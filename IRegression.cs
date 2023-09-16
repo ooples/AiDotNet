@@ -1,12 +1,8 @@
 ﻿namespace AiDotNet;
 
-public interface IRegression
+public abstract class IRegression
 {
-    double Predict(double[] x);
+    internal abstract (double yIntercept, double slope) Fit(double[] inputs, double[] outputs);
 
-    void Fit(double[][] x, double[] y);
-
-    double Score(double[][] x, double[] y);
-
-    double[] Normalize(double[] x);
+    internal abstract double[] Transform(double[] inputs);
 }
