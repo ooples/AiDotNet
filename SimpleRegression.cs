@@ -55,34 +55,25 @@ public class SimpleRegression : IRegression
 
         // todo: handle normalization if normalization isn't null before we fit the data
 
-        (YIntercept, Slope) = Fit(TrainingInputs, TrainingOutputs);
+        Fit(TrainingInputs, TrainingOutputs);
         Predictions = Transform(OutOfSampleInputs);
         Metrics = new Metrics(Predictions, OutOfSampleOutputs);
     }
 
-    internal sealed override (double yIntercept, double slope) Fit(double[] inputs, double[] outputs)
+    internal sealed override void Fit(double[] x, double[] y)
     {
-        double inputAvg = 0, outputAvg = 0;
-        for (var i = 0; i < inputs.Length; i++)
+        var n = x.Length;
+        double sumX = 0, sumY = 0, sumXy = 0, sumXSq = 0;
+        for (var i = 0; i < n; i++)
         {
-            inputAvg += inputs[i];
-            outputAvg += outputs[i];
+            sumX += x[i];
+            sumY += y[i];
+            sumXy += x[i] * y[i];
+            sumXSq += x[i] * x[i];
         }
 
-        inputAvg /= inputs.Length;
-        outputAvg /= outputs.Length;
-
-        double variance = 0, covariance = 0;
-        for (var i = 0; i < inputs.Length; i++)
-        {
-            var diff = inputs[i] - inputAvg;
-            variance += diff * diff;
-            covariance += diff * (outputs[i] - outputAvg);
-        }
-
-        var m = variance != 0 ? covariance / variance : 0;
-
-        return (outputAvg - m * inputAvg, m);
+        Slope = (n * sumXy - sumX * sumY) / (n * sumXSq - sumX * sumX);
+        YIntercept = (sumY - Slope * sumX) / n;
     }
 
     internal sealed override double[] Transform(double[] inputs)
