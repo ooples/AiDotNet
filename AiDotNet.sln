@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNet", "AiDotNet.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNetTestConsole", "..\AiDotNetTestConsole\AiDotNetTestConsole.csproj", "{10A6CCBA-C92B-41CD-87D1-3030FA4CF483}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNetUnitTests", "..\AiDotNetUnitTests\AiDotNetUnitTests.csproj", "{9D9859B0-528F-416A-A908-B96CA11074EC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{10A6CCBA-C92B-41CD-87D1-3030FA4CF483}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{10A6CCBA-C92B-41CD-87D1-3030FA4CF483}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{10A6CCBA-C92B-41CD-87D1-3030FA4CF483}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9D9859B0-528F-416A-A908-B96CA11074EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D9859B0-528F-416A-A908-B96CA11074EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9D9859B0-528F-416A-A908-B96CA11074EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9D9859B0-528F-416A-A908-B96CA11074EC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

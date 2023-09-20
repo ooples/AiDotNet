@@ -1,4 +1,6 @@
-﻿namespace AiDotNet;
+﻿using AiDotNet.Interfaces;
+
+namespace AiDotNet;
 
 public class Metrics : IMetrics
 {
