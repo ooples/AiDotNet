@@ -59,7 +59,7 @@ public class SimpleRegression : IRegression
 
         Fit(TrainingInputs, TrainingOutputs);
         Predictions = Transform(OutOfSampleInputs);
-        Metrics = new Metrics(Predictions, OutOfSampleOutputs);
+        Metrics = new Metrics(Predictions, OutOfSampleOutputs, inputs.Rank);
     }
 
     internal sealed override void Fit(double[] x, double[] y)
