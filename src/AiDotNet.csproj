@@ -1,24 +1,25 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <Version>0.0.1-preview</Version>
-    <Title>Ai for .Net</Title>
-    <Description>This is a preview library that will eventually showcase the latest and greatest in ai breakthroughs and bring them to the .net community</Description>
-    <Company>Ooples Finance</Company>
-    <Authors>ooples</Authors>
-    <Copyright>Ooples Finance LLC 2023</Copyright>
-    <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
-    <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
-    <PackageTags>ai; regression; machine learning; artificial; intelligence; machine; chatgpt; learning; algorithm; algo; chatgpt-4</PackageTags>
-    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
-    <PackageIcon>Favicon.jpg</PackageIcon>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+	  <TargetFrameworks>net8.0;net7.0;net6.0;netstandard2.0;netstandard2.1;net48</TargetFrameworks>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<Version>0.0.1-preview</Version>
+		<Title>Ai for .Net</Title>
+		<Description>This is a preview library that will eventually showcase the latest and greatest in ai breakthroughs and bring them to the .net community</Description>
+		<Company>Ooples Finance</Company>
+		<Authors>ooples</Authors>
+		<Copyright>Ooples Finance LLC 2023</Copyright>
+		<PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
+		<RepositoryType>git</RepositoryType>
+		<RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
+		<PackageTags>ai; regression; machine learning; artificial; intelligence; machine; chatgpt; learning; algorithm; algo; chatgpt-4</PackageTags>
+		<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+	  <LangVersion>latest</LangVersion>
+		<PackageIcon>Favicon.jpg</PackageIcon>
+	  <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
