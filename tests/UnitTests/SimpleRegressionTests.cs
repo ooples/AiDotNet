@@ -1,4 +1,5 @@
 using AiDotNet;
+using AiDotNet.Regression;
 
 namespace AiDotNetUnitTests.UnitTests
 {

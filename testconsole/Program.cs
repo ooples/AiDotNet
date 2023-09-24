@@ -1,4 +1,5 @@
-﻿using AiDotNet;
+﻿using AiDotNet.Normalization;
+using AiDotNet.Regression;
 
 namespace AiDotNetTestConsole
 {
@@ -13,7 +14,7 @@ namespace AiDotNetTestConsole
             var metrics1 = simpleRegression.Metrics;
             var predictions1 = simpleRegression.Predictions;
 
-            var advancedSimpleRegression = new SimpleRegression(inputs, outputs, trainingPctSize: 20);
+            var advancedSimpleRegression = new SimpleRegression(inputs, outputs, trainingPctSize: 20, normalization: new LogNormalization());
             var metrics2 = advancedSimpleRegression.Metrics;
             var predictions2 = advancedSimpleRegression.Predictions;
 

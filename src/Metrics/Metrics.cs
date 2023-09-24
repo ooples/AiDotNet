@@ -1,6 +1,4 @@
-﻿using AiDotNet.Interfaces;
-
-namespace AiDotNet;
+﻿namespace AiDotNet;
 
 public sealed class Metrics : IMetrics
 {
@@ -14,24 +12,23 @@ public sealed class Metrics : IMetrics
     public double AverageStandardDeviation { get; private set; }
     public int DegreesOfFreedom { get; private set; }
     
-    private double[] _oosPredictions { get; }
-    private double _oosPredictionsAvg { get; }
-    private double[] _oosActualValues { get; }
-    private double _oosActualValuesAvg { get; }
-    private int _paramsCount { get; }
-    private int _sampleSize { get; }
-    private double _residualSumOfSquares { get; set; }
-    private double _totalSumOfSquares { get; set; }
+    private double[] OosPredictions { get; }
+    private double OosPredictionsAvg { get; }
+    private double[] OosActualValues { get; }
+    private double OosActualValuesAvg { get; }
+    private int ParamsCount { get; }
+    private int SampleSize { get; }
+    private double ResidualSumOfSquares { get; set; }
+    private double TotalSumOfSquares { get; set; }
 
-    public Metrics(double[] OosPredictions, double[] OosActualValues, int paramCount)
+    public Metrics(double[] oosPredictions, double[] oosActualValues, int paramCount)
     {
-        _oosPredictions = OosPredictions;
-        _oosPredictionsAvg = _oosPredictions.Average();
-        _oosActualValues = OosActualValues;
-        _oosActualValuesAvg = _oosActualValues.Average();
-        _paramsCount = paramCount;
-        _sampleSize = _oosPredictions.Length;
-
+        OosPredictions = oosPredictions;
+        OosPredictionsAvg = oosPredictions.Average();
+        OosActualValues = oosActualValues;
+        OosActualValuesAvg = oosActualValues.Average();
+        ParamsCount = paramCount;
+        SampleSize = oosPredictions.Length;
         DegreesOfFreedom = CalculateDegreesOfFreedom();
         R2 = CalculateR2();
         AdjustedR2 = CalculateAdjustedR2(R2);
@@ -45,7 +42,7 @@ public sealed class Metrics : IMetrics
 
     internal override double CalculateMeanSquaredError()
     {
-        return _residualSumOfSquares / _sampleSize;
+        return ResidualSumOfSquares / SampleSize;
     }
 
     internal override double CalculateRootMeanSquaredError()
@@ -56,32 +53,32 @@ public sealed class Metrics : IMetrics
     internal override double CalculateR2()
     {
         double residualSumSquares = 0, totalSumSquares = 0;
-        for (int i = 0; i < _sampleSize; i++)
+        for (int i = 0; i < SampleSize; i++)
         {
-            residualSumSquares += Math.Pow(_oosActualValues[i] - _oosPredictions[i], 2);
-            totalSumSquares += Math.Pow(_oosActualValues[i] - _oosActualValuesAvg, 2);
+            residualSumSquares += Math.Pow(OosActualValues[i] - OosPredictions[i], 2);
+            totalSumSquares += Math.Pow(OosActualValues[i] - OosActualValuesAvg, 2);
         }
 
         // We are saving these values for later reuse
-        _residualSumOfSquares = residualSumSquares;
-        _totalSumOfSquares = totalSumSquares;
+        ResidualSumOfSquares = residualSumSquares;
+        TotalSumOfSquares = totalSumSquares;
 
-        return _totalSumOfSquares != 0 ? 1 - (_residualSumOfSquares / _totalSumOfSquares) : 0;
+        return TotalSumOfSquares != 0 ? 1 - (ResidualSumOfSquares / TotalSumOfSquares) : 0;
     }
 
     internal override double CalculateAdjustedR2(double r2)
     {
-        return _sampleSize != 1 && DegreesOfFreedom != 1 ? 1 - (1 - Math.Pow(r2, 2)) * (_sampleSize - 1) / (DegreesOfFreedom - 1) : 0;
+        return SampleSize != 1 && DegreesOfFreedom != 1 ? 1 - (1 - Math.Pow(r2, 2)) * (SampleSize - 1) / (DegreesOfFreedom - 1) : 0;
     }
 
     internal override double CalculateAverageStandardError()
     {
-        return AverageStandardDeviation / Math.Sqrt(_sampleSize);
+        return AverageStandardDeviation / Math.Sqrt(SampleSize);
     }
 
     internal override double CalculatePredictionStandardError()
     {
-        return PredictionsStandardDeviation / Math.Sqrt(_sampleSize);
+        return PredictionsStandardDeviation / Math.Sqrt(SampleSize);
     }
 
     private static double CalculateStandardDeviation(double avgSumSquares)
@@ -91,20 +88,20 @@ public sealed class Metrics : IMetrics
 
     internal override double CalculateAverageStandardDeviation()
     {
-        var avgSumSquares = _totalSumOfSquares / _sampleSize;
+        var avgSumSquares = TotalSumOfSquares / SampleSize;
 
         return CalculateStandardDeviation(avgSumSquares);
     }
 
     internal override double CalculatePredictionStandardDeviation()
     {
-        var avgSumSquares = _residualSumOfSquares / _sampleSize;
+        var avgSumSquares = ResidualSumOfSquares / SampleSize;
 
         return CalculateStandardDeviation(avgSumSquares);
     }
 
     internal override int CalculateDegreesOfFreedom()
     {
-        return _sampleSize - _paramsCount;
+        return SampleSize - ParamsCount;
     }
 }
