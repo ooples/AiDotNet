@@ -1,27 +1,23 @@
-﻿using AiDotNet.Interfaces;
+﻿namespace AiDotNet.Regression;
 
-namespace AiDotNet;
-
-public class SimpleRegression : IRegression
+public sealed class SimpleRegression : IRegression
 {
-    public double YIntercept { get; private set; }
-
-    public double Slope { get; private set; }
-
+    private double YIntercept { get; set; }
+    private double Slope { get; set; }
     public double[] Predictions { get; private set; }
-
     public IMetrics Metrics { get; private set; }
 
-    private int TrainingSize { get; }
-
-    private int OutOfSampleSize { get; }
-
-    private double[] TrainingInputs { get; }
-    private double[] OutOfSampleInputs { get; }
-    private double[] TrainingOutputs { get; }
-    private double[] OutOfSampleOutputs { get; }
-
-    public SimpleRegression(double[] inputs, double[] outputs, int trainingPctSize = 25, INormalization? normalization = null)
+    /// <summary>
+    /// Performs a simple linear regression on the provided inputs and outputs.
+    /// This handles all of the steps needed to create a trained ai model including training, normalizing, splitting, and transforming the data.
+    /// </summary>
+    /// <param name="inputs">The raw inputs (predicted values) to compare against the output values</param>
+    /// <param name="outputs">The raw outputs (actual values) to compare against the input values</param>
+    /// <param name="trainingPctSize">A number greater than 0 and less than 100. This is used to split the inputs and outputs between training data and test data</param>
+    /// <param name="normalization">A normalization class that determines which normalization formula to apply to the inputs and outputs to help with the training process</param>
+    /// <exception cref="ArgumentNullException">The input array and/or output array is null</exception>
+    /// <exception cref="ArgumentException">The input array or output array is either not the same length or doesn't have enough data</exception>
+    public SimpleRegression(double[] inputs, double[] outputs, double trainingPctSize = 25, INormalization? normalization = null)
     {
         if (inputs == null)
         {
@@ -35,34 +31,42 @@ public class SimpleRegression : IRegression
 
         if (inputs.Length != outputs.Length)
         {
-            throw new ArgumentException("Inputs and outputs must be the same length");
+            throw new ArgumentException("Inputs and outputs must have the same length");
         }
 
         if (inputs.Length < 2)
         {
-            throw new ArgumentException("Inputs and outputs need to have at least 2 values");
+            throw new ArgumentException("Inputs and outputs must have at least 2 values each");
         }
 
-        if (trainingPctSize < 1 || trainingPctSize > 99)
+        if (trainingPctSize <= 0 || trainingPctSize >= 100)
         {
-            throw new ArgumentException(nameof(trainingPctSize), $"{nameof(trainingPctSize)} must be between 1 and 99");
+            throw new ArgumentException($"{nameof(trainingPctSize)} must be greater than 0 and less than 100", nameof(trainingPctSize));
         }
 
-        TrainingSize = (int)Math.Floor((double)inputs.Length * trainingPctSize / 100);
-        OutOfSampleSize = inputs.Length - TrainingSize;
-        TrainingInputs = inputs.Take(TrainingSize).ToArray();
-        TrainingOutputs = outputs.Take(TrainingSize).ToArray();
-        OutOfSampleInputs = inputs.Skip(TrainingSize).ToArray();
-        OutOfSampleOutputs = outputs.Skip(TrainingSize).ToArray();
+        // Set the training sizes to determine if we have enough training data to fit the model
+        var trainingSize = (int)Math.Floor((double)inputs.Length * trainingPctSize / 100);
+        var outOfSampleSize = inputs.Length - trainingSize;
 
-        // todo: handle normalization if normalization isn't null before we fit the data
+        if (trainingSize < 2)
+        {
+            throw new ArgumentException($"Training data must contain at least 2 values. " +
+                                        $"You either need to increase your {nameof(trainingPctSize)} or increase the amount of inputs and outputs data");
+        }
 
-        Fit(TrainingInputs, TrainingOutputs);
-        Predictions = Transform(OutOfSampleInputs);
-        Metrics = new Metrics(Predictions, OutOfSampleOutputs, inputs.Rank);
+        if (outOfSampleSize < 2)
+        {
+            throw new ArgumentException($"Out of sample data must contain at least 2 values. " +
+                                        $"You either need to decrease your {nameof(trainingPctSize)} or increase the amount of inputs and outputs data");
+        }
+
+        var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) = PrepareData(inputs, outputs, trainingSize, normalization);
+        Fit(trainingInputs, trainingOutputs);
+        Predictions = Transform(oosInputs);
+        Metrics = new Metrics(Predictions, oosOutputs, inputs.Rank);
     }
 
-    internal sealed override void Fit(double[] x, double[] y)
+    internal override void Fit(double[] x, double[] y)
     {
         var n = x.Length;
         double sumX = 0, sumY = 0, sumXy = 0, sumXSq = 0;
@@ -78,7 +82,7 @@ public class SimpleRegression : IRegression
         YIntercept = (sumY - Slope * sumX) / n;
     }
 
-    internal sealed override double[] Transform(double[] inputs)
+    internal override double[] Transform(double[] inputs)
     {
         var predictions = new double[inputs.Length];
 
@@ -88,5 +92,10 @@ public class SimpleRegression : IRegression
         }
 
         return predictions;
+    }
+
+    internal override (double[], double[], double[], double[]) PrepareData(double[] inputs, double[] outputs, int trainingSize, INormalization? normalization)
+    {
+        return normalization?.PrepareData(inputs, outputs, trainingSize) ?? NormalizationHelper.SplitData(inputs, outputs, trainingSize);
     }
 }

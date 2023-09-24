@@ -13,7 +13,7 @@ We will be handling all ai algorithms using the same methods.
 Here is an example to show how easy it is to use this library to get a trained model, get metrics for the trained model, and generate new predictions:
 
 ```cs
-using AiDotNet;
+using AiDotNet.Regression;
 
 var inputs = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
 var outputs = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -26,12 +26,13 @@ var predictions = simpleRegression.Predictions;
 Here is an example for more advanced users to customize everything used in the algorithm:
 
 ```cs
-using AiDotNet;
+using AiDotNet.Regression;
+using AiDotNet.Normalization;
 
 var inputs = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
 var outputs = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
 
-var advancedSimpleRegression = new SimpleRegression(inputs, outputs, trainingPctSize: 20);
+var advancedSimpleRegression = new SimpleRegression(inputs, outputs, trainingPctSize: 20, normalization: new LogNormalization());
 var metrics = advancedSimpleRegression.Metrics;
 var predictions = advancedSimpleRegression.Predictions;
 ```
