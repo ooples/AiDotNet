@@ -5,7 +5,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<Version>0.0.3-preview</Version>
+		<Version>0.0.4-preview</Version>
 		<Title>Ai for .Net</Title>
 		<Description>This is a preview library that will eventually showcase the latest and greatest in ai breakthroughs and bring them to the .net community</Description>
 		<Company>Ooples Finance</Company>
@@ -14,7 +14,7 @@
 		<PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
 		<RepositoryType>git</RepositoryType>
 		<RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
-		<PackageTags>ai; regression; machine learning; artificial; intelligence; machine; chatgpt; learning; algorithm; algo; chatgpt-4</PackageTags>
+		<PackageTags>ai; ai.net; aidotnet; regression; machine learning; artificial; intelligence; machine; chatgpt; learning; algorithm; algo; chatgpt-4</PackageTags>
 		<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	  <LangVersion>latest</LangVersion>
