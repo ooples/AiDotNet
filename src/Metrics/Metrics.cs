@@ -1,4 +1,4 @@
-﻿namespace AiDotNet;
+﻿namespace AiDotNet.Metrics;
 
 public sealed class Metrics : IMetrics
 {
@@ -54,7 +54,7 @@ public sealed class Metrics : IMetrics
     internal override double CalculateR2()
     {
         double residualSumSquares = 0, totalSumSquares = 0;
-        for (int i = 0; i < SampleSize; i++)
+        for (var i = 0; i < SampleSize; i++)
         {
             residualSumSquares += Math.Pow(OosActualValues[i] - OosPredictions[i], 2);
             totalSumSquares += Math.Pow(OosActualValues[i] - OosActualValuesAvg, 2);
