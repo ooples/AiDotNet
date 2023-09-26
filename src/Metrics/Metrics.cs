@@ -29,7 +29,6 @@ public sealed class Metrics : IMetrics
         OosActualValuesAvg = oosActualValues.Average();
         ParamsCount = paramCount;
         SampleSize = oosPredictions.Length;
-
         DegreesOfFreedom = CalculateDegreesOfFreedom();
         R2 = CalculateR2();
         AdjustedR2 = CalculateAdjustedR2(R2);
