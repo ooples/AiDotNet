@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Regression;
+namespace AiDotNet.Regression;
 
 public sealed class SimpleRegression : IRegression
 {
