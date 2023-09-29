@@ -1,4 +1,4 @@
-namespace AiDotNet.Metrics;
+namespace AiDotNet.Statistics;
 
 public sealed class Metrics : IMetrics
 {

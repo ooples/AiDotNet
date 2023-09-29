@@ -22,6 +22,11 @@ internal class MinMaxNormalization : INormalization
         return normalizedValues;
     }
 
+    internal override double[][] Normalize(double[][] rawValues)
+    {
+        throw new NotImplementedException();
+    }
+
     internal override (double[] trainingInputs, double[] trainingOutputs, double[] oosInputs, double[] oosOutputs) PrepareData(
         double[] inputs, double[] outputs, int trainingSize)
     {
@@ -30,5 +35,10 @@ internal class MinMaxNormalization : INormalization
         InputsMax = trainingInputs.Max();
 
         return (Normalize(trainingInputs), Normalize(trainingOutputs), Normalize(oosInputs), Normalize(oosOutputs));
+    }
+
+    internal override (double[][] trainingInputs, double[] trainingOutputs, double[][] oosInputs, double[] oosOutputs) PrepareData(double[][] inputs, double[] outputs, int trainingSize)
+    {
+        throw new NotImplementedException();
     }
 }

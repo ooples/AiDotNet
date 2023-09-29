@@ -1,4 +1,5 @@
 using AiDotNet;
+using AiDotNet.Models;
 using AiDotNet.Regression;
 
 namespace AiDotNetUnitTests.UnitTests
@@ -39,7 +40,7 @@ namespace AiDotNetUnitTests.UnitTests
             // Act
 
             // Assert
-            Assert.Throws<ArgumentException>(() => new SimpleRegression(_inputs, _outputs, tooBigTrainingSize));
+            Assert.Throws<ArgumentException>(() => new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions() { TrainingPctSize = tooBigTrainingSize }));
         }
 
         [Fact]
@@ -51,7 +52,7 @@ namespace AiDotNetUnitTests.UnitTests
             // Act
 
             // Assert
-            Assert.Throws<ArgumentException>(() => new SimpleRegression(_inputs, _outputs, tooSmallTrainingSize));
+            Assert.Throws<ArgumentException>(() => new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions() { TrainingPctSize = tooSmallTrainingSize }));
         }
     }
 }
