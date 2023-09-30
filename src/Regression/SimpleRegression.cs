@@ -1,12 +1,10 @@
-using AiDotNet.Models;
-using AiDotNet.Statistics;
-
 namespace AiDotNet.Regression;
 
 public sealed class SimpleRegression : IRegression<double, double>
 {
     private double YIntercept { get; set; }
     private double Slope { get; set; }
+    private SimpleRegressionOptions RegressionOptions { get; }
 
     public double[] Predictions { get; private set; }
     public IMetrics Metrics { get; private set; }
@@ -22,55 +20,26 @@ public sealed class SimpleRegression : IRegression<double, double>
     /// <exception cref="ArgumentException">The input array or output array is either not the same length or doesn't have enough data</exception>
     public SimpleRegression(double[] inputs, double[] outputs, SimpleRegressionOptions? regressionOptions = null)
     {
-        regressionOptions ??= new SimpleRegressionOptions();
+        // do simple checks on all inputs and outputs before we do any work
+        ValidationHelper.CheckForNullItems(inputs, outputs);
+        var inputSize = inputs.Length;
+        ValidationHelper.CheckForInvalidInputSize(inputSize, outputs.Length);
 
-        if (inputs == null)
-        {
-            throw new ArgumentNullException(nameof(inputs), "Inputs can't be null");
-        }
+        // setting up default regression options if necessary
+        RegressionOptions = regressionOptions ?? new SimpleRegressionOptions();
 
-        if (outputs == null)
-        {
-            throw new ArgumentNullException(nameof(outputs), "Outputs can't be null");
-        }
+        // Check the training sizes to determine if we have enough training data to fit the model
+        var trainingPctSize = RegressionOptions.TrainingPctSize;
+        ValidationHelper.CheckForInvalidTrainingPctSize(trainingPctSize);
+        var trainingSize = (int)Math.Floor(inputSize * trainingPctSize / 100);
+        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Max(2, inputs.Length), trainingPctSize);
 
-        if (inputs.Length != outputs.Length)
-        {
-            throw new ArgumentException("Inputs and outputs must have the same length");
-        }
-
-        if (inputs.Length < 2)
-        {
-            throw new ArgumentException("Inputs and outputs must have at least 2 values each");
-        }
-
-        var trainingPctSize = regressionOptions.TrainingPctSize;
-        if (trainingPctSize <= 0 || trainingPctSize >= 100)
-        {
-            throw new ArgumentException($"{nameof(trainingPctSize)} must be greater than 0 and less than 100", nameof(trainingPctSize));
-        }
-
-        // Set the training sizes to determine if we have enough training data to fit the model
-        var trainingSize = (int)Math.Floor(inputs.Length * trainingPctSize / 100);
-        var outOfSampleSize = inputs.Length - trainingSize;
-
-        if (trainingSize < 2)
-        {
-            throw new ArgumentException($"Training data must contain at least 2 values. " +
-                                        $"You either need to increase your {nameof(trainingPctSize)} or increase the amount of inputs and outputs data");
-        }
-
-        if (outOfSampleSize < 2)
-        {
-            throw new ArgumentException($"Out of sample data must contain at least 2 values. " +
-                                        $"You either need to decrease your {nameof(trainingPctSize)} or increase the amount of inputs and outputs data");
-        }
-
-        var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) = 
-            PrepareData(inputs, outputs, trainingSize, regressionOptions.Normalization);
+        // Perform the actual work necessary to create the prediction and metrics models
+        var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =
+            PrepareData(inputs, outputs, trainingSize, RegressionOptions.Normalization);
         Fit(trainingInputs, trainingOutputs);
         Predictions = Transform(oosInputs);
-        Metrics = new Metrics(Predictions, oosOutputs, inputs.Rank);
+        Metrics = new Metrics(Predictions, oosOutputs, inputs.Length);
     }
 
     internal override void Fit(double[] x, double[] y)

@@ -1,4 +1,3 @@
-using AiDotNet;
 using AiDotNet.Models;
 using AiDotNet.Regression;
 

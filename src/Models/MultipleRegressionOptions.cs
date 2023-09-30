@@ -1,6 +1,4 @@
-﻿using AiDotNet.Enums;
-
-namespace AiDotNet.Models;
+﻿namespace AiDotNet.Models;
 
 public class MultipleRegressionOptions : RegressionOptions
 {
