@@ -14,6 +14,11 @@ public class LogNormalization : INormalization
         return normalizedValues;
     }
 
+    internal override double[][] Normalize(double[][] rawValues)
+    {
+        throw new NotImplementedException();
+    }
+
     internal override (double[], double[], double[], double[]) PrepareData(double[] inputs, double[] outputs, int trainingSize)
     {
         var preparedInputs = Normalize(inputs);
@@ -44,5 +49,16 @@ public class LogNormalization : INormalization
         }
 
         return NormalizationHelper.SplitData(preparedInputs, preparedOutputs, trainingSize);
+    }
+
+    internal override (double[][] trainingInputs, double[] trainingOutputs, double[][] oosInputs, double[] oosOutputs) PrepareData(
+        double[][] inputs, double[] outputs, int trainingSize)
+    {
+        throw new NotImplementedException();
+    }
+
+    internal override (double[][] trainingInputs, double[][] trainingOutputs, double[][] oosInputs, double[][] oosOutputs) PrepareData(double[][] inputs, double[][] outputs, int trainingSize)
+    {
+        throw new NotImplementedException();
     }
 }
