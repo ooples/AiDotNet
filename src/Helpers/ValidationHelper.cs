@@ -15,7 +15,7 @@ internal static class ValidationHelper
         }
     }
 
-    public static void CheckForNullItems(double[][] inputs, double[] outputs, double[] weights)
+    internal static void CheckForNullItems(double[][] inputs, double[][] outputs)
     {
         if (inputs == null)
         {
@@ -26,27 +26,55 @@ internal static class ValidationHelper
         {
             throw new ArgumentNullException(nameof(outputs), "Outputs can't be null");
         }
+    }
 
+    internal static void CheckForNullItems(double[] inputs, double[] outputs)
+    {
+        if (inputs == null)
+        {
+            throw new ArgumentNullException(nameof(inputs), "Inputs can't be null");
+        }
+
+        if (outputs == null)
+        {
+            throw new ArgumentNullException(nameof(outputs), "Outputs can't be null");
+        }
+    }
+
+    internal static void CheckForInvalidOrder(int order, double[] inputs)
+    {
+        if (order < 1)
+        {
+            throw new ArgumentException("Order must be greater than 0", nameof(order));
+        }
+
+        if (inputs.Length < order + 1)
+        {
+            throw new ArgumentException(
+                $"Your inputs array must contain at least {order + 1} items and the inputs array only contains {inputs.Length} items",
+                nameof(inputs));
+        }
+    }
+
+    internal static void CheckForInvalidWeights(double[] weights)
+    {
         if (weights == null)
         {
             throw new ArgumentNullException(nameof(weights), "Weights can't be null");
         }
-    }
 
-    public static void CheckForNullItems(double[] inputs, double[] outputs)
-    {
-        if (inputs == null)
+        if (weights.All(x => x == 0))
         {
-            throw new ArgumentNullException(nameof(inputs), "Inputs can't be null");
+            throw new ArgumentException("Weights can't contain all zeros", nameof(weights));
         }
 
-        if (outputs == null)
+        if (weights.Any(x => double.IsNaN(x) || double.IsInfinity(x)))
         {
-            throw new ArgumentNullException(nameof(outputs), "Outputs can't be null");
+            throw new ArgumentException("Weights can't contain invalid values such as NaN or Infinity", nameof(weights));
         }
     }
 
-    public static void CheckForInvalidInputSize(int inputSize, int outputsLength)
+    internal static void CheckForInvalidInputSize(int inputSize, int outputsLength)
     {
         if (inputSize != outputsLength)
         {
@@ -59,7 +87,7 @@ internal static class ValidationHelper
         }
     }
 
-    public static void CheckForInvalidTrainingPctSize(double trainingPctSize)
+    internal static void CheckForInvalidTrainingPctSize(double trainingPctSize)
     {
         if (trainingPctSize <= 0 || trainingPctSize >= 100)
         {
@@ -67,7 +95,7 @@ internal static class ValidationHelper
         }
     }
 
-    public static void CheckForInvalidTrainingSizes(int trainingSize, int outOfSampleSize, int minSize, double trainingPctSize)
+    internal static void CheckForInvalidTrainingSizes(int trainingSize, int outOfSampleSize, int minSize, double trainingPctSize)
     {
         if (trainingSize < minSize)
         {
@@ -80,5 +108,5 @@ internal static class ValidationHelper
             throw new ArgumentException($"Out of sample data must contain at least 2 values. " +
                                         $"You either need to decrease your {nameof(trainingPctSize)} or increase the amount of inputs and outputs data");
         }
-    }
+   }
 }

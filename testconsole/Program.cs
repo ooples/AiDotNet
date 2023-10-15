@@ -31,7 +31,7 @@ internal class Program
         var predictions2 = advancedSimpleRegression.Predictions;
 
         var multipleRegression = new MultipleRegression(test3, test2, 
-            new MultipleRegressionOptions() { TrainingPctSize = 99, MatrixDecomposition = MatrixDecomposition.Lu, UseIntercept = true});
+            new MultipleRegressionOptions() { TrainingPctSize = 99, MatrixDecomposition = MatrixDecomposition.Lu, UseIntercept = true });
         var metrics3 = multipleRegression.Metrics;
         var predictions3 = multipleRegression.Predictions;
 

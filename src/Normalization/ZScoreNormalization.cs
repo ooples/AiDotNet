@@ -39,4 +39,9 @@ internal class ZScoreNormalization : INormalization
     {
         throw new NotImplementedException();
     }
+
+    internal override (double[][] trainingInputs, double[][] trainingOutputs, double[][] oosInputs, double[][] oosOutputs) PrepareData(double[][] inputs, double[][] outputs, int trainingSize)
+    {
+        throw new NotImplementedException();
+    }
 }
