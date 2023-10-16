@@ -3,13 +3,10 @@
   <Filters>
     <IncludeFilters>
       <FilterEntry>
-        <ModuleMask>Alpaca.Markets.Extensions</ModuleMask>
-      </FilterEntry>
-      <FilterEntry>
-        <ModuleMask>Alpaca.Markets</ModuleMask>
+        <ModuleMask>src</ModuleMask>
       </FilterEntry>
     </IncludeFilters>
   </Filters>
-  <Output>Alpaca.Markets.Coverage.xml</Output>
+  <Output>AiDotNet.Coverage.xml</Output>
   <ReportType>DetailedXml</ReportType>
 </CoverageParams>
