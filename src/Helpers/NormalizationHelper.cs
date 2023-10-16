@@ -44,4 +44,34 @@ internal static class NormalizationHelper
 
         return (trainingInputs.ToArray(), trainingOutputs.ToArray(), oosInputs.ToArray(), oosOutputs.ToArray());
     }
+
+    internal static double Min(this double[][] values)
+    {
+        var min = double.MaxValue;
+        for (var i = 0; i < values.Length; i++)
+        {
+            var rowMin = values[i].Min();
+            if (rowMin < min)
+            {
+                min = rowMin;
+            }
+        }
+
+        return min;
+    }
+
+    internal static double Max(this double[][] values)
+    {
+        var max = double.MinValue;
+        for (var i = 0; i < values.Length; i++)
+        {
+            var rowMax = values[i].Max();
+            if (rowMax > max)
+            {
+                max = rowMax;
+            }
+        }
+
+        return max;
+    }
 }
