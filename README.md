@@ -1,3 +1,5 @@
+[![CodeQL Analyis](https://github.com/ooples/AiDotNet/actions/workflows/codeql.yml/badge.svg)](https://github.com/ooples/AiDotNet/actions/workflows/codeql.yml)
+
 ## Ai.Net
 
 This is a library (currently in preview) for getting the latest and greatest ai algorithms and bringing them directly to the .net community. 
