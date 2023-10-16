@@ -1,3 +1,4 @@
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/9b39ac30ccdf4187b1e05530bfc3c27b)](https://app.codacy.com/gh/ooples/AiDotNet?utm_source=github.com&utm_medium=referral&utm_content=ooples/AiDotNet&utm_campaign=Badge_Grade)
 [![CodeQL Analyis](https://github.com/ooples/AiDotNet/actions/workflows/codeql.yml/badge.svg)](https://github.com/ooples/AiDotNet/actions/workflows/codeql.yml)
 
 ## Ai.Net
