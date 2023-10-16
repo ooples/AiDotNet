@@ -108,5 +108,30 @@ internal static class ValidationHelper
             throw new ArgumentException($"Out of sample data must contain at least 2 values. " +
                                         $"You either need to decrease your {nameof(trainingPctSize)} or increase the amount of inputs and outputs data");
         }
-   }
+    }
+
+    internal static void CheckForNaNOrInfinity(double[] preparedValues)
+    {
+        if (preparedValues.Contains(double.NaN))
+        {
+            throw new ArgumentException("Normalized Inputs can't contain NaN values. " +
+                                        "Log Normalization creates NaN values when a raw input value is negative.", nameof(preparedValues));
+        }
+
+        if (preparedValues.Contains(double.PositiveInfinity) || preparedValues.Contains(double.NegativeInfinity))
+        {
+            throw new ArgumentException("Normalized Inputs can't contain Infinity values. " +
+                                        "Log Normalization creates Infinity values when a raw input value is 0 or infinity.", nameof(preparedValues));
+        }
+    }
+
+    internal static void CheckForNaNOrInfinity(double[][] preparedValues)
+    {
+        for (var i = 0; i < preparedValues.Length; i++)
+        {
+            var preparedValuesArray = preparedValues[i];
+
+            CheckForNaNOrInfinity(preparedValuesArray);
+        }
+    }
 }

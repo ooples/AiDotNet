@@ -24,7 +24,13 @@ internal class MinMaxNormalization : INormalization
 
     internal override double[][] Normalize(double[][] rawValues)
     {
-        throw new NotImplementedException();
+        var normalizedValues = Array.Empty<double[]>();
+        for (var i = 0; i < rawValues.Length; i++)
+        {
+            normalizedValues[i] = Normalize(rawValues[i]);
+        }
+
+        return normalizedValues;
     }
 
     internal override (double[] trainingInputs, double[] trainingOutputs, double[] oosInputs, double[] oosOutputs) PrepareData(
@@ -37,13 +43,23 @@ internal class MinMaxNormalization : INormalization
         return (Normalize(trainingInputs), Normalize(trainingOutputs), Normalize(oosInputs), Normalize(oosOutputs));
     }
 
-    internal override (double[][] trainingInputs, double[] trainingOutputs, double[][] oosInputs, double[] oosOutputs) PrepareData(double[][] inputs, double[] outputs, int trainingSize)
+    internal override (double[][] trainingInputs, double[] trainingOutputs, double[][] oosInputs, double[] oosOutputs) 
+        PrepareData(double[][] inputs, double[] outputs, int trainingSize)
     {
-        throw new NotImplementedException();
+        var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) = NormalizationHelper.SplitData(inputs, outputs, trainingSize);
+        InputsMin = trainingInputs.Min();
+        InputsMax = trainingInputs.Max();
+
+        return (Normalize(trainingInputs), Normalize(trainingOutputs), Normalize(oosInputs), Normalize(oosOutputs));
     }
 
-    internal override (double[][] trainingInputs, double[][] trainingOutputs, double[][] oosInputs, double[][] oosOutputs) PrepareData(double[][] inputs, double[][] outputs, int trainingSize)
+    internal override (double[][] trainingInputs, double[][] trainingOutputs, double[][] oosInputs, double[][] oosOutputs) 
+        PrepareData(double[][] inputs, double[][] outputs, int trainingSize)
     {
-        throw new NotImplementedException();
+        var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) = NormalizationHelper.SplitData(inputs, outputs, trainingSize);
+        InputsMin = trainingInputs.Min();
+        InputsMax = trainingInputs.Max();
+
+        return (Normalize(trainingInputs), Normalize(trainingOutputs), Normalize(oosInputs), Normalize(oosOutputs));
     }
 }
