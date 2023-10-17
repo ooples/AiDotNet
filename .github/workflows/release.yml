@@ -47,7 +47,7 @@ jobs:
     - name: Send Coverage to Codacy
       env:
         CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
-      run: bash <(curl -Ls https://coverage.codacy.com/get.sh) report -r AiDotNet.Coverage.xml
+      run: bash <(curl -Ls https://coverage.codacy.com/get.sh)
 
   publish-sdk:
     name: Publish SDK Binaries
