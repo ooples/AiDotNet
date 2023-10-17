@@ -31,7 +31,7 @@ jobs:
       working-directory: ./tests
 
     - name: Dotnet Test (Debug)
-      run: dotnet dotcover test
+      run: dotnet dotcover test --dcXML=Configuration.xml
 
     - name: Dotnet Build (Release)
       run: dotnet build -c Release
@@ -40,24 +40,14 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: sdk-packages
-        path: |
+        path: | 
           src/bin/Release/*.nupkg
           src/bin/Release/*.snupkg
           
-  codacy-coverage-reporter:
-    runs-on: ubuntu-latest
-    name: codacy-coverage-reporter
-    steps:
-      - uses: actions/checkout@v2
-      - name: Run codacy-coverage-reporter
-        uses: codacy/codacy-coverage-reporter-action@v1
-        with:
-          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-          # or
-          # api-token: ${{ secrets.CODACY_API_TOKEN }}
-          # coverage-reports: ./tests
-          # or a comma-separated list for multiple reports
-          # coverage-reports: <PATH_TO_REPORT>, <PATH_TO_REPORT>
+    - name: Send Coverage to Codacy
+      env:
+        CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+      run: bash <(curl -Ls https://coverage.codacy.com/get.sh) report -r AiDotNet.Coverage.xml
 
   publish-sdk:
     name: Publish SDK Binaries
