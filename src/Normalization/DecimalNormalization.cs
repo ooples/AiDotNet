@@ -10,7 +10,7 @@ public class DecimalNormalization : INormalization
         var smallestMult = 0;
         for (var i = 1; i < 100; i++)
         {
-            if (!(maxValue / Math.Pow(10, i) <= 1)) continue;
+            if (maxValue / Math.Pow(10, i) > 1) continue;
             smallestMult = i;
             break;
         }
@@ -48,14 +48,16 @@ public class DecimalNormalization : INormalization
         return (Normalize(trainingInputs), Normalize(trainingOutputs), Normalize(oosInputs), Normalize(oosOutputs));
     }
 
-    internal override (double[][] trainingInputs, double[] trainingOutputs, double[][] oosInputs, double[] oosOutputs) PrepareData(double[][] inputs, double[] outputs, int trainingSize)
+    internal override (double[][] trainingInputs, double[] trainingOutputs, double[][] oosInputs, double[] oosOutputs) 
+        PrepareData(double[][] inputs, double[] outputs, int trainingSize)
     {
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) = NormalizationHelper.SplitData(inputs, outputs, trainingSize);
 
         return (Normalize(trainingInputs), Normalize(trainingOutputs), Normalize(oosInputs), Normalize(oosOutputs));
     }
 
-    internal override (double[][] trainingInputs, double[][] trainingOutputs, double[][] oosInputs, double[][] oosOutputs) PrepareData(double[][] inputs, double[][] outputs, int trainingSize)
+    internal override (double[][] trainingInputs, double[][] trainingOutputs, double[][] oosInputs, double[][] oosOutputs) 
+        PrepareData(double[][] inputs, double[][] outputs, int trainingSize)
     {
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) = NormalizationHelper.SplitData(inputs, outputs, trainingSize);
 
