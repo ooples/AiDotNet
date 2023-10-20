@@ -1,11 +1,12 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public abstract class IRegression
+public abstract class IRegression<TInput, TOutput>
 {
-    internal abstract (double[] trainingInputs, double[] trainingOutputs, double[] oosInputs, double[] oosOutputs) 
-        PrepareData(double[] inputs, double[] outputs, int trainingSize, INormalization normalization);
+    internal abstract (TInput[] trainingInputs, TOutput[] trainingOutputs, TInput[] oosInputs, TOutput[]
+        oosOutputs)
+        PrepareData(TInput[] inputs, TOutput[] outputs, int trainingSize, INormalization? normalization);
 
-    internal abstract void Fit(double[] inputs, double[] outputs);
+    internal abstract void Fit(TInput[] inputs, TOutput[] outputs);
 
-    internal abstract double[] Transform(double[] inputs);
+    internal abstract TOutput[] Transform(TInput[] inputs);
 }

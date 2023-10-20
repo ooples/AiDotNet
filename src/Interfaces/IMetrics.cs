@@ -6,8 +6,6 @@ public abstract class IMetrics
 
     internal abstract double CalculateRootMeanSquaredError();
 
-    internal abstract double CalculateR2();
-
     internal abstract double CalculateAdjustedR2(double r2);
 
     internal abstract double CalculateAverageStandardError();

@@ -1,3 +1,5 @@
+[![CodeQL Analyis](https://github.com/ooples/AiDotNet/actions/workflows/codeql.yml/badge.svg)](https://github.com/ooples/AiDotNet/actions/workflows/codeql.yml)
+
 ## Ai.Net
 
 This is a library (currently in preview) for getting the latest and greatest ai algorithms and bringing them directly to the .net community. 
@@ -32,7 +34,11 @@ using AiDotNet.Normalization;
 var inputs = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
 var outputs = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
 
-var advancedSimpleRegression = new SimpleRegression(inputs, outputs, trainingPctSize: 20, normalization: new LogNormalization());
-var metrics = advancedSimpleRegression.Metrics;
-var predictions = advancedSimpleRegression.Predictions;
+var advancedSimpleRegression = new SimpleRegression(inputs, outputs, new SimpleRegressionOptions()
+{
+    TrainingPctSize = 20,
+    Normalization = new DecimalNormalization()
+});
+var metrics2 = advancedSimpleRegression.Metrics;
+var predictions2 = advancedSimpleRegression.Predictions;
 ```

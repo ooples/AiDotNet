@@ -1,11 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
-	  <TargetFrameworks>net8.0;net7.0;net6.0;netstandard2.0;netstandard2.1;net48</TargetFrameworks>
+	  <TargetFrameworks>net8.0;net7.0;net6.0;net462</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<Version>0.0.4-preview</Version>
+		<Version>0.0.5-preview</Version>
 		<Title>Ai for .Net</Title>
 		<Description>This is a preview library that will eventually showcase the latest and greatest in ai breakthroughs and bring them to the .net community</Description>
 		<Company>Ooples Finance</Company>
@@ -17,7 +16,7 @@
 		<PackageTags>ai; ai.net; aidotnet; regression; machine learning; artificial; intelligence; machine; chatgpt; learning; algorithm; algo; chatgpt-4</PackageTags>
 		<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
-	  <LangVersion>latest</LangVersion>
+	    <LangVersion>latest</LangVersion>
 		<PackageIcon>Favicon.jpg</PackageIcon>
 	  <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
@@ -39,6 +38,10 @@
 			<Pack>True</Pack>
 			<PackagePath>\</PackagePath>
 		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
 	</ItemGroup>
 
 </Project>

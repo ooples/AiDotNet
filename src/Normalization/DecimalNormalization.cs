@@ -10,7 +10,7 @@ public class DecimalNormalization : INormalization
         var smallestMult = 0;
         for (var i = 1; i < 100; i++)
         {
-            if (!(maxValue / Math.Pow(10, i) <= 1)) continue;
+            if (maxValue / Math.Pow(10, i) > 1) continue;
             smallestMult = i;
             break;
         }
@@ -23,16 +23,44 @@ public class DecimalNormalization : INormalization
 
         for (var i = 0; i < rawValues.Length; i++)
         {
-            normalizedValues.SetValue(rawValues[i] / Math.Pow(10, smallestMult), i);
+            normalizedValues[i] = rawValues[i] / Math.Pow(10, smallestMult);
         }
 
         return normalizedValues;
     }
 
-    internal override (double[], double[], double[], double[]) PrepareData(double[] inputs, double[] outputs, int trainingSize)
+    internal override double[][] Normalize(double[][] rawValues)
+    {
+        var normalizedValues = Array.Empty<double[]>();
+        for (var i = 0; i < rawValues.Length; i++)
+        {
+            normalizedValues[i] = Normalize(rawValues[i]);
+        }
+
+        return normalizedValues;
+    }
+
+    internal override (double[] trainingInputs, double[] trainingOutputs, double[] oosInputs, double[] oosOutputs) 
+        PrepareData(double[] inputs, double[] outputs, int trainingSize)
     {
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) = NormalizationHelper.SplitData(inputs, outputs, trainingSize);
-        
+
+        return (Normalize(trainingInputs), Normalize(trainingOutputs), Normalize(oosInputs), Normalize(oosOutputs));
+    }
+
+    internal override (double[][] trainingInputs, double[] trainingOutputs, double[][] oosInputs, double[] oosOutputs) 
+        PrepareData(double[][] inputs, double[] outputs, int trainingSize)
+    {
+        var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) = NormalizationHelper.SplitData(inputs, outputs, trainingSize);
+
+        return (Normalize(trainingInputs), Normalize(trainingOutputs), Normalize(oosInputs), Normalize(oosOutputs));
+    }
+
+    internal override (double[][] trainingInputs, double[][] trainingOutputs, double[][] oosInputs, double[][] oosOutputs) 
+        PrepareData(double[][] inputs, double[][] outputs, int trainingSize)
+    {
+        var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) = NormalizationHelper.SplitData(inputs, outputs, trainingSize);
+
         return (Normalize(trainingInputs), Normalize(trainingOutputs), Normalize(oosInputs), Normalize(oosOutputs));
     }
 }

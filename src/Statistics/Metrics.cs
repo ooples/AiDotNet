@@ -1,4 +1,7 @@
-namespace AiDotNet.Metrics;
+using System.Linq;
+using MetricsHelper = AiDotNet.Helpers.MetricsHelper;
+
+namespace AiDotNet.Statistics;
 
 public sealed class Metrics : IMetrics
 {
@@ -12,9 +15,7 @@ public sealed class Metrics : IMetrics
     public double AverageStandardDeviation { get; private set; }
     public int DegreesOfFreedom { get; private set; }
     
-    private double[] OosPredictions { get; }
     private double OosPredictionsAvg { get; }
-    private double[] OosActualValues { get; }
     private double OosActualValuesAvg { get; }
     private int ParamsCount { get; }
     private int SampleSize { get; }
@@ -23,14 +24,35 @@ public sealed class Metrics : IMetrics
 
     public Metrics(double[] oosPredictions, double[] oosActualValues, int paramCount)
     {
-        OosPredictions = oosPredictions;
         OosPredictionsAvg = oosPredictions.Average();
-        OosActualValues = oosActualValues;
         OosActualValuesAvg = oosActualValues.Average();
         ParamsCount = paramCount;
         SampleSize = oosPredictions.Length;
         DegreesOfFreedom = CalculateDegreesOfFreedom();
-        R2 = CalculateR2();
+        var r2Result = MetricsHelper.CalculateR2(oosPredictions, oosActualValues, OosActualValuesAvg, SampleSize);
+        ResidualSumOfSquares = r2Result.residualSquaresSum;
+        TotalSumOfSquares = r2Result.totalSquaresSum;
+        R2 = r2Result.r2;
+        AdjustedR2 = CalculateAdjustedR2(R2);
+        AverageStandardDeviation = CalculateAverageStandardDeviation();
+        PredictionsStandardDeviation = CalculatePredictionStandardDeviation();
+        AverageStandardError = CalculateAverageStandardError();
+        PredictionsStandardError = CalculatePredictionStandardError();
+        MeanSquaredError = CalculateMeanSquaredError();
+        RootMeanSquaredError = CalculateRootMeanSquaredError();
+    }
+
+    public Metrics(double[][] oosPredictions, double[][] oosActualValues, int paramCount)
+    {
+        OosPredictionsAvg = oosPredictions.Average();
+        OosActualValuesAvg = oosActualValues.Average();
+        ParamsCount = paramCount;
+        SampleSize = oosPredictions.Length;
+        DegreesOfFreedom = CalculateDegreesOfFreedom();
+        var r2Result = MetricsHelper.CalculateR2(oosPredictions, oosActualValues, OosActualValuesAvg, SampleSize);
+        ResidualSumOfSquares = r2Result.residualSquaresSum;
+        TotalSumOfSquares = r2Result.totalSquaresSum;
+        R2 = r2Result.r2;
         AdjustedR2 = CalculateAdjustedR2(R2);
         AverageStandardDeviation = CalculateAverageStandardDeviation();
         PredictionsStandardDeviation = CalculatePredictionStandardDeviation();
@@ -48,22 +70,6 @@ public sealed class Metrics : IMetrics
     internal override double CalculateRootMeanSquaredError()
     {
         return MeanSquaredError >= 0 ? Math.Sqrt(MeanSquaredError) : 0;
-    }
-
-    internal override double CalculateR2()
-    {
-        double residualSumSquares = 0, totalSumSquares = 0;
-        for (var i = 0; i < SampleSize; i++)
-        {
-            residualSumSquares += Math.Pow(OosActualValues[i] - OosPredictions[i], 2);
-            totalSumSquares += Math.Pow(OosActualValues[i] - OosActualValuesAvg, 2);
-        }
-
-        // We are saving these values for later reuse
-        ResidualSumOfSquares = residualSumSquares;
-        TotalSumOfSquares = totalSumSquares;
-
-        return TotalSumOfSquares != 0 ? 1 - (ResidualSumOfSquares / TotalSumOfSquares) : 0;
     }
 
     internal override double CalculateAdjustedR2(double r2)
@@ -87,6 +93,7 @@ public sealed class Metrics : IMetrics
     }
 
     internal override double CalculateAverageStandardDeviation()
+
     {
         var avgSumSquares = TotalSumOfSquares / SampleSize;
 

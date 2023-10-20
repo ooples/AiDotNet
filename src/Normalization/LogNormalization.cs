@@ -8,7 +8,18 @@ public class LogNormalization : INormalization
 
         for (var i = 0; i < rawValues.Length; i++)
         {
-            normalizedValues.SetValue(Math.Log(rawValues[i]), i);
+            normalizedValues[i] = Math.Log(rawValues[i]);
+        }
+
+        return normalizedValues;
+    }
+
+    internal override double[][] Normalize(double[][] rawValues)
+    {
+        var normalizedValues = Array.Empty<double[]>();
+        for (var i = 0; i < rawValues.Length; i++)
+        {
+            normalizedValues[i] = Normalize(rawValues[i]);
         }
 
         return normalizedValues;
@@ -18,30 +29,30 @@ public class LogNormalization : INormalization
     {
         var preparedInputs = Normalize(inputs);
         var preparedOutputs = Normalize(outputs);
+        ValidationHelper.CheckForNaNOrInfinity(preparedInputs);
+        ValidationHelper.CheckForNaNOrInfinity(preparedOutputs);
 
-        if (preparedInputs.Contains(double.NaN))
-        {
-            throw new ArgumentException("Normalized Inputs can't contain NaN values. " +
-                                        "Log Normalization creates NaN values when a raw input value is negative.", nameof(inputs));
-        }
+        return NormalizationHelper.SplitData(preparedInputs, preparedOutputs, trainingSize);
+    }
 
-        if (preparedOutputs.Contains(double.NaN))
-        {
-            throw new ArgumentException("Normalized Outputs can't contain NaN values. " +
-                                        "Log Normalization creates NaN values when a raw output value is negative.", nameof(outputs));
-        }
+    internal override (double[][] trainingInputs, double[] trainingOutputs, double[][] oosInputs, double[] oosOutputs) PrepareData(
+        double[][] inputs, double[] outputs, int trainingSize)
+    {
+        var preparedInputs = Normalize(inputs);
+        var preparedOutputs = Normalize(outputs);
+        ValidationHelper.CheckForNaNOrInfinity(preparedInputs);
+        ValidationHelper.CheckForNaNOrInfinity(preparedOutputs);
 
-        if (preparedInputs.Contains(double.PositiveInfinity) || preparedInputs.Contains(double.NegativeInfinity))
-        {
-            throw new ArgumentException("Normalized Inputs can't contain Infinity values. " +
-                                        "Log Normalization creates Infinity values when a raw input value is 0 or infinity.", nameof(inputs));
-        }
+        return NormalizationHelper.SplitData(preparedInputs, preparedOutputs, trainingSize);
+    }
 
-        if (preparedOutputs.Contains(double.PositiveInfinity) || preparedOutputs.Contains(double.NegativeInfinity))
-        {
-            throw new ArgumentException("Normalized Outputs can't contain Infinity values. " +
-                                        "Log Normalization creates Infinity values when a raw output value is 0 or infinity.", nameof(outputs));
-        }
+    internal override (double[][] trainingInputs, double[][] trainingOutputs, double[][] oosInputs, double[][] oosOutputs) 
+        PrepareData(double[][] inputs, double[][] outputs, int trainingSize)
+    {
+        var preparedInputs = Normalize(inputs);
+        var preparedOutputs = Normalize(outputs);
+        ValidationHelper.CheckForNaNOrInfinity(preparedInputs);
+        ValidationHelper.CheckForNaNOrInfinity(preparedOutputs);
 
         return NormalizationHelper.SplitData(preparedInputs, preparedOutputs, trainingSize);
     }
