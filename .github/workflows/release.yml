@@ -1,6 +1,9 @@
 name: Build and Release
 
-on: [push]
+on:
+  pull_request:
+    branches:
+      - main
 permissions:
   contents: write
 
