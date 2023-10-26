@@ -68,6 +68,14 @@ jobs:
     - name: Create NuGet Version
       run: dotnet nuget push **.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_API_KEY }}
 
+    - name: Publish Github Packages
+      uses: tanaka-takayoshi/nuget-publish-to-github-packages-action@v2.1
+      with:
+        nupkg-path:  './artifacts/*.nupkg'
+        repo-owner:  'ooples'
+        gh-user:  'ooples'
+        token:  ${{ secrets.GITHUB_TOKEN }}
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
