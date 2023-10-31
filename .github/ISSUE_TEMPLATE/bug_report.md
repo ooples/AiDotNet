@@ -1,25 +1,38 @@
-### Prerequisites
+---
+name: Bug report
+about: Create a report to help us improve
+title: ''
+labels: ''
+assignees: ''
 
-* [ ] Can you reproduce the problem?
-* [ ] Are you running the latest version?
-* [ ] Did you perform a search to check if this issue has been reported already?
+---
 
-For more information, see the `CONTRIBUTING` guide.
+**Describe the bug**
+A clear and concise description of what the bug is.
 
-### Description
+**To Reproduce**
+Steps to reproduce the behavior:
+1. Go to '...'
+2. Click on '....'
+3. Scroll down to '....'
+4. See error
 
-[Description of the bug or feature]
+**Expected behavior**
+A clear and concise description of what you expected to happen.
 
-### Steps to Reproduce
+**Screenshots**
+If applicable, add screenshots to help explain your problem.
 
-1. [First Step]
-2. [Second Step]
-3. [and so on...]
+**Desktop (please complete the following information):**
+ - OS: [e.g. iOS]
+ - Browser [e.g. chrome, safari]
+ - Version [e.g. 22]
 
-**Expected behavior:** [What you expected to happen]
+**Smartphone (please complete the following information):**
+ - Device: [e.g. iPhone6]
+ - OS: [e.g. iOS8.1]
+ - Browser [e.g. stock browser, safari]
+ - Version [e.g. 22]
 
-**Actual behavior:** [What actually happened]
-
-### Versions
-
-You can get this information by checking your project's Nuget packages.
+**Additional context**
+Add any other context about the problem here.
