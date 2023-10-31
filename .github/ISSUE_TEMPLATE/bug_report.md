@@ -1,9 +1,10 @@
 ---
 name: Bug report
 about: Create a bug report to help report issues
-title: '[BUG]: '
-labels: 'bug'
-assignees: 'ooples'
+title: "[BUG]: "
+labels: bug
+assignees: ooples
+
 ---
 
 ### Prerequisites
