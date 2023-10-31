@@ -6,32 +6,28 @@ labels: 'bug'
 assignees: 'ooples'
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+### Prerequisites
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+* [ ] Can you reproduce the problem?
+* [ ] Are you running the latest version?
+* [ ] Did you perform a search in the existing issues?
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+For more information, see the `CONTRIBUTING` guide.
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+### Description
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+[Description of the bug or feature]
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+### Steps to Reproduce
 
-**Additional context**
-Add any other context about the problem here.
+1. [First Step]
+2. [Second Step]
+3. [and so on...]
+
+**Expected behavior:** [What you expected to happen]
+
+**Actual behavior:** [What actually happened]
+
+### Versions
+
+You can get this information by checking your project's Nuget packages.
