@@ -3,7 +3,7 @@
   <Filters>
     <IncludeFilters>
       <FilterEntry>
-        <ModuleMask>src</ModuleMask>
+        <ModuleMask>AiDotNet</ModuleMask>
       </FilterEntry>
     </IncludeFilters>
   </Filters>
