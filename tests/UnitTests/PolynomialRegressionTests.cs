@@ -1,7 +1,7 @@
 ﻿using AiDotNet.Models;
 using AiDotNet.Regression;
 
-namespace AiDotNetUnitTests.UnitTests;
+namespace AiDotNetTests.UnitTests;
 
 public class PolynomialRegressionTests
 {

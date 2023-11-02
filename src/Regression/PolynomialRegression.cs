@@ -39,7 +39,7 @@ public sealed class PolynomialRegression : IRegression<double, double>
         var trainingPctSize = RegressionOptions.TrainingPctSize;
         ValidationHelper.CheckForInvalidTrainingPctSize(trainingPctSize);
         var trainingSize = (int)Math.Floor(inputSize * trainingPctSize / 100);
-        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Max(2, inputSize), trainingPctSize);
+        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Min(2, inputSize), trainingPctSize);
 
         // Perform the actual work necessary to create the prediction and metrics models
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =

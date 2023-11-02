@@ -24,7 +24,7 @@ public sealed class MultivariateRegression : IRegression<double[], double[]>
         // do simple checks on all inputs and outputs before we do any work
         ValidationHelper.CheckForNullItems(inputs, outputs);
         var inputSize = inputs[0].Length;
-        ValidationHelper.CheckForInvalidInputSize(inputSize, outputs.Length);
+        ValidationHelper.CheckForInvalidInputSize(inputSize, outputs[0].Length);
 
         // setting up default regression options if necessary
         RegressionOptions = regressionOptions ?? new MultipleRegressionOptions();
@@ -33,7 +33,7 @@ public sealed class MultivariateRegression : IRegression<double[], double[]>
         var trainingPctSize = RegressionOptions.TrainingPctSize;
         ValidationHelper.CheckForInvalidTrainingPctSize(trainingPctSize);
         var trainingSize = (int)Math.Floor(inputSize * trainingPctSize / 100);
-        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Max(2, inputSize), trainingPctSize);
+        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Min(2, inputSize), trainingPctSize);
 
         // Perform the actual work necessary to create the prediction and metrics models
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =
@@ -105,12 +105,15 @@ public sealed class MultivariateRegression : IRegression<double[], double[]>
 
     internal override double[][] Transform(double[][] inputs)
     {
-        var predictions = Array.Empty<double[]>();
+        var predictions = new double[inputs.Length][];
+        predictions[0] = new double[inputs[0].Length];
+        predictions[1] = new double[inputs[1].Length];
+
         for (var i = 0; i < inputs.Length; i++)
         {
-            for (var j = 0; j < inputs[j].Length; j++)
+            for (var j = 0; j < inputs[i].Length; j++)
             {
-                predictions[i][j] = YIntercept + Coefficients[i][j] * inputs[i][j];
+                predictions[i][j] = Coefficients[i][1] + Coefficients[i][0] * inputs[i][j];
             }
         }
 

@@ -5,9 +5,11 @@ VisualStudioVersion = 17.8.34004.107
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNet", "src\AiDotNet.csproj", "{588E787B-4FCA-4590-9EE7-16750B9E6D3E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNetTestConsole", "testconsole\AiDotNetTestConsole.csproj", "{10A6CCBA-C92B-41CD-87D1-3030FA4CF483}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNetTestConsole", "testconsole\AiDotNetTestConsole.csproj", "{10A6CCBA-C92B-41CD-87D1-3030FA4CF483}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNetUnitTests", "tests\AiDotNetUnitTests.csproj", "{9D9859B0-528F-416A-A908-B96CA11074EC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNetUnitTests", "tests\AiDotNetUnitTests.csproj", "{9D9859B0-528F-416A-A908-B96CA11074EC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNetBenchmarkTests", "AiDotNetBenchmarkTests\AiDotNetBenchmarkTests.csproj", "{42B9395F-DD55-46EB-9AF5-E7837AA5BB1C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,6 +29,10 @@ Global
 		{9D9859B0-528F-416A-A908-B96CA11074EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9D9859B0-528F-416A-A908-B96CA11074EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9D9859B0-528F-416A-A908-B96CA11074EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{42B9395F-DD55-46EB-9AF5-E7837AA5BB1C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{42B9395F-DD55-46EB-9AF5-E7837AA5BB1C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{42B9395F-DD55-46EB-9AF5-E7837AA5BB1C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{42B9395F-DD55-46EB-9AF5-E7837AA5BB1C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
