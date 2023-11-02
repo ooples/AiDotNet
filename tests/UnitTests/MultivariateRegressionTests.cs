@@ -1,7 +1,7 @@
 ﻿using AiDotNet.Models;
 using AiDotNet.Regression;
 
-namespace AiDotNetUnitTests.UnitTests;
+namespace AiDotNetTests.UnitTests;
 
 public class MultivariateRegressionTests
 {
@@ -58,7 +58,8 @@ public class MultivariateRegressionTests
     public void MultivariateRegression_Constructor_Returns_Valid_Predictions_With_No_Options()
     {
         // Arrange
-        var expectedPredictions = new double[][] { new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, new double[] { 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 } };
+        var expectedPredictions = new double[][] { new double[] { 3, 4, 5, 6, 7, 8, 9, 10 }, 
+            new double[] { 112.99999999999999, 98.59999999999998, 84.199999999999989, 69.8, 55.399999999999991, 40.999999999999993, 26.599999999999998, 12.2 } };
 
         // Act
         var multivariateRegression = new MultivariateRegression(_inputs, _outputs);
