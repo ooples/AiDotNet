@@ -1,7 +1,7 @@
 using AiDotNet.Models;
 using AiDotNet.Regression;
 
-namespace AiDotNetTests.UnitTests;
+namespace AiDotNetUnitTests.UnitTests;
 
 public class SimpleRegressionTests
 {

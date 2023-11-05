@@ -1,19 +1,55 @@
-using System.Linq;
-using MetricsHelper = AiDotNet.Helpers.MetricsHelper;
-
 namespace AiDotNet.Statistics;
 
+/// <summary>
+/// Metrics data to help evaluate the performance of a model by comparing the predicted values to the actual values.
+/// Predicted values are taken from the out of sample (oos) data only.
+/// </summary>
 public sealed class Metrics : IMetrics
 {
-    public double MeanSquaredError { get; private set; }
-    public double RootMeanSquaredError { get; private set; }
-    public double AdjustedR2 { get; private set; }
-    public double R2 { get; private set; }
-    public double PredictionsStandardError { get; private set; }
-    public double PredictionsStandardDeviation { get; private set; }
-    public double AverageStandardError { get; private set; }
-    public double AverageStandardDeviation { get; private set; }
-    public int DegreesOfFreedom { get; private set; }
+    /// <summary>
+    /// Mean squared error (MSE) is the average of the squared differences between the predicted values and the actual values.
+    /// </summary>
+    public double MeanSquaredError { get; }
+
+    /// <summary>
+    /// Root mean squared error (RMSE) is the square root of the mean squared error.
+    /// </summary>
+    public double RootMeanSquaredError { get; }
+
+    /// <summary>
+    /// Adjusted R2 is the coefficient of determination (R2) adjusted for the number of independent variables in the model.
+    /// </summary>
+    public double AdjustedR2 { get; }
+
+    /// <summary>
+    /// R2 is the coefficient of determination which is a measure of how well the predictions fit the actual values.
+    /// </summary>
+    public double R2 { get; }
+
+    /// <summary>
+    /// The standard error of the predictions.
+    /// </summary>
+    public double PredictionsStandardError { get; }
+
+    /// <summary>
+    /// The standard deviation of the predictions.
+    /// </summary>
+    public double PredictionsStandardDeviation { get; }
+
+    /// <summary>
+    /// The standard error of the average predictions.
+    /// </summary>
+    public double AverageStandardError { get; }
+
+    /// <summary>
+    /// The standard deviation of the average predictions.
+    /// </summary>
+    public double AverageStandardDeviation { get; }
+
+    /// <summary>
+    /// The degrees of freedom is the number of independent values that can vary in the data sample.
+    /// </summary>
+    public int DegreesOfFreedom { get; }
     
     private double OosPredictionsAvg { get; }
     private double OosActualValuesAvg { get; }

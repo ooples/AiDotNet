@@ -7,8 +7,16 @@ public sealed class PolynomialRegression : IRegression<double, double>
     private MultipleRegressionOptions RegressionOptions { get; }
     private int Order { get; }
 
+    /// <summary>
+    /// Predictions created from the out of sample (oos) data only.
+    /// </summary>
     public double[] Predictions { get; private set; }
-    public IMetrics Metrics { get; private set; }
+
+    /// <summary>
+    /// Metrics data to help evaluate the performance of a model by comparing the predicted values to the actual values.
+    /// Predicted values are taken from the out of sample (oos) data only.
+    /// </summary>
+    public Metrics Metrics { get; private set; }
 
     /// <summary>
     /// Performs polynomial regression on the provided inputs and outputs. A polynomial regression is a form of regression analysis in which the relationship
