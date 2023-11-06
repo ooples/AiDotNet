@@ -1,6 +1,6 @@
 ﻿namespace AiDotNet.OutlierRemoval;
 
-internal class ThresholdOutlierRemoval : IOutlierRemoval
+public class ThresholdOutlierRemoval : IOutlierRemoval
 {
     internal override (double[] cleanedInputs, double[] cleanedOutputs) RemoveOutliers(double[] rawInputs, double[] rawOutputs)
     {
