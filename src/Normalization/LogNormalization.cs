@@ -1,5 +1,8 @@
 ﻿namespace AiDotNet.Normalization;
 
+/// <summary>
+/// Normalizes the data by taking the natural log of each value.
+/// </summary>
 public class LogNormalization : INormalization
 {
     internal override double[] Normalize(double[] rawValues)

@@ -1,6 +1,11 @@
 ﻿namespace AiDotNet.Normalization;
 
-internal class MinMaxNormalization : INormalization
+/// <summary>
+/// Normalizes the data by
+/// 1) Subtracting the minimum value from each value
+/// 2) Dividing each value from step #1 by the absolute difference between the maximum and minimum values
+/// </summary>
+public class MinMaxNormalization : INormalization
 {
     private double InputsMin { get; set; }
     private double InputsMax { get; set; }
@@ -10,7 +15,9 @@ internal class MinMaxNormalization : INormalization
         var normalizedValues = new double[rawValues.Length];
         for (var i = 0; i < rawValues.Length; i++)
         {
-            normalizedValues.SetValue(Math.Abs(InputsMax - InputsMin) > 0 ? (rawValues[i] - InputsMin) / (InputsMax - InputsMin) : double.NaN, i);
+            normalizedValues[i] = Math.Abs(InputsMax - InputsMin) > 0
+                ? (rawValues[i] - InputsMin) / Math.Abs(InputsMax - InputsMin)
+                : double.NaN;
         }
 
         if (normalizedValues.Contains(double.NaN))

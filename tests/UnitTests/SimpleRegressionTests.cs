@@ -3,7 +3,7 @@ using AiDotNet.OutlierRemoval;
 using AiDotNet.Quartile;
 using AiDotNet.Regression;
 
-namespace AiDotNetTests.UnitTests;
+namespace AiDotNetUnitTests.UnitTests;
 
 public class SimpleRegressionTests
 {

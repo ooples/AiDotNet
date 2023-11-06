@@ -1,5 +1,8 @@
 ﻿namespace AiDotNet.OutlierRemoval;
 
+/// <summary>
+/// Removes outliers from the data using the threshold method. This method is not recommended for data sets with less than 15 data points.
+/// </summary>
 public class ThresholdOutlierRemoval : IOutlierRemoval
 {
     internal override (double[] cleanedInputs, double[] cleanedOutputs) RemoveOutliers(double[] rawInputs, double[] rawOutputs)

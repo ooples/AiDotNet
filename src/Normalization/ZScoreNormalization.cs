@@ -1,6 +1,9 @@
 ﻿namespace AiDotNet.Normalization;
 
-internal class ZScoreNormalization : INormalization
+/// <summary>
+/// Normalizes the data by subtracting the mean from each value and dividing by the standard deviation.
+/// </summary>
+public class ZScoreNormalization : INormalization
 {
     internal override double[] Normalize(double[] rawValues)
     {
@@ -11,7 +14,7 @@ internal class ZScoreNormalization : INormalization
 
         for (var i = 0; i < rawValues.Length; i++)
         {
-            normalizedValues.SetValue(rawValuesStdDev != 0 ? (rawValues[i] - rawValuesAvg) / rawValuesStdDev : double.NaN, i);
+            normalizedValues[i] = rawValuesStdDev != 0 ? (rawValues[i] - rawValuesAvg) / rawValuesStdDev : double.NaN;
         }
 
         if (normalizedValues.Contains(double.NaN))

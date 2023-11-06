@@ -1,5 +1,8 @@
 ﻿namespace AiDotNet.Normalization;
 
+/// <summary>
+/// Normalizes the data by dividing each value by the smallest multiple of 10 that is greater than the largest value.
+/// </summary>
 public class DecimalNormalization : INormalization
 {
     internal override double[] Normalize(double[] rawValues)

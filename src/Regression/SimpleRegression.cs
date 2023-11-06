@@ -6,7 +6,15 @@ public sealed class SimpleRegression : IRegression<double, double>
     private double Slope { get; set; }
     private SimpleRegressionOptions RegressionOptions { get; }
 
+    /// <summary>
+    /// Predictions created from the out of sample (oos) data only.
+    /// </summary>
     public double[] Predictions { get; private set; }
+
+    /// <summary>
+    /// Metrics data to help evaluate the performance of a model by comparing the predicted values to the actual values.
+    /// Predicted values are taken from the out of sample (oos) data only.
+    /// </summary>
     public Metrics Metrics { get; private set; }
 
     /// <summary>
