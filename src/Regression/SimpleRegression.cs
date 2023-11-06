@@ -7,7 +7,7 @@ public sealed class SimpleRegression : IRegression<double, double>
     private SimpleRegressionOptions RegressionOptions { get; }
 
     public double[] Predictions { get; private set; }
-    public IMetrics Metrics { get; private set; }
+    public Metrics Metrics { get; private set; }
 
     /// <summary>
     /// Performs a simple linear regression on the provided inputs and outputs.
@@ -32,14 +32,14 @@ public sealed class SimpleRegression : IRegression<double, double>
         var trainingPctSize = RegressionOptions.TrainingPctSize;
         ValidationHelper.CheckForInvalidTrainingPctSize(trainingPctSize);
         var trainingSize = (int)Math.Floor(inputSize * trainingPctSize / 100);
-        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Min(2, inputs.Length), trainingPctSize);
+        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Min(2, inputSize), trainingPctSize);
 
         // Perform the actual work necessary to create the prediction and metrics models
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =
             PrepareData(inputs, outputs, trainingSize, RegressionOptions.Normalization);
         Fit(trainingInputs, trainingOutputs);
         Predictions = Transform(oosInputs);
-        Metrics = new Metrics(Predictions, oosOutputs, inputs.Length);
+        Metrics = new Metrics(Predictions, oosOutputs, inputs.Length, RegressionOptions.OutlierRemoval?.Quartile);
     }
 
     internal override void Fit(double[] x, double[] y)

@@ -1,6 +1,3 @@
-using System.Linq;
-using MetricsHelper = AiDotNet.Helpers.MetricsHelper;
-
 namespace AiDotNet.Statistics;
 
 public sealed class Metrics : IMetrics
@@ -14,15 +11,19 @@ public sealed class Metrics : IMetrics
     public double AverageStandardError { get; private set; }
     public double AverageStandardDeviation { get; private set; }
     public int DegreesOfFreedom { get; private set; }
-    
+    public double Quartile1Value { get; private set; }
+    public double Quartile2Value { get; private set; }
+    public double Quartile3Value { get; private set; }
+
     private double OosPredictionsAvg { get; }
     private double OosActualValuesAvg { get; }
     private int ParamsCount { get; }
     private int SampleSize { get; }
     private double ResidualSumOfSquares { get; set; }
     private double TotalSumOfSquares { get; set; }
+    private IQuartile Quartile { get; set; }
 
-    public Metrics(double[] oosPredictions, double[] oosActualValues, int paramCount)
+    public Metrics(double[] oosPredictions, double[] oosActualValues, int paramCount, IQuartile? quartile)
     {
         OosPredictionsAvg = oosPredictions.Average();
         OosActualValuesAvg = oosActualValues.Average();
@@ -41,9 +42,16 @@ public sealed class Metrics : IMetrics
         PredictionsStandardError = CalculatePredictionStandardError();
         MeanSquaredError = CalculateMeanSquaredError();
         RootMeanSquaredError = CalculateRootMeanSquaredError();
+
+        Quartile = quartile ?? new StandardQuartile();
+        var sortedOosPredictions = oosPredictions.DeepCopySort();
+        var (q1Value, q2Value, q3Value) = Quartile.FindQuartiles(sortedOosPredictions);
+        Quartile1Value = q1Value;
+        Quartile2Value = q2Value;
+        Quartile3Value = q3Value;
     }
 
-    public Metrics(double[][] oosPredictions, double[][] oosActualValues, int paramCount)
+    public Metrics(double[][] oosPredictions, double[][] oosActualValues, int paramCount, IQuartile? quartile)
     {
         OosPredictionsAvg = oosPredictions.Average();
         OosActualValuesAvg = oosActualValues.Average();
@@ -61,6 +69,14 @@ public sealed class Metrics : IMetrics
         PredictionsStandardError = CalculatePredictionStandardError();
         MeanSquaredError = CalculateMeanSquaredError();
         RootMeanSquaredError = CalculateRootMeanSquaredError();
+
+        Quartile = quartile ?? new StandardQuartile();
+        // sort oos predictions here
+        var sortedOosPredictions = oosPredictions.DeepCopySort();
+        var (q1Value, q2Value, q3Value) = Quartile.FindQuartiles(sortedOosPredictions);
+        Quartile1Value = q1Value;
+        Quartile2Value = q2Value;
+        Quartile3Value = q3Value;
     }
 
     internal override double CalculateMeanSquaredError()

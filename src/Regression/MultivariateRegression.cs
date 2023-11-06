@@ -40,7 +40,7 @@ public sealed class MultivariateRegression : IRegression<double[], double[]>
             PrepareData(inputs, outputs, trainingSize, RegressionOptions.Normalization);
         Fit(trainingInputs, trainingOutputs);
         Predictions = Transform(oosInputs);
-        Metrics = new Metrics(Predictions, oosOutputs, inputSize);
+        Metrics = new Metrics(Predictions, oosOutputs, inputSize, RegressionOptions.OutlierRemoval?.Quartile);
     }
 
     internal override void Fit(double[][] inputs, double[][] outputs)

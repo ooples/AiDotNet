@@ -44,4 +44,28 @@ internal static class MetricsHelper
 
         return sum / count;
     }
+
+    internal static double[] DeepCopySort(this double[] inputs)
+    {
+        var inputLength = inputs.Length;
+        var tmpInputs = new double[inputLength];
+        Array.Copy(inputs, tmpInputs, inputLength);
+        Array.Sort(tmpInputs);
+
+        return tmpInputs;
+    }
+
+    internal static double[][] DeepCopySort(this double[][] inputs)
+    {
+        var inputLength = inputs.Length;
+        var tmpInputs = new double[inputLength][];
+        for (var i = 0; i < inputLength; i++)
+        {
+            tmpInputs[i] = new double[inputs[i].Length];
+        }
+        Array.Copy(inputs, tmpInputs, inputLength);
+        Array.Sort(tmpInputs);
+
+        return tmpInputs;
+    }
 }
