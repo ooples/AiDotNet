@@ -103,9 +103,9 @@ internal static class ValidationHelper
                                         $"You either need to increase your {nameof(trainingPctSize)} or increase the amount of inputs and outputs data");
         }
 
-        if (outOfSampleSize < 2)
+        if (outOfSampleSize < minSize)
         {
-            throw new ArgumentException($"Out of sample data must contain at least 2 values. " +
+            throw new ArgumentException($"Out of sample data must contain at least {minSize} values. " +
                                         $"You either need to decrease your {nameof(trainingPctSize)} or increase the amount of inputs and outputs data");
         }
     }
@@ -132,6 +132,14 @@ internal static class ValidationHelper
             var preparedValuesArray = preparedValues[i];
 
             CheckForNaNOrInfinity(preparedValuesArray);
+        }
+    }
+
+    internal static void CheckForMinimumInputSize(int inputSize, int minimumSize)
+    {
+        if (inputSize < minimumSize)
+        {
+            throw new ArgumentException($"The length of the array is too small. Please make sure your array has at least {minimumSize} values.", nameof(inputSize));
         }
     }
 }

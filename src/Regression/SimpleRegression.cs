@@ -40,14 +40,14 @@ public sealed class SimpleRegression : IRegression<double, double>
         var trainingPctSize = RegressionOptions.TrainingPctSize;
         ValidationHelper.CheckForInvalidTrainingPctSize(trainingPctSize);
         var trainingSize = (int)Math.Floor(inputSize * trainingPctSize / 100);
-        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Min(2, inputs.Length), trainingPctSize);
+        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Min(2, inputSize), trainingPctSize);
 
         // Perform the actual work necessary to create the prediction and metrics models
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =
             PrepareData(inputs, outputs, trainingSize, RegressionOptions.Normalization);
         Fit(trainingInputs, trainingOutputs);
         Predictions = Transform(oosInputs);
-        Metrics = new Metrics(Predictions, oosOutputs, inputs.Length);
+        Metrics = new Metrics(Predictions, oosOutputs, inputs.Length, RegressionOptions.OutlierRemoval?.Quartile);
     }
 
     internal override void Fit(double[] x, double[] y)
