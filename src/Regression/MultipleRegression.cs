@@ -102,9 +102,9 @@ public sealed class MultipleRegression : IRegression<double[], double>
 
         for (var i = 0; i < inputs.Length; i++)
         {
-            for (var j = 0; j < inputs[j].Length; j++)
+            for (var j = 0; j < inputs[i].Length; j++)
             {
-                predictions[j] += YIntercept + Coefficients[i] * inputs[i][j];
+                predictions[j] += Coefficients[1] + Coefficients[0] * inputs[i][j];
             }
         }
 

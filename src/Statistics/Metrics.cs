@@ -34,10 +34,11 @@ public sealed class Metrics : IMetrics
         ParamsCount = paramCount;
         SampleSize = oosPredictions.Length;
         DegreesOfFreedom = CalculateDegreesOfFreedom();
-        var r2Result = MetricsHelper.CalculateR2(oosPredictions, oosActualValues, OosActualValuesAvg, SampleSize);
-        ResidualSumOfSquares = r2Result.residualSquaresSum;
-        TotalSumOfSquares = r2Result.totalSquaresSum;
-        R2 = r2Result.r2;
+        var (residualSquaresSum, totalSquaresSum, r2) = 
+            MetricsHelper.CalculateR2(oosPredictions, oosActualValues, OosActualValuesAvg, SampleSize);
+        ResidualSumOfSquares = residualSquaresSum;
+        TotalSumOfSquares = totalSquaresSum;
+        R2 = r2;
         AdjustedR2 = CalculateAdjustedR2(R2);
         AverageStandardDeviation = CalculateAverageStandardDeviation();
         PredictionsStandardDeviation = CalculatePredictionStandardDeviation();
