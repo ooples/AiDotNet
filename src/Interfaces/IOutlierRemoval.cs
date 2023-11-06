@@ -6,5 +6,5 @@ public abstract class IOutlierRemoval
 
     internal abstract (double[][] cleanedInputs, double[] cleanedOutputs) RemoveOutliers(double[][] rawInputs, double[] rawOutputs);
 
-    public IQuartile? Quartile { get; set; }
+    internal IQuartile? Quartile { get; set; }
 }

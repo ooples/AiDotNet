@@ -1,5 +1,3 @@
-using AiDotNet.Quartile;
-
 namespace AiDotNet.Regression;
 
 public sealed class SimpleRegression : IRegression<double, double>

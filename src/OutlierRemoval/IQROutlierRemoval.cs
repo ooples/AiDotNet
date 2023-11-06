@@ -1,6 +1,4 @@
-﻿using AiDotNet.Quartile;
-
-namespace AiDotNet.OutlierRemoval;
+﻿namespace AiDotNet.OutlierRemoval;
 
 public class IQROutlierRemoval : IOutlierRemoval
 {
@@ -14,8 +12,9 @@ public class IQROutlierRemoval : IOutlierRemoval
         //initializes new type StandardQuartile of class IQuartile only if type is null else leaves the same.
         var (q1Value, _, q3Value) = QuartileHelper.FindQuartiles(unfiltered, Quartile ?? new StandardQuartile());
         var iQR = q3Value - q1Value;
-        var minLimit = q1Value - (1.5 * iQR);
-        var maxLimit = q3Value + (1.5 * iQR);
+        var factor = 1.5 * iQR;
+        var minLimit = q1Value - factor;
+        var maxLimit = q3Value + factor;
 
         return QuartileHelper.FindIndicesToRemove(unfiltered, minLimit, maxLimit);
     }

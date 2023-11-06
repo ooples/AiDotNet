@@ -1,7 +1,3 @@
-using AiDotNet.Quartile;
-using System.Linq;
-using MetricsHelper = AiDotNet.Helpers.MetricsHelper;
-
 namespace AiDotNet.Statistics;
 
 public sealed class Metrics : IMetrics

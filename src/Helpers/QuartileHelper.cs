@@ -1,7 +1,4 @@
-﻿
-using System;
-
-namespace AiDotNet.Helpers
+﻿namespace AiDotNet.Helpers
 {
     internal static class QuartileHelper
     {
