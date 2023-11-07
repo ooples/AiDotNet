@@ -5,3 +5,4 @@ global using AiDotNet.Statistics;
 global using AiDotNet.Enums;
 global using MathNet.Numerics.LinearAlgebra;
 global using MetricsHelper = AiDotNet.Helpers.MetricsHelper;
+global using System.Security.Cryptography;

@@ -2,6 +2,7 @@
 using AiDotNet.Models;
 using AiDotNet.Normalization;
 using AiDotNet.Regression;
+using AiDotNet.Genetics;
 
 namespace AiDotNetTestConsole;
 
@@ -34,6 +35,9 @@ internal class Program
             new MultipleRegressionOptions() { TrainingPctSize = 99, MatrixDecomposition = MatrixDecomposition.Lu, UseIntercept = true });
         var metrics3 = multipleRegression.Metrics;
         var predictions3 = multipleRegression.Predictions;
+
+        var test = new GeneticsAi();
+        var testValue = test.TestValue;
 
         Console.WriteLine();
     }
