@@ -1,14 +1,10 @@
 ﻿using AiDotNet.Genetics.SelectionMethods;
-using System.Drawing;
-
 namespace AiDotNet.Genetics;
 
-public class GeneticsAi<T, CType>
+public class GeneticsAi<T>
 {
-    private IFitnessFunction FitnessFunction { get; }
-    private ISelectionMethod<T, CType> SelectionMethod { get; }
-    public List<IChromosome<T, CType>> Population { get; private set; }
-
+    public List<IChromosome<T>> Population { get; private set; }
+    private ISelectionMethod<T> SelectionMethod { get; }
     private int Size { get; }
     private double RandomSelectionPortion { get; }
     private bool AutoShuffle { get; }
@@ -16,28 +12,27 @@ public class GeneticsAi<T, CType>
     private double MutationRate { get; }
     private Random RandomGenerator { get; } = new ();
 
-    public GeneticsAi(IChromosome<T, CType> ancestor, IFitnessFunction? fitnessFunction, ISelectionMethod<T, CType>? selectionMethod, int size, 
+    public GeneticsAi(IChromosome<T> chromosome, ISelectionMethod<T>? selectionMethod, int size, 
         double randomSelectionPortion = 0.1, bool autoShuffle = false, double crossoverRate = 0.75, double mutationRate = 0.1)
     {
         Size = size;
         RandomSelectionPortion = randomSelectionPortion;
-        FitnessFunction = fitnessFunction ?? new DefaultFitnessFunction<T, CType>();
-        SelectionMethod = selectionMethod ?? new EliteSelection<T, CType>();
+        SelectionMethod = selectionMethod ?? new EliteSelection<T>();
         AutoShuffle = autoShuffle;
         CrossoverRate = crossoverRate;
         MutationRate = mutationRate;
-        Population = new List<IChromosome<T, CType>>(size);
+        Population = new List<IChromosome<T>>(size);
 
-        GeneratePopulation(ancestor);
+        GeneratePopulation(chromosome);
         RunGeneration();
 
         var test = new GeneticsFacade();
     }
 
-    private void GeneratePopulation(IChromosome<T, CType> ancestor)
+    private void GeneratePopulation(IChromosome<T> ancestor)
     {
         // add ancestor to the population
-        ancestor.CalculateFitness(FitnessFunction);
+        ancestor.CalculateFitnessScore();
         Population.Add(ancestor.Clone());
 
         // add more chromosomes to the population
@@ -46,7 +41,7 @@ public class GeneticsAi<T, CType>
             // create new chromosome
             var c = ancestor.CreateNew();
             // calculate it's fitness
-            c.CalculateFitness(FitnessFunction);
+            c.CalculateFitnessScore();
             // add it to population
             Population.Add(c);
         }
@@ -79,7 +74,7 @@ public class GeneticsAi<T, CType>
             // mutate it
             c.Mutate();
             // calculate fitness of the mutant
-            c.CalculateFitness(FitnessFunction);
+            c.CalculateFitnessScore();
             // add mutant to the population
             Population.Add(c);
         }
@@ -100,8 +95,8 @@ public class GeneticsAi<T, CType>
             c1.Crossover(c2);
 
             // calculate fitness of these two offsprings
-            c1.CalculateFitness(FitnessFunction);
-            c2.CalculateFitness(FitnessFunction);
+            c1.CalculateFitnessScore();
+            c2.CalculateFitnessScore();
 
             // add two new offsprings to the population
             Population.Add(c1);
@@ -126,7 +121,7 @@ public class GeneticsAi<T, CType>
             // create new chromosome
             var c = ancestor.CreateNew();
             // calculate it's fitness
-            c.CalculateFitness(FitnessFunction);
+            c.CalculateFitnessScore();
             // add it to population
             Population.Add(c);
         }

@@ -3,6 +3,8 @@ using AiDotNet.Models;
 using AiDotNet.Normalization;
 using AiDotNet.Regression;
 using AiDotNet.Genetics;
+using AiDotNet.Genetics.Chromosomes;
+using AiDotNet.Genetics.SelectionMethods;
 
 namespace AiDotNetTestConsole;
 
@@ -36,8 +38,8 @@ internal class Program
         var metrics3 = multipleRegression.Metrics;
         var predictions3 = multipleRegression.Predictions;
 
-        var test = new GeneticsAi();
-        var testValue = test.TestValue;
+        var test = new GeneticsAi<string>(new StringChromosome(), new EliteSelection<string>(), 25);
+        var testValue = test.Population;
 
         Console.WriteLine();
     }

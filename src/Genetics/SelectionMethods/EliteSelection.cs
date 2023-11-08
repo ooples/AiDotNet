@@ -1,8 +1,8 @@
 ﻿namespace AiDotNet.Genetics.SelectionMethods;
 
-public class EliteSelection<T, CType> : ISelectionMethod<T, CType>
+public class EliteSelection<T> : ISelectionMethod<T>
 {
-    public void ApplySelection(List<IChromosome<T, CType>> chromosomes, int size)
+    public void ApplySelection(List<IChromosome<T>> chromosomes, int size)
     {
         // sort chromosomes
         chromosomes.Sort();

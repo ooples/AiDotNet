@@ -1,34 +1,30 @@
 ﻿namespace AiDotNet.Genetics.Chromosomes;
 
-public class StringChromosome : IChromosome<StringChromosome, string>
+public class StringChromosome : IChromosome<string>
 {
     public double FitnessScore { get; }
     public string Chromosome { get; private set; }
-    public IFitnessFunction FitnessFunction { get; }
 
     private string Target = "I Love Genetics so much!";
     private const string Genes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890, .-;:_!\"#%&/()=?@${[]}";
 
-    public StringChromosome(StringChromosome source)
+    private StringChromosome(StringChromosome source)
     {
         Chromosome = (string)source.Chromosome.Clone();
         FitnessScore = source.FitnessScore;
         Target = source.Target;
-        FitnessFunction = source.FitnessFunction;
     }
 
-    public StringChromosome(string chromosome, IFitnessFunction fitnessFunction)
+    public StringChromosome(string chromosome)
     {
         Chromosome = chromosome;
-        FitnessFunction = fitnessFunction;
-        FitnessScore = CalculateFitness(FitnessFunction);
+        FitnessScore = CalculateFitnessScore();
     }
 
-    public StringChromosome(IFitnessFunction fitnessFunction)
+    public StringChromosome()
     {
         Chromosome = Generate();
-        FitnessFunction = fitnessFunction;
-        FitnessScore = CalculateFitness(FitnessFunction);
+        FitnessScore = CalculateFitnessScore();
     }
 
     public void Mutate()
@@ -55,17 +51,17 @@ public class StringChromosome : IChromosome<StringChromosome, string>
         return Genes[index];
     }
 
-    public IChromosome<StringChromosome, string> Clone()
+    public IChromosome<string> Clone()
     {
         return new StringChromosome(this);
     }
 
-    public IChromosome<StringChromosome, string> CreateNew()
+    public IChromosome<string> CreateNew()
     {
-        return new StringChromosome(FitnessFunction);
+        return new StringChromosome();
     }
 
-    public double CalculateFitness(IFitnessFunction fitnessFunction)
+    public double CalculateFitnessScore()
     {
         double fitnessScore = 0;
         for (var i = 0; i < Target.Length; i++)
@@ -76,12 +72,7 @@ public class StringChromosome : IChromosome<StringChromosome, string>
         return fitnessScore;
     }
 
-    public int CompareTo(StringChromosome? other)
-    {
-        return FitnessScore.CompareTo(other?.FitnessScore);
-    }
-
-    public string Crossover(IChromosome<StringChromosome, string> chromosome)
+    public string Crossover(IChromosome<string> chromosome)
     {
         var newChromosome = string.Empty;
         for (var i = 0; i < Chromosome.Length; i++)

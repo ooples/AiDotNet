@@ -1,20 +1,20 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IChromosome<T, CType> : IComparable<T>
+public interface IChromosome<T>
 {
     double FitnessScore { get; }
 
-    CType Chromosome { get; }
+    T Chromosome { get; }
 
     public void Mutate();
 
-    public CType Crossover(IChromosome<T, CType> chromosome);
+    public T Crossover(IChromosome<T> chromosome);
 
-    public CType Generate();
+    public T Generate();
 
-    public IChromosome<T, CType> Clone();
+    public IChromosome<T> Clone();
 
-    public IChromosome<T, CType> CreateNew();
+    public IChromosome<T> CreateNew();
 
-    public double CalculateFitness(IFitnessFunction fitnessFunction);
+    public double CalculateFitnessScore();
 }

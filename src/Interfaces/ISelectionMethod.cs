@@ -1,6 +1,6 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface ISelectionMethod<T, CType>
+public interface ISelectionMethod<T>
 {
-    public void ApplySelection(List<IChromosome<T, CType>> chromosomes, int size);
+    public void ApplySelection(List<IChromosome<T>> chromosomes, int size);
 }
