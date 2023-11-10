@@ -4,32 +4,49 @@ public class StringChromosome : IChromosome<string>
 {
     public double FitnessScore { get; }
     public string Chromosome { get; private set; }
+    public int Size { get; }
 
-    private string Target = "I Love Genetics so much!";
-    private const string Genes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890, .-;:_!\"#%&/()=?@${[]}";
+    private double CrossoverBalancer { get; }
+    private double MutationBalancer { get; }
+    private string Target { get; }
+    private string Genes { get; }
+    private Random RandomGenerator { get; } = new();
 
     private StringChromosome(StringChromosome source)
     {
         Chromosome = (string)source.Chromosome.Clone();
         FitnessScore = source.FitnessScore;
         Target = source.Target;
+        Genes = source.Genes;
+        Size = source.Size;
+        RandomGenerator = source.RandomGenerator;
+        CrossoverBalancer = source.CrossoverBalancer;
+        MutationBalancer = source.MutationBalancer;
     }
 
-    public StringChromosome(string chromosome)
-    {
-        Chromosome = chromosome;
-        FitnessScore = CalculateFitnessScore();
-    }
-
-    public StringChromosome()
+    public StringChromosome(string target, string genes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890, .-;:_!\"#%&/()=?@${[]}")
     {
         Chromosome = Generate();
         FitnessScore = CalculateFitnessScore();
+        Target = target;
+        Genes = genes;
     }
 
     public void Mutate()
     {
-        
+        var mutationGene = RandomGenerator.Next(Size);
+        var tempArray = Chromosome.ToCharArray();
+
+        if (RandomGenerator.NextDouble() < MutationBalancer)
+        {
+            tempArray[mutationGene] *= mutationMultiplierGenerator;
+        }
+        else
+        {
+            tempArray[mutationGene] += mutationAdditionGenerator.Generate();
+        }
+
+        Chromosome = tempArray.ToString() ?? Chromosome;
     }
 
     public string Generate()
@@ -37,16 +54,15 @@ public class StringChromosome : IChromosome<string>
         var chromosome = string.Empty;
         for (var i = 0; i < Target.Length; i++)
         {
-            chromosome += StringChromosome.CreateRandomGene();
+            chromosome += CreateRandomGene();
         }
 
         return chromosome;
     }
 
-    private static char CreateRandomGene()
+    private char CreateRandomGene()
     {
-        var random = new Random();
-        var index = random.Next(0, Genes.Length);
+        var index = RandomGenerator.Next(0, Genes.Length);
 
         return Genes[index];
     }
@@ -77,20 +93,27 @@ public class StringChromosome : IChromosome<string>
         var newChromosome = string.Empty;
         for (var i = 0; i < Chromosome.Length; i++)
         {
-            var probability = new Random().NextDouble();
+            var probability = RandomGenerator.NextDouble();
 
-            newChromosome += probability switch
+            if (probability < CrossoverBalancer)
             {
-                // if prob is less than 0.45, insert gene
-                // from parent 1 
-                < 0.45 => Chromosome[i],
-                // if prob is between 0.45 and 0.90, insert
-                // gene from parent 2
-                < 0.9 => chromosome.Chromosome[i],
-                _ => CreateRandomGene()
-            };
+                newChromosome += Chromosome[i];
+            }
+            else if (probability > CrossoverBalancer)
+            {
+                newChromosome += chromosome.Chromosome[i];
+            }
+            else
+            {
+                newChromosome += CreateRandomGene();
+            }
         }
 
         return newChromosome;
+    }
+
+    public int CompareTo(IChromosome<string>? otherChromosome)
+    {
+        return FitnessScore.CompareTo(otherChromosome?.FitnessScore);
     }
 }

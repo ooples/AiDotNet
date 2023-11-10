@@ -1,6 +1,6 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IChromosome<T>
+public interface IChromosome<T> : IComparable<IChromosome<T>>
 {
     double FitnessScore { get; }
 
