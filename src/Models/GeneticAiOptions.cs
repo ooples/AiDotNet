@@ -6,8 +6,6 @@ public class GeneticAiOptions<T>
     public double RandomSelectionPortion { get; set; } = 0.1;
     public bool AutoShuffle { get; set; } = false;
     public double CrossoverRate { get; set; } = 0.75;
-    public double CrossoverBalancer { get; set; } = 0.5;
     public double MutationRate { get; set; } = 0.1;
-    public double MutationBalancer { get; set; } = 0.5;
-    public ISelectionMethod<T>? SelectionMethod { get; set; } = null;
+    public ISelectionMethod<T> SelectionMethod { get; set; } = new EliteSelection<T>();
 }

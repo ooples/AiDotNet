@@ -8,9 +8,7 @@ public interface IGenetics<T>
     public double RandomSelectionPortion { get; }
     public bool AutoShuffle { get; }
     public double CrossoverRate { get; }
-    public double CrossoverBalancer { get; }
     public double MutationRate { get; }
-    public double MutationBalancer { get; }
 
     public void GeneratePopulation(IChromosome<T> chromosome);
 

@@ -1,6 +1,4 @@
-﻿using AiDotNet.Genetics.Chromosomes;
-
-namespace AiDotNet.Genetics;
+﻿namespace AiDotNet.Genetics;
 
 public class GeneticsAi<T>
 {
@@ -8,7 +6,6 @@ public class GeneticsAi<T>
     {
         var test = new GeneticsFacade<T>(chromosome, geneticAiOptions);
 
-        var test2 = new StringChromosome("I want this string");
-        test2.
+        var test2 = new StringChromosome(new ChromosomeOptions<string>());
     }
 }

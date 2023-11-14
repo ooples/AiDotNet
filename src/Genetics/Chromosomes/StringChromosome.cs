@@ -6,44 +6,40 @@ public class StringChromosome : IChromosome<string>
     public string Chromosome { get; private set; }
     public int Size { get; }
 
-    private double CrossoverBalancer { get; }
-    private double MutationBalancer { get; }
-    private string Target { get; }
     private string Genes { get; }
-    private Random RandomGenerator { get; } = new();
+    private ChromosomeOptions<string> ChromosomeOptions { get; }
 
     private StringChromosome(StringChromosome source)
     {
         Chromosome = (string)source.Chromosome.Clone();
         FitnessScore = source.FitnessScore;
-        Target = source.Target;
         Genes = source.Genes;
         Size = source.Size;
-        RandomGenerator = source.RandomGenerator;
-        CrossoverBalancer = source.CrossoverBalancer;
-        MutationBalancer = source.MutationBalancer;
+        ChromosomeOptions = source.ChromosomeOptions;
     }
 
-    public StringChromosome(string target, string genes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890, .-;:_!\"#%&/()=?@${[]}")
+    public StringChromosome(ChromosomeOptions<string> chromosomeOptions, 
+        string genes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890, .-;:_!\"#%&/()=?@${[]}")
     {
+        ChromosomeOptions = chromosomeOptions;
         Chromosome = Generate();
         FitnessScore = CalculateFitnessScore();
-        Target = target;
         Genes = genes;
     }
 
     public void Mutate()
     {
-        var mutationGene = RandomGenerator.Next(Size);
+        var mutationGene = ChromosomeOptions.RandomGenerator.Next(Size);
         var tempArray = Chromosome.ToCharArray();
 
-        if (RandomGenerator.NextDouble() < MutationBalancer)
+        if (ChromosomeOptions.RandomGenerator.NextDouble() < ChromosomeOptions.MutationBalancer)
         {
-            tempArray[mutationGene] *= mutationMultiplierGenerator;
+
+            tempArray[mutationGene] = Genes[ChromosomeOptions.MutationMultiplierGenerator.Next(0, 1)];
         }
         else
         {
-            tempArray[mutationGene] += mutationAdditionGenerator.Generate();
+            tempArray[mutationGene] = Genes[ChromosomeOptions.MutationAdditionGenerator.Next(-1, 1)];
         }
 
         Chromosome = tempArray.ToString() ?? Chromosome;
@@ -52,7 +48,7 @@ public class StringChromosome : IChromosome<string>
     public string Generate()
     {
         var chromosome = string.Empty;
-        for (var i = 0; i < Target.Length; i++)
+        for (var i = 0; i < ChromosomeOptions.Target.Length; i++)
         {
             chromosome += CreateRandomGene();
         }
@@ -62,7 +58,7 @@ public class StringChromosome : IChromosome<string>
 
     private char CreateRandomGene()
     {
-        var index = RandomGenerator.Next(0, Genes.Length);
+        var index = ChromosomeOptions.RandomGenerator.Next(0, Genes.Length);
 
         return Genes[index];
     }
@@ -74,15 +70,15 @@ public class StringChromosome : IChromosome<string>
 
     public IChromosome<string> CreateNew()
     {
-        return new StringChromosome();
+        return new StringChromosome(ChromosomeOptions);
     }
 
     public double CalculateFitnessScore()
     {
         double fitnessScore = 0;
-        for (var i = 0; i < Target.Length; i++)
+        for (var i = 0; i < ChromosomeOptions.Target.Length; i++)
         {
-            fitnessScore += Target[i] != Chromosome[i] ? 1 : 0;
+            fitnessScore += ChromosomeOptions.Target[i] != Chromosome[i] ? 1 : 0;
         }
 
         return fitnessScore;
@@ -93,13 +89,13 @@ public class StringChromosome : IChromosome<string>
         var newChromosome = string.Empty;
         for (var i = 0; i < Chromosome.Length; i++)
         {
-            var probability = RandomGenerator.NextDouble();
+            var probability = ChromosomeOptions.RandomGenerator.NextDouble();
 
-            if (probability < CrossoverBalancer)
+            if (probability < ChromosomeOptions.CrossoverBalancer)
             {
                 newChromosome += Chromosome[i];
             }
-            else if (probability > CrossoverBalancer)
+            else if (probability > ChromosomeOptions.CrossoverBalancer)
             {
                 newChromosome += chromosome.Chromosome[i];
             }

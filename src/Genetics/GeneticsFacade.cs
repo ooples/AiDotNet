@@ -9,21 +9,16 @@ internal class GeneticsFacade<T> : IGenetics<T>
     public double RandomSelectionPortion { get; }
     public bool AutoShuffle { get; }
     public double CrossoverRate { get; }
-    public double CrossoverBalancer { get; }
     public double MutationRate { get; }
-    public double MutationBalancer { get; }
 
     public GeneticsFacade(IChromosome<T> chromosome, GeneticAiOptions<T> geneticAiOptions)
     {
         PopulationSize = geneticAiOptions.PopulationSize;
         RandomSelectionPortion = geneticAiOptions.RandomSelectionPortion;
-        // Default selection method is Elite Selection
-        SelectionMethod = geneticAiOptions.SelectionMethod ?? new EliteSelection<T>();
+        SelectionMethod = geneticAiOptions.SelectionMethod;
         AutoShuffle = geneticAiOptions.AutoShuffle;
         CrossoverRate = geneticAiOptions.CrossoverRate;
-        CrossoverBalancer = geneticAiOptions.CrossoverBalancer;
         MutationRate = geneticAiOptions.MutationRate;
-        MutationBalancer = geneticAiOptions.MutationBalancer;
         Population = new List<IChromosome<T>>(PopulationSize);
 
         GeneratePopulation(chromosome);
@@ -111,12 +106,12 @@ internal class GeneticsFacade<T> : IGenetics<T>
 
         // add random chromosomes
         if (randomAmount <= 0) return;
-        var ancestor = Population[0];
+        var chromosome = Population[0];
 
         for (var i = 0; i < randomAmount; i++)
         {
             // create new chromosome
-            var c = ancestor.CreateNew();
+            var c = chromosome.CreateNew();
             // calculate it's fitness
             c.CalculateFitnessScore();
             // add it to population

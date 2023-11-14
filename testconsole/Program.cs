@@ -38,8 +38,7 @@ internal class Program
         var metrics3 = multipleRegression.Metrics;
         var predictions3 = multipleRegression.Predictions;
 
-        var test = new GeneticsAi<string>(new StringChromosome(), new EliteSelection<string>(), 25);
-        var testValue = test.Population;
+        var test = new GeneticsAi<string>(new StringChromosome(new ChromosomeOptions<string>()), new GeneticAiOptions<string>());
 
         Console.WriteLine();
     }
