@@ -5,7 +5,7 @@ namespace AiDotNetTests.UnitTests;
 
 public class WeightedRegressionTests
 {
-    private readonly double[][] _inputs = new double[][] { new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, new double[] { 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 } };
+    private readonly double[] _inputs = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
     private readonly double[] _outputs = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
     private readonly double[] _weights = new double[] { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
     
@@ -13,22 +13,24 @@ public class WeightedRegressionTests
     public void WeightedRegression_Constructor_Throws_ArgumentNullException_When_Inputs_Is_Null()
     {
         // Arrange
+        const int order = 2;
 
         // Act
 
         // Assert
-        Assert.Throws<ArgumentNullException>(() => new WeightedRegression(null, _outputs, _weights));
+        Assert.Throws<ArgumentNullException>(() => new WeightedRegression(null, _outputs, _weights, order));
     }
 
     [Fact]
     public void WeightedRegression_Constructor_Throws_ArgumentNullException_When_Outputs_Is_Null()
     {
         // Arrange
+        const int order = 2;
 
         // Act
 
         // Assert
-        Assert.Throws<ArgumentNullException>(() => new WeightedRegression(_inputs, null, _weights));
+        Assert.Throws<ArgumentNullException>(() => new WeightedRegression(_inputs, null, _weights, order));
     }
 
     [Fact]
@@ -36,11 +38,12 @@ public class WeightedRegressionTests
     {
         // Arrange
         const int tooBigTrainingSize = 110;
+        const int order = 2;
 
         // Act
 
         // Assert
-        Assert.Throws<ArgumentException>(() => new WeightedRegression(_inputs, _outputs, _weights, new MultipleRegressionOptions() { TrainingPctSize = tooBigTrainingSize }));
+        Assert.Throws<ArgumentException>(() => new WeightedRegression(_inputs, _outputs, _weights, order, new MultipleRegressionOptions() { TrainingPctSize = tooBigTrainingSize }));
     }
 
     [Fact]
@@ -48,21 +51,23 @@ public class WeightedRegressionTests
     {
         // Arrange
         const int tooSmallTrainingSize = 0;
+        const int order = 2;
 
         // Act
 
         // Assert
-        Assert.Throws<ArgumentException>(() => new WeightedRegression(_inputs, _outputs, _weights, new MultipleRegressionOptions() { TrainingPctSize = tooSmallTrainingSize }));
+        Assert.Throws<ArgumentException>(() => new WeightedRegression(_inputs, _outputs, _weights, order, new MultipleRegressionOptions() { TrainingPctSize = tooSmallTrainingSize }));
     }
 
     [Fact]
     public void WeightedRegression_Constructor_Returns_Valid_Predictions_With_No_Options()
     {
         // Arrange
-        var expectedPredictions = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+        var expectedPredictions = new double[] { 0, 52, 0, 0, 0, 0, 0, 0 };
+        const int order = 2;
 
         // Act
-        var weightedRegression = new WeightedRegression(_inputs, _outputs, _weights);
+        var weightedRegression = new WeightedRegression(_inputs, _outputs, _weights, order);
         var actualPredictions = weightedRegression.Predictions;
 
         // Assert
