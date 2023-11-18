@@ -27,11 +27,6 @@ internal static class MatrixHelper
         return determinant;
     }
 
-    public static double[,] CreateIdentityMatrix()
-    {
-        throw new NotImplementedException();
-    }
-
     private static double[,] CreateSubMatrix(double[,] matrix, int excludeRowIndex, int excludeColumnIndex)
     {
         var size = matrix.GetLength(0);
