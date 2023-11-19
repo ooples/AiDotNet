@@ -62,7 +62,6 @@ public sealed class PolynomialRegression : IRegression<double, double>
         var m = Matrix<double>.Build;
         var inputMatrix = m.Dense(inputs.Length, Order + 1, (i, j) => Math.Pow(inputs[i], j));
         var outputVector = CreateVector.Dense(outputs);
-        var result = CreateVector.Dense<double>(inputs.Length + (RegressionOptions.UseIntercept ? 1 : 0));
 
         if (RegressionOptions.UseIntercept)
         {
@@ -71,30 +70,23 @@ public sealed class PolynomialRegression : IRegression<double, double>
                 inputMatrix.InsertRow(0, CreateVector.Dense(outputs.Length, Vector<double>.One));
         }
 
-        switch (RegressionOptions.MatrixDecomposition)
+        var result = RegressionOptions.MatrixDecomposition switch
         {
-            case MatrixDecomposition.Cholesky:
-                inputMatrix.Cholesky().Solve(outputVector, result);
-                break;
-            case MatrixDecomposition.Evd:
-                inputMatrix.Evd().Solve(outputVector, result);
-                break;
-            case MatrixDecomposition.GramSchmidt:
-                inputMatrix.GramSchmidt().Solve(outputVector, result);
-                break;
-            case MatrixDecomposition.Lu:
-                inputMatrix.LU().Solve(outputVector, result);
-                break;
-            case MatrixDecomposition.Qr:
-                inputMatrix.QR().Solve(outputVector, result);
-                break;
-            case MatrixDecomposition.Svd:
-                inputMatrix.Svd().Solve(outputVector, result);
-                break;
-            default:
-                inputMatrix.Solve(outputVector, result);
-                break;
-        }
+            MatrixDecomposition.Cholesky => inputMatrix.TransposeThisAndMultiply(inputMatrix).Cholesky()
+                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
+            MatrixDecomposition.Evd => inputMatrix.TransposeThisAndMultiply(inputMatrix).Evd()
+                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
+            MatrixDecomposition.GramSchmidt => inputMatrix.TransposeThisAndMultiply(inputMatrix).GramSchmidt()
+                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
+            MatrixDecomposition.Lu => inputMatrix.TransposeThisAndMultiply(inputMatrix).LU()
+                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
+            MatrixDecomposition.Qr => inputMatrix.TransposeThisAndMultiply(inputMatrix).QR()
+                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
+            MatrixDecomposition.Svd => inputMatrix.TransposeThisAndMultiply(inputMatrix).Svd()
+                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
+            _ => inputMatrix.TransposeThisAndMultiply(inputMatrix).Cholesky()
+                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
+        };
 
         Coefficients = result.ToArray();
         YIntercept = 0;
