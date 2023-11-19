@@ -63,8 +63,12 @@ internal static class MetricsHelper
         {
             tmpInputs[i] = new double[inputs[i].Length];
         }
+
         Array.Copy(inputs, tmpInputs, inputLength);
-        Array.Sort(tmpInputs);
+        for (var i = 0; i < tmpInputs.Length; i++)
+        {
+            Array.Sort(tmpInputs[i]);
+        }
 
         return tmpInputs;
     }

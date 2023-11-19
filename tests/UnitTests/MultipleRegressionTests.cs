@@ -58,7 +58,7 @@ public class MultipleRegressionTests
     public void MultipleRegression_Constructor_Returns_Valid_Predictions_With_No_Options()
     {
         // Arrange
-        var expectedPredictions = new double[] { 11, 11, 11, 11, 11, 11, 11, 11 };
+        var expectedPredictions = new double[] { 3, 4, 5, 6, 7, 8, 9, 10 };
 
         // Act
         var multipleRegression = new MultipleRegression(_inputs, _outputs);
