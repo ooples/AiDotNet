@@ -1,9 +1,10 @@
 using AiDotNet.Models;
+using AiDotNet.Normalization;
 using AiDotNet.OutlierRemoval;
 using AiDotNet.Quartile;
 using AiDotNet.Regression;
 
-namespace AiDotNetUnitTests.UnitTests;
+namespace AiDotNetTests.UnitTests;
 
 public class SimpleRegressionTests
 {
@@ -78,6 +79,64 @@ public class SimpleRegressionTests
         var simpleRegression = new SimpleRegression(_inputs, _outputs);
         var actualPredictions = simpleRegression.Predictions;
       
+        // Assert
+        Assert.Equal(expectedPredictions, actualPredictions);
+    }
+
+    [Fact]
+    public void SimpleRegression_Constructor_Returns_Valid_Predictions_With_DecimalNormalization()
+    {
+        // Arrange
+        var expectedPredictions = new double[] { 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1 };
+
+        // Act
+        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new DecimalNormalization()});
+        var actualPredictions = simpleRegression.Predictions;
+
+        // Assert
+        Assert.Equal(expectedPredictions, actualPredictions);
+    }
+
+    [Fact]
+    public void SimpleRegression_Constructor_Returns_Valid_Predictions_With_MinMaxNormalization()
+    {
+        // Arrange
+        var expectedPredictions = new double[] { 2, 3, 4, 5, 6, 7, 8, 9 };
+
+        // Act
+        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new MinMaxNormalization() });
+        var actualPredictions = simpleRegression.Predictions;
+
+        // Assert
+        Assert.Equal(expectedPredictions, actualPredictions);
+    }
+
+    [Fact]
+    public void SimpleRegression_Constructor_Returns_Valid_Predictions_With_LogNormalization()
+    {
+        // Arrange
+        var expectedPredictions = new double[] { 1.0986122886681098, 1.3862943611198906, 1.6094379124341003, 1.791759469228055, 1.9459101490553132, 
+            2.0794415416798357, 2.1972245773362196, 2.302585092994046 };
+
+        // Act
+        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new LogNormalization() });
+        var actualPredictions = simpleRegression.Predictions;
+
+        // Assert
+        Assert.Equal(expectedPredictions, actualPredictions);
+    }
+
+    [Fact]
+    public void SimpleRegression_Constructor_Returns_Valid_Predictions_With_ZScoreNormalization()
+    {
+        // Arrange
+        var expectedPredictions = new double[] { -1.5275252316519468, -1.091089451179962, -0.6546536707079772, -0.2182178902359924, 
+            0.2182178902359924, 0.6546536707079772, 1.091089451179962, 1.5275252316519468 };
+
+        // Act
+        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new ZScoreNormalization() });
+        var actualPredictions = simpleRegression.Predictions;
+
         // Assert
         Assert.Equal(expectedPredictions, actualPredictions);
     }

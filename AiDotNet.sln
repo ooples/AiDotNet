@@ -7,9 +7,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNet", "src\AiDotNet.cs
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNetTestConsole", "testconsole\AiDotNetTestConsole.csproj", "{10A6CCBA-C92B-41CD-87D1-3030FA4CF483}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNetUnitTests", "tests\AiDotNetUnitTests.csproj", "{9D9859B0-528F-416A-A908-B96CA11074EC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNetTests", "tests\AiDotNetTests.csproj", "{9D9859B0-528F-416A-A908-B96CA11074EC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNetBenchmarkTests", "AiDotNetBenchmarkTests\AiDotNetBenchmarkTests.csproj", "{42B9395F-DD55-46EB-9AF5-E7837AA5BB1C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNetBenchmarkTests", "AiDotNetBenchmarkTests\AiDotNetBenchmarkTests.csproj", "{42B9395F-DD55-46EB-9AF5-E7837AA5BB1C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
