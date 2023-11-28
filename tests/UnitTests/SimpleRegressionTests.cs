@@ -204,7 +204,7 @@ public class SimpleRegressionTests
         var q3ExpectedValue = 212.13832142754239;
 
         // Act
-        var sut = new SimpleRegression(_EvenEvenInputs, _EvenEvenOutputs, new SimpleRegressionOptions() { OutlierRemoval = new IQROutlierRemoval(new StandardQuartile()) });
+        var sut = new SimpleRegression(_EvenEvenInputs, _EvenEvenOutputs, new SimpleRegressionOptions { OutlierRemoval = new ThresholdOutlierRemoval() });
 
         // Assert
         var metrics = sut.Metrics;

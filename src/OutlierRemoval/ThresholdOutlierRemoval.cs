@@ -5,11 +5,11 @@
 /// </summary>
 public class ThresholdOutlierRemoval : IOutlierRemoval
 {
-    internal override (double[] cleanedInputs, double[] cleanedOutputs) RemoveOutliers(double[] rawInputs, double[] rawOutputs)
+    internal override (double[], double[]) RemoveOutliers(double[] rawInputs, double[] rawOutputs)
     {
-        var sortedValues = new List<double>(rawInputs.OrderBy(v => v));
+        var sortedValues = new List<double>(rawInputs);
         var median = sortedValues[sortedValues.Count / 2];
-        var deviations = new List<double>(sortedValues.Select(v => Math.Abs(v - median)));
+        var deviations = new List<double>(sortedValues.Select(v => Math.Abs(v - median)).OrderBy(x => x));
         var medianDeviation = deviations[deviations.Count / 2];
         var threshold = 3 * medianDeviation;
 
@@ -26,7 +26,12 @@ public class ThresholdOutlierRemoval : IOutlierRemoval
         return (cleanedInputs.ToArray(), cleanedOutputs.ToArray());
     }
 
-    internal override (double[][] cleanedInputs, double[] cleanedOutputs) RemoveOutliers(double[][] rawInputs, double[] rawOutputs)
+    internal override (double[][], double[]) RemoveOutliers(double[][] rawInputs, double[] rawOutputs)
+    {
+        throw new NotImplementedException();
+    }
+
+    internal override (double[][], double[][]) RemoveOutliers(double[][] rawInputs, double[][] rawOutputs)
     {
         throw new NotImplementedException();
     }

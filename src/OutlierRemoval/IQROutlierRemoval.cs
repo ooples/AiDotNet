@@ -19,7 +19,7 @@ public class IQROutlierRemoval : IOutlierRemoval
         return QuartileHelper.FindIndicesToRemove(unfiltered, minLimit, maxLimit);
     }
 
-    internal override (double[] cleanedInputs, double[] cleanedOutputs) RemoveOutliers(double[] rawInputs, double[] rawOutputs)
+    internal override (double[], double[]) RemoveOutliers(double[] rawInputs, double[] rawOutputs)
     {
         //Create Deep Copy
         var sortedInputs = rawInputs.ToArray();
@@ -34,7 +34,12 @@ public class IQROutlierRemoval : IOutlierRemoval
         return (cleanedInputs, cleanedOutputs);
     }
 
-    internal override (double[][] cleanedInputs, double[] cleanedOutputs) RemoveOutliers(double[][] rawInputs, double[] rawOutputs)
+    internal override (double[][], double[]) RemoveOutliers(double[][] rawInputs, double[] rawOutputs)
+    {
+        throw new NotImplementedException();
+    }
+
+    internal override (double[][], double[][]) RemoveOutliers(double[][] rawInputs, double[][] rawOutputs)
     {
         throw new NotImplementedException();
     }
