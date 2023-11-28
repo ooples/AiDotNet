@@ -9,15 +9,10 @@
             return quartile.FindQuartiles(inputs);
         }
 
-        internal static double[] FilterArrayWithIndices(double[] rawOutputs, int[] ignoredIndices)
+        internal static (double[], double[]) FilterArraysWithIndices(IEnumerable<double> rawInputs, IEnumerable<double> rawOutputs, IEnumerable<int> ignoredIndices)
         {
-            var filteredOutputsList = new List<double>(rawOutputs);
-            for (var i = 0; i < ignoredIndices.Length; i++)
-            {
-                filteredOutputsList.RemoveAt(i);
-            }
-
-            return filteredOutputsList.ToArray();
+            return (rawInputs.Where((val, idx) => !ignoredIndices.Contains(idx)).ToArray(),
+                rawOutputs.Where((val, idx) => !ignoredIndices.Contains(idx)).ToArray());
         }
 
         internal static int[] FindIndicesToRemove(double[] unfiltered, double minLimit, double maxLimit)
