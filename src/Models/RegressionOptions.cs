@@ -8,7 +8,7 @@ public class RegressionOptions
     /// <summary>
     /// The percentage of the data to use for training. The rest will be used for testing.
     /// </summary>
-    public double TrainingPctSize { get; set; } = 25;
+    public double TrainingPctSize { get; set; } = 75;
 
     /// <summary>
     /// The normalization to use on the data before training and testing.
