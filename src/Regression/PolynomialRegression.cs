@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Regression;
+﻿using AiDotNet.LinearAlgebra;
+
+namespace AiDotNet.Regression;
 
 public sealed class PolynomialRegression : IRegression<double, double>
 {
@@ -63,6 +65,7 @@ public sealed class PolynomialRegression : IRegression<double, double>
         var inputMatrix = m.Dense(inputs.Length, Order + 1, (i, j) => Math.Pow(inputs[i], j));
         var outputVector = CreateVector.Dense(outputs);
         var result = CreateVector.Dense<double>(inputs.Length + (RegressionOptions.UseIntercept ? 1 : 0));
+        var cramerArray = new double[Order + 1];
 
         if (RegressionOptions.UseIntercept)
         {
@@ -73,6 +76,9 @@ public sealed class PolynomialRegression : IRegression<double, double>
 
         switch (RegressionOptions.MatrixDecomposition)
         {
+            case MatrixDecomposition.Cramer:
+                cramerArray = new CramerMatrix(inputs, outputs, Order).Coefficients;
+                break;
             case MatrixDecomposition.Cholesky:
                 inputMatrix.Cholesky().Solve(outputVector, result);
                 break;
@@ -96,7 +102,7 @@ public sealed class PolynomialRegression : IRegression<double, double>
                 break;
         }
 
-        Coefficients = result.ToArray();
+        Coefficients = RegressionOptions.MatrixDecomposition == MatrixDecomposition.Cramer ? cramerArray : result.ToArray();
         YIntercept = 0;
     }
 

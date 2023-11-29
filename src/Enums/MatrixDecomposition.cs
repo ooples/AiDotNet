@@ -14,6 +14,7 @@
 /// </summary>
 public enum MatrixDecomposition
 {
+    Cramer,
     Cholesky,
     Evd,
     GramSchmidt,

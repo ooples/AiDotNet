@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Models;
 using AiDotNet.Regression;
+using AiDotNet.Helpers;
 
 namespace AiDotNetTests.UnitTests;
 
@@ -72,4 +73,40 @@ public class PolynomialRegressionTests
         // Assert
         Assert.Equal(expectedPredictions, actualPredictions);
     }
+
+    [Fact]
+    public void PolynomialRegression_TestCalculationOf_CalculateDeterminantRecursive()
+    {
+        // Arrange
+        const double expectedPredictions1 = 900.014766;
+        double actualPredictions1;
+        var matrix1 = new double[,] { { 8.34, -5.66, 2.58 }, { -0.74, 5.27, 8.48 }, { -3.97, -8.97, 0.1 } };
+
+        // Act
+        //actualPredictions1 = Helpers
+
+        // Assert
+        //Assert.Equal(expectedPredictions1, actualPredictions1);
+    }
+
+    [Fact]
+    public void PolynomialRegression_TestCalculationOf_CalculateCramerMethod()
+    {
+        // Arrange 
+        var expectedPredictions = new double[] { 0.229065559, -0.162800413, 0.027763966 }; //really I mean coefficients here I just copied and pasted.
+        var order = 2;
+        var actualPredictions = new double[order + 1];
+        var inputs = new double[] { -3, -2, -1, -0.2, 1, 3 };
+        var outputs = new double[] { 0.9, 0.8, 0.4, 0.2, 0.1, 0 };
+
+        // Act
+        var polynomialRegressionCramer = new PolynomialRegression(inputs, outputs, order, new MultipleRegressionOptions() { MatrixDecomposition = AiDotNet.Enums.MatrixDecomposition.Cramer });
+        actualPredictions = polynomialRegressionCramer.Predictions;
+
+        // Assert
+        Assert.Equal(expectedPredictions[0], actualPredictions[0]);
+        Assert.Equal(expectedPredictions[1], actualPredictions[1]);
+        Assert.Equal(expectedPredictions[2], actualPredictions[2]);
+    }
+
 }

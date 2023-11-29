@@ -57,4 +57,19 @@ internal static class MatrixHelper
 
         return subMatrix;
     }
+    public static void ReplaceColumn(double[,] destination, double[,] source, int destColumn, int srcColumn)
+    {
+        //exceptions
+        //Ensure the size of source matrix column is equal to the size of destination matrix column
+        //ensure destColumn is in scope of destination, ie destColumn < sizeOf Destinations rows
+        //ensure srcColumn is in scope of source, ie srcColumn < sizeOf source rows
+
+        //rows = 0 ; col = 1
+        int size = source.GetLength(0);
+
+        for (var i = 0; i < size; i++)
+        {
+            destination[i, destColumn] = source[i, srcColumn];
+        }
+    }
 }
