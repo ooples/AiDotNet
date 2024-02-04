@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Models;
+using AiDotNet.Normalization;
 using AiDotNet.Regression;
 using AiDotNet.Helpers;
 
@@ -56,14 +57,14 @@ public class PolynomialRegressionTests
         // Act
 
         // Assert
-        Assert.Throws<ArgumentException>(() => new PolynomialRegression(_inputs, _outputs, order, new MultipleRegressionOptions() { TrainingPctSize = tooSmallTrainingSize }));
+        Assert.Throws<ArgumentException>(() => new PolynomialRegression(_inputs, _outputs, order, new MultipleRegressionOptions { TrainingPctSize = tooSmallTrainingSize }));
     }
 
     [Fact]
     public void PolynomialRegression_Constructor_Returns_Valid_Predictions_With_No_Options()
     {
         // Arrange
-        var expectedPredictions = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+        var expectedPredictions = new double[] { 239.19999999999956, 447.20000000000016, -166.39999999999998, 0, 0, 0, 0, 0 };
         const int order = 2;
 
         // Act

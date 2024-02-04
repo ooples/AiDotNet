@@ -54,7 +54,9 @@ public sealed class PolynomialRegression : IRegression<double, double>
         // Perform the actual work necessary to create the prediction and metrics models
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =
             PrepareData(inputs, outputs, trainingSize, RegressionOptions.Normalization);
-        Fit(trainingInputs, trainingOutputs);
+        var (cleanedInputs, cleanedOutputs) = 
+            RegressionOptions.OutlierRemoval?.RemoveOutliers(trainingInputs, trainingOutputs) ?? (trainingInputs, trainingOutputs);
+        Fit(cleanedInputs, cleanedOutputs);
         Predictions = Transform(oosInputs);
         Metrics = new Metrics(Predictions, oosOutputs, inputSize, RegressionOptions.OutlierRemoval?.Quartile);
     }
@@ -74,7 +76,7 @@ public sealed class PolynomialRegression : IRegression<double, double>
                 inputMatrix.InsertRow(0, CreateVector.Dense(outputs.Length, Vector<double>.One));
         }
 
-        switch (RegressionOptions.MatrixDecomposition)
+        var result = RegressionOptions.MatrixDecomposition switch
         {
             case MatrixDecomposition.Cramer:
                 cramerArray = new CramerMatrix(inputs, outputs, Order).Coefficients;

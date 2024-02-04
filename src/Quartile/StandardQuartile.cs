@@ -27,9 +27,4 @@ public class StandardQuartile : IQuartile
 
         return (valQ1, valQ2, valQ3);
     }
-
-    internal override (double q1Value, double q2Value, double q3Value) FindQuartiles(double[][] inputs)
-    {
-        throw new NotImplementedException();
-    }
 }

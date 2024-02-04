@@ -19,23 +19,45 @@ public class IQROutlierRemoval : IOutlierRemoval
         return QuartileHelper.FindIndicesToRemove(unfiltered, minLimit, maxLimit);
     }
 
-    internal override (double[] cleanedInputs, double[] cleanedOutputs) RemoveOutliers(double[] rawInputs, double[] rawOutputs)
+    internal override (double[], double[]) RemoveOutliers(double[] rawInputs, double[] rawOutputs)
     {
         //Create Deep Copy
         var sortedInputs = rawInputs.ToArray();
         var sortedOutputs = rawOutputs.ToArray();
         //Sort Both Arrays according to Input's ascending order
         Array.Sort(sortedInputs, sortedOutputs);
-
         var ignoredIndices = DetermineIQR(sortedInputs);
-        var cleanedInputs  = QuartileHelper.FilterArrayWithIndices(sortedInputs, ignoredIndices);
-        var cleanedOutputs = QuartileHelper.FilterArrayWithIndices(sortedOutputs, ignoredIndices);
 
-        return (cleanedInputs, cleanedOutputs);
+        return QuartileHelper.FilterArraysWithIndices(sortedInputs, sortedOutputs, ignoredIndices);
     }
 
-    internal override (double[][] cleanedInputs, double[] cleanedOutputs) RemoveOutliers(double[][] rawInputs, double[] rawOutputs)
+    internal override (double[][], double[]) RemoveOutliers(double[][] rawInputs, double[] rawOutputs)
     {
-        throw new NotImplementedException();
+        var length = rawInputs[0].Length;
+
+        var finalInputs = Array.Empty<double[]>();
+        var finalOutputs = Array.Empty<double>();
+        for (var i = 0; i < length; i++)
+        {
+            var (cleanedInputs, cleanedOutputs) = RemoveOutliers(rawInputs[i], rawOutputs);
+            finalInputs[i] = cleanedInputs;
+            finalOutputs = cleanedOutputs;
+        }
+
+        return (finalInputs, finalOutputs);
+    }
+
+    internal override (double[][], double[][]) RemoveOutliers(double[][] rawInputs, double[][] rawOutputs)
+    {
+        var finalInputs = Array.Empty<double[]>();
+        var finalOutputs = Array.Empty<double[]>();
+        for (var i = 0; i < rawInputs.Length; i++)
+        {
+            var (cleanedInputs, cleanedOutputs) = RemoveOutliers(rawInputs[i], rawOutputs[i]);
+            finalInputs[i] = cleanedInputs;
+            finalOutputs[i] = cleanedOutputs;
+        }
+
+        return (finalInputs, finalOutputs);
     }
 }

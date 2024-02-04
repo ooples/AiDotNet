@@ -48,10 +48,11 @@ internal static class ValidationHelper
             throw new ArgumentException("Order must be greater than 0", nameof(order));
         }
 
-        if (inputs.Length < order + 1)
+        if (order > inputs.Length - 1)
         {
             throw new ArgumentException(
-                $"Your inputs array must contain at least {order + 1} items and the inputs array only contains {inputs.Length} items",
+                $"The order amount you use can't be greater or equal to the amount of inputs. " +
+                $"You currently have {inputs.Length} inputs and the order must be {inputs.Length - 1} or less",
                 nameof(inputs));
         }
     }
