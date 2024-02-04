@@ -59,7 +59,7 @@ public class MultivariateRegressionTests
     {
         // Arrange
         var expectedPredictions = new double[][] { new double[] { 3, 4, 5, 6, 7, 8, 9, 10 }, 
-            new double[] { 112.99999999999999, 98.59999999999998, 84.199999999999989, 69.8, 55.399999999999991, 40.999999999999993, 26.599999999999998, 12.2 } };
+            new double[] { 12.2, 26.599999999999998, 40.99999999999999, 55.39999999999999, 69.8, 84.19999999999999, 98.59999999999998, 112.99999999999999 } };
 
         // Act
         var multivariateRegression = new MultivariateRegression(_inputs, _outputs);

@@ -1,27 +1,32 @@
 ﻿namespace AiDotNet.OutlierRemoval;
 
-/// <summary>
-/// Removes outliers from the data using the threshold method. This method is not recommended for data sets with less than 15 data points.
-/// </summary>
-public class ThresholdOutlierRemoval : IOutlierRemoval
+public class IQROutlierRemoval : IOutlierRemoval
 {
+    public IQROutlierRemoval(IQuartile? quartile = null)
+    {
+        Quartile = quartile;
+    }
+
+    internal int[] DetermineIQR(double[] unfiltered)
+    {
+        //initializes new type StandardQuartile of class IQuartile only if type is null else leaves the same.
+        var (q1Value, _, q3Value) = QuartileHelper.FindQuartiles(unfiltered, Quartile ?? new StandardQuartile());
+        var iQR = q3Value - q1Value;
+        var factor = 1.5 * iQR;
+        var minLimit = q1Value - factor;
+        var maxLimit = q3Value + factor;
+
+        return QuartileHelper.FindIndicesToRemove(unfiltered, minLimit, maxLimit);
+    }
+
     internal override (double[], double[]) RemoveOutliers(double[] rawInputs, double[] rawOutputs)
     {
-        var sortedInputs = new List<double>(rawInputs);
+        //Create Deep Copy
+        var sortedInputs = rawInputs.ToArray();
         var sortedOutputs = rawOutputs.ToArray();
-        var median = sortedInputs[sortedInputs.Count / 2];
-        var deviations = new List<double>(sortedInputs.Select(v => Math.Abs(v - median)).OrderBy(x => x));
-        var medianDeviation = deviations[deviations.Count / 2];
-        var threshold = 3 * medianDeviation;
-
-        var ignoredIndices = new List<int>();
-        for (var i = 0; i < rawInputs.Length; i++)
-        {
-            if (Math.Abs(rawInputs[i] - median) > threshold)
-            {
-                ignoredIndices.Add(i);
-            }
-        }
+        //Sort Both Arrays according to Input's ascending order
+        Array.Sort(sortedInputs, sortedOutputs);
+        var ignoredIndices = DetermineIQR(sortedInputs);
 
         return QuartileHelper.FilterArraysWithIndices(sortedInputs, sortedOutputs, ignoredIndices);
     }

@@ -46,9 +46,11 @@ public sealed class MultivariateRegression : IRegression<double[], double[]>
         // Perform the actual work necessary to create the prediction and metrics models
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =
             PrepareData(inputs, outputs, trainingSize, RegressionOptions.Normalization);
-        Fit(trainingInputs, trainingOutputs);
+        var (cleanedInputs, cleanedOutputs) = 
+            RegressionOptions.OutlierRemoval?.RemoveOutliers(trainingInputs, trainingOutputs) ?? (trainingInputs, trainingOutputs);
+        Fit(cleanedInputs, cleanedOutputs);
         Predictions = Transform(oosInputs);
-        Metrics = new Metrics(Predictions, oosOutputs, inputSize);
+        Metrics = new Metrics(Predictions, oosOutputs, inputSize, RegressionOptions.OutlierRemoval?.Quartile);
     }
 
     internal override void Fit(double[][] inputs, double[][] outputs)

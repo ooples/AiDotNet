@@ -1,11 +1,12 @@
 ﻿namespace AiDotNet.Regression;
 
-public sealed class WeightedRegression : IRegression<double[], double>
+public sealed class WeightedRegression : IRegression<double, double>
 {
     private double YIntercept { get; set; }
     private double[] Coefficients { get; set; } = Array.Empty<double>();
     private MultipleRegressionOptions RegressionOptions { get; }
     private double[] Weights { get; }
+    private int Order { get; }
 
     /// <summary>
     /// Predictions created from the out of sample (oos) data only.
@@ -28,11 +29,11 @@ public sealed class WeightedRegression : IRegression<double[], double>
     /// <param name="regressionOptions">Different options to allow full customization of the regression process</param>
     /// <exception cref="ArgumentNullException">The input array and/or output array is null</exception>
     /// <exception cref="ArgumentException">The input array or output array is either not the same length or doesn't have enough data</exception>
-    public WeightedRegression(double[][] inputs, double[] outputs, double[] weights, MultipleRegressionOptions? regressionOptions = null)
+    public WeightedRegression(double[] inputs, double[] outputs, double[] weights, int order, MultipleRegressionOptions? regressionOptions = null)
     {
         // do simple checks on all inputs and outputs before we do any work
         ValidationHelper.CheckForNullItems(inputs, outputs);
-        var inputSize = inputs[0].Length;
+        var inputSize = inputs.Length;
         ValidationHelper.CheckForInvalidInputSize(inputSize, outputs.Length);
         ValidationHelper.CheckForInvalidWeights(weights);
         Weights = weights;
@@ -40,37 +41,38 @@ public sealed class WeightedRegression : IRegression<double[], double>
         // setting up default regression options if necessary
         RegressionOptions = regressionOptions ?? new MultipleRegressionOptions();
 
+        // Check for invalid order such as a negative amount
+        ValidationHelper.CheckForInvalidOrder(order, inputs);
+        Order = order;
+
         // Check the training sizes to determine if we have enough training data to fit the model
         var trainingPctSize = RegressionOptions.TrainingPctSize;
         ValidationHelper.CheckForInvalidTrainingPctSize(trainingPctSize);
         var trainingSize = (int)Math.Floor(inputSize * trainingPctSize / 100);
-        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Max(2, inputs.Length), trainingPctSize);
+        ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Min(2, inputs.Length), trainingPctSize);
 
         // Perform the actual work necessary to create the prediction and metrics models
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =
             PrepareData(inputs, outputs, trainingSize, RegressionOptions.Normalization);
-        Fit(trainingInputs, trainingOutputs);
+        var (cleanedInputs, cleanedOutputs) = 
+            RegressionOptions.OutlierRemoval?.RemoveOutliers(trainingInputs, trainingOutputs) ?? (trainingInputs, trainingOutputs);
+        Fit(cleanedInputs, cleanedOutputs);
         Predictions = Transform(oosInputs);
-        Metrics = new Metrics(Predictions, oosOutputs, inputs.Length);
+        Metrics = new Metrics(Predictions, oosOutputs, inputs.Length, RegressionOptions.OutlierRemoval?.Quartile);
     }
 
-    internal override (double[][] trainingInputs, double[] trainingOutputs, double[][] oosInputs, double[] oosOutputs) PrepareData(
-        double[][] inputs, double[] outputs, int trainingSize, INormalization? normalization)
+    internal override (double[] trainingInputs, double[] trainingOutputs, double[] oosInputs, double[] oosOutputs) PrepareData(
+        double[] inputs, double[] outputs, int trainingSize, INormalization? normalization)
     {
         return normalization?.PrepareData(inputs, outputs, trainingSize) ?? NormalizationHelper.SplitData(inputs, outputs, trainingSize);
     }
 
-    internal override void Fit(double[][] inputs, double[] outputs)
+    internal override void Fit(double[] inputs, double[] outputs)
     {
         var m = Matrix<double>.Build;
-        var inputMatrix = RegressionOptions.MatrixLayout switch
-        {
-            MatrixLayout.ColumnArrays => m.DenseOfColumnArrays(inputs),
-            MatrixLayout.RowArrays => m.DenseOfRowArrays(inputs),
-            _ => m.DenseOfColumnArrays(inputs)
-        };
+        var inputMatrix = m.Dense(inputs.Length, Order + 1, (i, j) => Math.Pow(inputs[i], j));
         var outputVector = CreateVector.Dense(outputs);
-        var weights = m.Diagonal(Weights);
+        var weights = m.Diagonal(Weights.Take(inputs.Length).ToArray());
 
         if (RegressionOptions.UseIntercept)
         {
@@ -101,15 +103,15 @@ public sealed class WeightedRegression : IRegression<double[], double>
         YIntercept = 0;
     }
 
-    internal override double[] Transform(double[][] inputs)
+    internal override double[] Transform(double[] inputs)
     {
-        var predictions = new double[inputs[0].Length];
+        var predictions = new double[inputs.Length];
 
         for (var i = 0; i < inputs.Length; i++)
         {
-            for (var j = 0; j < inputs[j].Length; j++)
+            for (var j = 0; j < Order + 1; j++)
             {
-                predictions[j] += YIntercept + Coefficients[i] * inputs[i][j];
+                predictions[j] += YIntercept + Coefficients[j] * inputs[i];
             }
         }
 

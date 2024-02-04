@@ -8,3 +8,4 @@ global using MetricsHelper = AiDotNet.Helpers.MetricsHelper;
 global using System.Security.Cryptography;
 global using AiDotNet.Genetics.SelectionMethods;
 global using AiDotNet.Genetics.Chromosomes;
+global using AiDotNet.Quartile;
