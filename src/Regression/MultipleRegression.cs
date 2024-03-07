@@ -43,11 +43,10 @@ public sealed class MultipleRegression : IRegression<double[], double>
         ValidationHelper.CheckForInvalidTrainingSizes(trainingSize, inputSize - trainingSize, Math.Min(2, inputs.Length), trainingPctSize);
 
         // Perform the actual work necessary to create the prediction and metrics models
-        var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =
-            PrepareData(inputs, outputs, trainingSize, RegressionOptions.Normalization);
-        var (cleanedInputs, cleanedOutputs) = 
-            RegressionOptions.OutlierRemoval?.RemoveOutliers(trainingInputs, trainingOutputs) ?? (trainingInputs, trainingOutputs);
-        Fit(cleanedInputs, cleanedOutputs);
+        var (cleanedInputs, cleanedOutputs) = RegressionOptions.OutlierRemoval?.RemoveOutliers(inputs, outputs) ?? (inputs, outputs);
+        var (normalizedInputs, normalizedOutputs, oosInputs, oosOutputs) =
+            PrepareData(cleanedInputs, cleanedOutputs, trainingSize, RegressionOptions.Normalization);
+        Fit(normalizedInputs, normalizedOutputs);
         Predictions = Transform(oosInputs);
         Metrics = new Metrics(Predictions, oosOutputs, inputs.Length, RegressionOptions.OutlierRemoval?.Quartile);
     }
