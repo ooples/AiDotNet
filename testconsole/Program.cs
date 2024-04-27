@@ -14,6 +14,10 @@ internal class Program
         var test3 = new[] { new[] { 1.0, 2.0, 3.0, 4.0 }, new[] { 4.0, 5.0, 2.0, 3.0 } };
         var test2 = new[] { 15.0, 20, 10, 15.0 };
 
+        int[,] matrixA = { { 1, 2, 3 }, { 4, 5, 6 } };
+        int[,] matrixB = { { 1, 2, 3 }, { 3, 4, 5 }, { 5, 6, 7 } };
+        matrixA.DotProductMatrices(matrixB);
+
         //var simpleRegression = new SimpleRegression(inputs, outputs);
         //var metrics1 = simpleRegression.Metrics;
         //var predictions1 = simpleRegression.Predictions;
@@ -62,7 +66,6 @@ internal class Program
         actualPredictions3 = CalculateDeterminantRecursive(matrix3);
         actualPredictions4 = CalculateDeterminantRecursive(matrix4);
         actualPredictions5 = CalculateDeterminantRecursive(matrix5);
-
         Console.WriteLine(expectedPredictions1.ToString());
         Console.WriteLine(actualPredictions1.ToString());
         Console.WriteLine(expectedPredictions2.ToString());
