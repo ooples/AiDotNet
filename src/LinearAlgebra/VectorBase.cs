@@ -2,17 +2,31 @@
 
 public abstract class VectorBase<T>
 {
+    public T[] Values { get; private set; }
+
     public int Count { get; private set; }
-    private readonly List<T> _values;
 
     public VectorBase(IEnumerable<T> values)
     {
-        _values = new List<T>(values);
-        Count = _values.Count;
+        Values = values.ToArray();
+        Count = Values.Length;
     }
 
-    public T ValueAt(int index)
+    public VectorBase(int count)
     {
-        return _values[index];
+        Values = new T[count];
+        Count = count;
+    }
+
+    public T this[int i]
+    {
+        get
+        {
+            return Values[i];
+        }
+        set
+        {
+            Values[i] = value;
+        }
     }
 }

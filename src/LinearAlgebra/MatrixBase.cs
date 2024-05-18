@@ -1,36 +1,82 @@
 ﻿namespace AiDotNet.LinearAlgebra;
 
-public abstract class MatrixBase<T, T2>
+public abstract class MatrixBase<T>
 {
-    public int ColumnCount { get; private set; }
     public int RowCount { get; private set; }
-    private readonly List<Vector<T>> _values;
 
-    public MatrixBase(IEnumerable<Vector<T>> values)
+    public int ColumnCount { get; private set; }
+
+    public T[][] Values { get; private set; }
+
+    public MatrixBase(IEnumerable<IEnumerable<T>> values)
     {
-        _values = new List<Vector<T>>(values);
-        ColumnCount = _values[0].Count;
-        RowCount = _values.Count;
+        Values = BuildMatrix(values);
     }
 
-    public virtual (T[,] mainMatrix, T[,] subMatrix, T[,] yTerms) BuildMatrix(T[] inputs, T[] outputs, T2 order)
+    public MatrixBase(int rows, int columns)
     {
-        throw new NotImplementedException();
+        Values = new T[rows][];
+        RowCount = rows;
+        ColumnCount = columns;
     }
 
-    public virtual T[] Solve(T[,] matrix1, T[,] matrix2, T[,] matrix3)
+    public T[] this[int i]
     {
-        throw new NotImplementedException();
+        get
+        {
+            return Values[i];
+        }
+        set
+        {
+            Values[i] = value;
+        }
     }
 
-    public T ValueAt(int x, int y)
+    public T this[int i, int j]
     {
-        return _values[x].ValueAt(y);
+        get
+        {
+            return Values[i][j];
+        }
+        set
+        {
+            Values[i][j] = value;
+        }
     }
 
-    public float[,] BuildOnesMatrix(int rows, int columns)
+    public Matrix<T> CreateIdentityMatrix(int size)
     {
-        var matrix = new float[rows, columns];
+        if (size <= 1)
+        {
+            throw new ArgumentException($"{nameof(size)} has to be a minimum of 2", nameof(size));
+        }
+
+        var identityMatrix = new Matrix<T>(size, size);
+        for (int i = 0; i < size; i++)
+        {
+            identityMatrix[i][i] = 0;
+        }
+
+        return identityMatrix;
+    }
+
+    private T[][] BuildMatrix(IEnumerable<IEnumerable<T>> values)
+    {
+        var result = new T[RowCount][];
+        RowCount = values.Count();
+        ColumnCount = values.FirstOrDefault()?.Count() ?? default;
+
+        for (int i = 0; i < RowCount; i++)
+        {
+            result[i] = values.ElementAt(i).ToArray();
+        }
+
+        return result;
+    }
+
+    public T[,] BuildOnesMatrix(int rows, int columns)
+    {
+        var matrix = new T[rows, columns];
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < columns; j++)
@@ -42,7 +88,7 @@ public abstract class MatrixBase<T, T2>
         return matrix;
     }
 
-    public double[,] MultiplyMatrices(double[,] matrixA, double[,] matrixB)
+    public T[,] Multiply(T[,] matrixA, T[,] matrixB)
     {
         if (matrixA == null)
         {
@@ -81,7 +127,7 @@ public abstract class MatrixBase<T, T2>
             throw new ArgumentException($"{nameof(matrixA)} has to contain the same amount of columns as {nameof(matrixB)}");
         }
 
-        var matrix = new double[rows, columns];
+        var matrix = new T[rows, columns];
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < columns; j++)
@@ -93,7 +139,12 @@ public abstract class MatrixBase<T, T2>
         return matrix;
     }
 
-    public double[,] DotProductMatrices(double[,] matrixA, double[,] matrixB)
+    public void DotProduct(T matrixA, T matrixB, out T result) where T : new()
+    {
+
+    }
+
+    public double[,] DotProduct(double[,] matrixA, double[,] matrixB)
     {
         if (matrixA == null)
         {
