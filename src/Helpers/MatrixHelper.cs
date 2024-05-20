@@ -1,8 +1,6 @@
-﻿global using Matrix = AiDotNet.LinearAlgebra.Matrix<double>;
+﻿namespace AiDotNet.Helpers;
 
-namespace AiDotNet.Helpers;
-
-internal static class MatrixHelper
+public static class MatrixHelper
 {
     public static double CalculateDeterminantRecursive(double[,] matrix)
     {
@@ -75,11 +73,10 @@ internal static class MatrixHelper
         }
     }
 
-    public static T[] GetColumn<T>(this T[,] matrix, int columnIndex)
+    public static Vector<T> GetColumn<T>(this Matrix<T> matrix, int columnIndex)
     {
-        return Enumerable.Range(0, matrix.GetLength(0))
-                .Select(x => matrix[x, columnIndex])
-                .ToArray();
+        return new Vector<T>(Enumerable.Range(0, matrix.RowCount)
+                .Select(x => matrix[x, columnIndex]));
     }
 
     public static T[] GetRow<T>(this T[,] matrix, int rowIndex)
@@ -89,11 +86,11 @@ internal static class MatrixHelper
                 .ToArray();
     }
 
-    public static double[,] Reshape(this double[] array, int rows, int columns)
+    public static Matrix<T> Reshape<T>(this Vector<T> vector, int rows, int columns)
     {
-        if (array == null)
+        if (vector == null)
         {
-            throw new ArgumentNullException(nameof(array), $"{nameof(array)} can't be null");
+            throw new ArgumentNullException(nameof(vector), $"{nameof(vector)} can't be null");
         }
 
         if (rows <= 0)
@@ -106,25 +103,37 @@ internal static class MatrixHelper
             throw new ArgumentException($"{nameof(columns)} needs to be an integer larger than 0", nameof(columns));
         }
 
-        var length = array.Length;
+        var length = vector.Count;
         if (rows * columns != length)
         {
             throw new ArgumentException($"{nameof(rows)} and {nameof(columns)} multiplied together needs to be equal the array length");
         }
 
-        var matrix = new double[rows, columns];
+        var matrix = new Matrix<T>(rows, columns);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < columns; j++)
             {
-                matrix[i, j] = array[i * columns + j];
+                matrix[i, j] = vector[i * columns + j];
             }
         }
 
         return matrix;
     }
 
-    public static LinearAlgebra.Matrix<T> Duplicate<T>(this LinearAlgebra.Matrix<T> matrix)
+    public static Matrix<T> ToMatrix<T>(this Vector<T> vector)
+    {
+        int n = vector.Count;
+        var matrix = new Matrix<T>(n, 1);
+        for (int i = 0; i < n; ++i)
+        {
+            matrix[i, 0] = vector[i];
+        }
+            
+        return matrix;
+    }
+
+    public static Matrix<T> Duplicate<T>(this Matrix<T> matrix)
     {
         if (matrix == null)
         {
@@ -234,10 +243,27 @@ internal static class MatrixHelper
         }
     }
 
-    public static double Norm(this double[] vector)
+    public static Vector<double> BackwardSubstitution(this Matrix<double> uMatrix, Vector<double> yVector)
+    {
+        int n = uMatrix.RowCount;
+        var xVector = new Vector<double>(n);
+        for (int i = n - 1; i >= 0; --i)
+        {
+            xVector[i] = yVector[i];
+            for (int j = i + 1; j < n; ++j)
+            {
+                xVector[i] -= uMatrix[i, j] * xVector[j];
+            }
+            xVector[i] /= uMatrix[i, i];
+        }
+
+        return xVector;
+    }
+
+    public static double Norm(this Vector<double> vector)
     {
         double sum = 0.0;
-        int n = vector.Length;
+        int n = vector.Count;
         for (int i = 0; i < n; i++)
         {
             sum += Math.Pow(vector[i], 2);
@@ -246,15 +272,30 @@ internal static class MatrixHelper
         return Math.Sqrt(sum);
     }
 
-    public static double DotProduct(this double[] vectorA, double[] vectorB)
+    public static double DotProduct(this Vector<double> aVector, Vector<double> bVector)
     {
         double result = 0.0;
-        int n = vectorA.Length;
+        int n = aVector.Count;
         for (int i = 0; i < n; i++)
         {
-            result += vectorA[i] * vectorB[i];
+            result += aVector[i] * bVector[i];
         }
           
+        return result;
+    }
+
+    public static Vector<double> DotProduct(this Matrix<double> aMatrix, Vector<double> bVector)
+    {
+        int m = aMatrix.RowCount, n = aMatrix.ColumnCount;
+        var result = new Vector<double>(m);
+        for (int i = 0; i < m; i++)
+        {
+            for (int k = 0; k < n; k++)
+            {
+                result[i] += aMatrix[i, k] * bVector[k];
+            }
+        }
+
         return result;
     }
 
@@ -326,12 +367,12 @@ internal static class MatrixHelper
         return true;
     }
 
-    public static double[,] InvertUpperTriangularMatrix(this double[,] matrix)
+    public static Matrix<double> InvertUpperTriangularMatrix(this Matrix<double> matrix)
     {
-        int n = matrix.GetLength(0);
+        int n = matrix.RowCount;
 
         // Create the inverse matrix
-        double[,] inverse = new double[n, n];
+        var inverse = new Matrix<double>(n, n);
 
         for (int i = 0; i < n; i++)
         {
@@ -349,6 +390,28 @@ internal static class MatrixHelper
         }
 
         return inverse;
+    }
+
+    public static Matrix<double> InvertLowerTriangularMatrix(Matrix<double> matrix)
+    {
+        int n = matrix.RowCount;
+        var invL = new Matrix<double>(n, n);
+
+        for (int i = 0; i < n; i++)
+        {
+            invL[i, i] = 1.0 / matrix[i, i];
+            for (int j = 0; j < i; j++)
+            {
+                double sum = 0;
+                for (int k = j; k < i; k++)
+                {
+                    sum += matrix[i, k] * invL[k, j];
+                }
+                invL[i, j] = -sum / matrix[i, i];
+            }
+        }
+
+        return invL;
     }
 
     public static double Hypotenuse(double x, double y)
@@ -374,6 +437,35 @@ internal static class MatrixHelper
         return max * Math.Sqrt(1 + u * u);
     }
 
+    public static double Hypotenuse(params double[] values)
+    {
+        double sum = 0.0;
+        foreach (var value in values)
+        {
+            sum += value * value;
+        }
+
+        return Math.Sqrt(sum);
+    }
+
+    public static Vector<double> ForwardSubstitution(Matrix<double> aMatrix, Vector<double> bVector)
+    {
+        int n = aMatrix.RowCount;
+        var x = new Vector<double>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            x[i] = bVector[i];
+            for (int j = 0; j < i; j++)
+            {
+                x[i] -= aMatrix[i, j] * x[j];
+            }
+            x[i] /= aMatrix[i, i];
+        }
+
+        return x;
+    }
+
     public static double[,] Decompose(this double[,] matrix, out double d)
     {
         // Crout's Method
@@ -387,8 +479,8 @@ internal static class MatrixHelper
             throw new ArgumentException($"{nameof(matrix)} has to contain at least one row of values", nameof(matrix));
         }
 
-        var columns = matrix.GetRow(0).Length;
-        var rows = matrix.GetColumn(0).Length;
+        var columns = matrix.ColumnCount;
+        var rows = matrix.RowCount;
         if (rows <= 0)
         {
             throw new ArgumentException($"{nameof(rows)} needs to be an integer larger than 0");
@@ -655,8 +747,6 @@ internal static class MatrixHelper
         qMatrix = q1Matrix.Transpose();
     }
 
-    public static void ()
-
     public static void Decompose(this double[,] matrix, out double[,] qMatrix, out double[,] rMatrix)
     {
         // Householder method qr algo
@@ -868,9 +958,9 @@ internal static class MatrixHelper
         }
     }
 
-    public static double[,] Extract(this double[,] matrix, int rows, int columns)
+    public static Matrix<T> Extract<T>(this Matrix<T> matrix, int rows, int columns)
     {
-        double[,] result = new double[rows, columns];
+        var result = new Matrix<T>(rows, columns);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < columns; j++)
@@ -882,9 +972,92 @@ internal static class MatrixHelper
         return result;
     }
 
-    public static double[] Extract(this double[] vector, int length)
+    public int Nullity(double threshold)
     {
-        var result = new double[length];
+        var rows = _matrix.RowCount;
+        var columns = _matrix.ColumnCount;
+        var weightsVector = new Vector<double>(columns);
+        var thresh = threshold >= 0 ? threshold : 0.5 * Math.Sqrt(rows + columns + 1) * weightsVector[0] * double.Epsilon;
+        int nullity = 0;
+
+        for (int i = 0; i < columns; i++)
+        {
+            if (weightsVector[i] <= thresh)
+            {
+                nullity++;
+            }
+        }
+
+        return nullity;
+    }
+
+    public static Matrix<double> Nullspace(double threshold)
+    {
+        int rows = _matrix.RowCount, columns = _matrix.ColumnCount, nullIndex = 0;
+        var weightsVector = new Vector<double>(columns);
+        var thresh = threshold >= 0 ? threshold : 0.5 * Math.Sqrt(rows + columns + 1) * weightsVector[0] * double.Epsilon;
+        var nullspaceMatrix = new Matrix<double>(columns, Nullity(thresh));
+        var vMatrix = new Matrix<double>(columns, columns);
+
+        for (int i = 0; i < columns; i++)
+        {
+            if (weightsVector[i] <= thresh)
+            {
+                for (int j = 0; j < columns; j++)
+                {
+                    nullspaceMatrix[j][nullIndex] = vMatrix[j][i];
+                }
+                nullIndex++;
+            }
+        }
+
+        return nullspaceMatrix;
+    }
+
+    public static Matrix<double> Range(double threshold)
+    {
+        int rows = _matrix.RowCount, columns = _matrix.ColumnCount, rank = 0;
+        var weightsVector = new Vector<double>(columns);
+        var rangeMatrix = new Matrix<double>(rows, Rank(threshold));
+        var uMatrix = _matrix.Duplicate();
+
+        for (int i = 0; i < columns; i++)
+        {
+            if (weightsVector[i] > threshold)
+            {
+                for (int j = 0; j < rows; j++)
+                {
+                    rangeMatrix[j][rank] = uMatrix[j][i];
+                }
+                rank++;
+            }
+        }
+
+        return rangeMatrix;
+    }
+
+    public static int Rank(double threshold = -1)
+    {
+        var rows = _matrix.RowCount;
+        var columns = _matrix.ColumnCount;
+        var weightsVector = new Vector<double>(columns);
+        var thresh = threshold >= 0 ? threshold : 0.5 * Math.Sqrt(rows + columns + 1) * weightsVector[0] * double.Epsilon;
+        int rank = 0;
+
+        for (int i = 0; i < columns; i++)
+        {
+            if (weightsVector[i] > thresh)
+            {
+                rank++;
+            }
+        }
+
+        return rank;
+    }
+
+    public static Vector<T> Extract<T>(this Vector<T> vector, int length)
+    {
+        var result = new Vector<T>(length);
         for (int i = 0; i < length; i++)
         {
             result[i] = vector[i];
@@ -893,20 +1066,15 @@ internal static class MatrixHelper
         return result;
     }
 
-    public static T[,] Transpose<T>(this T[,] matrix)
+    public static Matrix<T> Transpose<T>(this Matrix<T> matrix)
     {
         if (matrix == null)
         {
             throw new ArgumentNullException(nameof(matrix), $"{nameof(matrix)} can't be null");
         }
 
-        if (matrix.Length == 0)
-        {
-            throw new ArgumentException($"{nameof(matrix)} has to contain at least one row of values", nameof(matrix));
-        }
-
-        var rows = matrix.GetColumn(0).Length;
-        var columns = matrix.GetRow(0).Length;
+        var rows = matrix.RowCount;
+        var columns = matrix.ColumnCount;
         if (rows == 0)
         {
             throw new ArgumentException($"{nameof(matrix)} has to contain at least one row of values", nameof(matrix));
@@ -917,7 +1085,7 @@ internal static class MatrixHelper
             throw new ArgumentException($"{nameof(matrix)} has to contain at least one column of values", nameof(matrix));
         }
 
-        var newMatrix = new T[columns, rows];
+        var newMatrix = new Matrix<T>(columns, rows);
         for (int i = 0; i < columns; i++)
         {
             for (int j = 0; j < rows; j++)
@@ -962,8 +1130,7 @@ internal static class MatrixHelper
         }
     }
 
-    public static void BandDiagonalMultiply(int leftSide, int rightSide, LinearAlgebra.Matrix<double> matrix, LinearAlgebra.Vector<double> solutionVector, 
-        LinearAlgebra.Vector<double> actualVector)
+    public static void BandDiagonalMultiply(int leftSide, int rightSide, Matrix<double> matrix, Vector<double> solutionVector, Vector<double> actualVector)
     {
         var size = matrix.RowCount;
 
@@ -979,14 +1146,14 @@ internal static class MatrixHelper
         }
     }
 
-    public static LinearAlgebra.Matrix<T> CreateIdentityMatrix<T>(int size)
+    public static Matrix<T> CreateIdentityMatrix<T>(int size)
     {
         if (size <= 1)
         {
             throw new ArgumentException($"{nameof(size)} has to be a minimum of 2", nameof(size));
         }
 
-        var identityMatrix = new LinearAlgebra.Matrix<T>(size, size);
+        var identityMatrix = new Matrix<T>(size, size);
         for (int i = 0; i < size; i++)
         {
             identityMatrix[i, i] = (T)Convert.ChangeType(1, typeof(T));;
@@ -995,7 +1162,7 @@ internal static class MatrixHelper
         return identityMatrix;
     }
 
-    public static double[,] DotProduct(this double[,] matrixA, double[,] matrixB)
+    public static Matrix<double> DotProduct(this Matrix<double> matrixA, Matrix<double> matrixB)
     {
         if (matrixA == null)
         {
@@ -1007,26 +1174,26 @@ internal static class MatrixHelper
             throw new ArgumentNullException(nameof(matrixB), $"{nameof(matrixB)} can't be null");
         }
 
-        if (matrixA.Length == 0)
+        if (matrixA.RowCount == 0)
         {
             throw new ArgumentException($"{nameof(matrixA)} has to contain at least one row of values", nameof(matrixA));
         }
 
-        if (matrixB.Length == 0)
+        if (matrixB.RowCount == 0)
         {
             throw new ArgumentException($"{nameof(matrixB)} has to contain at least one row of values", nameof(matrixB));
         }
 
-        var bRows = matrixB.GetColumn(0).Length;
-        var bColumns = matrixB.GetRow(0).Length;
-        var aColumns = matrixA.GetRow(0).Length;
+        var bRows = matrixB.RowCount;
+        var bColumns = matrixB.ColumnCount;
+        var aColumns = matrixA.ColumnCount;
         if (aColumns != bRows)
         {
             throw new ArgumentException($"The columns in {nameof(matrixA)} has to contain the same amount of rows in {nameof(matrixB)}");
         }
 
-        var aRows = matrixA.GetColumn(0).Length;
-        var matrix = new double[aRows, aColumns];
+        var aRows = matrixA.RowCount;
+        var matrix = new Matrix<double>(aRows, aColumns);
         for (int h = 0; h < aRows; h++)
         {
             for (int i = 0; i < bColumns; i++)
