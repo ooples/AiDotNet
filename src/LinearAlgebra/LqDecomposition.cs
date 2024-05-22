@@ -109,7 +109,7 @@ public class LqDecomposition : IMatrixDecomposition<double>
         int n = QMatrix.RowCount;
 
         var qMatrixTransposed = QMatrix.Transpose();
-        var lMatrixInverted = MatrixHelper.InvertLowerTriangularMatrix(LMatrix);
+        var lMatrixInverted = LMatrix.InvertLowerTriangularMatrix();
 
         return qMatrixTransposed.DotProduct(lMatrixInverted);
     }

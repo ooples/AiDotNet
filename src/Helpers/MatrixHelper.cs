@@ -133,6 +133,38 @@ public static class MatrixHelper
         return matrix;
     }
 
+    // Helper method to compute Householder vector
+    public static Vector<double> HouseholderVector(Vector<double> xVector)
+    {
+        var result = new Vector<double>(xVector.Count);
+        double norm = 0;
+        for (int i = 0; i < xVector.Count; i++)
+        {
+            norm += xVector[i] * xVector[i];
+        }
+        norm = Math.Sqrt(norm);
+
+        result[0] = xVector[0] + Math.Sign(xVector[0]) * norm;
+        for (int i = 1; i < xVector.Count; i++)
+        {
+            result[i] = xVector[i];
+        }
+
+        double vNorm = 0;
+        for (int i = 0; i < result.Count; i++)
+        {
+            vNorm += result[i] * result[i];
+        }
+        vNorm = Math.Sqrt(vNorm);
+
+        for (int i = 0; i < result.Count; i++)
+        {
+            result[i] /= vNorm;
+        }
+
+        return result;
+    }
+
     public static Matrix<T> Duplicate<T>(this Matrix<T> matrix)
     {
         if (matrix == null)
@@ -243,18 +275,110 @@ public static class MatrixHelper
         }
     }
 
-    public static Vector<double> BackwardSubstitution(this Matrix<double> uMatrix, Vector<double> yVector)
+    // Helper method to apply Householder reflection to QR decomposition
+    public static (Matrix<double> qMatrix, Matrix<double> rMatrix) 
+        ApplyHouseholderTransformationToQR(Vector<double> vector, Matrix<double> qMatrix, Matrix<double> rMatrix, int k)
     {
-        int n = uMatrix.RowCount;
+        var rows = vector.Count;
+        for (int i = k; i < rows; i++)
+        {
+            double sum = 0;
+            for (int j = k; j < rows; j++)
+            {
+                sum += vector[j - k] * rMatrix[j, i];
+            }
+            for (int j = k; j < rows; j++)
+            {
+                rMatrix[j, i] -= 2 * vector[j - k] * sum;
+            }
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            double sum = 0;
+            for (int j = k; j < rows; j++)
+            {
+                sum += vector[j - k] * qMatrix[i, j];
+            }
+            for (int j = k; j < rows; j++)
+            {
+                qMatrix[i, j] -= 2 * vector[j - k] * sum;
+            }
+        }
+
+        return (qMatrix, rMatrix);
+    }
+
+    // Helper method to perform QR decomposition using Householder reflections
+    public static (Matrix<double>, Matrix<double>) QRDecomposition(Matrix<double> matrix)
+    {
+        var rMatrix = matrix.Duplicate();
+        var rows = rMatrix.RowCount;
+        var qMatrix = CreateIdentityMatrix<double>(rows);
+
+        for (int k = 0; k < rows - 1; k++)
+        {
+            var xVector = new Vector<double>(rows - k);
+            for (int i = k; i < rows; i++)
+            {
+                xVector[i - k] = rMatrix[i, k];
+            }
+
+            var hVector = HouseholderVector(xVector);
+            (qMatrix, rMatrix) = ApplyHouseholderTransformationToQR(hVector, qMatrix, rMatrix, k);
+        }
+
+        return (qMatrix, rMatrix);
+    }
+
+    public static Matrix<double> ReduceToHessenbergFormat(Matrix<double> matrix)
+    {
+        var rows = matrix.RowCount;
+        var result = new Matrix<double>(rows, rows);
+        for (int k = 0; k < rows - 2; k++)
+        {
+            var xVector = new Vector<double>(rows - k - 1);
+            for (int i = 0; i < rows - k - 1; i++)
+            {
+                xVector[i] = matrix[k + 1 + i, k];
+            }
+
+            var hVector = CreateHouseholderVector(xVector);
+            matrix = ApplyHouseholderTransformation(matrix, hVector, k);
+        }
+
+        return matrix;
+    }
+
+    public static Vector<double> BackwardSubstitution(this Matrix<double> aMatrix, Vector<double> bVector)
+    {
+        int n = aMatrix.RowCount;
         var xVector = new Vector<double>(n);
         for (int i = n - 1; i >= 0; --i)
         {
-            xVector[i] = yVector[i];
+            xVector[i] = bVector[i];
             for (int j = i + 1; j < n; ++j)
             {
-                xVector[i] -= uMatrix[i, j] * xVector[j];
+                xVector[i] -= aMatrix[i, j] * xVector[j];
             }
-            xVector[i] /= uMatrix[i, i];
+            xVector[i] /= aMatrix[i, i];
+        }
+
+        return xVector;
+    }
+
+    public static Vector<Complex> BackwardSubstitution(this Matrix<double> aMatrix, Vector<Complex> bVector)
+    {
+        int n = aMatrix.RowCount;
+        var xVector = new Vector<Complex>(n);
+        for (int i = n - 1; i >= 0; --i)
+        {
+            xVector[i] = bVector[i];
+            for (int j = i + 1; j < n; ++j)
+            {
+                xVector[i] -= new Complex(aMatrix[i, j], 0) * xVector[j];
+            }
+            xVector[i] /= new Complex(aMatrix[i, i], 0);
         }
 
         return xVector;
@@ -321,25 +445,14 @@ public static class MatrixHelper
         return result;
     }
 
-    public static double[,] InvertSvd(this double[,] matrix)
+    public static bool IsUpperTriangularMatrix(this Matrix<double> matrix, double tolerance = double.Epsilon)
     {
-        // svd inversion
-        matrix.Decompose(out double[,] uMatrix, out double[,] vhMatrix, out double[] sVector);
-        var sInverted = sVector.Invert();
-        var vMatrix = vhMatrix.Transpose();
-        var uTransposed = uMatrix.Transpose();
-
-        return vMatrix.DotProduct(sInverted.DotProduct(uTransposed));
-    }
-
-    public static bool IsUpperTriangularMatrix(this double[,] matrix)
-    {
-        for (int i = 1; i < matrix.GetColumn(0).Length; i++)
+        for (int i = 1; i < matrix.RowCount; i++)
         {
             for (int j = 0; j < i; j++)
             {
                 // If any element below the main diagonal is non-zero, the matrix is not upper triangular.
-                if (matrix[i, j] != 0)
+                if (Math.Abs(matrix[i, j]) > tolerance)
                 {
                     return false;
                 }
@@ -349,15 +462,37 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsLowerTriangularMatrix(this double[,] matrix)
+    public static bool IsLowerTriangularMatrix(this Matrix<double> matrix, double tolerance = double.Epsilon)
     {
-        var rows = matrix.GetColumn(0).Length;
+        var rows = matrix.RowCount;
         for (int i = 0; i < rows - 1; i++)
         {
             for (int j = i + 1; j < rows; j++)
             {
                 // If any element above the main diagonal is non-zero, the matrix is not lower triangular.
-                if (matrix[i, j] != 0)
+                if (Math.Abs(matrix[i, j]) > tolerance)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsSquareMatrix(this Matrix<double> matrix)
+    {
+        return matrix.RowCount == matrix.ColumnCount;
+    }
+
+    public static bool IsSymmetricMatrix(this Matrix<double> matrix)
+    {
+        var rows = matrix.RowCount;
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j <= i; j++)
+            {
+                if (matrix[i, j] != matrix[j, i])
                 {
                     return false;
                 }
@@ -392,7 +527,7 @@ public static class MatrixHelper
         return inverse;
     }
 
-    public static Matrix<double> InvertLowerTriangularMatrix(Matrix<double> matrix)
+    public static Matrix<double> InvertLowerTriangularMatrix(this Matrix<double> matrix)
     {
         int n = matrix.RowCount;
         var invL = new Matrix<double>(n, n);
@@ -452,6 +587,78 @@ public static class MatrixHelper
     {
         int n = aMatrix.RowCount;
         var x = new Vector<double>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            x[i] = bVector[i];
+            for (int j = 0; j < i; j++)
+            {
+                x[i] -= aMatrix[i, j] * x[j];
+            }
+            x[i] /= aMatrix[i, i];
+        }
+
+        return x;
+    }
+
+    public static Matrix<Complex> ToComplexMatrix(this Matrix<double> matrix)
+    {
+        var rows = matrix.RowCount;
+        var complexMatrix = new Matrix<Complex>(rows, rows);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < rows; j++)
+            {
+                complexMatrix[i, j] = new Complex(matrix[i, j], 0);
+            }
+        }
+
+        return complexMatrix;
+    }
+
+    public static Vector<Complex> ToComplexVector(this Vector<double> vector)
+    {
+        var count = vector.Count;
+        var complexVector = new Vector<Complex>(count);
+        for (int i = 0; i < count; i++)
+        {
+            complexVector[i] = new Complex(vector[i], 0);
+        }
+
+        return complexVector;
+    }
+
+    public static Matrix<double> ToRealMatrix(this Matrix<Complex> matrix)
+    {
+        var rows = matrix.RowCount;
+        var realMatrix = new Matrix<double>(rows, rows);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < rows; j++)
+            {
+                realMatrix[i, j] = matrix[i, j].Real;
+            }
+        }
+
+        return realMatrix;
+    }
+
+    public static Vector<double> ToRealVector(this Vector<Complex> vector)
+    {
+        var count = vector.Count;
+        var realVector = new Vector<double>(count);
+        for (int i = 0; i < count; i++)
+        {
+            realVector[i] = vector[i, j].Real;
+        }
+
+        return realVector;
+    }
+
+    public static Vector<Complex> ForwardSubstitution(Matrix<Complex> aMatrix, Vector<Complex> bVector)
+    {
+        int n = aMatrix.RowCount;
+        var x = new Vector<Complex>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -586,6 +793,155 @@ public static class MatrixHelper
         }
 
         return result;
+    }
+
+    public static Matrix<double> ApplyHouseholderTransformation(Matrix<double> matrix, Vector<double> vector, int k)
+    {
+        var rows = matrix.RowCount;
+        for (int i = k + 1; i < rows; i++)
+        {
+            double sum = 0;
+            for (int j = k + 1; j < rows; j++)
+            {
+                sum += vector[j - k - 1] * matrix[j, i];
+            }
+            for (int j = k + 1; j < rows; j++)
+            {
+                matrix[j, i] -= 2 * vector[j - k - 1] * sum;
+            }
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            double sum = 0;
+            for (int j = k + 1; j < rows; j++)
+            {
+                sum += vector[j - k - 1] * matrix[i, j];
+            }
+            for (int j = k + 1; j < rows; j++)
+            {
+                matrix[i, j] -= 2 * vector[j - k - 1] * sum;
+            }
+        }
+
+        return matrix;
+    }
+
+    // Helper method to compute Householder vector
+    public static Vector<double> CreateHouseholderVector(Vector<double> x)
+    {
+        var v = new Vector<double>(x.Count);
+        double norm = 0;
+        for (int i = 0; i < x.Count; i++)
+        {
+            norm += x[i] * x[i];
+        }
+        norm = Math.Sqrt(norm);
+
+        v[0] = x[0] + Math.Sign(x[0]) * norm;
+        for (int i = 1; i < x.Count; i++)
+        {
+            v[i] = x[i];
+        }
+
+        double vNorm = 0;
+        for (int i = 0; i < v.Count; i++)
+        {
+            vNorm += v[i] * v[i];
+        }
+        vNorm = Math.Sqrt(vNorm);
+
+        for (int i = 0; i < v.Count; i++)
+        {
+            v[i] /= vNorm;
+        }
+
+        return v;
+    }
+
+    // Power Iteration method to find the dominant eigenvalue and eigenvector
+    public static (double, Vector<double>) PowerIteration(Matrix<double> aMatrix, int maxIterations, double tolerance)
+    {
+        var rows = aMatrix.RowCount;
+        var bVector = new Vector<double>(rows);
+        var b2Vector = new Vector<double>(rows);
+        double eigenvalue = 0;
+
+        // Initial guess for the eigenvector
+        for (int i = 0; i < rows; i++)
+        {
+            bVector[i] = 1.0;
+        }
+
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            // Multiply A by the vector b
+            for (int i = 0; i < rows; i++)
+            {
+                b2Vector[i] = 0;
+                for (int j = 0; j < rows; j++)
+                {
+                    b2Vector[i] += aMatrix[i, j] * bVector[j];
+                }
+            }
+
+            // Normalize the vector
+            double norm = 0;
+            for (int i = 0; i < rows; i++)
+            {
+                norm += b2Vector[i] * b2Vector[i];
+            }
+            norm = Math.Sqrt(norm);
+            for (int i = 0; i < rows; i++)
+            {
+                b2Vector[i] /= norm;
+            }
+
+            // Estimate the eigenvalue
+            double newEigenvalue = 0;
+            for (int i = 0; i < rows; i++)
+            {
+                newEigenvalue += b2Vector[i] * b2Vector[i];
+            }
+
+            // Check for convergence
+            if (Math.Abs(newEigenvalue - eigenvalue) < tolerance)
+            {
+                break;
+            }
+            eigenvalue = newEigenvalue;
+            Array.Copy(b2Vector.Values, bVector.Values, rows);
+        }
+
+        return (eigenvalue, b2Vector);
+    }
+
+    public static void SwapRows<T>(this Matrix<T> matrix, int row1Index, int row2Index)
+    {
+        var rows = matrix.RowCount;
+        for (int i = 0; i < rows; i++)
+        {
+            var temp = matrix[row1Index, i];
+            matrix[row1Index, i] = matrix[row2Index, i];
+            matrix[row2Index, i] = temp;
+        }
+    }
+
+    public static Matrix<double> InvertDiagonalMatrix(this Matrix<double> matrix)
+    {
+        var rows = matrix.RowCount;
+        var invertedMatrix = new Matrix<double>(rows, rows);
+        for (int i = 0; i < rows; i++)
+        {
+            invertedMatrix[i, i] = 1.0 / matrix[i, i];
+        }
+
+        return invertedMatrix;
+    }
+
+    public static Matrix<Complex> InvertUnitaryMatrix(this Matrix<Complex> matrix)
+    {
+        return matrix.Transpose();
     }
 
     public static void GaussJordanElimination(this double[,] matrix, double[,] vector, out double[,] inverseMatrix, out double[,] coefficients)
@@ -1194,6 +1550,52 @@ public static class MatrixHelper
 
         var aRows = matrixA.RowCount;
         var matrix = new Matrix<double>(aRows, aColumns);
+        for (int h = 0; h < aRows; h++)
+        {
+            for (int i = 0; i < bColumns; i++)
+            {
+                for (int j = 0; j < aColumns; j++)
+                {
+                    matrix[h, i] += matrixA[h, j] * matrixB[j, i];
+                }
+            }
+        }
+
+        return matrix;
+    }
+
+    public static Matrix<Complex> DotProduct(this Matrix<Complex> matrixA, Matrix<Complex> matrixB)
+    {
+        if (matrixA == null)
+        {
+            throw new ArgumentNullException(nameof(matrixA), $"{nameof(matrixA)} can't be null");
+        }
+
+        if (matrixB == null)
+        {
+            throw new ArgumentNullException(nameof(matrixB), $"{nameof(matrixB)} can't be null");
+        }
+
+        if (matrixA.RowCount == 0)
+        {
+            throw new ArgumentException($"{nameof(matrixA)} has to contain at least one row of values", nameof(matrixA));
+        }
+
+        if (matrixB.RowCount == 0)
+        {
+            throw new ArgumentException($"{nameof(matrixB)} has to contain at least one row of values", nameof(matrixB));
+        }
+
+        var bRows = matrixB.RowCount;
+        var bColumns = matrixB.ColumnCount;
+        var aColumns = matrixA.ColumnCount;
+        if (aColumns != bRows)
+        {
+            throw new ArgumentException($"The columns in {nameof(matrixA)} has to contain the same amount of rows in {nameof(matrixB)}");
+        }
+
+        var aRows = matrixA.RowCount;
+        var matrix = new Matrix<Complex>(aRows, aColumns);
         for (int h = 0; h < aRows; h++)
         {
             for (int i = 0; i < bColumns; i++)
