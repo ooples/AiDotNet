@@ -423,7 +423,7 @@ public static class MatrixHelper
         return result;
     }
 
-    public static double[,] Invert(this double[,] matrix)
+    public static double[,] Invert(this Matrix<double> matrix)
     {
         // qr inversion
         matrix.Decompose(out double[,] qMatrix, out double[,] rMatrix);
@@ -462,6 +462,48 @@ public static class MatrixHelper
         return true;
     }
 
+    public static bool IsSparseMatrix(this Matrix<double> matrix, double sparsityThreshold = 0.5)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+        int totalElements = rows * cols;
+        int zeroCount = 0;
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (matrix[i, j] == 0)
+                {
+                    zeroCount++;
+                }
+            }
+        }
+
+        return (double)zeroCount / totalElements >= sparsityThreshold;
+    }
+
+    public static bool IsDenseMatrix(this Matrix<double> matrix, double denseThreshold = 0.5)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+        int totalElements = rows * cols;
+        int nonZeroCount = 0;
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (matrix[i, j] != 0)
+                {
+                    nonZeroCount++;
+                }
+            }
+        }
+
+        return (double)nonZeroCount / totalElements >= denseThreshold;
+    }
+
     public static bool IsLowerTriangularMatrix(this Matrix<double> matrix, double tolerance = double.Epsilon)
     {
         var rows = matrix.RowCount;
@@ -485,6 +527,11 @@ public static class MatrixHelper
         return matrix.RowCount == matrix.ColumnCount;
     }
 
+    public static bool IsRectangularMatrix(this Matrix<double> matrix)
+    {
+        return matrix.RowCount != matrix.ColumnCount;
+    }
+
     public static bool IsSymmetricMatrix(this Matrix<double> matrix)
     {
         var rows = matrix.RowCount;
@@ -493,6 +540,503 @@ public static class MatrixHelper
             for (int j = 0; j <= i; j++)
             {
                 if (matrix[i, j] != matrix[j, i])
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsDiagonalMatrix(this Matrix<double> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A diagonal matrix must be square
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (i != j && matrix[i, j] != 0)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsIdentityMatrix(this Matrix<double> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // An identity matrix must be square
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (i == j)
+                {
+                    if (matrix[i, j] != 1)
+                    {
+                        return false; // Diagonal elements must be 1
+                    }
+                }
+                else
+                {
+                    if (matrix[i, j] != 0)
+                    {
+                        return false; // Non-diagonal elements must be 0
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsSkewSymmetricMatrix(this Matrix<double> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A skew-symmetric matrix must be square
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (matrix[i, j] != -matrix[j, i])
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsScalarMatrix(this Matrix<double> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A scalar matrix must be square
+        }
+
+        double diagonalValue = matrix[0, 0];
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (i == j)
+                {
+                    if (matrix[i, j] != diagonalValue)
+                    {
+                        return false; // All diagonal elements must be equal
+                    }
+                }
+                else
+                {
+                    if (matrix[i, j] != 0)
+                    {
+                        return false; // All off-diagonal elements must be zero
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsUpperBidiagonalMatrix(this Matrix<double> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // An upper bidiagonal matrix must be square
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (i > j || j > i + 1)
+                {
+                    if (matrix[i, j] != 0)
+                    {
+                        return false; // Elements below the main diagonal or above the first superdiagonal must be zero
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsLowerBidiagonalMatrix(this Matrix<double> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A lower bidiagonal matrix must be square
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (i < j || i > j + 1)
+                {
+                    if (matrix[i, j] != 0)
+                    {
+                        return false; // Elements above the main diagonal or below the first subdiagonal must be zero
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsTridiagonalMatrix(this Matrix<double> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A tridiagonal matrix must be square
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (Math.Abs(i - j) > 1 && matrix[i, j] != 0)
+                {
+                    return false; // Elements outside the three diagonals must be zero
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsBandMatrix(this Matrix<double> matrix, int subDiagonalThreshold = 1, int superDiagonalThreshold = 1)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A band matrix must be square
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (Math.Abs(i - j) > subDiagonalThreshold || Math.Abs(i - j) > superDiagonalThreshold)
+                {
+                    if (matrix[i, j] != 0)
+                    {
+                        return false; // Elements outside the specified bands must be zero
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsHermitianMatrix(this Matrix<Complex> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A Hermitian matrix must be square
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (matrix[i, j] != Complex.Conjugate(matrix[j, i]))
+                {
+                    return false; // Check if element is equal to its conjugate transpose
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsSkewHermitianMatrix(Matrix<Complex> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A skew-Hermitian matrix must be square
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (matrix[i, j] != -Complex.Conjugate(matrix[j, i]))
+                {
+                    return false; // Check if element is equal to the negation of its conjugate transpose
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsOrthogonalMatrix(this Matrix<double> matrix, IMatrixDecomposition<double> matrixDecomposition)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // An orthogonal matrix must be square
+        }
+
+        var transpose = matrix.Transpose();
+        var inverse = matrixDecomposition.Invert();
+
+        // Check if transpose is equal to inverse
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (Math.Abs(transpose[i, j] - inverse[i, j]) > 0.0001)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static Matrix<Complex> ConjugateTranspose(this Matrix<Complex> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+        var result = new Matrix<Complex>(cols, rows);
+
+        for (int i = 0; i < cols; i++)
+        {
+            for (int j = 0; j < rows; j++)
+            {
+                result[i, j] = Complex.Conjugate(matrix[j, i]);
+            }
+        }
+
+        return result;
+    }
+
+    public static bool IsSingularMatrix(this Matrix<double> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A singular matrix must be square
+        }
+
+        // Calculate the determinant
+        double determinant = matrix.GetDeterminant();
+
+        // If determinant is zero, the matrix is singular
+        return Math.Abs(determinant) < double.Epsilon;
+    }
+
+    public static bool IsNonSingularMatrix(this Matrix<double> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A singular matrix must be square
+        }
+
+        // Calculate the determinant
+        double determinant = matrix.GetDeterminant();
+
+        // If determinant is zero, the matrix is singular
+        return Math.Abs(determinant) >= double.Epsilon;
+    }
+
+    public static bool IsPositiveDefiniteMatrix(this Matrix<double> matrix)
+    {
+        if (!matrix.IsSymmetricMatrix())
+        {
+            return false; // Positive definite matrices must be symmetric
+        }
+
+        var eigenvalues = matrix.Eigenvalues().Values;
+        // Check if all eigenvalues are positive
+        foreach (var eigenvalue in eigenvalues)
+        {
+            if (eigenvalue <= 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static Vector<double> Eigenvalues(this Matrix<double> matrix)
+    {
+        // QR algorithm for finding eigenvalues of a symmetric matrix
+        var rows = matrix.RowCount;
+        var a = new Matrix<double>(rows, rows);
+        Array.Copy(matrix.Values, a.Values, matrix.ColumnCount);
+        double epsilon = 1e-10; // Precision threshold
+        var eigenvalues = new Vector<double>(rows);
+
+        for (int k = rows - 1; k > 0; k--)
+        {
+            while (Math.Abs(a[k, k - 1]) > epsilon)
+            {
+                double mu = a[k, k];
+                for (int i = 0; i <= k; i++)
+                {
+                    for (int j = 0; j <= k; j++)
+                    {
+                        a[i, j] -= mu * a[k, i] * a[k, j];
+                    }
+                }
+
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < rows; j++)
+                    {
+                        a[i, j] -= mu * a[i, k] * a[j, k];
+                    }
+                }
+            }
+
+            eigenvalues[k] = a[k, k];
+            for (int i = 0; i <= k; i++)
+            {
+                a[k, i] = a[i, k] = 0.0;
+            }
+        }
+        eigenvalues[0] = a[0, 0];
+
+        return eigenvalues;
+    }
+
+    // Method to calculate the determinant of a matrix
+    public static double GetDeterminant(this Matrix<double> matrix)
+    {
+        var rows = matrix.RowCount;
+
+        // Base case: for 1x1 matrix, determinant is the single element
+        if (rows == 1)
+        {
+            return matrix[0, 0];
+        }
+
+        double det = 0;
+        // Recursive case: compute the determinant using cofactor expansion
+        for (int j = 0; j < rows; j++)
+        {
+            // Calculate the cofactor of matrix[0, j]
+            var submatrix = new Matrix<double>(rows - 1, rows - 1);
+            for (int i = 1; i < rows; i++)
+            {
+                for (int k = 0; k < rows; k++)
+                {
+                    if (k < j)
+                    {
+                        submatrix[i - 1, k] = matrix[i, k];
+                    }
+                    else if (k > j)
+                    {
+                        submatrix[i - 1, k - 1] = matrix[i, k];
+                    }
+                }
+            }
+
+            // Add the cofactor to the determinant
+            det += Math.Pow(-1, j) * matrix[0, j] * submatrix.GetDeterminant();
+        }
+
+        return det;
+    }
+
+    public static bool IsUnitaryMatrix(this Matrix<Complex> matrix, IMatrixDecomposition<Complex> matrixDecomposition)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        if (rows != cols)
+        {
+            return false; // A unitary matrix must be square
+        }
+
+        var conjugateTranspose = matrix.ConjugateTranspose();
+        var inverse = matrixDecomposition.Invert();
+
+        // Check if conjugate transpose is equal to inverse
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (conjugateTranspose[i, j] != inverse[i, j])
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static bool IsZeroMatrix(this Matrix<double> matrix)
+    {
+        int rows = matrix.RowCount;
+        int cols = matrix.ColumnCount;
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                if (matrix[i, j] != 0)
                 {
                     return false;
                 }
@@ -942,6 +1486,85 @@ public static class MatrixHelper
     public static Matrix<Complex> InvertUnitaryMatrix(this Matrix<Complex> matrix)
     {
         return matrix.Transpose();
+    }
+
+    public static Matrix<double> GaussianEliminationInversion(this Matrix<double> matrix)
+    {
+        var rows = matrix.RowCount;
+        var augmentedMatrix = new Matrix<double>(rows, 2 * rows);
+
+        // Copy matrix into the left half of the augmented matrix
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < rows; j++)
+            {
+                augmentedMatrix[i, j] = matrix[i, j];
+            }
+        }
+
+        // Add identity matrix to the right half of the augmented matrix
+        for (int i = 0; i < rows; i++)
+        {
+            augmentedMatrix[i, i + rows] = 1;
+        }
+
+        // Perform Gaussian elimination with partial pivoting
+        for (int i = 0; i < rows; i++)
+        {
+            // Find pivot row
+            int maxRowIndex = i;
+            double maxValue = Math.Abs(augmentedMatrix[i, i]);
+            for (int k = i + 1; k < rows; k++)
+            {
+                double absValue = Math.Abs(augmentedMatrix[k, i]);
+                if (absValue > maxValue)
+                {
+                    maxRowIndex = k;
+                    maxValue = absValue;
+                }
+            }
+
+            // Swap current row with pivot row
+            if (maxRowIndex != i)
+            {
+                for (int j = 0; j < 2 * rows; j++)
+                {
+                    (augmentedMatrix[maxRowIndex, j], augmentedMatrix[i, j]) = (augmentedMatrix[i, j], augmentedMatrix[maxRowIndex, j]);
+                }
+            }
+
+            // Make diagonal element 1
+            double pivot = augmentedMatrix[i, i];
+            for (int j = 0; j < 2 * rows; j++)
+            {
+                augmentedMatrix[i, j] /= pivot;
+            }
+
+            // Make other elements in the column zero
+            for (int k = 0; k < rows; k++)
+            {
+                if (k != i)
+                {
+                    double factor = augmentedMatrix[k, i];
+                    for (int j = 0; j < 2 * rows; j++)
+                    {
+                        augmentedMatrix[k, j] -= factor * augmentedMatrix[i, j];
+                    }
+                }
+            }
+        }
+
+        // Extract the right half of the augmented matrix (the inverse)
+        var inverseMatrix = new Matrix<double>(rows, rows);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < rows; j++)
+            {
+                inverseMatrix[i, j] = augmentedMatrix[i, j + rows];
+            }
+        }
+
+        return inverseMatrix;
     }
 
     public static void GaussJordanElimination(this double[,] matrix, double[,] vector, out double[,] inverseMatrix, out double[,] coefficients)
