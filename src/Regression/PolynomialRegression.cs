@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Regression;
+﻿using AiDotNet.LinearAlgebra;
+
+namespace AiDotNet.Regression;
 
 public sealed class PolynomialRegression : IRegression<double, double>
 {
@@ -63,6 +65,8 @@ public sealed class PolynomialRegression : IRegression<double, double>
         var m = Matrix<double>.Build;
         var inputMatrix = m.Dense(inputs.Length, Order + 1, (i, j) => Math.Pow(inputs[i], j));
         var outputVector = CreateVector.Dense(outputs);
+        var result = CreateVector.Dense<double>(inputs.Length + (RegressionOptions.UseIntercept ? 1 : 0));
+        var cramerArray = new double[Order + 1];
 
         if (RegressionOptions.UseIntercept)
         {
@@ -73,23 +77,33 @@ public sealed class PolynomialRegression : IRegression<double, double>
 
         var result = RegressionOptions.MatrixDecomposition switch
         {
-            MatrixDecomposition.Cholesky => inputMatrix.TransposeThisAndMultiply(inputMatrix).Cholesky()
-                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
-            MatrixDecomposition.Evd => inputMatrix.TransposeThisAndMultiply(inputMatrix).Evd()
-                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
-            MatrixDecomposition.GramSchmidt => inputMatrix.TransposeThisAndMultiply(inputMatrix).GramSchmidt()
-                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
-            MatrixDecomposition.Lu => inputMatrix.TransposeThisAndMultiply(inputMatrix).LU()
-                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
-            MatrixDecomposition.Qr => inputMatrix.TransposeThisAndMultiply(inputMatrix).QR()
-                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
-            MatrixDecomposition.Svd => inputMatrix.TransposeThisAndMultiply(inputMatrix).Svd()
-                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
-            _ => inputMatrix.TransposeThisAndMultiply(inputMatrix).Cholesky()
-                .Solve(inputMatrix.TransposeThisAndMultiply(outputVector)),
-        };
+            case MatrixDecomposition.Cramer:
+                cramerArray = new CramerMatrix(inputs, outputs, Order).Coefficients;
+                break;
+            case MatrixDecomposition.Cholesky:
+                inputMatrix.Cholesky().Solve(outputVector, result);
+                break;
+            case MatrixDecomposition.Evd:
+                inputMatrix.Evd().Solve(outputVector, result);
+                break;
+            case MatrixDecomposition.GramSchmidt:
+                inputMatrix.GramSchmidt().Solve(outputVector, result);
+                break;
+            case MatrixDecomposition.Lu:
+                inputMatrix.LU().Solve(outputVector, result);
+                break;
+            case MatrixDecomposition.Qr:
+                inputMatrix.QR().Solve(outputVector, result);
+                break;
+            case MatrixDecomposition.Svd:
+                inputMatrix.Svd().Solve(outputVector, result);
+                break;
+            default:
+                inputMatrix.Solve(outputVector, result);
+                break;
+        }
 
-        Coefficients = result.ToArray();
+        Coefficients = RegressionOptions.MatrixDecomposition == MatrixDecomposition.Cramer ? cramerArray : result.ToArray();
         YIntercept = 0;
     }
 
