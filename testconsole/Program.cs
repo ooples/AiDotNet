@@ -3,6 +3,9 @@ using AiDotNet.Models;
 using AiDotNet.Normalization;
 using AiDotNet.OutlierRemoval;
 using AiDotNet.Regression;
+using AiDotNet.Genetics;
+using AiDotNet.Genetics.Chromosomes;
+using AiDotNet.Genetics.SelectionMethods;
 
 namespace AiDotNetTestConsole;
 
@@ -40,6 +43,7 @@ internal class Program
         int[] keySort = Enumerable.Range(0, arrayOne.Length).ToArray();
         var stringOne = new string[] {"four", "one", "three", "two" };
 
+        var test = new GeneticsAi<string>(new StringChromosome(new ChromosomeOptions<string>()), new GeneticAiOptions<string>());
         //Sort by Inputs
         Array.Sort(arrayOne, keySort);
         PrintToConsole(keySort);
