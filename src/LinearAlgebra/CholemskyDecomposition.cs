@@ -8,18 +8,18 @@ public class CholemskyDecomposition : IMatrixDecomposition<double>
 
     public Vector<double> SolutionVector { get; private set; }
 
-    public CholemskyDecomposition(IEnumerable<IEnumerable<double>> expectedValues, IEnumerable<double> actualValues)
+    public CholemskyDecomposition(IEnumerable<Vector<double>> expectedValues, IEnumerable<double> actualValues)
     {
         AMatrix = new Matrix<double>(expectedValues);
         BVector = new Vector<double>(actualValues);
-        LMatrix = new Matrix<double>(AMatrix.RowCount, AMatrix.RowCount);
+        LMatrix = new Matrix<double>(AMatrix.Rows, AMatrix.Rows);
         Decompose(AMatrix);
         SolutionVector = Solve(LMatrix, BVector);
     }
 
     public void Decompose(Matrix<double> matrix)
     {
-        int n = matrix.RowCount;
+        int n = matrix.Rows;
         LMatrix = new Matrix<double>(n, n);
 
         for (int i = 0; i < n; ++i)
@@ -51,14 +51,14 @@ public class CholemskyDecomposition : IMatrixDecomposition<double>
         var lMatrixInverse = Inverse(LMatrix);
         var lMatrixTransposed = lMatrixInverse.Transpose();
 
-        return lMatrixInverse.DotProduct(lMatrixTransposed);
+        return lMatrixInverse.Multiply(lMatrixTransposed);
     }
 
     private Matrix<double> Inverse(Matrix<double> matrix)
     {
-        int n = matrix.RowCount;
+        int n = matrix.Rows;
         var inv = new Matrix<double>(n, n);
-        var eye = MatrixHelper.CreateIdentityMatrix<double>(n);
+        var eye = Matrix<double>.CreateIdentityMatrix<double>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -81,7 +81,7 @@ public class CholemskyDecomposition : IMatrixDecomposition<double>
 
     private static Vector<double> ForwardSubstitution(Matrix<double> lMatrix, Vector<double> bVector)
     {
-        int n = lMatrix.RowCount;
+        int n = lMatrix.Rows;
         var yVector = new Vector<double>(n);
         for (int i = 0; i < n; ++i)
         {

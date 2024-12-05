@@ -1,12 +1,168 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿global using System.Collections;
 
-public class Vector<T> : VectorBase<T>
+namespace AiDotNet.LinearAlgebra;
+
+public class Vector<T> : VectorBase<T>, IEnumerable<T>
 {
-    public Vector(IEnumerable<T> values) : base(values)
+    public Vector(int length, INumericOperations<T>? numericOperations = null)
+        : base(length, numericOperations ?? MathHelper.GetNumericOperations<T>())
     {
     }
 
-    public Vector(int count) : base(count)
+    public Vector(IEnumerable<T> values, INumericOperations<T>? numericOperations = null)
+        : base(values, numericOperations ?? MathHelper.GetNumericOperations<T>())
     {
+    }
+
+    public IEnumerator<T> GetEnumerator()
+    {
+        return ((IEnumerable<T>)data).GetEnumerator();
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
+    }
+
+    public Vector<T> Where(Func<T, bool> predicate)
+    {
+        return new Vector<T>(data.Where(predicate), ops);
+    }
+
+    public Vector<TResult> Select<TResult>(Func<T, TResult> selector)
+    {
+        return new Vector<TResult>(data.Select(selector), MathHelper.GetNumericOperations<TResult>());
+    }
+
+    public override VectorBase<T> Copy()
+    {
+        return new Vector<T>(this.ToArray(), ops);
+    }
+
+    public override VectorBase<T> Zeros(int size)
+    {
+        return new Vector<T>(size, ops);
+    }
+
+    public new Vector<TResult> Transform<TResult>(Func<T, TResult> function)
+    {
+        return new Vector<TResult>(base.Transform(function).ToArray(), MathHelper.GetNumericOperations<TResult>());
+    }
+
+    public new Vector<TResult> Transform<TResult>(Func<T, int, TResult> function)
+    {
+        return new Vector<TResult>(base.Transform(function).ToArray(), MathHelper.GetNumericOperations<TResult>());
+    }
+
+    public override VectorBase<T> Ones(int size)
+    {
+        return new Vector<T>(Enumerable.Repeat(ops.One, size), ops);
+    }
+
+    protected override VectorBase<T> CreateInstance(int size)
+    {
+        return new Vector<T>(size, ops);
+    }
+
+    protected override VectorBase<T> CreateInstance(T[] data)
+    {
+        return new Vector<T>(data, ops);
+    }
+
+    protected override VectorBase<TResult> CreateInstance<TResult>(int size)
+    {
+        return new Vector<TResult>(size, MathHelper.GetNumericOperations<TResult>());
+    }
+
+    public new Vector<T> Add(VectorBase<T> other)
+    {
+        return new Vector<T>(base.Add(other).ToArray(), ops);
+    }
+
+    public new Vector<T> Subtract(VectorBase<T> other)
+    {
+        return new Vector<T>(base.Subtract(other).ToArray(), ops);
+    }
+
+    public new Vector<T> Multiply(T scalar)
+    {
+        return new Vector<T>(base.Multiply(scalar).ToArray(), ops);
+    }
+
+    public new Vector<T> Divide(T scalar)
+    {
+        return new Vector<T>(base.Divide(scalar).ToArray(), ops);
+    }
+
+    public static Vector<T> operator +(Vector<T> left, Vector<T> right)
+    {
+        return left.Add(right);
+    }
+
+    public static Vector<T> operator +(Vector<T> vector, T scalar)
+    {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
+        return vector.Add(scalar);
+    }
+
+    public static Vector<T> operator -(Vector<T> vector, T scalar)
+    {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
+        return vector.Subtract(scalar);
+    }
+
+    public static Vector<T> operator -(Vector<T> left, Vector<T> right)
+    {
+        return left.Subtract(right);
+    }
+
+    public static Vector<T> operator *(Vector<T> vector, T scalar)
+    {
+        return vector.Multiply(scalar);
+    }
+
+    public static Vector<T> operator *(T scalar, Vector<T> vector)
+    {
+        return vector * scalar;
+    }
+
+    public static Vector<T> operator /(Vector<T> vector, T scalar)
+    {
+        return vector.Divide(scalar);
+    }
+
+    public static implicit operator T[](Vector<T> vector)
+    {
+        return vector.ToArray();
+    }
+
+    public static Vector<T> FromArray(T[] array)
+    {
+        return new Vector<T>(array);
+    }
+
+    public static Vector<T> FromEnumerable(IEnumerable<T> enumerable)
+    {
+        if (enumerable == null)
+            throw new ArgumentNullException(nameof(enumerable));
+        if (enumerable is T[] arr)
+            return FromArray(arr);
+        if (enumerable is List<T> list)
+            return FromList(list);
+        var tempList = enumerable.ToList();
+        return FromList(tempList);
+    }
+
+    public static Vector<T> FromList(List<T> list)
+    {
+        if (list == null)
+            throw new ArgumentNullException(nameof(list));
+        var vector = new Vector<T>(list.Count);
+        list.CopyTo(vector.data);
+        return vector;
     }
 }

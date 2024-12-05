@@ -63,55 +63,64 @@ public sealed class PolynomialRegression : IRegression<double, double>
 
     internal override void Fit(double[] inputs, double[] outputs)
     {
-        var m = Matrix<double>.Build;
-        var inputMatrix = m.Dense(inputs.Length, Order + 1, (i, j) => Math.Pow(inputs[i], j));
-        var outputVector = CreateVector.Dense(outputs);
-        var result = CreateVector.Dense<double>(inputs.Length + (RegressionOptions.UseIntercept ? 1 : 0));
+        var operations = MatrixHelper.GetNumericOperations<double>();
+        var inputMatrix = new Matrix<double>(inputs.Length, Order + 1, operations);
+        for (int i = 0; i < inputs.Length; i++)
+        {
+            for (int j = 0; j <= Order; j++)
+            {
+                inputMatrix[i, j] = Math.Pow(inputs[i], j);
+            }
+        }
+
+        var outputVector = new Vector<double>(outputs, operations);
+        var coefficients = new Vector<double>(Order + 1, operations);
         var cramerArray = new double[Order + 1];
 
         if (RegressionOptions.UseIntercept)
         {
-            inputMatrix = RegressionOptions.MatrixLayout == MatrixLayout.ColumnArrays ?
-                inputMatrix.InsertColumn(0, CreateVector.Dense(outputs.Length, Vector<double>.One)) :
-                inputMatrix.InsertRow(0, CreateVector.Dense(outputs.Length, Vector<double>.One));
+            var onesVector = Vector<double>.Ones(RegressionOptions.MatrixLayout == MatrixLayout.ColumnArrays ? outputs.Length : Order + 1, operations);
+            inputMatrix = RegressionOptions.MatrixLayout == MatrixLayout.ColumnArrays
+                ? inputMatrix.InsertColumn(0, onesVector)
+                : inputMatrix.InsertRow(0, onesVector);
         }
 
-        var result = RegressionOptions.MatrixDecomposition switch
+        switch (RegressionOptions.MatrixDecomposition)
         {
             case MatrixDecomposition.Cramer:
                 cramerArray = new CramerMatrix(inputs, outputs, Order).Coefficients;
                 break;
             case MatrixDecomposition.Cholesky:
-                inputMatrix.Cholesky().Solve(outputVector, result);
+                coefficients = inputMatrix.Cholesky().Solve(outputVector);
                 break;
             case MatrixDecomposition.Evd:
-                inputMatrix.Evd().Solve(outputVector, result);
+                coefficients = inputMatrix.Evd().Solve(outputVector);
                 break;
             case MatrixDecomposition.GramSchmidt:
-                inputMatrix.GramSchmidt().Solve(outputVector, result);
+                coefficients = inputMatrix.GramSchmidt().Solve(outputVector);
                 break;
             case MatrixDecomposition.Lu:
-                inputMatrix.LU().Solve(outputVector, result);
+                coefficients = inputMatrix.LU().Solve(outputVector);
                 break;
             case MatrixDecomposition.Qr:
-                inputMatrix.QR().Solve(outputVector, result);
+                coefficients = inputMatrix.QR().Solve(outputVector);
                 break;
             case MatrixDecomposition.Svd:
-                inputMatrix.Svd().Solve(outputVector, result);
+                coefficients = inputMatrix.Svd().Solve(outputVector);
                 break;
             default:
-                inputMatrix.Solve(outputVector, result);
+                coefficients = inputMatrix.Solve(outputVector);
                 break;
         }
 
-        Coefficients = RegressionOptions.MatrixDecomposition == MatrixDecomposition.Cramer ? cramerArray : result.ToArray();
-        YIntercept = 0;
+        Coefficients = RegressionOptions.MatrixDecomposition == MatrixDecomposition.Cramer ? cramerArray : coefficients.ToArray();
+        YIntercept = RegressionOptions.UseIntercept ? Coefficients[0] : 0;
     }
 
     internal override (double[] trainingInputs, double[] trainingOutputs, double[] oosInputs, double[] oosOutputs) 
-        PrepareData(double[] inputs, double[] outputs, int trainingSize, INormalization? normalization)
+        PrepareData(double[] inputs, double[] outputs, int trainingSize, INormalizer? normalizer)
     {
-        return normalization?.PrepareData(inputs, outputs, trainingSize) ?? NormalizationHelper.SplitData(inputs, outputs, trainingSize);
+        return normalizer?.PrepareData(inputs, outputs, trainingSize) ?? NormalizationHelper.SplitData(inputs, outputs, trainingSize);
     }
 
     internal override double[] Transform(double[] inputs)

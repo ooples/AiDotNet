@@ -104,7 +104,7 @@ public class SimpleRegressionTests
         var expectedPredictions = new double[] { 2, 3, 4, 5, 6, 7, 8, 9 };
 
         // Act
-        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new MinMaxNormalization() });
+        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new MinMaxNormalizer() });
         var actualPredictions = simpleRegression.Predictions;
 
         // Assert
@@ -134,7 +134,7 @@ public class SimpleRegressionTests
             0.2182178902359924, 0.6546536707079772, 1.091089451179962, 1.5275252316519468 };
 
         // Act
-        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new ZScoreNormalization() });
+        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new ZScoreNormalizer() });
         var actualPredictions = simpleRegression.Predictions;
 
         // Assert

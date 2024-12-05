@@ -24,8 +24,8 @@ public class SvdDecomposition : IMatrixDecomposition<double>
     public void Decompose(Matrix<double> aMatrix)
     {
         // Golub-Reinsch algorithm
-        int m = aMatrix.RowCount;
-        int n = aMatrix.ColumnCount;
+        int m = aMatrix.Rows;
+        int n = aMatrix.Columns;
         
         var a = aMatrix.Duplicate();
         UMatrix = new Matrix<double>(m, m);
@@ -329,8 +329,8 @@ public class SvdDecomposition : IMatrixDecomposition<double>
 
     public Matrix<double> Invert()
     {
-        int m = UMatrix.RowCount;
-        int n = VtMatrix.ColumnCount;
+        int m = UMatrix.Rows;
+        int n = VtMatrix.Columns;
 
         var sInv = new Matrix<double>(n, m);
 
@@ -350,8 +350,8 @@ public class SvdDecomposition : IMatrixDecomposition<double>
 
     public Vector<double> Solve(Matrix<double> aMatrix, Vector<double> bVector)
     {
-        int m = UMatrix.RowCount;
-        int n = VtMatrix.ColumnCount;
+        int m = UMatrix.Rows;
+        int n = VtMatrix.Columns;
 
         var sInv = new Matrix<double>(n, m);
         for (int i = 0; i < SVector.Count; i++)

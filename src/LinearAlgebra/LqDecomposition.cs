@@ -13,53 +13,52 @@ public class LqDecomposition : IMatrixDecomposition<double>
     {
         AMatrix = new Matrix<double>(expectedValues);
         BVector = new Vector<double>(actualValues);
-        LMatrix = new Matrix<double>(AMatrix.RowCount, AMatrix.RowCount);
-        QMatrix = new Matrix<double>(AMatrix.RowCount, AMatrix.RowCount);
+        LMatrix = new Matrix<double>(AMatrix.Rows, AMatrix.Rows);
+        QMatrix = new Matrix<double>(AMatrix.Rows, AMatrix.Rows);
         Decompose(AMatrix);
         SolutionVector = Solve(AMatrix, BVector);
     }
 
     public void Decompose(Matrix<double> aMatrix)
     {
-        // lq decomp using householder algo
-        int m = aMatrix.RowCount;
-        int n = aMatrix.ColumnCount;
+        int m = aMatrix.Rows;
+        int n = aMatrix.Columns;
 
         LMatrix = new Matrix<double>(m, n);
-        QMatrix = MatrixHelper.CreateIdentityMatrix<double>(n);
+        QMatrix = Matrix<double>.CreateIdentityMatrix<double>(n);
 
-        var a = aMatrix.Duplicate();
+        var a = aMatrix.Copy();
 
         // Perform Householder transformations
         for (int k = 0; k < Math.Min(m, n); k++)
         {
-            var x = new Vector<double>(m - k);
+            var x = VectorHelper.CreateVector<double>(m - k);
             for (int i = k; i < m; i++)
             {
                 x[i - k] = a[i, k];
             }
 
-            double alpha = -Math.Sign(x[0]) * MatrixHelper.Hypotenuse(x.Values);
-            var u = new Vector<double>(x.Count);
-            for (int i = 0; i < x.Count; i++)
+            double alpha = -Math.Sign(x[0]) * MatrixHelper.Hypotenuse(x);
+            var u = VectorHelper.CreateVector<double>(x.Length);
+            for (int i = 0; i < x.Length; i++)
             {
                 u[i] = (i == 0) ? x[i] - alpha : x[i];
             }
 
-            double norm_u = MatrixHelper.Hypotenuse(u.Values);
-            for (int i = 0; i < u.Count; i++)
+            double norm_u = MatrixHelper.Hypotenuse(u);
+            for (int i = 0; i < u.Length; i++)
             {
                 u[i] /= norm_u;
             }
 
-            var uMatrix = new Matrix<double>(u.Count, 1);
-            for (int i = 0; i < u.Count; i++)
+            var uMatrix = new Matrix<double>(u.Length, 1);
+            for (int i = 0; i < u.Length; i++)
             {
                 uMatrix[i, 0] = u[i];
             }
 
             var uT = uMatrix.Transpose();
-            var uTu = uMatrix.DotProduct(uT);
+            var uTu = MatrixHelper.Multiply(uMatrix, uT);
 
             for (int i = 0; i < m - k; i++)
             {
@@ -72,7 +71,7 @@ public class LqDecomposition : IMatrixDecomposition<double>
                 }
             }
 
-            var P = MatrixHelper.CreateIdentityMatrix<double>(m);
+            var P = Matrix<double>.CreateIdentityMatrix<double>(m);
             for (int i = k; i < m; i++)
             {
                 for (int j = k; j < m; j++)
@@ -81,16 +80,16 @@ public class LqDecomposition : IMatrixDecomposition<double>
                 }
             }
 
-            a = P.DotProduct(a);
-            QMatrix = QMatrix.DotProduct(P);
+            a = MatrixHelper.Multiply(P, a);
+            QMatrix = MatrixHelper.Multiply(QMatrix, P);
         }
 
         LMatrix = a;
 
         // Ensure QMatrix is orthogonal
-        for (int i = 0; i < QMatrix.RowCount; i++)
+        for (int i = 0; i < QMatrix.Rows; i++)
         {
-            for (int j = 0; j < QMatrix.ColumnCount; j++)
+            for (int j = 0; j < QMatrix.Columns; j++)
             {
                 if (i == j)
                 {
@@ -106,12 +105,12 @@ public class LqDecomposition : IMatrixDecomposition<double>
 
     public Matrix<double> Invert()
     {
-        int n = QMatrix.RowCount;
+        int n = QMatrix.Rows;
 
         var qMatrixTransposed = QMatrix.Transpose();
         var lMatrixInverted = LMatrix.InvertLowerTriangularMatrix();
 
-        return qMatrixTransposed.DotProduct(lMatrixInverted);
+        return MatrixHelper.Multiply(qMatrixTransposed, lMatrixInverted);
     }
 
     public Vector<double> Solve(Matrix<double> aMatrix, Vector<double> bVector)

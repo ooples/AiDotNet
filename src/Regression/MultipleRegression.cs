@@ -54,56 +54,54 @@ public sealed class MultipleRegression : IRegression<double[], double>
 
     internal override void Fit(double[][] inputs, double[] outputs)
     {
-        var m = Matrix<double>.Build;
+        var operations = MathHelper.GetNumericOperations<double>();
         var inputMatrix = RegressionOptions.MatrixLayout switch
         {
-            MatrixLayout.ColumnArrays => m.DenseOfColumnArrays(inputs),
-            MatrixLayout.RowArrays => m.DenseOfRowArrays(inputs),
-            _ => m.DenseOfColumnArrays(inputs)
+            MatrixLayout.ColumnArrays => new Matrix<double>(inputs, operations),
+            MatrixLayout.RowArrays => new Matrix<double>(inputs.Select(row => new Vector<double>(row, operations)), operations),
+            _ => new Matrix<double>(inputs, operations)
         };
-        var outputVector = CreateVector.Dense(outputs);
-        var result = CreateVector.Dense<double>(inputs.Length + (RegressionOptions.UseIntercept ? 1 : 0));
+        var outputVector = new Vector<double>(outputs, operations);
+        var result = new Vector<double>(inputs.Length + (RegressionOptions.UseIntercept ? 1 : 0), operations);
 
         if (RegressionOptions.UseIntercept)
         {
+            var onesVector = new Vector<double>(outputs.Length, operations);
+            for (int i = 0; i < onesVector.Length; i++)
+            {
+                onesVector[i] = 1.0;
+            }
+
             inputMatrix = RegressionOptions.MatrixLayout == MatrixLayout.ColumnArrays ? 
-                inputMatrix.InsertColumn(0, CreateVector.Dense(outputs.Length, Vector<double>.One)) :
-                inputMatrix.InsertRow(0, CreateVector.Dense(outputs.Length, Vector<double>.One));
+                inputMatrix.InsertColumn(0, onesVector) :
+                inputMatrix.InsertRow(0, onesVector);
         }
 
         switch (RegressionOptions.MatrixDecomposition)
         {
             case MatrixDecomposition.Cholesky:
-                inputMatrix.Cholesky().Solve(outputVector, result);
-                break;
-            case MatrixDecomposition.Evd:
-                inputMatrix.Evd().Solve(outputVector, result);
-                break;
-            case MatrixDecomposition.GramSchmidt:
-                inputMatrix.GramSchmidt().Solve(outputVector, result);
+                var choleskyDecomp = new CholeskyDecomposition(inputMatrix);
+                choleskyDecomp.Solve(outputVector, result);
                 break;
             case MatrixDecomposition.Lu:
-                inputMatrix.LU().Solve(outputVector, result);
+                var luDecomp = new LuDecomposition(inputMatrix);
+                luDecomp.Solve(outputVector, result);
                 break;
-            case MatrixDecomposition.Qr:
-                inputMatrix.QR().Solve(outputVector, result);
-                break;
-            case MatrixDecomposition.Svd:
-                inputMatrix.Svd().Solve(outputVector, result);
-                break;
+            // Add other decomposition methods as needed
             default:
-                inputMatrix.Solve(outputVector, result);
+                // Implement a default solving method, e.g., using Gaussian elimination
+                result = GaussianElimination(inputMatrix, outputVector);
                 break;
         }
 
         Coefficients = result.ToArray();
-        YIntercept = 0;
+        YIntercept = RegressionOptions.UseIntercept ? Coefficients[0] : 0;
     }
 
     internal override (double[][] trainingInputs, double[] trainingOutputs, double[][] oosInputs, double[] oosOutputs) 
-        PrepareData(double[][] inputs, double[] outputs, int trainingSize, INormalization? normalization)
+        PrepareData(double[][] inputs, double[] outputs, int trainingSize, INormalizer? normalizer)
     {
-        return normalization?.PrepareData(inputs, outputs, trainingSize) ?? NormalizationHelper.SplitData(inputs, outputs, trainingSize);
+        return normalizer?.PrepareData(inputs, outputs, trainingSize) ?? NormalizationHelper.SplitData(inputs, outputs, trainingSize);
     }
 
     internal override double[] Transform(double[][] inputs)

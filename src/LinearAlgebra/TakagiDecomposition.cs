@@ -10,11 +10,11 @@ public class TakagiDecomposition : IMatrixDecomposition<double>
 
     public Vector<double> SolutionVector { get; private set; }
 
-    public TakagiDecomposition(IEnumerable<IEnumerable<double>> expectedValues, IEnumerable<double> actualValues)
+    public TakagiDecomposition(IEnumerable<Vector<double>> expectedValues, IEnumerable<double> actualValues)
     {
-        AMatrix = new Matrix<double>(expectedValues);
+        AMatrix = Matrix.CreateDoubleMatrix(expectedValues);
         BVector = new Vector<double>(actualValues);
-        SigmaMatrix = new Matrix<double>(AMatrix.RowCount, AMatrix.RowCount);
+        SigmaMatrix = Matrix.CreateDoubleMatrix(AMatrix.Rows, AMatrix.Rows);
         var eigenDecomposition = new EigenvalueDecomposition(expectedValues, actualValues);
         UnitaryMatrix = eigenDecomposition.EigenVectors.ToComplexMatrix();
         EigenValues = eigenDecomposition.EigenValues.ToComplexVector();
@@ -24,8 +24,8 @@ public class TakagiDecomposition : IMatrixDecomposition<double>
 
     public void Decompose(Matrix<double> aMatrix)
     {
-        var rows = aMatrix.RowCount;
-        SigmaMatrix = new Matrix<double>(rows, rows);
+        var rows = aMatrix.Rows;
+        SigmaMatrix = Matrix.CreateDoubleMatrix(rows, rows);
         for (int i = 0; i < rows; i++)
         {
             SigmaMatrix[i, i] = Math.Sqrt(EigenValues[i].Magnitude);
@@ -43,8 +43,8 @@ public class TakagiDecomposition : IMatrixDecomposition<double>
 
     public Vector<double> Solve(Matrix<double> sigmaMatrix, Vector<double> bVector)
     {
-        var bComplex = new Vector<Complex>(bVector.Count);
-        for (int i = 0; i < bVector.Count; i++)
+        var bComplex = new Vector<Complex>(bVector.Length);
+        for (int i = 0; i < bVector.Length; i++)
         {
             bComplex[i] = new Complex(bVector[i], 0);
         }

@@ -55,50 +55,55 @@ public sealed class MultivariateRegression : IRegression<double[], double[]>
 
     internal override void Fit(double[][] inputs, double[][] outputs)
     {
-        var m = Matrix<double>.Build;
         var inputMatrix = RegressionOptions.MatrixLayout switch
         {
-            MatrixLayout.ColumnArrays => m.DenseOfColumnArrays(inputs),
-            MatrixLayout.RowArrays => m.DenseOfRowArrays(inputs),
-            _ => m.DenseOfColumnArrays(inputs)
+            MatrixLayout.ColumnArrays => new Matrix<double>(inputs),
+            MatrixLayout.RowArrays => new Matrix<double>(inputs).Transpose(),
+            _ => new Matrix<double>(inputs)
         };
         var outputMatrix = RegressionOptions.MatrixLayout switch
         {
-            MatrixLayout.ColumnArrays => m.DenseOfColumnArrays(outputs),
-            MatrixLayout.RowArrays => m.DenseOfRowArrays(outputs),
-            _ => m.DenseOfColumnArrays(outputs)
+            MatrixLayout.ColumnArrays => new Matrix<double>(outputs),
+            MatrixLayout.RowArrays => new Matrix<double>(outputs).Transpose(),
+            _ => new Matrix<double>(outputs)
         };
 
         if (RegressionOptions.UseIntercept)
         {
+            var onesVector = VectorHelper.CreateVector<double>(outputs.Length);
+            for (int i = 0; i < onesVector.Length; i++)
+            {
+                onesVector[i] = 1.0;
+            }
+
             inputMatrix = RegressionOptions.MatrixLayout == MatrixLayout.ColumnArrays ?
-                inputMatrix.InsertColumn(0, CreateVector.Dense(outputs.Length, Vector<double>.One)) :
-                inputMatrix.InsertRow(0, CreateVector.Dense(outputs.Length, Vector<double>.One));
+                inputMatrix.InsertColumn(0, onesVector) :
+                inputMatrix.InsertRow(0, onesVector);
         }
 
-        var result = m.DenseOfMatrix(inputMatrix);
+        var result = new Matrix<double>(inputMatrix.Rows, outputMatrix.Columns);
         switch (RegressionOptions.MatrixDecomposition)
         {
             case MatrixDecomposition.Cholesky:
-                inputMatrix.Cholesky().Solve(outputMatrix, result);
+                result = inputMatrix.Cholesky().Solve(outputMatrix);
                 break;
             case MatrixDecomposition.Evd:
-                inputMatrix.Evd().Solve(outputMatrix, result);
+                result = inputMatrix.Evd().Solve(outputMatrix);
                 break;
             case MatrixDecomposition.GramSchmidt:
-                inputMatrix.GramSchmidt().Solve(outputMatrix, result);
+                result = inputMatrix.GramSchmidt().Solve(outputMatrix);
                 break;
             case MatrixDecomposition.Lu:
-                inputMatrix.LU().Solve(outputMatrix, result);
+                result = inputMatrix.Lu().Solve(outputMatrix);
                 break;
             case MatrixDecomposition.Qr:
-                inputMatrix.QR().Solve(outputMatrix, result);
+                result = inputMatrix.Qr().Solve(outputMatrix);
                 break;
             case MatrixDecomposition.Svd:
-                inputMatrix.Svd().Solve(outputMatrix, result);
+                result = inputMatrix.Svd().Solve(outputMatrix);
                 break;
             default:
-                inputMatrix.Solve(outputMatrix, result);
+                result = inputMatrix.Solve(outputMatrix);
                 break;
         }
 

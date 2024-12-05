@@ -9,22 +9,22 @@ public class EigenvalueDecomposition : IMatrixDecomposition<double>
     public Matrix<double> EigenVectors { get; private set; }
     public Vector<double> EigenValues { get; private set; }
 
-    public EigenvalueDecomposition(IEnumerable<IEnumerable<double>> expectedValues, IEnumerable<double> actualValues)
+    public EigenvalueDecomposition(IEnumerable<Vector<double>> expectedValues, IEnumerable<double> actualValues)
     {
-        AMatrix = new Matrix<double>(expectedValues);
+        AMatrix = Matrix.CreateDoubleMatrix(expectedValues);
         BVector = new Vector<double>(actualValues);
-        EigenVectors = new Matrix<double>(AMatrix.RowCount, AMatrix.RowCount);
-        EigenValues = new Vector<double>(AMatrix.RowCount);
+        EigenVectors = Matrix.CreateDoubleMatrix(AMatrix.Rows, AMatrix.Rows);
+        EigenValues = new Vector<double>(AMatrix.Rows);
         Decompose(AMatrix);
         SolutionVector = Solve(EigenVectors, BVector);
     }
 
     public void Decompose(Matrix<double> aMatrix)
     {
-        var rows = aMatrix.RowCount;
+        var rows = aMatrix.Rows;
         EigenValues = new Vector<double>(rows);
-        EigenVectors = new Matrix<double>(rows, rows);
-        var A = aMatrix.Duplicate();
+        EigenVectors = Matrix.CreateDoubleMatrix(rows, rows);
+        var A = aMatrix.Copy();
 
         for (int i = 0; i < rows; i++)
         {
@@ -48,8 +48,8 @@ public class EigenvalueDecomposition : IMatrixDecomposition<double>
 
     public Matrix<double> Invert()
     {
-        var rows = AMatrix.RowCount;
-        var inv = new Matrix<double>(rows, rows);
+        var rows = AMatrix.Rows;
+        var inv = Matrix.CreateDoubleMatrix(rows, rows);
         for (int i = 0; i < rows; i++)
         {
             double eigenvalue = EigenValues[i];
@@ -73,7 +73,7 @@ public class EigenvalueDecomposition : IMatrixDecomposition<double>
 
     public Vector<double> Solve(Matrix<double> eigenVectors, Vector<double> bVector)
     {
-        var rows = eigenVectors.RowCount;
+        var rows = eigenVectors.Rows;
         var x = new Vector<double>(rows);
         for (int i = 0; i < rows; i++)
         {

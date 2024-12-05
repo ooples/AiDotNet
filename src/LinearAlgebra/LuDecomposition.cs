@@ -15,15 +15,15 @@ public class LuDecomposition : IMatrixDecomposition<double>
         AMatrix = new Matrix<double>(expectedValues);
         BVector = new Vector<double>(actualValues);
         PVector = new Vector<int>(BVector.Count);
-        LMatrix = new Matrix<double>(AMatrix.RowCount, AMatrix.RowCount);
-        UMatrix = new Matrix<double>(AMatrix.RowCount, AMatrix.RowCount);
+        LMatrix = new Matrix<double>(AMatrix.Rows, AMatrix.Rows);
+        UMatrix = new Matrix<double>(AMatrix.Rows, AMatrix.Rows);
         Decompose(AMatrix);
         SolutionVector = Solve(LMatrix, BVector);
     }
 
     public void Decompose(Matrix<double> aMatrix)
     {
-        var rows = aMatrix.RowCount;
+        var rows = aMatrix.Rows;
         LMatrix = new Matrix<double>(rows, rows);
         UMatrix = aMatrix.Duplicate();
         PVector = new Vector<int>(Enumerable.Range(0, rows));
@@ -82,7 +82,7 @@ public class LuDecomposition : IMatrixDecomposition<double>
 
     public Matrix<double> Invert()
     {
-        var rows = AMatrix.RowCount;
+        var rows = AMatrix.Rows;
         var inv = new Matrix<double>(rows, rows);
         var eVector = new Vector<double>(rows);
 
@@ -104,7 +104,7 @@ public class LuDecomposition : IMatrixDecomposition<double>
 
     public Vector<double> Solve(Matrix<double> aMatrix, Vector<double> bVector)
     {
-        var rows = aMatrix.RowCount;
+        var rows = aMatrix.Rows;
         var xVector = new Vector<double>(rows);
         var yVector = new Vector<double>(rows);
 

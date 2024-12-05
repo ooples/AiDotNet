@@ -10,28 +10,31 @@ public class LuCroutMatrix : ILuDecomposition<double>
     private readonly Matrix<double> _upperTriangularMatrix;
     private readonly Vector<double> _solutionVector;
 
-    public LuCroutMatrix(IEnumerable<IEnumerable<double>> expectedValues, IEnumerable<double> actualValues)
+    public LuCroutMatrix(IEnumerable<Vector<double>> expectedValues, IEnumerable<double> actualValues)
     {
-        _matrix = new Matrix<double>(expectedValues);
-        _vector = new Vector<double>(actualValues);
+        var operations = MatrixHelper.GetNumericOperations<double>();
+        _matrix = new Matrix<double>(expectedValues, operations);
+        _vector = new Vector<double>(actualValues, operations);
         Decompose(out _luDecompMatrix, out _indexVector);
         Decompose(out _upperTriangularMatrix, out _lowerTriangularMatrix, 1, 1);
+        _solutionVector = new Vector<double>(_matrix.Rows, operations);
     }
 
     public void Decompose(out Matrix<double> matrix, out Vector<int> indexVector)
     {
         double max, temp, d = 1;
-        int rows = _matrix.RowCount, intMax = 0;
-        var luMatrix = _matrix.Duplicate();
+        int rows = _matrix.Rows, intMax = 0;
+        var luMatrix = _matrix.Copy();
         double[] vectorScaling = new double[rows];
-        indexVector = new(Enumerable.Range(0, rows));
+        var operations = MatrixHelper.GetNumericOperations<int>();
+        indexVector = new Vector<int>(Enumerable.Range(0, rows), operations);
 
         for (int i = 0; i < rows; i++)
         {
             max = 0;
             for (int j = 0; j < rows; j++)
             {
-                max = Math.Max(Math.Abs(luMatrix[i][j]), max);
+                max = Math.Max(Math.Abs(luMatrix[i, j]), max);
             }
 
             if (max == 0)
@@ -47,7 +50,7 @@ public class LuCroutMatrix : ILuDecomposition<double>
             max = 0;
             for (int j = i; j < rows; j++)
             {
-                temp = vectorScaling[j] * Math.Abs(luMatrix[j][i]);
+                temp = vectorScaling[j] * Math.Abs(luMatrix[j, i]);
 
                 if (temp > max)
                 {
@@ -60,9 +63,9 @@ public class LuCroutMatrix : ILuDecomposition<double>
             {
                 for (int j = 0; j < rows; j++)
                 {
-                    temp = luMatrix[intMax][j];
-                    luMatrix[intMax][j] = luMatrix[i][j];
-                    luMatrix[i][j] = temp;
+                    temp = luMatrix[intMax, j];
+                    luMatrix[intMax, j] = luMatrix[i, j];
+                    luMatrix[i, j] = temp;
                 }
 
                 d = -d;
@@ -71,17 +74,17 @@ public class LuCroutMatrix : ILuDecomposition<double>
 
             indexVector[i] = intMax;
 
-            if (luMatrix[i][i] == 0)
+            if (luMatrix[i, i] == 0)
             {
-                luMatrix[i][i] = double.Epsilon;
+                luMatrix[i, i] = double.Epsilon;
             }
 
             for (int j = i + 1; j < rows; j++)
             {
-                temp = luMatrix[j][i] /= luMatrix[i][i];
+                temp = luMatrix[j, i] /= luMatrix[i, i];
                 for (int k = i + 1; k < rows; k++)
                 {
-                    luMatrix[j][k] -= temp * luMatrix[i][k];
+                    luMatrix[j, k] -= temp * luMatrix[i, k];
                 }
             }
         }
@@ -91,21 +94,21 @@ public class LuCroutMatrix : ILuDecomposition<double>
 
     public void Decompose(out Matrix<double> upperTriangularMatrix, out Matrix<double> lowerTriangularMatrix, int leftSide, int rightSide)
     {
-        int mm = leftSide + rightSide + 1, index = leftSide, size = _matrix.RowCount;
+        int mm = leftSide + rightSide + 1, index = leftSide, size = _matrix.Rows;
         double dummy = 0;
-        upperTriangularMatrix = _matrix.Duplicate();
-        lowerTriangularMatrix = _matrix.Duplicate();
+        upperTriangularMatrix = _matrix.Copy();
+        lowerTriangularMatrix = _matrix.Copy();
 
         for (int i = 0; i < leftSide; i++)
         {
             for (int j = leftSide - i; j < mm; j++)
             {
-                upperTriangularMatrix[i][j - 1] = upperTriangularMatrix[i][j];
+                upperTriangularMatrix[i, j - 1] = upperTriangularMatrix[i, j];
             }
             index--;
             for (int j = mm - index - 1; j < mm; j++)
             {
-                upperTriangularMatrix[i][j] = 0;
+                upperTriangularMatrix[i, j] = 0;
             }
         }
 
@@ -113,7 +116,7 @@ public class LuCroutMatrix : ILuDecomposition<double>
         index = leftSide;
         for (int i = 0; i < size; i++)
         {
-            dummy = upperTriangularMatrix[i][0];
+            dummy = upperTriangularMatrix[i, 0];
             var index1 = i;
             if (index < size)
             {
@@ -122,10 +125,10 @@ public class LuCroutMatrix : ILuDecomposition<double>
 
             for (int j = i + 1; j < index; j++)
             {
-                dummy = Math.Max(Math.Abs(upperTriangularMatrix[j][0]), Math.Abs(dummy));
-                if (Math.Abs(upperTriangularMatrix[j][0]) > Math.Abs(dummy))
+                dummy = Math.Max(Math.Abs(upperTriangularMatrix[j, 0]), Math.Abs(dummy));
+                if (Math.Abs(upperTriangularMatrix[j, 0]) > Math.Abs(dummy))
                 {
-                    dummy = upperTriangularMatrix[j][0];
+                    dummy = upperTriangularMatrix[j, 0];
                     index1 = j;
                 }
             }
@@ -133,7 +136,7 @@ public class LuCroutMatrix : ILuDecomposition<double>
             _indexVector[i] = index1 + 1;
             if (dummy == 0)
             {
-                upperTriangularMatrix[i][0] = double.Epsilon;
+                upperTriangularMatrix[i, 0] = double.Epsilon;
             }
 
             if (index1 != i)
@@ -141,19 +144,19 @@ public class LuCroutMatrix : ILuDecomposition<double>
                 d = -d;
                 for (int j = 0; j < mm; j++)
                 {
-                    upperTriangularMatrix[i][j] = upperTriangularMatrix[index1][j];
+                    upperTriangularMatrix[i, j] = upperTriangularMatrix[index1, j];
                 }
             }
 
             for (int j = i + 1; j < index; j++)
             {
-                dummy = upperTriangularMatrix[j][0] / upperTriangularMatrix[i][0];
-                lowerTriangularMatrix[i][j - i - 1] = dummy;
+                dummy = upperTriangularMatrix[j, 0] / upperTriangularMatrix[i, 0];
+                lowerTriangularMatrix[i, j - i - 1] = dummy;
 
                 for (int k = 1; k < mm; k++)
                 {
-                    upperTriangularMatrix[j][k - 1] = upperTriangularMatrix[j][k] - dummy * upperTriangularMatrix[i][k];
-                    upperTriangularMatrix[j][mm - 1] = 0;
+                    upperTriangularMatrix[j, k - 1] = upperTriangularMatrix[j, k] - dummy * upperTriangularMatrix[i, k];
+                    upperTriangularMatrix[j, mm - 1] = 0;
                 }
             }
         }
@@ -161,9 +164,13 @@ public class LuCroutMatrix : ILuDecomposition<double>
 
     public void Solve(out Matrix<double> upperTriangularMatrix, out Matrix<double> lowerTriangularMatrix, int leftSide, int rightSide)
     {
-        int mm = leftSide + rightSide + 1, index = leftSide, size = _matrix.RowCount;
+        int mm = leftSide + rightSide + 1, index = leftSide, size = _matrix.Rows;
         double dummy = 0;
-        var solutionVector = _vector.Duplicate();
+        var solutionVector = _vector.Copy();
+
+        // Initialize the out parameters
+        upperTriangularMatrix = _upperTriangularMatrix.Copy();
+        lowerTriangularMatrix = _lowerTriangularMatrix.Copy();
 
         for (int i = 0; i < size; i++)
         {
@@ -181,7 +188,7 @@ public class LuCroutMatrix : ILuDecomposition<double>
 
             for (int j = i + 1; j < index; j++)
             {
-                solutionVector[j] -= _lowerTriangularMatrix[i][j - i - 1] * solutionVector[i];
+                solutionVector[j] -= lowerTriangularMatrix[i, j - i - 1] * solutionVector[i];
             }
         }
 
@@ -191,22 +198,28 @@ public class LuCroutMatrix : ILuDecomposition<double>
             dummy = solutionVector[i];
             for (int j = 1; j < index; j++)
             {
-                dummy -= _upperTriangularMatrix[i][j] * solutionVector[j + i];
+                dummy -= upperTriangularMatrix[i, j] * solutionVector[j + i];
             }
-            solutionVector[i] = dummy / _upperTriangularMatrix[i][0];
+            solutionVector[i] = dummy / upperTriangularMatrix[i, 0];
             if (index < mm)
             {
                 index++;
             }
+        }
+
+        // If you want to update the solution vector in the class
+        for (int i = 0; i < size; i++)
+        {
+            _solutionVector[i] = solutionVector[i];
         }
     }
 
     public double GetDeterminant()
     {
         double determinant = 0;
-        for (int i = 0; i < _matrix.RowCount; i++)
+        for (int i = 0; i < _matrix.Rows; i++)
         {
-            determinant *= _luDecompMatrix[i][i];
+            determinant *= _luDecompMatrix[i, i];
         }
 
         return determinant;
@@ -214,15 +227,16 @@ public class LuCroutMatrix : ILuDecomposition<double>
 
     public void Improve()
     {
-        var size = _matrix.RowCount;
-        var errorVector = new Vector<double>(size);
+        var size = _matrix.Rows;
+        var operations = MatrixHelper.GetNumericOperations<double>();
+        var errorVector = new Vector<double>(size, operations);
 
         for (int i = 0; i < size; i++)
         {
             var sdp = -_vector[i];
             for (int j = 0; j < size; j++)
             {
-                sdp += _matrix[i][j] * _solutionVector[j];
+                sdp += _matrix[i, j] * _solutionVector[j];
             }
             errorVector[i] = sdp;
         }
@@ -236,9 +250,9 @@ public class LuCroutMatrix : ILuDecomposition<double>
     public double GetDeterminant(bool isUpper = true)
     {
         double determinant = 0;
-        for (int i = 0; i < _matrix.RowCount; i++)
+        for (int i = 0; i < _matrix.Rows; i++)
         {
-            determinant *= _upperTriangularMatrix[i][0];
+            determinant *= _upperTriangularMatrix[i, 0];
         }
 
         return determinant;
@@ -246,24 +260,24 @@ public class LuCroutMatrix : ILuDecomposition<double>
 
     public Matrix<double> GetInverse()
     {
-        var identityMatrix = MatrixHelper.CreateIdentityMatrix<double>(_matrix.RowCount);
+        var identityMatrix = MatrixHelper.CreateIdentityMatrix<double>(_matrix.Rows);
         Solve(identityMatrix, out Matrix<double> inverseMatrix);
 
         return inverseMatrix;
     }
 
-    public void Solve(LinearAlgebra.Vector<double> vector, out LinearAlgebra.Vector<double> solutionVector)
+    public void Solve(Vector<double> vector, out Vector<double> solutionVector)
     {
-        solutionVector = vector.Duplicate();
+        solutionVector = vector.Copy();
         double sum;
         int i2 = 0;
 
-        if (vector.Count != _matrix.RowCount)
+        if (vector.Length != _matrix.Rows)
         {
             throw new InvalidOperationException("Rows must match");
         }
 
-        for (int i = 0; i < _matrix.RowCount; i++) 
+        for (int i = 0; i < _matrix.Rows; i++) 
         {
             var index = _indexVector[i];
             sum = solutionVector[index];
@@ -273,7 +287,7 @@ public class LuCroutMatrix : ILuDecomposition<double>
             {
                 for (int j = i2 - 1; j < i; j++)
                 {
-                    sum -= _luDecompMatrix[i][j] * solutionVector[j];
+                    sum -= _luDecompMatrix[i, j] * solutionVector[j];
                 }
             }
             else if (sum != 0)
@@ -284,39 +298,60 @@ public class LuCroutMatrix : ILuDecomposition<double>
             solutionVector[i] = sum;
         }
 
-        for (int i = _matrix.RowCount - 1; i >= 0; i--)
+        for (int i = _matrix.Rows - 1; i >= 0; i--)
         {
             sum = solutionVector[i];
-            for (int j = i + 1; j < _matrix.RowCount; j++)
+            for (int j = i + 1; j < _matrix.Rows; j++)
             {
-                sum -= _luDecompMatrix[i][j] * solutionVector[j];
+                sum -= _luDecompMatrix[i, j] * solutionVector[j];
             }
         }
     }
 
-    public void Solve(LinearAlgebra.Matrix<double> matrix, out LinearAlgebra.Matrix<double> solutionMatrix)
+    public void Solve(Matrix<double> matrix, out Matrix<double> solutionMatrix)
     {
-        solutionMatrix = matrix.Duplicate();
+        solutionMatrix = matrix.Copy();
 
-        if (matrix.RowCount != _matrix.RowCount)
+        if (matrix.Rows != _matrix.Rows)
         {
             throw new InvalidOperationException("Rows must match");
         }
 
-        var solutionVector = new Vector<double>(matrix.RowCount);
-        for (int i = 0; i < matrix.ColumnCount; i++)
+        var operations = MatrixHelper.GetNumericOperations<double>();
+        var solutionVector = new Vector<double>(matrix.Rows, operations);
+        for (int i = 0; i < matrix.Columns; i++)
         {
-            for (int j = 0; j < matrix.RowCount; j++)
+            for (int j = 0; j < matrix.Rows; j++)
             {
-                solutionVector[j] = matrix[j][i];
+                solutionVector[j] = matrix[j, i];
             }
 
             Solve(solutionVector, out solutionVector);
 
-            for (int j = 0; j < matrix.RowCount; j++)
+            for (int j = 0; j < matrix.Rows; j++)
             {
-                solutionMatrix[j][i] = solutionVector[j];
+                solutionMatrix[j, i] = solutionVector[j];
             }
         }
+    }
+
+    public void Decompose(out Matrix<double> upperTriangularMatrix, out Matrix<double> lowerTriangularMatrix)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void Decompose(Matrix<double> aMatrix)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Vector<double> Solve(Matrix<double> aMatrix, Vector<double> bVector)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Matrix<double> Invert()
+    {
+        throw new NotImplementedException();
     }
 }

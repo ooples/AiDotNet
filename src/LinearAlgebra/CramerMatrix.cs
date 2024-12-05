@@ -1,8 +1,6 @@
-﻿using AiDotNet.Helpers;
+﻿namespace AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.LinearAlgebra;
-
-internal class CramerMatrix : IMatrix<double, int>
+internal class CramerMatrix : IMatrix<double>
 {
     public double[] Coefficients { get; }
 
@@ -82,4 +80,13 @@ internal class CramerMatrix : IMatrix<double, int>
         return aTerms;
     }
 
+    public Matrix<double> GetInverse()
+    {
+        throw new NotImplementedException();
+    }
+
+    public double GetDeterminant()
+    {
+        throw new NotImplementedException();
+    }
 }

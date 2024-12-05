@@ -11,10 +11,10 @@ public class SchurDecomposition : IMatrixDecomposition<double>
 
     public SchurDecomposition(IEnumerable<IEnumerable<double>> expectedValues, IEnumerable<double> actualValues)
     {
-        AMatrix = new Matrix<double>(expectedValues);
+        AMatrix = Matrix.CreateDoubleMatrix(expectedValues);
         BVector = new Vector<double>(actualValues);
-        SchurMatrix = new Matrix<double>(AMatrix.RowCount, AMatrix.RowCount);
-        UnitaryMatrix = new Matrix<double>(AMatrix.RowCount, AMatrix.RowCount);
+        SchurMatrix = Matrix.CreateDoubleMatrix(AMatrix.Rows, AMatrix.Rows);
+        UnitaryMatrix = Matrix.CreateDoubleMatrix(AMatrix.Rows, AMatrix.Rows);
         Decompose(AMatrix);
         SolutionVector = Solve(SchurMatrix, BVector);
     }

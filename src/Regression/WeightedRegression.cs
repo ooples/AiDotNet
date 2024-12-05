@@ -55,6 +55,8 @@ public sealed class WeightedRegression : IRegression<double, double>
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =
             PrepareData(inputs, outputs, trainingSize, RegressionOptions.Normalization);
         var (cleanedInputs, cleanedOutputs) = 
+
+
             RegressionOptions.OutlierRemoval?.RemoveOutliers(trainingInputs, trainingOutputs) ?? (trainingInputs, trainingOutputs);
         Fit(cleanedInputs, cleanedOutputs);
         Predictions = Transform(oosInputs);
@@ -62,45 +64,69 @@ public sealed class WeightedRegression : IRegression<double, double>
     }
 
     internal override (double[] trainingInputs, double[] trainingOutputs, double[] oosInputs, double[] oosOutputs) PrepareData(
-        double[] inputs, double[] outputs, int trainingSize, INormalization? normalization)
+        double[] inputs, double[] outputs, int trainingSize, INormalizer? normalizer)
     {
-        return normalization?.PrepareData(inputs, outputs, trainingSize) ?? NormalizationHelper.SplitData(inputs, outputs, trainingSize);
+        return normalizer?.PrepareData(inputs, outputs, trainingSize) ?? NormalizationHelper.SplitData(inputs, outputs, trainingSize);
     }
 
     internal override void Fit(double[] inputs, double[] outputs)
     {
-        var m = Matrix<double>.Build;
-        var inputMatrix = m.Dense(inputs.Length, Order + 1, (i, j) => Math.Pow(inputs[i], j));
-        var outputVector = CreateVector.Dense(outputs);
-        var weights = m.Diagonal(Weights.Take(inputs.Length).ToArray());
+        var operations = MathHelper.GetNumericOperations<double>();
+        var inputMatrix = new Matrix<double>(inputs.Length, Order + 1, operations);
+        for (int i = 0; i < inputs.Length; i++)
+        {
+            for (int j = 0; j <= Order; j++)
+            {
+                inputMatrix[i, j] = Math.Pow(inputs[i], j);
+            }
+        }
+
+        var outputVector = new Vector<double>(outputs, operations);
+        var weights = new Matrix<double>(inputs.Length, inputs.Length, operations);
+        for (int i = 0; i < inputs.Length; i++)
+        {
+            weights[i, i] = Weights[i];
+        }
 
         if (RegressionOptions.UseIntercept)
         {
+            var onesVector = new Vector<double>(outputs.Length, operations);
+            for (int i = 0; i < onesVector.Length; i++)
+            {
+                onesVector[i] = 1.0;
+            }
+
             inputMatrix = RegressionOptions.MatrixLayout == MatrixLayout.ColumnArrays ?
-                inputMatrix.InsertColumn(0, CreateVector.Dense(outputs.Length, Vector<double>.One)) :
-                inputMatrix.InsertRow(0, CreateVector.Dense(outputs.Length, Vector<double>.One));
+                inputMatrix.InsertColumn(0, onesVector) :
+                inputMatrix.InsertRow(0, onesVector);
         }
 
-        var result = RegressionOptions.MatrixDecomposition switch
+        var transposedInputMatrix = inputMatrix.Transpose();
+        var weightedInputMatrix = weights * inputMatrix;
+        var leftSide = transposedInputMatrix * weightedInputMatrix;
+        var rightSide = transposedInputMatrix * (weights * outputVector);
+
+        Vector<double> result;
+
+        switch (RegressionOptions.MatrixDecomposition)
         {
-            MatrixDecomposition.Cholesky => inputMatrix.TransposeThisAndMultiply(weights * inputMatrix).Cholesky()
-                                .Solve(inputMatrix.TransposeThisAndMultiply(weights * outputVector)),
-            MatrixDecomposition.Evd => inputMatrix.TransposeThisAndMultiply(weights * inputMatrix).Evd()
-                                .Solve(inputMatrix.TransposeThisAndMultiply(weights * outputVector)),
-            MatrixDecomposition.GramSchmidt => inputMatrix.TransposeThisAndMultiply(weights * inputMatrix).GramSchmidt()
-                                .Solve(inputMatrix.TransposeThisAndMultiply(weights * outputVector)),
-            MatrixDecomposition.Lu => inputMatrix.TransposeThisAndMultiply(weights * inputMatrix).LU()
-                                .Solve(inputMatrix.TransposeThisAndMultiply(weights * outputVector)),
-            MatrixDecomposition.Qr => inputMatrix.TransposeThisAndMultiply(weights * inputMatrix).QR()
-                                .Solve(inputMatrix.TransposeThisAndMultiply(weights * outputVector)),
-            MatrixDecomposition.Svd => inputMatrix.TransposeThisAndMultiply(weights * inputMatrix).Svd()
-                                .Solve(inputMatrix.TransposeThisAndMultiply(weights * outputVector)),
-            _ => inputMatrix.TransposeThisAndMultiply(weights * inputMatrix).Cholesky()
-                                .Solve(inputMatrix.TransposeThisAndMultiply(weights * outputVector)),
-        };
+            case MatrixDecomposition.Cholesky:
+                var choleskyDecomp = new CholeskyDecomposition(leftSide);
+                result = choleskyDecomp.Solve(rightSide);
+                break;
+            case MatrixDecomposition.Lu:
+                var luDecomp = new LuDecomposition(leftSide);
+                result = luDecomp.Solve(rightSide);
+                break;
+            // Implement other decomposition methods as needed
+            default:
+                // Use a default method, e.g., Gaussian elimination
+                result = GaussianElimination(leftSide, rightSide);
+                break;
+        }
 
         Coefficients = result.ToArray();
-        YIntercept = 0;
+        YIntercept = RegressionOptions.UseIntercept ? Coefficients[0] : 0;
     }
 
     internal override double[] Transform(double[] inputs)

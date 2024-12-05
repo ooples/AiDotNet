@@ -12,14 +12,14 @@ public class HessenbergDecomposition : IMatrixDecomposition<double>
     {
         AMatrix = new Matrix<double>(expectedValues);
         BVector = new Vector<double>(actualValues);
-        HessenbergMatrix = new Matrix<double>(AMatrix.RowCount, AMatrix.RowCount);
+        HessenbergMatrix = new Matrix<double>(AMatrix.Rows, AMatrix.Rows);
         Decompose(AMatrix);
         SolutionVector = Solve(HessenbergMatrix, BVector);
     }
 
     public void Decompose(Matrix<double> aMatrix)
     {
-        var rows = aMatrix.RowCount;
+        var rows = aMatrix.Rows;
         for (int k = 0; k < rows - 2; k++)
         {
             var xVector = new Vector<double>(rows - k - 1);
@@ -35,7 +35,7 @@ public class HessenbergDecomposition : IMatrixDecomposition<double>
 
     public Matrix<double> Invert()
     {
-        var rows = AMatrix.RowCount;
+        var rows = AMatrix.Rows;
         var iMatrix = MatrixHelper.CreateIdentityMatrix<double>(rows);
         var inv = new Matrix<double>(rows, rows);
 
@@ -55,7 +55,7 @@ public class HessenbergDecomposition : IMatrixDecomposition<double>
 
     public Vector<double> Solve(Matrix<double> aMatrix, Vector<double> bVector)
     {
-        var rows = aMatrix.RowCount;
+        var rows = aMatrix.Rows;
         var xVector = new Vector<double>(rows);
         var yVector = new Vector<double>(rows);
 
