@@ -13,7 +13,7 @@ public class RegressionOptions
     /// <summary>
     /// The normalization to use on the data before training and testing.
     /// </summary>
-    public INormalization? Normalization { get; set; }
+    public INormalizer? Normalization { get; set; }
 
     /// <summary>
     /// The outlier removal to use on the data before training and testing.

@@ -726,6 +726,69 @@ public static class MatrixHelper
         }
     }
 
+    public static (Matrix<double>, Vector<double>, Matrix<double>, Vector<double>, Matrix<double>, Vector<double>) SplitData(Matrix<double> X, Vector<double> y, 
+        PredictionModelOptions options)
+    {
+        int totalSamples = X.Rows;
+        int features = X.Columns;
+
+        // Calculate split sizes
+        int trainingSize = (int)(totalSamples * options.TrainingSplitPercentage);
+        int validationSize = (int)(totalSamples * options.ValidationSplitPercentage);
+        int testingSize = totalSamples - trainingSize - validationSize;
+
+        // Create matrices and vectors for split data
+        var XTrain = new Matrix<double>(trainingSize, features);
+        var yTrain = new Vector<double>(trainingSize);
+        var XVal = new Matrix<double>(validationSize, features);
+        var yVal = new Vector<double>(validationSize);
+        var XTest = new Matrix<double>(testingSize, features);
+        var yTest = new Vector<double>(testingSize);
+
+        // Create random indices
+        var random = new Random(options.RandomSeed);
+        var indices = Enumerable.Range(0, totalSamples).ToList();
+    
+        // Fisher-Yates shuffle
+        for (int i = indices.Count - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (indices[i], indices[j]) = (indices[j], indices[i]);
+        }
+
+        // Split data
+        int currentIndex = 0;
+
+        // Fill training data
+        for (int i = 0; i < trainingSize; i++)
+        {
+            for (int j = 0; j < features; j++)
+                XTrain[i, j] = X[indices[currentIndex], j];
+            yTrain[i] = y[indices[currentIndex]];
+            currentIndex++;
+        }
+
+        // Fill validation data
+        for (int i = 0; i < validationSize; i++)
+        {
+            for (int j = 0; j < features; j++)
+                XVal[i, j] = X[indices[currentIndex], j];
+            yVal[i] = y[indices[currentIndex]];
+            currentIndex++;
+        }
+
+        // Fill test data
+        for (int i = 0; i < testingSize; i++)
+        {
+            for (int j = 0; j < features; j++)
+                XTest[i, j] = X[indices[currentIndex], j];
+            yTest[i] = y[indices[currentIndex]];
+            currentIndex++;
+        }
+
+        return (XTrain, yTrain, XVal, yVal, XTest, yTest);
+    }
+
     public static bool IsBlockMatrix(this Matrix<double> matrix, int blockRows, int blockCols)
     {
         var rows = matrix.Rows;

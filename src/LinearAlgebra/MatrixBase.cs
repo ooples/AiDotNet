@@ -116,6 +116,54 @@ public abstract class MatrixBase<T>
         return new Vector<T>(Enumerable.Range(0, rows).Select(row => this[row, col]).ToArray(), ops);
     }
 
+    public Matrix<T> SubMatrix(int startRow, int startCol, int numRows, int numCols)
+    {
+        if (startRow < 0 || startCol < 0 || startRow + numRows > Rows || startCol + numCols > Columns)
+        {
+            throw new ArgumentException("Invalid submatrix dimensions");
+        }
+
+        var subMatrix = new Matrix<T>(numRows, numCols, ops);
+
+        for (int i = 0; i < numRows; i++)
+        {
+            for (int j = 0; j < numCols; j++)
+            {
+                subMatrix[i, j] = this[startRow + i, startCol + j];
+            }
+        }
+
+        return subMatrix;
+    }
+
+    public Matrix<T> SubMatrix(int startRow, int endRow, List<int> columnIndices)
+    {
+        if (startRow < 0 || endRow > Rows || startRow >= endRow)
+        {
+            throw new ArgumentException("Invalid row indices");
+        }
+
+        if (columnIndices.Any(i => i < 0 || i >= Columns))
+        {
+            throw new ArgumentException("Invalid column indices");
+        }
+
+        int numRows = endRow - startRow;
+        int numCols = columnIndices.Count;
+
+        var subMatrix = new Matrix<T>(numRows, numCols, ops);
+
+        for (int i = 0; i < numRows; i++)
+        {
+            for (int j = 0; j < numCols; j++)
+            {
+                subMatrix[i, j] = this[startRow + i, columnIndices[j]];
+            }
+        }
+
+        return subMatrix;
+    }
+
     public virtual MatrixBase<T> Add(MatrixBase<T> other)
     {
         if (rows != other.Rows || cols != other.Columns)

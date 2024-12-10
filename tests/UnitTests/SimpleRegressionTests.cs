@@ -1,5 +1,5 @@
 using AiDotNet.Models;
-using AiDotNet.Normalization;
+using AiDotNet.Normalizers;
 using AiDotNet.OutlierRemoval;
 using AiDotNet.Quartile;
 using AiDotNet.Regression;
@@ -90,7 +90,7 @@ public class SimpleRegressionTests
         var expectedPredictions = new double[] { 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1 };
 
         // Act
-        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new DecimalNormalization()});
+        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new DecimalNormalizer()});
         var actualPredictions = simpleRegression.Predictions;
 
         // Assert
@@ -119,7 +119,7 @@ public class SimpleRegressionTests
             2.0794415416798357, 2.1972245773362196, 2.302585092994046 };
 
         // Act
-        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new LogNormalization() });
+        var simpleRegression = new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions { Normalization = new LogNormalizer() });
         var actualPredictions = simpleRegression.Predictions;
 
         // Assert
