@@ -131,6 +131,11 @@ public class Matrix<T> : MatrixBase<T>
         return matrix.Zeros(rows, cols);
     }
 
+    public new static Matrix<T> Empty()
+    {
+        return new Matrix<T>(0, 0);
+    }
+
     public static Matrix<T> FromColumnVectors(IEnumerable<IEnumerable<T>> vectors)
     {
         if (vectors == null)

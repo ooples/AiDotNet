@@ -88,7 +88,7 @@ public class PredictionModelBuilder
         var normalizer = _normalizer ?? new NoNormalizer();
         var optimizer = _optimizer ?? new NormalOptimizer();
         var featureSelector = _featureSelector ?? new NoFeatureSelector();
-        var fitDetector = _fitDetector ?? new NoFitDetector();
+        var fitDetector = _fitDetector ?? new DefaultFitDetector();
         var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator();
         var regularization = _regularization ?? new NoRegularization();
         var dataPreprocessor = _dataPreprocessor ?? new DataPreprocessor(normalizer, featureSelector, _options);
@@ -109,12 +109,37 @@ public class PredictionModelBuilder
             TrainingData = (XTrain, yTrain),
             ValidationData = (XVal, yVal),
             TestingData = (XTest, yTest),
-            TrainingFitness = optimizationResult.TrainingFitnessScore,
-            ValidationFitness = optimizationResult.ValidationFitness,
-            TestingFitness = testingFitness,
-            FitDetectionResult = fitResult,
+            TrainingFitness = optimizationResult.TrainingMetrics["R2"],  // Assuming R2 is used as fitness
+            ValidationFitness = optimizationResult.ValidationMetrics["R2"],
+            TestingFitness = optimizationResult.TestMetrics["R2"],
+            FitDetectionResult = optimizationResult.FitDetectionResult,
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo
         };
+    }
+
+    public Vector<double> Predict(Matrix<double> newData, PredictionModelResult model)
+    {
+        return model.Predict(newData);
+    }
+
+    public void SaveModel(PredictionModelResult model, string filePath)
+    {
+        model.SaveModel(filePath);
+    }
+
+    public PredictionModelResult LoadModel(string filePath)
+    {
+        return PredictionModelResult.LoadModel(filePath);
+    }
+
+    public string SerializeModel(PredictionModelResult model)
+    {
+        return model.SerializeToJson();
+    }
+
+    public PredictionModelResult DeserializeModel(string jsonString)
+    {
+        return PredictionModelResult.DeserializeFromJson(jsonString);
     }
 }

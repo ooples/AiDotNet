@@ -1,9 +1,18 @@
 ﻿namespace AiDotNet.FitnessCalculators;
 
-public class RSquaredFitnessCalculator : IFitnessCalculator
+public class RSquaredFitnessCalculator : FitnessCalculatorBase
 {
-    public double CalculateFitnessScore(Vector<double> actualYValues, Vector<double> predictedYValues)
+    public RSquaredFitnessCalculator() : base(isHigherScoreBetter: true)
     {
-        throw new NotImplementedException();
+    }
+
+    public override double CalculateFitnessScore(
+        ErrorStats errorStats, 
+        BasicStats basicStats, 
+        Vector<double> actualValues, 
+        Vector<double> predictedValues,
+        Matrix<double> features)
+    {
+        return errorStats.R2;
     }
 }

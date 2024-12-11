@@ -36,13 +36,19 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
 
     public override VectorBase<T> Copy()
     {
-        return new Vector<T>(this.ToArray(), ops);
+        return new Vector<T>([.. this], ops);
     }
 
     public override VectorBase<T> Zeros(int size)
     {
         return new Vector<T>(size, ops);
     }
+
+    public override VectorBase<T> Default(int size, T defaultValue)
+    {
+        return base.Default(size, defaultValue);
+    }
+
 
     public new Vector<TResult> Transform<TResult>(Func<T, TResult> function)
     {
@@ -57,6 +63,22 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public override VectorBase<T> Ones(int size)
     {
         return new Vector<T>(Enumerable.Repeat(ops.One, size), ops);
+    }
+
+    public new static Vector<T> Empty()
+    {
+        return new Vector<T>(0);
+    }
+
+    public static Vector<T> CreateDefault(int length, T value)
+    {
+        var vector = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = value;
+        }
+
+        return vector;
     }
 
     protected override VectorBase<T> CreateInstance(int size)

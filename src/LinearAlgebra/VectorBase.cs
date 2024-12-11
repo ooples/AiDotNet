@@ -52,6 +52,11 @@ public abstract class VectorBase<T>
         return CreateInstance(data);
     }
 
+    public static VectorBase<T> Empty()
+    {
+        return new Vector<T>(0);
+    }
+
     public virtual VectorBase<T> Zeros(int size)
     {
         var result = CreateInstance(size);
@@ -119,6 +124,18 @@ public abstract class VectorBase<T>
         {
             result[i] = ops.One;
         }
+
+        return result;
+    }
+
+    public virtual VectorBase<T> Default(int size, T defaultValue)
+    {
+        var result = CreateInstance(size);
+        for (int i = 0; i < size; i++)
+        {
+            result[i] = defaultValue;
+        }
+
         return result;
     }
 

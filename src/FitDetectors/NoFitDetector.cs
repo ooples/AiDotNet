@@ -2,7 +2,8 @@
 
 public class NoFitDetector : IFitDetector
 {
-    public FitDetectionResult DetectFit(Vector<double> trainingMetrics, Vector<double> validationMetrics)
+    public FitDetectorResult DetectFit(ErrorStats trainingErrorStats, ErrorStats validationErrorStats, ErrorStats testErrorStats, 
+        BasicStats trainingBasicStats, BasicStats validationBasicStats, BasicStats testBasicStats)
     {
         throw new NotImplementedException();
     }

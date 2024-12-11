@@ -2,5 +2,12 @@
 
 public interface IFitnessCalculator
 {
-    double CalculateFitnessScore(Vector<double> actualYValues, Vector<double> predictedYValues);
+    double CalculateFitnessScore(
+        ErrorStats errorStats, 
+        BasicStats basicStats, 
+        Vector<double> actualValues, 
+        Vector<double> predictedValues,
+        Matrix<double> features);
+
+    bool IsHigherScoreBetter { get; }
 }

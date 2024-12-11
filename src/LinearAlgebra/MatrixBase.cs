@@ -104,6 +104,11 @@ public abstract class MatrixBase<T>
         }
     }
 
+    public static MatrixBase<T> Empty()
+    {
+        return new Matrix<T>(0, 0);
+    }
+
     public virtual VectorBase<T> GetRow(int row)
     {
         ValidateIndices(row, 0);
