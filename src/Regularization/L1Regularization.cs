@@ -2,36 +2,24 @@
 
 public class L1Regularization<T> : IRegularization<T>
 {
-    private readonly T _regularizationStrength;
     private readonly INumericOperations<T> _numOps;
+    private readonly RegularizationOptions _options;
 
-    public L1Regularization(T regularizationStrength)
+    public L1Regularization(INumericOperations<T> numOps, RegularizationOptions options)
     {
-        _regularizationStrength = regularizationStrength;
-        _numOps = MathHelper.GetNumericOperations<T>();
+        _numOps = numOps;
+        _options = options;
     }
 
-    public Matrix<T> RegularizeMatrix(Matrix<T> featuresMatrix)
+    public Matrix<T> RegularizeMatrix(Matrix<T> matrix)
     {
-        return featuresMatrix;
+        // L1 regularization doesn't modify the matrix directly
+        return matrix;
     }
 
     public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
     {
-        var count = coefficients.Length;
-        var regularizedCoefficients = new Vector<T>(count);
-
-        for (int i = 0; i < count; i++)
-        {
-            T coeff = coefficients[i];
-            if (_numOps.GreaterThan(coeff, _regularizationStrength))
-                regularizedCoefficients[i] = _numOps.Subtract(coeff, _regularizationStrength);
-            else if (_numOps.LessThan(coeff, _numOps.Negate(_regularizationStrength)))
-                regularizedCoefficients[i] = _numOps.Add(coeff, _regularizationStrength);
-            else
-                regularizedCoefficients[i] = _numOps.Zero;
-        }
-
-        return regularizedCoefficients;
+        var regularizationStrength = _numOps.FromDouble(_options.Strength);
+        return coefficients.Transform(c => _numOps.Sign(c).Multiply(_numOps.Max(_numOps.Abs(c).Subtract(regularizationStrength), _numOps.Zero)));
     }
 }

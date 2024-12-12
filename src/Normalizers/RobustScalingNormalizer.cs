@@ -12,8 +12,8 @@ public class RobustScalingNormalizer<T> : INormalizer<T>
     public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
     {
         T median = StatisticsHelper<T>.CalculateMedian(vector);
-        T q1 = StatisticsHelper<T>.CalculateQuartile(vector, _numOps.FromDouble(0.25));
-        T q3 = StatisticsHelper<T>.CalculateQuartile(vector, _numOps.FromDouble(0.75));
+        T q1 = StatisticsHelper<T>.CalculateQuantile(vector, _numOps.FromDouble(0.25));
+        T q3 = StatisticsHelper<T>.CalculateQuantile(vector, _numOps.FromDouble(0.75));
         T iqr = _numOps.Subtract(q3, q1);
         if (_numOps.Equals(iqr, _numOps.Zero)) iqr = _numOps.One;
 

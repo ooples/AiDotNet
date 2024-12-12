@@ -2,9 +2,14 @@
 
 public class NoRegularization<T> : IRegularization<T>
 {
-    public Matrix<T> RegularizeMatrix(Matrix<T> featuresMatrix)
+    public NoRegularization(INumericOperations<T> numOps, RegularizationOptions options)
     {
-        return featuresMatrix;
+        // No need to store these as we don't use them
+    }
+
+    public Matrix<T> RegularizeMatrix(Matrix<T> matrix)
+    {
+        return matrix;
     }
 
     public Vector<T> RegularizeCoefficients(Vector<T> coefficients)

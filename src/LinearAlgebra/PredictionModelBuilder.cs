@@ -3,6 +3,7 @@ global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Regularization;
 global using AiDotNet.Optimizers;
 global using AiDotNet.Normalizers;
+global using AiDotNet.OutlierRemoval;
 
 namespace AiDotNet.LinearAlgebra;
 
@@ -18,6 +19,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     private IRegression<T>? _regression;
     private IOptimizationAlgorithm<T>? _optimizer;
     private IDataPreprocessor<T>? _dataPreprocessor;
+    private IOutlierRemoval<T>? _outlierRemoval;
 
     public PredictionModelBuilder(PredictionModelOptions? options = null)
     {
@@ -73,6 +75,12 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         return this;
     }
 
+    public IPredictionModelBuilder<T> WithOutlierRemoval(IOutlierRemoval<T> outlierRemoval)
+    {
+        _outlierRemoval = outlierRemoval;
+        return this;
+    }
+
     public PredictionModelResult<T> Build(Matrix<T> x, Vector<T> y)
     {
         // Validate inputs
@@ -93,7 +101,8 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         var fitDetector = _fitDetector ?? new DefaultFitDetector<T>();
         var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator<T>();
         var regularization = _regularization ?? new NoRegularization<T>();
-        var dataPreprocessor = _dataPreprocessor ?? new DataPreprocessor<T>(normalizer, featureSelector, _options);
+        var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T>();
+        var dataPreprocessor = _dataPreprocessor ?? new DataPreprocessor<T>(normalizer, featureSelector, outlierRemoval, _options);
 
         // Preprocess the data
         var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);

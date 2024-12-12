@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Helpers;
+﻿using System.Linq;
+
+namespace AiDotNet.Helpers;
 
 public static class StatisticsHelper<T>
 {
@@ -903,21 +905,21 @@ public static class StatisticsHelper<T>
         return CalculateInverseStudentTCDF(degreesOfFreedom, NumOps.Subtract(NumOps.One, alpha));
     }
 
-    public static (T FirstQuartile, T ThirdQuartile) CalculateQuartiles(Vector<T> data)
+    public static (T FirstQuantile, T ThirdQuantile) CalculateQuantiles(Vector<T> data)
     {
         var sortedData = data.OrderBy(x => x).ToArray();
         int n = sortedData.Length;
 
-        T Q1 = CalculateQuartile(sortedData, NumOps.FromDouble(0.25));
-        T Q3 = CalculateQuartile(sortedData, NumOps.FromDouble(0.75));
+        T Q1 = CalculateQuantile(sortedData, NumOps.FromDouble(0.25));
+        T Q3 = CalculateQuantile(sortedData, NumOps.FromDouble(0.75));
 
         return (Q1, Q3);
     }
 
-    public static T CalculateQuartile(T[] sortedData, T quartile)
+    public static T CalculateQuantile(T[] sortedData, T quantile)
     {
         int n = sortedData.Length;
-        T position = NumOps.Multiply(NumOps.FromDouble(n - 1), quartile);
+        T position = NumOps.Multiply(NumOps.FromDouble(n - 1), quantile);
         int index = NumOps.ToInt32(NumOps.Round(position));
         T fraction = NumOps.Subtract(position, NumOps.FromDouble(index));
 
@@ -955,5 +957,118 @@ public static class StatisticsHelper<T>
             ) : NumOps.Zero;
 
         return (skewness, kurtosis);
+    }
+
+    public static (T Lower, T Upper) CalculateToleranceInterval(Vector<T> actual, Vector<T> predicted, T confidenceLevel)
+    {
+        int n = actual.Length;
+        T mean = predicted.Average();
+        T stdDev = CalculateStandardDeviation(predicted);
+        T factor = NumOps.FromDouble(Math.Sqrt(1 + (1.0 / n)));
+        T tValue = CalculateTValue(n - 1, confidenceLevel);
+        T margin = NumOps.Multiply(tValue, NumOps.Multiply(stdDev, factor));
+
+        return (NumOps.Subtract(mean, margin), NumOps.Add(mean, margin));
+    }
+
+    public static (T Lower, T Upper) CalculateForecastInterval(Vector<T> actual, Vector<T> predicted, T confidenceLevel)
+    {
+        int n = actual.Length;
+        T mean = predicted.Average();
+        T mse = CalculateMeanSquaredError(actual, predicted);
+        T factor = NumOps.FromDouble(Math.Sqrt(1 + (1.0 / n)));
+        T tValue = CalculateTValue(n - 1, confidenceLevel);
+        T margin = NumOps.Multiply(tValue, NumOps.Multiply(NumOps.Sqrt(mse), factor));
+
+        return (NumOps.Subtract(mean, margin), NumOps.Add(mean, margin));
+    }
+
+    public static List<(T Quantile, T Lower, T Upper)> CalculateQuantileIntervals(Vector<T> actual, Vector<T> predicted, T[] quantiles)
+    {
+        var result = new List<(T Quantile, T Lower, T Upper)>();
+        var sortedPredictions = new Vector<T>([.. predicted.OrderBy(x => x)]);
+
+        foreach (var q in quantiles)
+        {
+            T lowerQuantile = CalculateQuantile(sortedPredictions, NumOps.Subtract(q, NumOps.FromDouble(0.025)));
+            T upperQuantile = CalculateQuantile(sortedPredictions, NumOps.Add(q, NumOps.FromDouble(0.025)));
+            result.Add((q, lowerQuantile, upperQuantile));
+        }
+
+        return result;
+    }
+
+    public static (T Lower, T Upper) CalculateBootstrapInterval(Vector<T> actual, Vector<T> predicted, T confidenceLevel)
+    {
+        int n = actual.Length;
+        int bootstrapSamples = 1000;
+        var bootstrapMeans = new List<T>();
+
+        Random random = new();
+        for (int i = 0; i < bootstrapSamples; i++)
+        {
+            var sample = new Vector<T>(n);
+            for (int j = 0; j < n; j++)
+            {
+                int index = random.Next(n);
+                sample[j] = predicted[index];
+            }
+            bootstrapMeans.Add(sample.Average());
+        }
+
+        bootstrapMeans.Sort();
+        int lowerIndex = NumOps.ToInt32(NumOps.Divide(NumOps.Multiply(confidenceLevel, NumOps.FromDouble(bootstrapSamples)), NumOps.FromDouble(2)));
+        int upperIndex = bootstrapSamples - lowerIndex - 1;
+
+        return (bootstrapMeans[lowerIndex], bootstrapMeans[upperIndex]);
+    }
+
+    public static (T Lower, T Upper) CalculateSimultaneousPredictionInterval(Vector<T> actual, Vector<T> predicted, T confidenceLevel)
+    {
+        int n = actual.Length;
+        T mean = predicted.Average();
+        T mse = CalculateMeanSquaredError(actual, predicted);
+        T factor = NumOps.Sqrt(NumOps.Multiply(NumOps.FromDouble(2), confidenceLevel));
+        T margin = NumOps.Multiply(factor, NumOps.Sqrt(mse));
+
+        return (NumOps.Subtract(mean, margin), NumOps.Add(mean, margin));
+    }
+
+    public static (T Lower, T Upper) CalculateJackknifeInterval(Vector<T> actual, Vector<T> predicted)
+    {
+        int n = actual.Length;
+        var jackknifeSamples = new List<T>();
+
+        for (int i = 0; i < n; i++)
+        {
+            var sample = new Vector<T>(n - 1);
+            int index = 0;
+            for (int j = 0; j < n; j++)
+            {
+                if (j != i)
+                {
+                    sample[index++] = predicted[j];
+                }
+            }
+            jackknifeSamples.Add(sample.Average());
+        }
+
+        T jackknifeEstimate = new Vector<T>([.. jackknifeSamples]).Average();
+        T jackknifeStdError = CalculateStandardDeviation(new Vector<T>([.. jackknifeSamples]));
+        T tValue = CalculateTValue(n - 1, NumOps.FromDouble(0.95));
+        T margin = NumOps.Multiply(tValue, jackknifeStdError);
+
+        return (NumOps.Subtract(jackknifeEstimate, margin), NumOps.Add(jackknifeEstimate, margin));
+    }
+
+    public static (T Lower, T Upper) CalculatePercentileInterval(Vector<T> predicted, T confidenceLevel)
+    {
+        var sortedPredictions = new Vector<T>([.. predicted.OrderBy(x => x)]);
+        int n = sortedPredictions.Length;
+        T alpha = NumOps.Subtract(NumOps.One, confidenceLevel);
+        int lowerIndex = NumOps.ToInt32(NumOps.Divide(NumOps.Multiply(alpha, NumOps.FromDouble(n)), NumOps.FromDouble(2.0)));
+        int upperIndex = n - lowerIndex - 1;
+
+        return (sortedPredictions[lowerIndex], sortedPredictions[upperIndex]);
     }
 }

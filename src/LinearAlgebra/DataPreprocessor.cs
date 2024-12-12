@@ -4,13 +4,15 @@ public class DataPreprocessor<T> : IDataPreprocessor<T>
 {
     private readonly INormalizer<T> _normalizer;
     private readonly IFeatureSelector<T> _featureSelector;
+    private readonly IOutlierRemoval<T> _outlierRemoval;
     private readonly bool _normalizeBeforeFeatureSelection;
     private readonly PredictionModelOptions _options;
 
-    public DataPreprocessor(INormalizer<T> normalizer, IFeatureSelector<T> featureSelector, PredictionModelOptions options)
+    public DataPreprocessor(INormalizer<T> normalizer, IFeatureSelector<T> featureSelector, IOutlierRemoval<T> outlierRemoval, PredictionModelOptions options)
     {
         _normalizer = normalizer;
         _featureSelector = featureSelector;
+        _outlierRemoval = outlierRemoval;
         _options = options;
         _normalizeBeforeFeatureSelection = options.NormalizeBeforeFeatureSelection;
     }
@@ -18,6 +20,8 @@ public class DataPreprocessor<T> : IDataPreprocessor<T>
     public (Matrix<T> X, Vector<T> y, NormalizationInfo<T> normInfo) PreprocessData(Matrix<T> X, Vector<T> y)
     {
         NormalizationInfo<T> normInfo = new();
+
+        (X, y) = _outlierRemoval.RemoveOutliers(X, y);
 
         if (_normalizeBeforeFeatureSelection)
         {
@@ -35,8 +39,7 @@ public class DataPreprocessor<T> : IDataPreprocessor<T>
         return (X, y, normInfo);
     }
 
-    public (Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XValidation, Vector<T> yValidation, Matrix<T> XTest, Vector<T> yTest) 
-        SplitData(Matrix<T> X, Vector<T> y)
+    public (Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XValidation, Vector<T> yValidation, Matrix<T> XTest, Vector<T> yTest) SplitData(Matrix<T> X, Vector<T> y)
     {
         int totalSamples = X.Rows;
         int trainSize = (int)(totalSamples * _options.TrainingSplitPercentage);

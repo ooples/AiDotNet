@@ -58,7 +58,7 @@ public class BasicStats<T>
         Min = values.Min();
         Max = values.Max();
         Median = StatisticsHelper<T>.CalculateMedian(values);
-        (FirstQuartile, ThirdQuartile) = StatisticsHelper<T>.CalculateQuartiles(values);
+        (FirstQuartile, ThirdQuartile) = StatisticsHelper<T>.CalculateQuantiles(values);
         InterquartileRange = NumOps.Subtract(ThirdQuartile, FirstQuartile);
         MAD = StatisticsHelper<T>.CalculateMeanAbsoluteDeviation(values, Median);
     }

@@ -2,28 +2,25 @@
 
 public class L2Regularization<T> : IRegularization<T>
 {
-    private readonly T _regularizationStrength;
+    private readonly INumericOperations<T> _numOps;
+    private readonly RegularizationOptions _options;
 
-    public L2Regularization(T regularizationStrength)
+    public L2Regularization(INumericOperations<T> numOps, RegularizationOptions options)
     {
-        _regularizationStrength = regularizationStrength;
+        _numOps = numOps;
+        _options = options;
     }
 
-    public Matrix<T> RegularizeMatrix(Matrix<T> featuresMatrix)
+    public Matrix<T> RegularizeMatrix(Matrix<T> matrix)
     {
-        int featureCount = featuresMatrix.Columns;
-        var regularizationMatrix = new Matrix<T>(featureCount, featureCount);
-
-        for (int i = 0; i < featureCount; i++)
-        {
-            regularizationMatrix[i, i] = _regularizationStrength;
-        }
-
-        return featuresMatrix.Add(regularizationMatrix);
+        var identity = Matrix<T>.CreateIdentity(matrix.Rows, _numOps);
+        var regularizationStrength = _numOps.FromDouble(_options.Strength);
+        return matrix.Add(identity.Multiply(regularizationStrength));
     }
 
     public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
     {
-        return coefficients;
+        var regularizationStrength = _numOps.FromDouble(_options.Strength);
+        return coefficients.Multiply(_numOps.Subtract(_numOps.FromDouble(1), regularizationStrength));
     }
 }

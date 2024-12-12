@@ -1,12 +1,6 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public abstract class IOutlierRemoval
+public interface IOutlierRemoval<T>
 {
-    internal abstract (double[], double[]) RemoveOutliers(double[] rawInputs, double[] rawOutputs);
-
-    internal abstract (double[][], double[]) RemoveOutliers(double[][] rawInputs, double[] rawOutputs);
-
-    internal abstract (double[][], double[][]) RemoveOutliers(double[][] rawInputs, double[][] rawOutputs);
-
-    internal IQuartile? Quartile { get; set; }
+    (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs);
 }

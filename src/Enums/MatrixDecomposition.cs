@@ -20,5 +20,6 @@ public enum MatrixDecomposition
     GramSchmidt,
     Lu,
     Qr,
-    Svd
+    Svd,
+    Normal
 }

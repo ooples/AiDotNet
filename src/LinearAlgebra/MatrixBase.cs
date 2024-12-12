@@ -109,16 +109,16 @@ public abstract class MatrixBase<T>
         return new Matrix<T>(0, 0);
     }
 
-    public virtual VectorBase<T> GetRow(int row)
+    public virtual Vector<T> GetRow(int row)
     {
         ValidateIndices(row, 0);
-        return new Vector<T>(Enumerable.Range(0, cols).Select(col => this[row, col]).ToArray(), ops);
+        return new Vector<T>([.. Enumerable.Range(0, cols).Select(col => this[row, col])], ops);
     }
 
-    public virtual VectorBase<T> GetColumn(int col)
+    public virtual Vector<T> GetColumn(int col)
     {
         ValidateIndices(0, col);
-        return new Vector<T>(Enumerable.Range(0, rows).Select(row => this[row, col]).ToArray(), ops);
+        return new Vector<T>([.. Enumerable.Range(0, rows).Select(row => this[row, col])], ops);
     }
 
     public Matrix<T> SubMatrix(int startRow, int startCol, int numRows, int numCols)

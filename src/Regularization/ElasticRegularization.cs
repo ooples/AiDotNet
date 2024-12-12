@@ -1,48 +1,35 @@
 ﻿namespace AiDotNet.Regularization;
+
 public class ElasticNetRegularization<T> : IRegularization<T>
 {
-    private readonly T _l1Ratio;
-    private readonly T _regularizationStrength;
     private readonly INumericOperations<T> _numOps;
+    private readonly RegularizationOptions _options;
 
-    public ElasticNetRegularization(T regularizationStrength, T l1Ratio)
+    public ElasticNetRegularization(INumericOperations<T> numOps, RegularizationOptions options)
     {
-        _regularizationStrength = regularizationStrength;
-        _l1Ratio = l1Ratio;
-        _numOps = MathHelper.GetNumericOperations<T>();
+        _numOps = numOps;
+        _options = options;
     }
 
-    public Matrix<T> RegularizeMatrix(Matrix<T> featuresMatrix)
+    public Matrix<T> RegularizeMatrix(Matrix<T> matrix)
     {
-        int featureCount = featuresMatrix.Columns;
-        var regularizationMatrix = new Matrix<T>(featureCount, featureCount);
-        T l2Strength = _numOps.Multiply(_regularizationStrength, _numOps.Subtract(_numOps.One, _l1Ratio));
-
-        for (int i = 0; i < featureCount; i++)
-        {
-            regularizationMatrix[i, i] = l2Strength;
-        }
-
-        return featuresMatrix.Add(regularizationMatrix);
+        var identity = Matrix<T>.CreateIdentity(matrix.Columns, _numOps);
+        var regularizationStrength = _numOps.FromDouble(_options.Strength);
+        var l2Ratio = _numOps.FromDouble(1 - _options.L1Ratio);
+        return matrix.Add(identity.Multiply(regularizationStrength.Multiply(l2Ratio)));
     }
 
     public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
     {
-        var count = coefficients.Length;
-        var regularizedCoefficients = new Vector<T>(count);
-        T l1Strength = _numOps.Multiply(_regularizationStrength, _l1Ratio);
+        var regularizationStrength = _numOps.FromDouble(_options.Strength);
+        var l1Ratio = _numOps.FromDouble(_options.L1Ratio);
+        var l2Ratio = _numOps.FromDouble(1 - _options.L1Ratio);
 
-        for (int i = 0; i < count; i++)
+        return coefficients.Transform(c =>
         {
-            T coeff = coefficients[i];
-            if (_numOps.GreaterThan(coeff, l1Strength))
-                regularizedCoefficients[i] = _numOps.Subtract(coeff, l1Strength);
-            else if (_numOps.LessThan(coeff, _numOps.Negate(l1Strength)))
-                regularizedCoefficients[i] = _numOps.Add(coeff, l1Strength);
-            else
-                regularizedCoefficients[i] = _numOps.Zero;
-        }
-
-        return regularizedCoefficients;
+            var l1Part = _numOps.Sign(c).Multiply(_numOps.Max(_numOps.Abs(c).Subtract(regularizationStrength.Multiply(l1Ratio)), _numOps.Zero));
+            var l2Part = c.Multiply(_numOps.Subtract(_numOps.One, regularizationStrength.Multiply(l2Ratio)));
+            return _numOps.Add(l1Part, l2Part);
+        });
     }
 }

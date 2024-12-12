@@ -131,6 +131,17 @@ public class Matrix<T> : MatrixBase<T>
         return matrix.Zeros(rows, cols);
     }
 
+    public static Matrix<T> CreateDiagonal(Vector<T> diagonal, INumericOperations<T>? numericOperations = null)
+    {
+        var matrix = new Matrix<T>(diagonal.Length, diagonal.Length, numericOperations);
+        for (int i = 0; i < diagonal.Length; i++)
+        {
+            matrix[i, i] = diagonal[i];
+        }
+
+        return matrix;
+    }
+
     public new static Matrix<T> Empty()
     {
         return new Matrix<T>(0, 0);

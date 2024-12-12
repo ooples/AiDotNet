@@ -1,6 +1,4 @@
-﻿using AiDotNet.Normalizers;
-
-namespace AiDotNet.Factories;
+﻿namespace AiDotNet.Factories;
 
 public class NormalizerFactory<T>
 {

@@ -10,6 +10,7 @@ public interface IPredictionModelBuilder<T>
     IPredictionModelBuilder<T> WithRegression(IRegression<T> regression);
     IPredictionModelBuilder<T> WithOptimizer(IOptimizationAlgorithm<T> optimizationAlgorithm, OptimizationAlgorithmOptions optimizationOptions);
     IPredictionModelBuilder<T> WithDataPreprocessor(IDataPreprocessor<T> dataPreprocessor);
+    IPredictionModelBuilder<T> WithOutlierRemoval(IOutlierRemoval<T> outlierRemoval);
     PredictionModelResult<T> Build(Matrix<T> x, Vector<T> y);
     Vector<T> Predict(Matrix<T> newData, PredictionModelResult<T> model);
     void SaveModel(PredictionModelResult<T> model, string filePath);

@@ -1,13 +1,13 @@
 ﻿namespace AiDotNet.OutlierRemoval;
 
-public class IQROutlierRemoval<T> : IOutlierRemoval<T>
+public class ZScoreOutlierRemoval<T> : IOutlierRemoval<T>
 {
-    private readonly T _iqrMultiplier;
+    private readonly T _threshold;
     private readonly INumericOperations<T> _numOps;
 
-    public IQROutlierRemoval(T iqrMultiplier, INumericOperations<T> numOps)
+    public ZScoreOutlierRemoval(T threshold, INumericOperations<T> numOps)
     {
-        _iqrMultiplier = iqrMultiplier;
+        _threshold = threshold;
         _numOps = numOps;
     }
 
@@ -22,14 +22,10 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
             for (int j = 0; j < inputs.Columns; j++)
             {
                 var column = inputs.GetColumn(j);
-                var quartiles = new Quartile<T>(column, _numOps);
-                var q1 = quartiles.Q1;
-                var q3 = quartiles.Q3;
-                var iqr = _numOps.Subtract(q3, q1);
-                var lowerBound = _numOps.Subtract(q1, _numOps.Multiply(_iqrMultiplier, iqr));
-                var upperBound = _numOps.Add(q3, _numOps.Multiply(_iqrMultiplier, iqr));
+                (var mean, var std) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
+                var zScore = _numOps.Divide(_numOps.Subtract(column[i], mean), std);
 
-                if (_numOps.LessThan(column[i], lowerBound) || _numOps.GreaterThan(column[i], upperBound))
+                if (_numOps.GreaterThan(_numOps.Abs(zScore), _threshold))
                 {
                     isOutlier = true;
                     break;
@@ -38,7 +34,7 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
 
             if (!isOutlier)
             {
-                cleanedInputs.Add(new Vector<T>(inputs.GetRow(i), _numOps));
+                cleanedInputs.Add(inputs.GetRow(i));
                 cleanedOutputs.Add(outputs[i]);
             }
         }
