@@ -1,17 +1,35 @@
-﻿namespace AiDotNet.Normalizers;
+﻿using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NumericOperations;
+using System.Linq;
+
+namespace AiDotNet.Normalizers;
 
 /// <summary>
 /// Normalizes the data by dividing each value by the smallest multiple of 10 that is greater than the largest value.
 /// </summary>
-public class DecimalNormalizer : INormalizer
+public class DecimalNormalizer<T> : INormalizer<T>
 {
-    public (Vector<double>, NormalizationParameters) NormalizeVector(Vector<double> vector)
-    {
-        double maxAbs = vector.AbsoluteMaximum();
-        double scale = Math.Pow(10, Math.Floor(Math.Log10(maxAbs)) + 1);
+    private readonly INumericOperations<T> _numOps;
 
-        var normalizedVector = vector.Divide(scale);
-        var parameters = new NormalizationParameters
+    public DecimalNormalizer()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+    }
+
+    public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
+    {
+        T maxAbs = vector.AbsoluteMaximum();
+        T scale = _numOps.One;
+        T ten = _numOps.FromDouble(10);
+
+        while (_numOps.GreaterThanOrEquals(maxAbs, scale))
+        {
+            scale = _numOps.Multiply(scale, ten);
+        }
+
+        var normalizedVector = vector.Transform(x => _numOps.Divide(x, scale));
+        var parameters = new NormalizationParameters<T>
         {
             Method = NormalizationMethod.Decimal,
             Scale = scale
@@ -19,10 +37,10 @@ public class DecimalNormalizer : INormalizer
         return (normalizedVector, parameters);
     }
 
-    public (Matrix<double>, List<NormalizationParameters>) NormalizeMatrix(Matrix<double> matrix)
+    public (Matrix<T>, List<NormalizationParameters<T>>) NormalizeMatrix(Matrix<T> matrix)
     {
-        var normalizedMatrix = Matrix<double>.CreateZeros(matrix.Rows, matrix.Columns);
-        var parametersList = new List<NormalizationParameters>();
+        var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
+        var parametersList = new List<NormalizationParameters<T>>();
 
         for (int i = 0; i < matrix.Columns; i++)
         {
@@ -35,19 +53,20 @@ public class DecimalNormalizer : INormalizer
         return (normalizedMatrix, parametersList);
     }
 
-    public Vector<double> DenormalizeVector(Vector<double> vector, NormalizationParameters parameters)
+    public Vector<T> DenormalizeVector(Vector<T> vector, NormalizationParameters<T> parameters)
     {
-        return vector.Multiply(parameters.Scale);
+        return vector.Transform(x => _numOps.Multiply(x, parameters.Scale));
     }
 
-    public Vector<double> DenormalizeCoefficients(Vector<double> coefficients, List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public Vector<T> DenormalizeCoefficients(Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        return coefficients.PointwiseMultiply(Vector<double>.FromArray(xParams.Select(p => yParams.Scale / p.Scale).ToArray()));
+        var scalingFactors = xParams.Select(p => _numOps.Divide(yParams.Scale, p.Scale)).ToArray();
+        return coefficients.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
     }
 
-    public double DenormalizeYIntercept(Matrix<double> xMatrix, Vector<double> y, Vector<double> coefficients,
-        List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public T DenormalizeYIntercept(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients,
+        List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        return 0; // The y-intercept for decimal normalization is always 0
+        return _numOps.Zero; // The y-intercept for decimal normalization is always 0
     }
 }

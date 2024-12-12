@@ -23,4 +23,8 @@ public interface INumericOperations<T>
     bool LessThanOrEquals(T a, T b);
     int ToInt32(T value);
     T Round(T value);
+    T MinValue { get; }
+    T MaxValue { get; }
+    bool IsNaN(T value);
+    bool IsInfinity(T value);
 }

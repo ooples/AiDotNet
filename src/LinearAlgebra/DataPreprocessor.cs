@@ -1,13 +1,13 @@
 ﻿namespace AiDotNet.LinearAlgebra;
 
-public class DataPreprocessor : IDataPreprocessor
+public class DataPreprocessor<T> : IDataPreprocessor<T>
 {
-    private readonly INormalizer _normalizer;
-    private readonly IFeatureSelector _featureSelector;
+    private readonly INormalizer<T> _normalizer;
+    private readonly IFeatureSelector<T> _featureSelector;
     private readonly bool _normalizeBeforeFeatureSelection;
     private readonly PredictionModelOptions _options;
 
-    public DataPreprocessor(INormalizer normalizer, IFeatureSelector featureSelector, PredictionModelOptions options)
+    public DataPreprocessor(INormalizer<T> normalizer, IFeatureSelector<T> featureSelector, PredictionModelOptions options)
     {
         _normalizer = normalizer;
         _featureSelector = featureSelector;
@@ -15,9 +15,9 @@ public class DataPreprocessor : IDataPreprocessor
         _normalizeBeforeFeatureSelection = options.NormalizeBeforeFeatureSelection;
     }
 
-    public (Matrix<double> X, Vector<double> y, NormalizationInfo normInfo) PreprocessData(Matrix<double> X, Vector<double> y)
+    public (Matrix<T> X, Vector<T> y, NormalizationInfo<T> normInfo) PreprocessData(Matrix<T> X, Vector<T> y)
     {
-        NormalizationInfo normInfo = new();
+        NormalizationInfo<T> normInfo = new();
 
         if (_normalizeBeforeFeatureSelection)
         {
@@ -35,8 +35,8 @@ public class DataPreprocessor : IDataPreprocessor
         return (X, y, normInfo);
     }
 
-    public (Matrix<double> XTrain, Vector<double> yTrain, Matrix<double> XValidation, Vector<double> yValidation, Matrix<double> XTest, Vector<double> yTest) 
-        SplitData(Matrix<double> X, Vector<double> y)
+    public (Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XValidation, Vector<T> yValidation, Matrix<T> XTest, Vector<T> yTest) 
+        SplitData(Matrix<T> X, Vector<T> y)
     {
         int totalSamples = X.Rows;
         int trainSize = (int)(totalSamples * _options.TrainingSplitPercentage);
@@ -49,12 +49,12 @@ public class DataPreprocessor : IDataPreprocessor
         indices = [.. indices.OrderBy(x => random.Next())];
 
         // Split the data
-        var XTrain = new Matrix<double>(trainSize, X.Columns);
-        var yTrain = new Vector<double>(trainSize);
-        var XValidation = new Matrix<double>(validationSize, X.Columns);
-        var yValidation = new Vector<double>(validationSize);
-        var XTest = new Matrix<double>(testSize, X.Columns);
-        var yTest = new Vector<double>(testSize);
+        var XTrain = new Matrix<T>(trainSize, X.Columns);
+        var yTrain = new Vector<T>(trainSize);
+        var XValidation = new Matrix<T>(validationSize, X.Columns);
+        var yValidation = new Vector<T>(validationSize);
+        var XTest = new Matrix<T>(testSize, X.Columns);
+        var yTest = new Vector<T>(testSize);
 
         for (int i = 0; i < trainSize; i++)
         {

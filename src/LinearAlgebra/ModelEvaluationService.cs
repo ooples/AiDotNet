@@ -1,13 +1,20 @@
 ﻿namespace AiDotNet.LinearAlgebra;
 
-public class ModelEvaluationService : IModelEvaluator
+public class ModelEvaluationService<T> : IModelEvaluator<T>
 {
-    public ModelEvaluationResult EvaluateModel(
-        Vector<double> actualTrain, Vector<double> predictedTrain,
-        Vector<double> actualVal, Vector<double> predictedVal,
-        Vector<double> actualTest, Vector<double> predictedTest)
+    private readonly int _numberOfParameters;
+
+    public ModelEvaluationService(int numberOfParameters)
     {
-        var result = new ModelEvaluationResult
+        _numberOfParameters = numberOfParameters;
+    }
+
+    public ModelEvaluationResult<T> EvaluateModel(
+        Vector<T> actualTrain, Vector<T> predictedTrain,
+        Vector<T> actualVal, Vector<T> predictedVal,
+        Vector<T> actualTest, Vector<T> predictedTest)
+    {
+        var result = new ModelEvaluationResult<T>
         {
             TrainingMetrics = CalculateMetrics(actualTrain, predictedTrain),
             ValidationMetrics = CalculateMetrics(actualVal, predictedVal),
@@ -17,17 +24,18 @@ public class ModelEvaluationService : IModelEvaluator
         return result;
     }
 
-    public Dictionary<string, double> CalculateMetrics(Vector<double> actual, Vector<double> predicted)
+    public Dictionary<string, T> CalculateMetrics(Vector<T> actual, Vector<T> predicted)
     {
-        var basicStats = new BasicStats(actual, predicted);
-        var errorStats = new ErrorStats(actual, predicted);
+        var basicStats = new BasicStats<T>();
+        basicStats.Calculate(actual, predicted);
+        var errorStats = new ErrorStats<T>(actual, predicted, _numberOfParameters);
 
         return CombineMetrics(basicStats, errorStats);
     }
 
-    private Dictionary<string, double> CombineMetrics(BasicStats basicStats, ErrorStats errorStats)
+    private Dictionary<string, T> CombineMetrics(BasicStats<T> basicStats, ErrorStats<T> errorStats)
     {
-        var combinedMetrics = new Dictionary<string, double>
+        var combinedMetrics = new Dictionary<string, T>
         {
             ["Mean"] = basicStats.Mean,
             ["Median"] = basicStats.Median,
@@ -38,8 +46,8 @@ public class ModelEvaluationService : IModelEvaluator
             ["MAE"] = errorStats.MAE,
             ["MSE"] = errorStats.MSE,
             ["RMSE"] = errorStats.RMSE,
-            ["R2"] = errorStats.R2,
-            ["AdjustedR2"] = errorStats.AdjustedR2,
+            ["R2"] = errorStats.RSquared,
+            ["AdjustedR2"] = errorStats.AdjustedRSquared,
             ["MAPE"] = errorStats.MAPE
         };
 

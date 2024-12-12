@@ -1,8 +1,8 @@
 ﻿namespace AiDotNet.Models;
 
-public class ModelEvaluationResult
+public class ModelEvaluationResult<T>
 {
-    public Dictionary<string, double> TrainingMetrics { get; set; } = [];
-    public Dictionary<string, double> ValidationMetrics { get; set; } = [];
-    public Dictionary<string, double> TestMetrics { get; set; } = [];
+    public Dictionary<string, T> TrainingMetrics { get; set; } = [];
+    public Dictionary<string, T> ValidationMetrics { get; set; } = [];
+    public Dictionary<string, T> TestMetrics { get; set; } = [];
 }

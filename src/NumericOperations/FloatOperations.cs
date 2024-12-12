@@ -21,4 +21,10 @@ public class FloatOperations : INumericOperations<float>
     public float Log(float value) => (float)Math.Log(value);
     public bool GreaterThanOrEquals(float a, float b) => a >= b;
     public bool LessThanOrEquals(float a, float b) => a <= b;
+    public int ToInt32(float value) => (int)Math.Round(value);
+    public float Round(float value) => (float)Math.Round((double)value);
+    public float MinValue => float.MinValue;
+    public float MaxValue => float.MaxValue;
+    public bool IsNaN(float value) => float.IsNaN(value);
+    public bool IsInfinity(float value) => float.IsInfinity(value);
 }

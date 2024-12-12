@@ -1,12 +1,18 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IFitDetector
+public interface IFitDetector<T>
 {
-    FitDetectorResult DetectFit(
-        ErrorStats trainingErrorStats,
-        ErrorStats validationErrorStats,
-        ErrorStats testErrorStats,
-        BasicStats trainingBasicStats,
-        BasicStats validationBasicStats,
-        BasicStats testBasicStats);
+    FitDetectorResult<T> DetectFit(
+        ErrorStats<T> trainingErrorStats,
+        ErrorStats<T> validationErrorStats,
+        ErrorStats<T> testErrorStats,
+        BasicStats<T> trainingActualBasicStats,
+        BasicStats<T> trainingPredictedBasicStats,
+        BasicStats<T> validationActualBasicStats,
+        BasicStats<T> validationPredictedBasicStats,
+        BasicStats<T> testActualBasicStats,
+        BasicStats<T> testPredictedBasicStats,
+        PredictionStats<T> trainingPredictionStats,
+        PredictionStats<T> validationPredictionStats,
+        PredictionStats<T> testPredictionStats);
 }

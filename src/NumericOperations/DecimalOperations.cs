@@ -23,4 +23,8 @@ public class DecimalOperations : INumericOperations<decimal>
     public bool LessThanOrEquals(decimal a, decimal b) => a <= b;
     public int ToInt32(decimal value) => (int)Math.Round(value);
     public decimal Round(decimal value) => Math.Round(value);
+    public decimal MinValue => decimal.MinValue;
+    public decimal MaxValue => decimal.MaxValue;
+    public bool IsNaN(decimal value) => false;
+    public bool IsInfinity(decimal value) => false;
 }

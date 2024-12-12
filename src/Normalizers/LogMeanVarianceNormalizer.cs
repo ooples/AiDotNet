@@ -1,31 +1,46 @@
 ﻿namespace AiDotNet.Normalizers;
 
-public class LogMeanVarianceNormalizer : INormalizer
+public class LogMeanVarianceNormalizer<T> : INormalizer<T>
 {
-    private const double Epsilon = 1e-10;
+    private readonly INumericOperations<T> _numOps;
+    private readonly T _epsilon;
 
-    public (Vector<double>, NormalizationParameters) NormalizeVector(Vector<double> vector)
+    public LogMeanVarianceNormalizer(INumericOperations<T>? numOps = null)
     {
-        double minValue = vector.Min();
-        double shift = minValue > 0 ? 0 : -minValue + 1 + Epsilon;
+        _numOps = numOps ?? MathHelper.GetNumericOperations<T>();
+        _epsilon = _numOps.FromDouble(1e-10);
+    }
 
-        var logVector = vector.Transform(x => Math.Log(x + shift));
-        double mean = logVector.Average();
+    public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
+    {
+        T minValue = vector.Min();
+        T shift = _numOps.GreaterThan(minValue, _numOps.Zero) 
+            ? _numOps.Zero
+            : _numOps.Add(_numOps.Add(_numOps.Negate(minValue), _numOps.One), _epsilon);
+
+        var logVector = vector.Transform(x => _numOps.Log(_numOps.Add(x, shift)));
+        T mean = logVector.Average();
         
-        double variance = logVector.Select(x => Math.Pow(x - mean, 2)).Average();
-        double stdDev = Math.Sqrt(Math.Max(variance, Epsilon));
+        T variance = logVector.Select(x => _numOps.Power(_numOps.Subtract(x, mean), _numOps.FromDouble(2))).Average();
+        T stdDev = _numOps.Sqrt(_numOps.GreaterThan(variance, _epsilon) ? variance : _epsilon);
 
-        var normalizedVector = logVector.Transform(x => (x - mean) / stdDev);
-        normalizedVector = normalizedVector.Transform(x => double.IsNaN(x) ? 0 : x);
+        var normalizedVector = logVector.Transform(x => _numOps.Divide(_numOps.Subtract(x, mean), stdDev));
+        normalizedVector = normalizedVector.Transform(x => _numOps.IsNaN(x) ? _numOps.Zero : x);
 
-        var parameters = new NormalizationParameters { Shift = shift, Mean = mean, StdDev = stdDev };
+        var parameters = new NormalizationParameters<T>(_numOps) 
+        { 
+            Method = NormalizationMethod.LogMeanVariance,
+            Shift = shift, 
+            Mean = mean, 
+            StdDev = stdDev 
+        };
         return (normalizedVector, parameters);
     }
 
-    public (Matrix<double>, List<NormalizationParameters>) NormalizeMatrix(Matrix<double> matrix)
+    public (Matrix<T>, List<NormalizationParameters<T>>) NormalizeMatrix(Matrix<T> matrix)
     {
-        var normalizedMatrix = Matrix<double>.CreateZeros(matrix.Rows, matrix.Columns);
-        var parametersList = new List<NormalizationParameters>();
+        var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
+        var parametersList = new List<NormalizationParameters<T>>();
 
         for (int i = 0; i < matrix.Columns; i++)
         {
@@ -38,30 +53,39 @@ public class LogMeanVarianceNormalizer : INormalizer
         return (normalizedMatrix, parametersList);
     }
 
-    public Vector<double> DenormalizeVector(Vector<double> vector, NormalizationParameters parameters)
+    public Vector<T> DenormalizeVector(Vector<T> vector, NormalizationParameters<T> parameters)
     {
         return vector
             .Multiply(parameters.StdDev)
             .Add(parameters.Mean)
-            .Transform(x => Math.Exp(x) - parameters.Shift);
+            .Transform(x => _numOps.Subtract(_numOps.Exp(x), parameters.Shift));
     }
 
-    public Vector<double> DenormalizeCoefficients(Vector<double> coefficients, List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public Vector<T> DenormalizeCoefficients(Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         return coefficients.PointwiseMultiply(
-            Vector<double>.FromArray(xParams.Select(p => yParams.StdDev / Math.Max(p.StdDev, Epsilon)).ToArray())
+            Vector<T>.FromArray([.. xParams.Select(p => 
+                _numOps.Divide(yParams.StdDev, _numOps.GreaterThan(p.StdDev, _epsilon) ? p.StdDev : _epsilon)
+            )])
         );
     }
 
-    public double DenormalizeYIntercept(Matrix<double> xMatrix, Vector<double> y, Vector<double> coefficients, 
-        List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public T DenormalizeYIntercept(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients, 
+        List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        double denormalizedLogIntercept = yParams.Mean;
+        T denormalizedLogIntercept = yParams.Mean;
         for (int i = 0; i < coefficients.Length; i++)
         {
-            denormalizedLogIntercept -= coefficients[i] * (xParams[i].Mean * yParams.StdDev / Math.Max(xParams[i].StdDev, Epsilon));
+            denormalizedLogIntercept = _numOps.Subtract(denormalizedLogIntercept, 
+                _numOps.Multiply(coefficients[i], 
+                    _numOps.Divide(
+                        _numOps.Multiply(xParams[i].Mean, yParams.StdDev), 
+                        _numOps.GreaterThan(xParams[i].StdDev, _epsilon) ? xParams[i].StdDev : _epsilon
+                    )
+                )
+            );
         }
 
-        return Math.Exp(denormalizedLogIntercept) - yParams.Shift;
+        return _numOps.Subtract(_numOps.Exp(denormalizedLogIntercept), yParams.Shift);
     }
 }

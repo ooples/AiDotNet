@@ -1,33 +1,35 @@
 ﻿namespace AiDotNet.Regularization;
 
-public class L1Regularization : IRegularization
+public class L1Regularization<T> : IRegularization<T>
 {
-    private readonly double _regularizationStrength;
+    private readonly T _regularizationStrength;
+    private readonly INumericOperations<T> _numOps;
 
-    public L1Regularization(double regularizationStrength)
+    public L1Regularization(T regularizationStrength)
     {
         _regularizationStrength = regularizationStrength;
+        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
-    public Matrix<double> RegularizeMatrix(Matrix<double> featuresMatrix)
+    public Matrix<T> RegularizeMatrix(Matrix<T> featuresMatrix)
     {
         return featuresMatrix;
     }
 
-    public Vector<double> RegularizeCoefficients(Vector<double> coefficients)
+    public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
     {
         var count = coefficients.Length;
-        var regularizedCoefficients = new Vector<double>(count);
+        var regularizedCoefficients = new Vector<T>(count);
 
         for (int i = 0; i < count; i++)
         {
-            double coeff = coefficients[i];
-            if (coeff > _regularizationStrength)
-                regularizedCoefficients[i] = coeff - _regularizationStrength;
-            else if (coeff < -_regularizationStrength)
-                regularizedCoefficients[i] = coeff + _regularizationStrength;
+            T coeff = coefficients[i];
+            if (_numOps.GreaterThan(coeff, _regularizationStrength))
+                regularizedCoefficients[i] = _numOps.Subtract(coeff, _regularizationStrength);
+            else if (_numOps.LessThan(coeff, _numOps.Negate(_regularizationStrength)))
+                regularizedCoefficients[i] = _numOps.Add(coeff, _regularizationStrength);
             else
-                regularizedCoefficients[i] = 0;
+                regularizedCoefficients[i] = _numOps.Zero;
         }
 
         return regularizedCoefficients;

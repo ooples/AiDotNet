@@ -54,4 +54,8 @@ public class ComplexOperations : INumericOperations<Complex>
     }
     public int ToInt32(Complex value) => (int)Math.Round(value.Real);
     public Complex Round(Complex value) => new(Math.Round(value.Real), Math.Round(value.Imaginary));
+    public Complex MinValue => new Complex(double.MinValue, double.MinValue);
+    public Complex MaxValue => new Complex(double.MaxValue, double.MaxValue);
+    public bool IsNaN(Complex value) => double.IsNaN(value.Real) || double.IsNaN(value.Imaginary);
+    public bool IsInfinity(Complex value) => double.IsInfinity(value.Real) || double.IsInfinity(value.Imaginary);
 }

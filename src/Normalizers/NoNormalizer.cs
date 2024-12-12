@@ -1,29 +1,29 @@
 ﻿namespace AiDotNet.Normalizers;
 
-public class NoNormalizer : INormalizer
+public class NoNormalizer<T> : INormalizer<T>
 {
-    public (Vector<double>, NormalizationParameters) NormalizeVector(Vector<double> vector)
+    public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
     {
-        return (vector, new NormalizationParameters { Method = NormalizationMethod.None });
+        return (vector, new NormalizationParameters<T> { Method = NormalizationMethod.None });
     }
 
-    public (Matrix<double>, List<NormalizationParameters>) NormalizeMatrix(Matrix<double> matrix)
+    public (Matrix<T>, List<NormalizationParameters<T>>) NormalizeMatrix(Matrix<T> matrix)
     {
-        var parameters = Enumerable.Repeat(new NormalizationParameters { Method = NormalizationMethod.None }, matrix.Columns).ToList();
+        var parameters = Enumerable.Repeat(new NormalizationParameters<T> { Method = NormalizationMethod.None }, matrix.Columns).ToList();
         return (matrix, parameters);
     }
 
-    public Vector<double> DenormalizeVector(Vector<double> vector, NormalizationParameters parameters)
+    public Vector<T> DenormalizeVector(Vector<T> vector, NormalizationParameters<T> parameters)
     {
         return vector;
     }
 
-    public Vector<double> DenormalizeCoefficients(Vector<double> coefficients, List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public Vector<T> DenormalizeCoefficients(Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         return coefficients;
     }
 
-    public double DenormalizeYIntercept(Matrix<double> xMatrix, Vector<double> y, Vector<double> coefficients, List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public T DenormalizeYIntercept(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         return MathHelper.CalculateYIntercept(xMatrix, y, coefficients);
     }

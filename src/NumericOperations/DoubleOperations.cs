@@ -23,4 +23,8 @@ public class DoubleOperations : INumericOperations<double>
     public bool LessThanOrEquals(double a, double b) => a <= b;
     public int ToInt32(double value) => (int)Math.Round(value);
     public double Round(double value) => Math.Round(value);
+    public double MinValue => double.MinValue;
+    public double MaxValue => double.MaxValue;
+    public bool IsNaN(double value) => double.IsNaN(value);
+    public bool IsInfinity(double value) => double.IsInfinity(value);
 }

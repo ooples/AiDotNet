@@ -1,7 +1,7 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IRegularization
+public interface IRegularization<T>
 {
-    Matrix<double> RegularizeMatrix(Matrix<double> featuresMatrix);
-    Vector<double> RegularizeCoefficients(Vector<double> coefficients);
+    Matrix<T> RegularizeMatrix(Matrix<T> featuresMatrix);
+    Vector<T> RegularizeCoefficients(Vector<T> coefficients);
 }

@@ -1,15 +1,17 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IFitnessCalculator
+public interface IFitnessCalculator<T>
 {
-    double CalculateFitnessScore(
-        ErrorStats errorStats, 
-        BasicStats basicStats, 
-        Vector<double> actualValues, 
-        Vector<double> predictedValues,
-        Matrix<double> features);
+    T CalculateFitnessScore(
+        ErrorStats<T> errorStats,
+        BasicStats<T> actualBasicStats,
+        BasicStats<T> predictedBasicStats,
+        Vector<T> actualValues,
+        Vector<T> predictedValues,
+        Matrix<T> features,
+        PredictionStats<T> predictionStats);
 
     bool IsHigherScoreBetter { get; }
 
-    bool IsBetterFitness(double currentFitness, double bestFitness);
+    bool IsBetterFitness(T currentFitness, T bestFitness);
 }

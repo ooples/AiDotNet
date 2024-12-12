@@ -23,4 +23,8 @@ public class UIntOperations : INumericOperations<uint>
     public bool LessThanOrEquals(uint a, uint b) => a <= b;
     public int ToInt32(uint value) => (int)value;
     public uint Round(uint value) => value;
+    public uint MinValue => uint.MinValue;
+    public uint MaxValue => uint.MaxValue;
+    public bool IsNaN(uint value) => false;
+    public bool IsInfinity(uint value) => false;
 }

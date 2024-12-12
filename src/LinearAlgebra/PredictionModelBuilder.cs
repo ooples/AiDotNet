@@ -1,78 +1,79 @@
 ﻿global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitnessCalculators;
-global using AiDotNet.Optimizers;
 global using AiDotNet.Regularization;
+global using AiDotNet.Optimizers;
+global using AiDotNet.Normalizers;
 
 namespace AiDotNet.LinearAlgebra;
 
-public class PredictionModelBuilder : IPredictionModelBuilder
+public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
 {
     private readonly PredictionModelOptions _options;
     private OptimizationAlgorithmOptions? _optimizationOptions;
-    private IFeatureSelector? _featureSelector;
-    private INormalizer? _normalizer;
-    private IRegularization? _regularization;
-    private IFitnessCalculator? _fitnessCalculator;
-    private IFitDetector? _fitDetector;
-    private IRegression? _regression;
-    private IOptimizationAlgorithm? _optimizer;
-    private IDataPreprocessor? _dataPreprocessor;
+    private IFeatureSelector<T>? _featureSelector;
+    private INormalizer<T>? _normalizer;
+    private IRegularization<T>? _regularization;
+    private IFitnessCalculator<T>? _fitnessCalculator;
+    private IFitDetector<T>? _fitDetector;
+    private IRegression<T>? _regression;
+    private IOptimizationAlgorithm<T>? _optimizer;
+    private IDataPreprocessor<T>? _dataPreprocessor;
 
     public PredictionModelBuilder(PredictionModelOptions? options = null)
     {
         _options = options ?? new PredictionModelOptions();
     }
 
-    public IPredictionModelBuilder WithFeatureSelector(IFeatureSelector selector)
+    public IPredictionModelBuilder<T> WithFeatureSelector(IFeatureSelector<T> selector)
     {
         _featureSelector = selector;
         return this;
     }
 
-    public IPredictionModelBuilder WithNormalizer(INormalizer normalizer)
+    public IPredictionModelBuilder<T> WithNormalizer(INormalizer<T> normalizer)
     {
         _normalizer = normalizer;
         return this;
     }
 
-    public IPredictionModelBuilder WithRegularization(IRegularization regularization)
+    public IPredictionModelBuilder<T> WithRegularization(IRegularization<T> regularization)
     {
         _regularization = regularization;
         return this;
     }
 
-    public IPredictionModelBuilder WithFitnessCalculator(IFitnessCalculator calculator)
+    public IPredictionModelBuilder<T> WithFitnessCalculator(IFitnessCalculator<T> calculator)
     {
         _fitnessCalculator = calculator;
         return this;
     }
 
-    public IPredictionModelBuilder WithFitDetector(IFitDetector detector)
+    public IPredictionModelBuilder<T> WithFitDetector(IFitDetector<T> detector)
     {
         _fitDetector = detector;
         return this;
     }
 
-    public IPredictionModelBuilder WithRegression(IRegression regression)
+    public IPredictionModelBuilder<T> WithRegression(IRegression<T> regression)
     {
         _regression = regression;
         return this;
     }
 
-    public IPredictionModelBuilder WithOptimizer(IOptimizationAlgorithm optimizationAlgorithm, OptimizationAlgorithmOptions? optimizationOptions = null)
+    public IPredictionModelBuilder<T> WithOptimizer(IOptimizationAlgorithm<T> optimizationAlgorithm, OptimizationAlgorithmOptions? optimizationOptions = null)
     {
         _optimizer = optimizationAlgorithm;
         _optimizationOptions = optimizationOptions;
         return this;
     }
 
-    public IPredictionModelBuilder WithDataPreprocessor(IDataPreprocessor dataPreprocessor)
+    public IPredictionModelBuilder<T> WithDataPreprocessor(IDataPreprocessor<T> dataPreprocessor)
     {
         _dataPreprocessor = dataPreprocessor;
         return this;
     }
 
-    public PredictionModelResult Build(Matrix<double> x, Vector<double> y)
+    public PredictionModelResult<T> Build(Matrix<T> x, Vector<T> y)
     {
         // Validate inputs
         if (x == null)
@@ -85,14 +86,14 @@ public class PredictionModelBuilder : IPredictionModelBuilder
             throw new InvalidOperationException("Regression method must be specified");
 
         // Use defaults for these interfaces if they aren't set
-        var normalizer = _normalizer ?? new NoNormalizer();
-        var optimizer = _optimizer ?? new NormalOptimizer();
+        var normalizer = _normalizer ?? new NoNormalizer<T>();
+        var optimizer = _optimizer ?? new NormalOptimizer<T>();
         var optimizerOptions = _optimizationOptions ?? new OptimizationAlgorithmOptions();
-        var featureSelector = _featureSelector ?? new NoFeatureSelector();
-        var fitDetector = _fitDetector ?? new DefaultFitDetector();
-        var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator();
-        var regularization = _regularization ?? new NoRegularization();
-        var dataPreprocessor = _dataPreprocessor ?? new DataPreprocessor(normalizer, featureSelector, _options);
+        var featureSelector = _featureSelector ?? new NoFeatureSelector<T>();
+        var fitDetector = _fitDetector ?? new DefaultFitDetector<T>();
+        var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator<T>();
+        var regularization = _regularization ?? new NoRegularization<T>();
+        var dataPreprocessor = _dataPreprocessor ?? new DataPreprocessor<T>(normalizer, featureSelector, _options);
 
         // Preprocess the data
         var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
@@ -104,7 +105,7 @@ public class PredictionModelBuilder : IPredictionModelBuilder
         var optimizationResult = optimizer.Optimize(XTrain, yTrain, XVal, yVal, XTest, yTest, _options, optimizerOptions, _regression, regularization, normalizer, 
             normInfo, fitnessCalculator, fitDetector);
 
-        return new PredictionModelResult
+        return new PredictionModelResult<T>
         {
             Model = _regression,
             OptimizationResult = optimizationResult,
@@ -112,28 +113,28 @@ public class PredictionModelBuilder : IPredictionModelBuilder
         };
     }
 
-    public Vector<double> Predict(Matrix<double> newData, PredictionModelResult modelResult)
+    public Vector<T> Predict(Matrix<T> newData, PredictionModelResult<T> modelResult)
     {
         return modelResult.Predict(newData);
     }
 
-    public void SaveModel(PredictionModelResult modelResult, string filePath)
+    public void SaveModel(PredictionModelResult<T> modelResult, string filePath)
     {
         modelResult.SaveModel(filePath);
     }
 
-    public PredictionModelResult LoadModel(string filePath)
+    public PredictionModelResult<T> LoadModel(string filePath)
     {
-        return PredictionModelResult.LoadModel(filePath);
+        return PredictionModelResult<T>.LoadModel(filePath);
     }
 
-    public string SerializeModel(PredictionModelResult modelResult)
+    public string SerializeModel(PredictionModelResult<T> modelResult)
     {
         return modelResult.SerializeToJson();
     }
 
-    public PredictionModelResult DeserializeModel(string jsonString)
+    public PredictionModelResult<T> DeserializeModel(string jsonString)
     {
-        return PredictionModelResult.DeserializeFromJson(jsonString);
+        return PredictionModelResult<T>.DeserializeFromJson(jsonString);
     }
 }

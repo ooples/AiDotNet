@@ -1,11 +1,11 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IModelEvaluator
+public interface IModelEvaluator<T>
 {
-    ModelEvaluationResult EvaluateModel(
-        Vector<double> actualTrain, Vector<double> predictedTrain,
-        Vector<double> actualVal, Vector<double> predictedVal,
-        Vector<double> actualTest, Vector<double> predictedTest);
+    ModelEvaluationResult<T> EvaluateModel(
+        Vector<T> actualTrain, Vector<T> predictedTrain,
+        Vector<T> actualVal, Vector<T> predictedVal,
+        Vector<T> actualTest, Vector<T> predictedTest);
 
-    Dictionary<string, double> CalculateMetrics(Vector<double> actual, Vector<double> predicted);
+    Dictionary<string, T> CalculateMetrics(Vector<T> actual, Vector<T> predicted);
 }

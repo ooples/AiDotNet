@@ -1,22 +1,36 @@
-﻿namespace AiDotNet.Normalizers;
+﻿using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NumericOperations;
+using System;
+using System.Linq;
 
-public class LpNormNormalizer(double p = 2) : INormalizer
+namespace AiDotNet.Normalizers;
+
+public class LpNormNormalizer<T> : INormalizer<T>
 {
-    private readonly double _p = p;
+    private readonly T _p;
+    private readonly INumericOperations<T> _numOps;
 
-    public (Vector<double>, NormalizationParameters) NormalizeVector(Vector<double> vector)
+    public LpNormNormalizer(T p)
     {
-        double norm = Math.Pow(vector.Select(x => Math.Pow(Math.Abs(x), _p)).Sum(), 1 / _p);
+        _p = p;
+        _numOps = MathHelper.GetNumericOperations<T>();
+    }
 
-        var normalizedVector = vector.Divide(norm);
-        var parameters = new NormalizationParameters { Scale = norm, P = _p, Method = NormalizationMethod.LpNorm };
+    public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
+    {
+        T sum = vector.Select(x => _numOps.Power(_numOps.Abs(x), _p)).Aggregate(_numOps.Zero, _numOps.Add);
+        T norm = _numOps.Power(sum, _numOps.Divide(_numOps.One, _p));
+
+        var normalizedVector = vector.Transform(x => _numOps.Divide(x, norm));
+        var parameters = new NormalizationParameters<T> { Scale = norm, P = _p, Method = NormalizationMethod.LpNorm };
         return (normalizedVector, parameters);
     }
 
-    public (Matrix<double>, List<NormalizationParameters>) NormalizeMatrix(Matrix<double> matrix)
+    public (Matrix<T>, List<NormalizationParameters<T>>) NormalizeMatrix(Matrix<T> matrix)
     {
-        var normalizedMatrix = Matrix<double>.CreateZeros(matrix.Rows, matrix.Columns);
-        var parametersList = new List<NormalizationParameters>();
+        var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
+        var parametersList = new List<NormalizationParameters<T>>();
 
         for (int i = 0; i < matrix.Columns; i++)
         {
@@ -29,19 +43,20 @@ public class LpNormNormalizer(double p = 2) : INormalizer
         return (normalizedMatrix, parametersList);
     }
 
-    public Vector<double> DenormalizeVector(Vector<double> vector, NormalizationParameters parameters)
+    public Vector<T> DenormalizeVector(Vector<T> vector, NormalizationParameters<T> parameters)
     {
-        return vector.Multiply(parameters.Scale);
+        return vector.Transform(x => _numOps.Multiply(x, parameters.Scale));
     }
 
-    public Vector<double> DenormalizeCoefficients(Vector<double> coefficients, List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public Vector<T> DenormalizeCoefficients(Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        return coefficients.PointwiseMultiply(Vector<double>.FromArray(xParams.Select(p => yParams.Scale / p.Scale).ToArray()));
+        var scalingFactors = xParams.Select(p => _numOps.Divide(yParams.Scale, p.Scale)).ToArray();
+        return coefficients.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
     }
 
-    public double DenormalizeYIntercept(Matrix<double> xMatrix, Vector<double> y, Vector<double> coefficients, 
-        List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public T DenormalizeYIntercept(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients, 
+        List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        return 0;
+        return _numOps.Zero;
     }
 }

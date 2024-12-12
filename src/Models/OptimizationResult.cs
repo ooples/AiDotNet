@@ -1,29 +1,60 @@
 ﻿namespace AiDotNet.Models;
 
-public class OptimizationResult
+public class OptimizationResult<T>
 {
-    public Vector<double> BestCoefficients { get; set; } = Vector<double>.Empty();
-    public double BestIntercept { get; set; }
-    public double FitnessScore { get; set; }
+    public Vector<T> BestCoefficients { get; set; }
+    public T BestIntercept { get; set; }
+    public T FitnessScore { get; set; }
     public int Iterations { get; set; }
-    public Vector<double> FitnessHistory { get; set; } = Vector<double>.Empty();
-    public List<Vector<double>> SelectedFeatures { get; set; } = [];
+    public Vector<T> FitnessHistory { get; set; }
+    public List<Vector<T>> SelectedFeatures { get; set; }
     
-    public DatasetResult TrainingResult { get; set; } = new();
-    public DatasetResult ValidationResult { get; set; } = new();
-    public DatasetResult TestResult { get; set; } = new();
+    public DatasetResult TrainingResult { get; set; }
+    public DatasetResult ValidationResult { get; set; }
+    public DatasetResult TestResult { get; set; }
     
-    public FitDetectorResult FitDetectionResult { get; set; } = new();
+    public FitDetectorResult<T> FitDetectionResult { get; set; }
     
-    public Vector<double> CoefficientLowerBounds { get; set; } = Vector<double>.Empty();
-    public Vector<double> CoefficientUpperBounds { get; set; } = Vector<double>.Empty();
+    public Vector<T> CoefficientLowerBounds { get; set; }
+    public Vector<T> CoefficientUpperBounds { get; set; }
+
+    private readonly INumericOperations<T> _numOps;
+
+    public OptimizationResult(INumericOperations<T>? numOps = null)
+    {
+        _numOps = numOps ?? MathHelper.GetNumericOperations<T>();
+        BestCoefficients = Vector<T>.Empty();
+        FitnessHistory = Vector<T>.Empty();
+        SelectedFeatures = [];
+        TrainingResult = new DatasetResult();
+        ValidationResult = new DatasetResult();
+        TestResult = new DatasetResult();
+        FitDetectionResult = new FitDetectorResult<T>();
+        CoefficientLowerBounds = Vector<T>.Empty();
+        CoefficientUpperBounds = Vector<T>.Empty();
+        BestIntercept = _numOps.Zero;
+        FitnessScore = _numOps.Zero;
+    }
 
     public class DatasetResult
     {
-        public Matrix<double> X { get; set; } = Matrix<double>.Empty();
-        public Vector<double> Y { get; set; } = Vector<double>.Empty();
-        public Vector<double> Predictions { get; set; } = Vector<double>.Empty();
-        public ErrorStats ErrorStats { get; set; } = ErrorStats.Empty();
-        public BasicStats BasicStats { get; set; } = BasicStats.Empty();
+        public Matrix<T> X { get; set; }
+        public Vector<T> Y { get; set; }
+        public Vector<T> Predictions { get; set; }
+        public ErrorStats<T> ErrorStats { get; set; }
+        public PredictionStats<T> PredictionStats { get; set; }
+        public BasicStats<T> ActualBasicStats { get; set; }
+        public BasicStats<T> PredictedBasicStats { get; set; }
+
+        public DatasetResult()
+        {
+            X = Matrix<T>.Empty();
+            Y = Vector<T>.Empty();
+            Predictions = Vector<T>.Empty();
+            ErrorStats = ErrorStats<T>.Empty();
+            PredictionStats = PredictionStats<T>.Empty();
+            ActualBasicStats = BasicStats<T>.Empty();
+            PredictedBasicStats = BasicStats<T>.Empty();
+        }
     }
 }

@@ -23,4 +23,8 @@ public class Int64Operations : INumericOperations<long>
     public bool LessThanOrEquals(long a, long b) => a <= b;
     public int ToInt32(long value) => (int)value;
     public long Round(long value) => value;
+    public long MinValue => long.MinValue;
+    public long MaxValue => long.MaxValue;
+    public bool IsNaN(long value) => false;
+    public bool IsInfinity(long value) => false;
 }

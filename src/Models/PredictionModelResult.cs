@@ -4,13 +4,13 @@ global using Formatting = Newtonsoft.Json.Formatting;
 namespace AiDotNet.Models;
 
 [Serializable]
-public class PredictionModelResult
+public class PredictionModelResult<T>
 {
-    public IRegression? Model { get; set; }
-    public OptimizationResult OptimizationResult { get; set; } = new();
-    public NormalizationInfo NormalizationInfo { get; set; } = new();
+    public IRegression<T>? Model { get; set; }
+    public OptimizationResult<T> OptimizationResult { get; set; } = new();
+    public NormalizationInfo<T> NormalizationInfo { get; set; } = new();
 
-    public Vector<double> Predict(Matrix<double> newData)
+    public Vector<T> Predict(Matrix<T> newData)
     {
         if (Model == null)
         {
@@ -41,10 +41,10 @@ public class PredictionModelResult
         File.WriteAllText(filePath, jsonString);
     }
 
-    public static PredictionModelResult LoadModel(string filePath)
+    public static PredictionModelResult<T> LoadModel(string filePath)
     {
         string jsonString = File.ReadAllText(filePath);
-        return JsonConvert.DeserializeObject<PredictionModelResult>(jsonString, new JsonSerializerSettings
+        return JsonConvert.DeserializeObject<PredictionModelResult<T>>(jsonString, new JsonSerializerSettings
         {
             TypeNameHandling = TypeNameHandling.All
         }) ?? new();
@@ -58,9 +58,9 @@ public class PredictionModelResult
         });
     }
 
-    public static PredictionModelResult DeserializeFromJson(string jsonString)
+    public static PredictionModelResult<T> DeserializeFromJson(string jsonString)
     {
-        return JsonConvert.DeserializeObject<PredictionModelResult>(jsonString, new JsonSerializerSettings
+        return JsonConvert.DeserializeObject<PredictionModelResult<T>>(jsonString, new JsonSerializerSettings
         {
             TypeNameHandling = TypeNameHandling.All
         }) ?? new();

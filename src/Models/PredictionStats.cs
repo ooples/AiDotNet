@@ -54,6 +54,11 @@ public class PredictionStats<T>
         CalculatePredictionStats(actual, predicted, numberOfParameters, confidenceLevel);
     }
 
+    public static PredictionStats<T> Empty()
+    {
+        return new PredictionStats<T>(Vector<T>.Empty(), Vector<T>.Empty(), 0, MathHelper.GetNumericOperations<T>().Zero);
+    }
+
     private void CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters, T confidenceLevel)
     {
         // Determine best fit distribution

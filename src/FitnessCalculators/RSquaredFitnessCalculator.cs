@@ -1,18 +1,20 @@
 ﻿namespace AiDotNet.FitnessCalculators;
 
-public class RSquaredFitnessCalculator : FitnessCalculatorBase
+public class RSquaredFitnessCalculator<T> : FitnessCalculatorBase<T>
 {
     public RSquaredFitnessCalculator() : base(isHigherScoreBetter: true)
     {
     }
 
-    public override double CalculateFitnessScore(
-        ErrorStats errorStats, 
-        BasicStats basicStats, 
-        Vector<double> actualValues, 
-        Vector<double> predictedValues,
-        Matrix<double> features)
+    public override T CalculateFitnessScore(
+        ErrorStats<T> errorStats,
+        BasicStats<T> basicStats,
+        BasicStats<T> targetStats,
+        Vector<T> actualValues,
+        Vector<T> predictedValues,
+        Matrix<T> features,
+        PredictionStats<T> predictionStats)
     {
-        return basicStats.R2;
+        return predictionStats.R2;
     }
 }

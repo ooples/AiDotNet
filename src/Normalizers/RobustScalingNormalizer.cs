@@ -1,25 +1,32 @@
 ﻿namespace AiDotNet.Normalizers;
 
-public class RobustScalingNormalizer : INormalizer
+public class RobustScalingNormalizer<T> : INormalizer<T>
 {
-    public (Vector<double>, NormalizationParameters) NormalizeVector(Vector<double> vector)
+    private readonly INumericOperations<T> _numOps;
+
+    public RobustScalingNormalizer()
     {
-        double median = CalculateMedian(vector);
-        double q1 = CalculateQuantile(vector, 0.25);
-        double q3 = CalculateQuantile(vector, 0.75);
-        double iqr = q3 - q1;
-        if (iqr == 0) iqr = 1;
+        _numOps = MathHelper.GetNumericOperations<T>();
+    }
+
+    public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
+    {
+        T median = StatisticsHelper<T>.CalculateMedian(vector);
+        T q1 = StatisticsHelper<T>.CalculateQuartile(vector, _numOps.FromDouble(0.25));
+        T q3 = StatisticsHelper<T>.CalculateQuartile(vector, _numOps.FromDouble(0.75));
+        T iqr = _numOps.Subtract(q3, q1);
+        if (_numOps.Equals(iqr, _numOps.Zero)) iqr = _numOps.One;
 
         var normalizedVector = vector.Subtract(median).Divide(iqr);
-        var parameters = new NormalizationParameters { Median = median, IQR = iqr, Method = NormalizationMethod.RobustScaling };
+        var parameters = new NormalizationParameters<T> { Median = median, IQR = iqr, Method = NormalizationMethod.RobustScaling };
 
         return (normalizedVector, parameters);
     }
 
-    public (Matrix<double>, List<NormalizationParameters>) NormalizeMatrix(Matrix<double> matrix)
+    public (Matrix<T>, List<NormalizationParameters<T>>) NormalizeMatrix(Matrix<T> matrix)
     {
-        var normalizedMatrix = Matrix<double>.CreateZeros(matrix.Rows, matrix.Columns);
-        var parametersList = new List<NormalizationParameters>();
+        var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
+        var parametersList = new List<NormalizationParameters<T>>();
 
         for (int i = 0; i < matrix.Columns; i++)
         {
@@ -32,58 +39,27 @@ public class RobustScalingNormalizer : INormalizer
         return (normalizedMatrix, parametersList);
     }
 
-    public Vector<double> DenormalizeVector(Vector<double> vector, NormalizationParameters parameters)
+    public Vector<T> DenormalizeVector(Vector<T> vector, NormalizationParameters<T> parameters)
     {
         return vector.Multiply(parameters.IQR).Add(parameters.Median);
     }
 
-    public Vector<double> DenormalizeCoefficients(Vector<double> coefficients, List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public Vector<T> DenormalizeCoefficients(Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        return coefficients.PointwiseMultiply(Vector<double>.FromArray(xParams.Select(p => yParams.IQR / p.IQR).ToArray()));
+        return coefficients.PointwiseMultiply(Vector<T>.FromArray([.. xParams.Select(p => _numOps.Divide(yParams.IQR, p.IQR))]));
     }
 
-    public double DenormalizeYIntercept(Matrix<double> xMatrix, Vector<double> y, Vector<double> coefficients, 
-        List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public T DenormalizeYIntercept(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients, 
+        List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        double denormalizedIntercept = yParams.Median;
+        T denormalizedIntercept = yParams.Median;
         for (int i = 0; i < coefficients.Length; i++)
         {
-            denormalizedIntercept -= coefficients[i] * xParams[i].Median * (yParams.IQR / xParams[i].IQR);
+            T term = _numOps.Multiply(coefficients[i], xParams[i].Median);
+            term = _numOps.Multiply(term, _numOps.Divide(yParams.IQR, xParams[i].IQR));
+            denormalizedIntercept = _numOps.Subtract(denormalizedIntercept, term);
         }
 
         return denormalizedIntercept;
-    }
-
-    private static double CalculateMedian(Vector<double> vector)
-    {
-        var sortedVector = vector.ToArray();
-        Array.Sort(sortedVector);
-        int n = sortedVector.Length;
-        if (n % 2 == 0)
-        {
-            return (sortedVector[n / 2 - 1] + sortedVector[n / 2]) / 2;
-        }
-
-        return sortedVector[n / 2];
-    }
-
-    private static double CalculateQuantile(Vector<double> vector, double quantile)
-    {
-        var sortedVector = vector.ToArray();
-        Array.Sort(sortedVector);
-        int n = sortedVector.Length;
-        double index = quantile * (n - 1);
-        int lowerIndex = (int)Math.Floor(index);
-        int upperIndex = (int)Math.Ceiling(index);
-
-        if (lowerIndex == upperIndex)
-        {
-            return sortedVector[lowerIndex];
-        }
-
-        double lowerValue = sortedVector[lowerIndex];
-        double upperValue = sortedVector[upperIndex];
-
-        return lowerValue + (upperValue - lowerValue) * (index - lowerIndex);
     }
 }

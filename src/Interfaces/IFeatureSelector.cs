@@ -1,6 +1,6 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IFeatureSelector
+public interface IFeatureSelector<T>
 {
-    Matrix<double> SelectFeatures(Matrix<double> allFeaturesMatrix);
+    Matrix<T> SelectFeatures(Matrix<T> allFeaturesMatrix);
 }

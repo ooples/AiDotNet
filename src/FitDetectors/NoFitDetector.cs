@@ -1,9 +1,9 @@
 ﻿namespace AiDotNet.FitDetectors;
 
-public class NoFitDetector : IFitDetector
+public class NoFitDetector<T> : IFitDetector<T>
 {
-    public FitDetectorResult DetectFit(ErrorStats trainingErrorStats, ErrorStats validationErrorStats, ErrorStats testErrorStats, 
-        BasicStats trainingBasicStats, BasicStats validationBasicStats, BasicStats testBasicStats)
+    public FitDetectorResult<T> DetectFit(ErrorStats<T> trainingErrorStats, ErrorStats<T> validationErrorStats, ErrorStats<T> testErrorStats, 
+        BasicStats<T> trainingBasicStats, BasicStats<T> validationBasicStats, BasicStats<T> testBasicStats)
     {
         throw new NotImplementedException();
     }

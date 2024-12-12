@@ -15,6 +15,7 @@ public class ShortOperations : INumericOperations<short>
     public bool LessThan(short a, short b) => a < b;
     public short Abs(short value) => Math.Abs(value);
     public short Square(short value) => Multiply(value, value);
+    public short Exp(short value) => (short)Math.Round(Math.Exp(value));
     public bool Equals(short a, short b) => a == b;
     public short Power(short baseValue, short exponent) => (short)Math.Pow(baseValue, exponent);
     public short Log(short value) => (short)Math.Log(value);
@@ -22,4 +23,8 @@ public class ShortOperations : INumericOperations<short>
     public bool LessThanOrEquals(short a, short b) => a <= b;
     public int ToInt32(short value) => value;
     public short Round(short value) => value;
+    public short MinValue => short.MinValue;
+    public short MaxValue => short.MaxValue;
+    public bool IsNaN(short value) => false;
+    public bool IsInfinity(short value) => false;
 }

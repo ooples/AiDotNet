@@ -1,24 +1,26 @@
-﻿global using AiDotNet.Normalizers;
+﻿using AiDotNet.Normalizers;
 
 namespace AiDotNet.Factories;
 
-public class NormalizerFactory
+public class NormalizerFactory<T>
 {
-    public static INormalizer CreateNormalizer(NormalizationMethod method, double lpNormP = 2)
+    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
+    public static INormalizer<T> CreateNormalizer(NormalizationMethod method, T? lpNormP = default)
     {
         return method switch
         {
-            NormalizationMethod.None => new NoNormalizer(),
-            NormalizationMethod.MinMax => new MinMaxNormalizer(),
-            NormalizationMethod.ZScore => new ZScoreNormalizer(),
-            NormalizationMethod.RobustScaling => new RobustScalingNormalizer(),
-            NormalizationMethod.Decimal => new DecimalNormalizer(),
-            NormalizationMethod.Binning => new BinningNormalizer(),
-            NormalizationMethod.MeanVariance => new MeanVarianceNormalizer(),
-            NormalizationMethod.LogMeanVariance => new LogMeanVarianceNormalizer(),
-            NormalizationMethod.GlobalContrast => new GlobalContrastNormalizer(),
-            NormalizationMethod.LpNorm => new LpNormNormalizer(lpNormP),
-            NormalizationMethod.Log => new LogNormalizer(),
+            NormalizationMethod.None => new NoNormalizer<T>(),
+            NormalizationMethod.MinMax => new MinMaxNormalizer<T>(),
+            NormalizationMethod.ZScore => new ZScoreNormalizer<T>(),
+            NormalizationMethod.RobustScaling => new RobustScalingNormalizer<T>(),
+            NormalizationMethod.Decimal => new DecimalNormalizer<T>(),
+            NormalizationMethod.Binning => new BinningNormalizer<T>(),
+            NormalizationMethod.MeanVariance => new MeanVarianceNormalizer<T>(),
+            NormalizationMethod.LogMeanVariance => new LogMeanVarianceNormalizer<T>(),
+            NormalizationMethod.GlobalContrast => new GlobalContrastNormalizer<T>(),
+            NormalizationMethod.LpNorm => new LpNormNormalizer<T>(lpNormP ?? _numOps.FromDouble(2)),
+            NormalizationMethod.Log => new LogNormalizer<T>(),
             _ => throw new ArgumentException($"Unsupported normalization method: {method}")
         };
     }

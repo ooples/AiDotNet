@@ -1,9 +1,9 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IDataPreprocessor
+public interface IDataPreprocessor<T>
 {
-    (Matrix<double> X, Vector<double> y, NormalizationInfo normInfo) PreprocessData(Matrix<double> X, Vector<double> y);
+    (Matrix<T> X, Vector<T> y, NormalizationInfo<T> normInfo) PreprocessData(Matrix<T> X, Vector<T> y);
     
-    (Matrix<double> XTrain, Vector<double> yTrain, Matrix<double> XValidation, Vector<double> yValidation, Matrix<double> XTest, Vector<double> yTest) 
-        SplitData(Matrix<double> X, Vector<double> y);
+    (Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XValidation, Vector<T> yValidation, Matrix<T> XTest, Vector<T> yTest) 
+        SplitData(Matrix<T> X, Vector<T> y);
 }

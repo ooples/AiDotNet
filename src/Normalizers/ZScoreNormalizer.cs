@@ -3,22 +3,30 @@
 /// <summary>
 /// Normalizes the data by subtracting the mean from each value and dividing by the standard deviation.
 /// </summary>
-public class ZScoreNormalizer : INormalizer
+public class ZScoreNormalizer<T> : INormalizer<T>
 {
-    public (Vector<double>, NormalizationParameters) NormalizeVector(Vector<double> vector)
+    private readonly INumericOperations<T> _numOps;
+
+    public ZScoreNormalizer()
     {
-        double mean = vector.Average();
-        double stdDev = Math.Sqrt(vector.Select(x => Math.Pow(x - mean, 2)).Average());
-    
-        Vector<double> normalizedVector = vector.Transform(x => (x - mean) / stdDev);
-    
-        return (normalizedVector, new NormalizationParameters { Method = NormalizationMethod.ZScore, Mean = mean, StdDev = stdDev });
+        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
-    public (Matrix<double>, List<NormalizationParameters>) NormalizeMatrix(Matrix<double> matrix)
+    public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
     {
-        var normalizedColumns = new List<Vector<double>>();
-        var parameters = new List<NormalizationParameters>();
+        T mean = StatisticsHelper<T>.CalculateMean(vector);
+        T variance = StatisticsHelper<T>.CalculateVariance(vector, mean);
+        T stdDev = _numOps.Sqrt(variance);
+
+        Vector<T> normalizedVector = vector.Transform(x => _numOps.Divide(_numOps.Subtract(x, mean), stdDev));
+
+        return (normalizedVector, new NormalizationParameters<T> { Method = NormalizationMethod.ZScore, Mean = mean, StdDev = stdDev });
+    }
+
+    public (Matrix<T>, List<NormalizationParameters<T>>) NormalizeMatrix(Matrix<T> matrix)
+    {
+        var normalizedColumns = new List<Vector<T>>();
+        var parameters = new List<NormalizationParameters<T>>();
 
         for (int i = 0; i < matrix.Columns; i++)
         {
@@ -27,26 +35,26 @@ public class ZScoreNormalizer : INormalizer
             parameters.Add(columnParams);
         }
 
-        return (Matrix<double>.FromColumnVectors(normalizedColumns), parameters);
+        return (Matrix<T>.FromColumnVectors(normalizedColumns), parameters);
     }
 
-    public Vector<double> DenormalizeVector(Vector<double> vector, NormalizationParameters parameters)
+    public Vector<T> DenormalizeVector(Vector<T> vector, NormalizationParameters<T> parameters)
     {
-        return vector.Transform(x => x * parameters.StdDev + parameters.Mean);
+        return vector.Transform(x => _numOps.Add(_numOps.Multiply(x, parameters.StdDev), parameters.Mean));
     }
 
-    public Vector<double> DenormalizeCoefficients(Vector<double> coefficients, List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public Vector<T> DenormalizeCoefficients(Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        return coefficients.PointwiseMultiply(Vector<double>.FromEnumerable(xParams.Select(p => p.StdDev / yParams.StdDev)));
+        return coefficients.PointwiseMultiply(Vector<T>.FromEnumerable(xParams.Select(p => _numOps.Divide(p.StdDev, yParams.StdDev))));
     }
 
-    public double DenormalizeYIntercept(Matrix<double> xMatrix, Vector<double> y, Vector<double> coefficients, 
-        List<NormalizationParameters> xParams, NormalizationParameters yParams)
+    public T DenormalizeYIntercept(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients, 
+        List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        double yMean = yParams.Mean;
-        var xMeans = Vector<double>.FromEnumerable(xParams.Select(p => p.Mean));
+        T yMean = yParams.Mean;
+        var xMeans = Vector<T>.FromEnumerable(xParams.Select(p => p.Mean));
         var denormalizedCoefficients = DenormalizeCoefficients(coefficients, xParams, yParams);
 
-        return yMean - xMeans.DotProduct(denormalizedCoefficients);
+        return _numOps.Subtract(yMean, xMeans.DotProduct(denormalizedCoefficients));
     }
 }

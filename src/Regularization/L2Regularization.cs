@@ -1,18 +1,18 @@
 ﻿namespace AiDotNet.Regularization;
 
-public class L2Regularization : IRegularization
+public class L2Regularization<T> : IRegularization<T>
 {
-    private readonly double _regularizationStrength;
+    private readonly T _regularizationStrength;
 
-    public L2Regularization(double regularizationStrength)
+    public L2Regularization(T regularizationStrength)
     {
         _regularizationStrength = regularizationStrength;
     }
 
-    public Matrix<double> RegularizeMatrix(Matrix<double> featuresMatrix)
+    public Matrix<T> RegularizeMatrix(Matrix<T> featuresMatrix)
     {
         int featureCount = featuresMatrix.Columns;
-        var regularizationMatrix = new Matrix<double>(featureCount, featureCount);
+        var regularizationMatrix = new Matrix<T>(featureCount, featureCount);
 
         for (int i = 0; i < featureCount; i++)
         {
@@ -22,7 +22,7 @@ public class L2Regularization : IRegularization
         return featuresMatrix.Add(regularizationMatrix);
     }
 
-    public Vector<double> RegularizeCoefficients(Vector<double> coefficients)
+    public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
     {
         return coefficients;
     }

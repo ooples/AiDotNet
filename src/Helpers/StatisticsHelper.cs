@@ -914,7 +914,7 @@ public static class StatisticsHelper<T>
         return (Q1, Q3);
     }
 
-    private static T CalculateQuartile(T[] sortedData, T quartile)
+    public static T CalculateQuartile(T[] sortedData, T quartile)
     {
         int n = sortedData.Length;
         T position = NumOps.Multiply(NumOps.FromDouble(n - 1), quartile);

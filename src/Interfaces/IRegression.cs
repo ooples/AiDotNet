@@ -1,11 +1,11 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IRegression
+public interface IRegression<T>
 {
-    void Fit(Matrix<double> x, Vector<double> y, IRegularization regularization);
-    Vector<double> Predict(Matrix<double> input);
+    void Fit(Matrix<T> x, Vector<T> y, IRegularization<T> regularization);
+    Vector<T> Predict(Matrix<T> input);
 
-    Vector<double> Coefficients { get; }
-    double Intercept { get; }
+    Vector<T> Coefficients { get; }
+    T Intercept { get; }
     bool HasIntercept { get; }
 }

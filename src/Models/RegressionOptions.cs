@@ -3,7 +3,7 @@
 /// <summary>
 /// Options for regression models.
 /// </summary>
-public class RegressionOptions
+public class RegressionOptions<T>
 {
     /// <summary>
     /// The percentage of the data to use for training. The rest will be used for testing.
@@ -13,7 +13,7 @@ public class RegressionOptions
     /// <summary>
     /// The normalization to use on the data before training and testing.
     /// </summary>
-    public INormalizer? Normalization { get; set; }
+    public INormalizer<T>? Normalization { get; set; }
 
     /// <summary>
     /// The outlier removal to use on the data before training and testing.

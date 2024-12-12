@@ -1,8 +1,8 @@
 ﻿namespace AiDotNet.FeatureSelectors;
 
-public class NoFeatureSelector : IFeatureSelector
+public class NoFeatureSelector<T> : IFeatureSelector<T>
 {
-    public Matrix<double> SelectFeatures(Matrix<double> allFeaturesMatrix)
+    public Matrix<T> SelectFeatures(Matrix<T> allFeaturesMatrix)
     {
         return allFeaturesMatrix;
     }

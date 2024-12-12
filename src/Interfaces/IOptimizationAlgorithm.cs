@@ -1,22 +1,22 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IOptimizationAlgorithm
+public interface IOptimizationAlgorithm<T>
 {
-    public OptimizationResult Optimize(
-        Matrix<double> XTrain,
-        Vector<double> yTrain,
-        Matrix<double> XVal,
-        Vector<double> yVal,
-        Matrix<double> XTest,
-        Vector<double> yTest,
+    public OptimizationResult<T> Optimize(
+        Matrix<T> XTrain,
+        Vector<T> yTrain,
+        Matrix<T> XVal,
+        Vector<T> yVal,
+        Matrix<T> XTest,
+        Vector<T> yTest,
         PredictionModelOptions modelOptions,
         OptimizationAlgorithmOptions optimizationOptions,
-        IRegression regressionMethod,
-        IRegularization regularization,
-        INormalizer normalizer,
-        NormalizationInfo normInfo,
-        IFitnessCalculator fitnessCalculator,
-        IFitDetector fitDetector);
+        IRegression<T> regressionMethod,
+        IRegularization<T> regularization,
+        INormalizer<T> normalizer,
+        NormalizationInfo<T> normInfo,
+        IFitnessCalculator<T> fitnessCalculator,
+        IFitDetector<T> fitDetector);
 
-    bool ShouldEarlyStop(List<OptimizationIteration> iterationHistory, OptimizationAlgorithmOptions options, IFitnessCalculator fitnessCalculator);
+    bool ShouldEarlyStop(List<OptimizationIterationInfo<T>> iterationHistory, OptimizationAlgorithmOptions options, IFitnessCalculator<T> fitnessCalculator);
 }

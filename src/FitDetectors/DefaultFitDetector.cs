@@ -1,18 +1,31 @@
-﻿public class DefaultFitDetector : IFitDetector
+﻿public class DefaultFitDetector<T> : IFitDetector<T>
 {
-    public FitDetectorResult DetectFit(
-        ErrorStats trainingErrorStats,
-        ErrorStats validationErrorStats,
-        ErrorStats testErrorStats,
-        BasicStats trainingBasicStats,
-        BasicStats validationBasicStats,
-        BasicStats testBasicStats)
-    {
-        var fitType = DetermineFitType(trainingErrorStats, validationErrorStats, testErrorStats);
-        var confidenceLevel = CalculateConfidenceLevel(trainingErrorStats, validationErrorStats, testErrorStats);
-        var recommendations = GenerateRecommendations(fitType, trainingErrorStats, validationErrorStats, testErrorStats);
+    private readonly INumericOperations<T> _numOps;
 
-        return new FitDetectorResult
+    public DefaultFitDetector()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+    }
+
+    public FitDetectorResult<T> DetectFit(
+        ErrorStats<T> trainingErrorStats,
+        ErrorStats<T> validationErrorStats,
+        ErrorStats<T> testErrorStats,
+        BasicStats<T> trainingBasicStats,
+        BasicStats<T> validationBasicStats,
+        BasicStats<T> testBasicStats,
+        BasicStats<T> trainingTargetStats,
+        BasicStats<T> validationTargetStats,
+        BasicStats<T> testTargetStats,
+        PredictionStats<T> trainingPredictionStats,
+        PredictionStats<T> validationPredictionStats,
+        PredictionStats<T> testPredictionStats)
+    {
+        var fitType = DetermineFitType(trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var confidenceLevel = CalculateConfidenceLevel(trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var recommendations = GenerateRecommendations(fitType);
+
+        return new FitDetectorResult<T>
         {
             FitType = fitType,
             ConfidenceLevel = confidenceLevel,
@@ -20,32 +33,33 @@
         };
     }
 
-    private FitType DetermineFitType(ErrorStats training, ErrorStats validation, ErrorStats test)
+    private FitType DetermineFitType(PredictionStats<T> training, PredictionStats<T> validation, PredictionStats<T> test)
     {
-        // Implement logic to determine fit type based on various metrics
-        // This is a simplified example, you should expand on this
-        if (training.R2 > 0.9 && validation.R2 > 0.9 && test.R2 > 0.9)
+        T threshold09 = _numOps.FromDouble(0.9);
+        T threshold07 = _numOps.FromDouble(0.7);
+        T threshold05 = _numOps.FromDouble(0.5);
+        T threshold02 = _numOps.FromDouble(0.2);
+
+        if (_numOps.GreaterThan(training.R2, threshold09) && _numOps.GreaterThan(validation.R2, threshold09) && _numOps.GreaterThan(test.R2, threshold09))
             return FitType.Good;
-        if (training.R2 > 0.9 && validation.R2 < 0.7)
+        if (_numOps.GreaterThan(training.R2, threshold09) && _numOps.LessThan(validation.R2, threshold07))
             return FitType.Overfit;
-        if (training.R2 < 0.7 && validation.R2 < 0.7)
+        if (_numOps.LessThan(training.R2, threshold07) && _numOps.LessThan(validation.R2, threshold07))
             return FitType.Underfit;
-        if (Math.Abs(training.R2 - validation.R2) > 0.2)
+        if (_numOps.GreaterThan(_numOps.Abs(_numOps.Subtract(training.R2, validation.R2)), threshold02))
             return FitType.HighVariance;
-        if (training.R2 < 0.5 && validation.R2 < 0.5 && test.R2 < 0.5)
+        if (_numOps.LessThan(training.R2, threshold05) && _numOps.LessThan(validation.R2, threshold05) && _numOps.LessThan(test.R2, threshold05))
             return FitType.HighBias;
         
         return FitType.Unstable;
     }
 
-    private double CalculateConfidenceLevel(ErrorStats training, ErrorStats validation, ErrorStats test)
+    private T CalculateConfidenceLevel(PredictionStats<T> training, PredictionStats<T> validation, PredictionStats<T> test)
     {
-        // Implement logic to calculate confidence level
-        // This is a placeholder implementation
-        return (training.R2 + validation.R2 + test.R2) / 3;
+        return _numOps.Divide(_numOps.Add(_numOps.Add(training.R2, validation.R2), test.R2), _numOps.FromDouble(3));
     }
 
-    private List<string> GenerateRecommendations(FitType fitType, ErrorStats training, ErrorStats validation, ErrorStats test)
+    private List<string> GenerateRecommendations(FitType fitType)
     {
         var recommendations = new List<string>();
 

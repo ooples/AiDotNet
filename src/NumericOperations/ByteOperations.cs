@@ -23,4 +23,8 @@ public class ByteOperations : INumericOperations<byte>
     public bool LessThanOrEquals(byte a, byte b) => a <= b;
     public int ToInt32(byte value) => value;
     public byte Round(byte value) => value;
+    public byte MinValue => byte.MinValue;
+    public byte MaxValue => byte.MaxValue;
+    public bool IsNaN(byte value) => false;
+    public bool IsInfinity(byte value) => false;
 }

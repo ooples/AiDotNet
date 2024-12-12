@@ -1,13 +1,13 @@
 ﻿namespace AiDotNet.Regularization;
 
-public class NoRegularization : IRegularization
+public class NoRegularization<T> : IRegularization<T>
 {
-    public Matrix<double> RegularizeMatrix(Matrix<double> featuresMatrix)
+    public Matrix<T> RegularizeMatrix(Matrix<T> featuresMatrix)
     {
         return featuresMatrix;
     }
 
-    public Vector<double> RegularizeCoefficients(Vector<double> coefficients)
+    public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
     {
         return coefficients;
     }
