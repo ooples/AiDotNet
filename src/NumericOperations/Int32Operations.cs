@@ -14,4 +14,13 @@ public class Int32Operations : INumericOperations<int>
     public bool GreaterThan(int a, int b) => a > b;
     public bool LessThan(int a, int b) => a < b;
     public int Abs(int value) => Math.Abs(value);
+    public int Square(int value) => Multiply(value, value);
+    public int Exp(int value) => (int)Math.Round(Math.Exp(value));
+    public bool Equals(int a, int b) => a == b;
+    public int Power(int baseValue, int exponent) => (int)Math.Pow(baseValue, exponent);
+    public int Log(int value) => (int)Math.Log(value);
+    public bool GreaterThanOrEquals(int a, int b) => a >= b;
+    public bool LessThanOrEquals(int a, int b) => a <= b;
+    public int ToInt32(int value) => value;
+    public int Round(int value) => value;
 }

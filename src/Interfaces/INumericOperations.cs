@@ -14,4 +14,13 @@ public interface INumericOperations<T>
     bool GreaterThan(T a, T b);
     bool LessThan(T a, T b);
     T Abs(T value);
+    T Square(T value);
+    T Exp(T value);
+    bool Equals(T a, T b);
+    T Power(T baseValue, T exponent);
+    T Log(T value);
+    bool GreaterThanOrEquals(T a, T b);
+    bool LessThanOrEquals(T a, T b);
+    int ToInt32(T value);
+    T Round(T value);
 }

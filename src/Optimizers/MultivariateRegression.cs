@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Regression;
+﻿namespace AiDotNet.Optimizers;
 
 public sealed class MultivariateRegression : IRegression<double[], double[]>
 {
@@ -46,7 +46,7 @@ public sealed class MultivariateRegression : IRegression<double[], double[]>
         // Perform the actual work necessary to create the prediction and metrics models
         var (trainingInputs, trainingOutputs, oosInputs, oosOutputs) =
             PrepareData(inputs, outputs, trainingSize, RegressionOptions.Normalization);
-        var (cleanedInputs, cleanedOutputs) = 
+        var (cleanedInputs, cleanedOutputs) =
             RegressionOptions.OutlierRemoval?.RemoveOutliers(trainingInputs, trainingOutputs) ?? (trainingInputs, trainingOutputs);
         Fit(cleanedInputs, cleanedOutputs);
         Predictions = Transform(oosInputs);
@@ -112,7 +112,7 @@ public sealed class MultivariateRegression : IRegression<double[], double[]>
     }
 
 
-    internal override (double[][] trainingInputs, double[][] trainingOutputs, double[][] oosInputs, double[][] oosOutputs) 
+    internal override (double[][] trainingInputs, double[][] trainingOutputs, double[][] oosInputs, double[][] oosOutputs)
         PrepareData(double[][] inputs, double[][] outputs, int trainingSize, INormalization? normalization)
     {
         return normalization?.PrepareData(inputs, outputs, trainingSize) ?? NormalizationHelper.SplitData(inputs, outputs, trainingSize);

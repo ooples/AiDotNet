@@ -14,4 +14,11 @@ public class FloatOperations : INumericOperations<float>
     public bool GreaterThan(float a, float b) => a > b;
     public bool LessThan(float a, float b) => a < b;
     public float Abs(float value) => Math.Abs(value);
+    public float Square(float value) => Multiply(value, value);
+    public float Exp(float value) => (float)Math.Exp(value);
+    public bool Equals(float a, float b) => a == b;
+    public float Power(float baseValue, float exponent) => (float)Math.Pow(baseValue, exponent);
+    public float Log(float value) => (float)Math.Log(value);
+    public bool GreaterThanOrEquals(float a, float b) => a >= b;
+    public bool LessThanOrEquals(float a, float b) => a <= b;
 }

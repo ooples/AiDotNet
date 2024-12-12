@@ -24,6 +24,12 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return GetEnumerator();
     }
 
+    public T Variance()
+    {
+        T mean = Mean();
+        return this.Select(x => ops.Square(ops.Subtract(x, mean))).Mean();
+    }
+
     public Vector<T> Where(Func<T, bool> predicate)
     {
         return new Vector<T>(data.Where(predicate), ops);

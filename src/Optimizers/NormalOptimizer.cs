@@ -2,7 +2,7 @@
 
 public class NormalOptimizer : IOptimizationAlgorithm
 {
-    private readonly Random _random = new Random();
+    private readonly Random _random = new();
 
     public OptimizationResult Optimize(
     Matrix<double> XTrain,
@@ -25,10 +25,14 @@ public class NormalOptimizer : IOptimizationAlgorithm
         double bestFitness = optimizationOptions.MaximizeFitness ? double.MinValue : double.MaxValue;
         var fitnessHistory = new List<double>();
         var iterationHistory = new List<OptimizationIteration>();
+        var bestSelectedFeatures = new List<Vector<double>>();
         FitDetectorResult? bestFitDetectionResult = null;
         Vector<double>? bestTrainingPredictions = null;
         Vector<double>? bestValidationPredictions = null;
         Vector<double>? bestTestPredictions = null;
+        Matrix<double>? bestTrainingFeatures = null;
+        Matrix<double>? bestValidationFeatures = null;
+        Matrix<double>? bestTestFeatures = null;
         ErrorStats? bestTrainingErrorStats = null;
         ErrorStats? bestValidationErrorStats = null;
         ErrorStats? bestTestErrorStats = null;
@@ -71,11 +75,13 @@ public class NormalOptimizer : IOptimizationAlgorithm
             // Detect fit type
             var fitDetectionResult = fitDetector.DetectFit(trainingErrorStats, validationErrorStats, testErrorStats, trainingBasicStats, validationBasicStats, testBasicStats);
 
+            // Calculate fitness score
+            double currentFitnessScore = fitnessCalculator.CalculateFitnessScore(validationErrorStats, validationBasicStats, yVal, validationPredictions, XValSubset);
+
             // Update best solution if necessary
-            if ((optimizationOptions.MaximizeFitness && validationBasicStats.R2 > bestFitness) ||
-                (!optimizationOptions.MaximizeFitness && validationBasicStats.R2 < bestFitness))
+            if (fitnessCalculator.IsBetterFitness(currentFitnessScore, bestFitness))
             {
-                bestFitness = validationBasicStats.R2;
+                bestFitness = currentFitnessScore;
                 bestSolution = denormalizedCoefficients;
                 bestIntercept = denormalizedIntercept;
                 bestFitDetectionResult = fitDetectionResult;
@@ -88,18 +94,22 @@ public class NormalOptimizer : IOptimizationAlgorithm
                 bestTrainingBasicStats = trainingBasicStats;
                 bestValidationBasicStats = validationBasicStats;
                 bestTestBasicStats = testBasicStats;
+                bestSelectedFeatures = [.. selectedFeatures.Select(XTrain.GetColumn)];
+                bestTestFeatures = XTestSubset;
+                bestTrainingFeatures = XTrainSubset;
+                bestValidationFeatures = XValSubset;
             }
 
-            fitnessHistory.Add(validationBasicStats.R2);
+            fitnessHistory.Add(currentFitnessScore);
             iterationHistory.Add(new OptimizationIteration
             {
                 Iteration = iteration,
-                Fitness = validationBasicStats.R2,
+                Fitness = currentFitnessScore,
                 FitDetectionResult = fitDetectionResult
             });
 
             // Check for early stopping
-            if (optimizationOptions.UseEarlyStopping && ShouldEarlyStop(iterationHistory, optimizationOptions))
+            if (optimizationOptions.UseEarlyStopping && ShouldEarlyStop(iterationHistory, optimizationOptions, fitnessCalculator))
             {
                 break;
             }
@@ -107,26 +117,46 @@ public class NormalOptimizer : IOptimizationAlgorithm
 
         return new OptimizationResult
         {
-            Regression = 
+            BestCoefficients = bestSolution,
+            BestIntercept = bestIntercept,
             FitnessScore = bestFitness,
             Iterations = iterationHistory.Count,
             FitnessHistory = new Vector<double>([.. fitnessHistory]),
-            TrainingPredictions = bestTrainingPredictions,
-            ValidationPredictions = bestValidationPredictions,
-            TestPredictions = bestTestPredictions,
-            FitDetectionResult = bestFitDetectionResult,
-            TrainingErrorStats = bestTrainingErrorStats,
-            ValidationErrorStats = bestValidationErrorStats,
-            TestErrorStats = bestTestErrorStats,
-            TrainingBasicStats = bestTrainingBasicStats,
-            ValidationBasicStats = bestValidationBasicStats,
-            TestBasicStats = bestTestBasicStats,
-            LowerBounds = lowerBounds,
-            UpperBounds = upperBounds
+            SelectedFeatures = bestSelectedFeatures,
+    
+            TrainingResult = new OptimizationResult.DatasetResult
+            {
+                Predictions = bestTrainingPredictions ?? Vector<double>.Empty(),
+                ErrorStats = bestTrainingErrorStats ?? ErrorStats.Empty(),
+                BasicStats = bestTrainingBasicStats ?? BasicStats.Empty(),
+                X = bestTrainingFeatures ?? Matrix<double>.Empty(),
+                Y = yTrain
+            },
+            ValidationResult = new OptimizationResult.DatasetResult
+            {
+                Predictions = bestValidationPredictions ?? Vector<double>.Empty(),
+                ErrorStats = bestValidationErrorStats ?? ErrorStats.Empty(),
+                BasicStats = bestValidationBasicStats ?? BasicStats.Empty(),
+                X = bestValidationFeatures ?? Matrix<double>.Empty(),
+                Y = yVal
+            },
+            TestResult = new OptimizationResult.DatasetResult
+            {
+                Predictions = bestTestPredictions ?? Vector<double>.Empty(),
+                ErrorStats = bestTestErrorStats ?? ErrorStats.Empty(),
+                BasicStats = bestTestBasicStats ?? BasicStats.Empty(),
+                X = bestTestFeatures ?? Matrix<double>.Empty(),
+                Y = yTest
+            },
+    
+            FitDetectionResult = bestFitDetectionResult ?? new FitDetectorResult(),
+    
+            CoefficientLowerBounds = Vector<double>.Empty(),
+            CoefficientUpperBounds = Vector<double>.Empty()
         };
     }
 
-    public bool ShouldEarlyStop(List<OptimizationIteration> iterationHistory, OptimizationAlgorithmOptions options)
+    public bool ShouldEarlyStop(List<OptimizationIteration> iterationHistory, OptimizationAlgorithmOptions options, IFitnessCalculator fitnessCalculator)
     {
         if (iterationHistory.Count < options.EarlyStoppingPatience)
         {
@@ -135,16 +165,21 @@ public class NormalOptimizer : IOptimizationAlgorithm
 
         var recentIterations = iterationHistory.Skip(Math.Max(0, iterationHistory.Count - options.EarlyStoppingPatience)).ToList();
 
+        // Find the best fitness score
+        double bestFitness = iterationHistory[0].Fitness;
+        foreach (var iteration in iterationHistory)
+        {
+            if (fitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
+            {
+                bestFitness = iteration.Fitness;
+            }
+        }
+
         // Check for improvement in recent iterations
-        var bestFitness = options.MaximizeFitness ? 
-            iterationHistory.Max(i => i.Fitness) : 
-            iterationHistory.Min(i => i.Fitness);
-    
         bool noImprovement = true;
         foreach (var iteration in recentIterations)
         {
-            if ((options.MaximizeFitness && iteration.Fitness > bestFitness + options.EarlyStoppingMinDelta) ||
-                (!options.MaximizeFitness && iteration.Fitness < bestFitness - options.EarlyStoppingMinDelta))
+            if (fitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
             {
                 noImprovement = false;
                 break;
@@ -171,6 +206,6 @@ public class NormalOptimizer : IOptimizationAlgorithm
     private List<int> RandomlySelectFeatures(int totalFeatures, int minFeatures, int maxFeatures)
     {
         int numFeatures = _random.Next(minFeatures, Math.Min(maxFeatures, totalFeatures) + 1);
-        return Enumerable.Range(0, totalFeatures).OrderBy(x => _random.Next()).Take(numFeatures).ToList();
+        return [.. Enumerable.Range(0, totalFeatures).OrderBy(x => _random.Next()).Take(numFeatures)];
     }
 }

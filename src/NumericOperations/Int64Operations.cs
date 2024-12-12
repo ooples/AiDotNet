@@ -14,4 +14,13 @@ public class Int64Operations : INumericOperations<long>
     public bool GreaterThan(long a, long b) => a > b;
     public bool LessThan(long a, long b) => a < b;
     public long Abs(long value) => Math.Abs(value);
+    public long Square(long value) => Multiply(value, value);
+    public long Exp(long value) => (long)Math.Round(Math.Exp(value));
+    public bool Equals(long a, long b) => a == b;
+    public long Power(long baseValue, long exponent) => (long)Math.Pow(baseValue, exponent);
+    public long Log(long value) => (long)Math.Log(value);
+    public bool GreaterThanOrEquals(long a, long b) => a >= b;
+    public bool LessThanOrEquals(long a, long b) => a <= b;
+    public int ToInt32(long value) => (int)value;
+    public long Round(long value) => value;
 }

@@ -10,4 +10,6 @@ public interface IFitnessCalculator
         Matrix<double> features);
 
     bool IsHigherScoreBetter { get; }
+
+    bool IsBetterFitness(double currentFitness, double bestFitness);
 }

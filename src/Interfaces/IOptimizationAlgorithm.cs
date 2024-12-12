@@ -18,5 +18,5 @@ public interface IOptimizationAlgorithm
         IFitnessCalculator fitnessCalculator,
         IFitDetector fitDetector);
 
-    bool ShouldEarlyStop(List<OptimizationIteration> iterationHistory, OptimizationAlgorithmOptions options);
+    bool ShouldEarlyStop(List<OptimizationIteration> iterationHistory, OptimizationAlgorithmOptions options, IFitnessCalculator fitnessCalculator);
 }

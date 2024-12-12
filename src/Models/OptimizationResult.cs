@@ -7,7 +7,7 @@ public class OptimizationResult
     public double FitnessScore { get; set; }
     public int Iterations { get; set; }
     public Vector<double> FitnessHistory { get; set; } = Vector<double>.Empty();
-    public List<int> SelectedFeatures { get; set; } = [];
+    public List<Vector<double>> SelectedFeatures { get; set; } = [];
     
     public DatasetResult TrainingResult { get; set; } = new();
     public DatasetResult ValidationResult { get; set; } = new();
@@ -23,7 +23,6 @@ public class OptimizationResult
         public Matrix<double> X { get; set; } = Matrix<double>.Empty();
         public Vector<double> Y { get; set; } = Vector<double>.Empty();
         public Vector<double> Predictions { get; set; } = Vector<double>.Empty();
-        public Dictionary<string, double> Metrics { get; set; } = new();
         public ErrorStats ErrorStats { get; set; } = ErrorStats.Empty();
         public BasicStats BasicStats { get; set; } = BasicStats.Empty();
     }

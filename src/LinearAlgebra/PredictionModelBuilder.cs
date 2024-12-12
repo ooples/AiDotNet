@@ -1,15 +1,14 @@
-﻿using AiDotNet.FeatureSelectors;
-using AiDotNet.FitDetectors;
-using AiDotNet.FitnessCalculators;
-using AiDotNet.Optimizers;
-using AiDotNet.Regularization;
+﻿global using AiDotNet.FeatureSelectors;
+global using AiDotNet.FitnessCalculators;
+global using AiDotNet.Optimizers;
+global using AiDotNet.Regularization;
 
 namespace AiDotNet.LinearAlgebra;
 
-public class PredictionModelBuilder
+public class PredictionModelBuilder : IPredictionModelBuilder
 {
     private readonly PredictionModelOptions _options;
-    private OptimizationAlgorithmOptions _optimizationOptions { get; set; }
+    private OptimizationAlgorithmOptions? _optimizationOptions;
     private IFeatureSelector? _featureSelector;
     private INormalizer? _normalizer;
     private IRegularization? _regularization;
@@ -22,53 +21,52 @@ public class PredictionModelBuilder
     public PredictionModelBuilder(PredictionModelOptions? options = null)
     {
         _options = options ?? new PredictionModelOptions();
-        _optimizationOptions = new OptimizationAlgorithmOptions();
     }
 
-    public PredictionModelBuilder WithFeatureSelector(IFeatureSelector selector)
+    public IPredictionModelBuilder WithFeatureSelector(IFeatureSelector selector)
     {
         _featureSelector = selector;
         return this;
     }
 
-    public PredictionModelBuilder WithNormalizer(INormalizer normalizer)
+    public IPredictionModelBuilder WithNormalizer(INormalizer normalizer)
     {
         _normalizer = normalizer;
         return this;
     }
 
-    public PredictionModelBuilder WithRegularization(IRegularization regularization)
+    public IPredictionModelBuilder WithRegularization(IRegularization regularization)
     {
         _regularization = regularization;
         return this;
     }
 
-    public PredictionModelBuilder WithFitnessCalculator(IFitnessCalculator calculator)
+    public IPredictionModelBuilder WithFitnessCalculator(IFitnessCalculator calculator)
     {
         _fitnessCalculator = calculator;
         return this;
     }
 
-    public PredictionModelBuilder WithFitDetector(IFitDetector detector)
+    public IPredictionModelBuilder WithFitDetector(IFitDetector detector)
     {
         _fitDetector = detector;
         return this;
     }
 
-    public PredictionModelBuilder WithRegression(IRegression regression)
+    public IPredictionModelBuilder WithRegression(IRegression regression)
     {
         _regression = regression;
         return this;
     }
 
-    public PredictionModelBuilder WithOptimizer(IOptimizationAlgorithm optimizationAlgorithm, OptimizationAlgorithmOptions optimizationOptions)
+    public IPredictionModelBuilder WithOptimizer(IOptimizationAlgorithm optimizationAlgorithm, OptimizationAlgorithmOptions? optimizationOptions = null)
     {
         _optimizer = optimizationAlgorithm;
         _optimizationOptions = optimizationOptions;
         return this;
     }
 
-    public PredictionModelBuilder WithDataPreprocessor(IDataPreprocessor dataPreprocessor)
+    public IPredictionModelBuilder WithDataPreprocessor(IDataPreprocessor dataPreprocessor)
     {
         _dataPreprocessor = dataPreprocessor;
         return this;
@@ -77,16 +75,19 @@ public class PredictionModelBuilder
     public PredictionModelResult Build(Matrix<double> x, Vector<double> y)
     {
         // Validate inputs
-        if (x == null || y == null)
-            throw new ArgumentNullException("Inputs and outputs can't be null");
+        if (x == null)
+            throw new ArgumentNullException(nameof(x), "Input features matrix can't be null");
+        if (y == null)
+            throw new ArgumentNullException(nameof(y), "Output vector can't be null");
         if (x.Rows != y.Length)
-            throw new ArgumentException("Number of rows in features matrix must match length of actual values vector");
+            throw new ArgumentException("Number of rows in features matrix must match length of actual values vector", nameof(x));
         if (_regression == null)
-            throw new ArgumentException("Regression method must be specified");
+            throw new InvalidOperationException("Regression method must be specified");
 
         // Use defaults for these interfaces if they aren't set
         var normalizer = _normalizer ?? new NoNormalizer();
         var optimizer = _optimizer ?? new NormalOptimizer();
+        var optimizerOptions = _optimizationOptions ?? new OptimizationAlgorithmOptions();
         var featureSelector = _featureSelector ?? new NoFeatureSelector();
         var fitDetector = _fitDetector ?? new DefaultFitDetector();
         var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator();
@@ -100,32 +101,25 @@ public class PredictionModelBuilder
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         // Optimize the model
-        var optimizationResult = optimizer.Optimize(XTrain, yTrain, XVal, yVal, XTest, yTest, _options, _optimizationOptions, _regression, regularization, normalizer, 
+        var optimizationResult = optimizer.Optimize(XTrain, yTrain, XVal, yVal, XTest, yTest, _options, optimizerOptions, _regression, regularization, normalizer, 
             normInfo, fitnessCalculator, fitDetector);
 
         return new PredictionModelResult
         {
             Model = _regression,
-            TrainingData = (XTrain, yTrain),
-            ValidationData = (XVal, yVal),
-            TestingData = (XTest, yTest),
-            TrainingFitness = optimizationResult.TrainingMetrics["R2"],  // Assuming R2 is used as fitness
-            ValidationFitness = optimizationResult.ValidationMetrics["R2"],
-            TestingFitness = optimizationResult.TestMetrics["R2"],
-            FitDetectionResult = optimizationResult.FitDetectionResult,
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo
         };
     }
 
-    public Vector<double> Predict(Matrix<double> newData, PredictionModelResult model)
+    public Vector<double> Predict(Matrix<double> newData, PredictionModelResult modelResult)
     {
-        return model.Predict(newData);
+        return modelResult.Predict(newData);
     }
 
-    public void SaveModel(PredictionModelResult model, string filePath)
+    public void SaveModel(PredictionModelResult modelResult, string filePath)
     {
-        model.SaveModel(filePath);
+        modelResult.SaveModel(filePath);
     }
 
     public PredictionModelResult LoadModel(string filePath)
@@ -133,9 +127,9 @@ public class PredictionModelBuilder
         return PredictionModelResult.LoadModel(filePath);
     }
 
-    public string SerializeModel(PredictionModelResult model)
+    public string SerializeModel(PredictionModelResult modelResult)
     {
-        return model.SerializeToJson();
+        return modelResult.SerializeToJson();
     }
 
     public PredictionModelResult DeserializeModel(string jsonString)

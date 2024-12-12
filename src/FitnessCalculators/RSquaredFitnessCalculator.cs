@@ -13,6 +13,6 @@ public class RSquaredFitnessCalculator : FitnessCalculatorBase
         Vector<double> predictedValues,
         Matrix<double> features)
     {
-        return errorStats.R2;
+        return basicStats.R2;
     }
 }
