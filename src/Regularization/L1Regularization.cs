@@ -5,15 +5,14 @@ public class L1Regularization<T> : IRegularization<T>
     private readonly INumericOperations<T> _numOps;
     private readonly RegularizationOptions _options;
 
-    public L1Regularization(INumericOperations<T> numOps, RegularizationOptions options)
+    public L1Regularization(RegularizationOptions? options = null)
     {
-        _numOps = numOps;
-        _options = options;
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _options = options ?? new RegularizationOptions();
     }
 
     public Matrix<T> RegularizeMatrix(Matrix<T> matrix)
     {
-        // L1 regularization doesn't modify the matrix directly
         return matrix;
     }
 

@@ -5,10 +5,10 @@ public class L2Regularization<T> : IRegularization<T>
     private readonly INumericOperations<T> _numOps;
     private readonly RegularizationOptions _options;
 
-    public L2Regularization(INumericOperations<T> numOps, RegularizationOptions options)
+    public L2Regularization(RegularizationOptions? options = null)
     {
-        _numOps = numOps;
-        _options = options;
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _options = options ?? new RegularizationOptions();
     }
 
     public Matrix<T> RegularizeMatrix(Matrix<T> matrix)

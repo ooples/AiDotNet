@@ -1,17 +1,14 @@
 ﻿namespace AiDotNet.OutlierRemoval;
 
-/// <summary>
-/// Removes outliers from the data using the threshold method. This method is not recommended for data sets with less than 15 data points.
-/// </summary>
 public class ThresholdOutlierRemoval<T> : IOutlierRemoval<T>
 {
     private readonly T _threshold;
     private readonly INumericOperations<T> _numOps;
 
-    public ThresholdOutlierRemoval(T threshold)
+    public ThresholdOutlierRemoval(T? threshold = default)
     {
-        _threshold = threshold;
         _numOps = MathHelper.GetNumericOperations<T>();
+        _threshold = threshold ?? GetDefaultThreshold();
     }
 
     public (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs)
@@ -41,5 +38,10 @@ public class ThresholdOutlierRemoval<T> : IOutlierRemoval<T>
         }
 
         return (new Matrix<T>(cleanedInputs, _numOps), new Vector<T>(cleanedOutputs, _numOps));
+    }
+
+    private T GetDefaultThreshold()
+    {
+        return _numOps.FromDouble(3.0);
     }
 }

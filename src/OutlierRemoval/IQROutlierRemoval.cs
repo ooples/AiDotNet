@@ -5,10 +5,10 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
     private readonly T _iqrMultiplier;
     private readonly INumericOperations<T> _numOps;
 
-    public IQROutlierRemoval(T iqrMultiplier)
+    public IQROutlierRemoval(T? iqrMultiplier = default)
     {
-        _iqrMultiplier = iqrMultiplier;
         _numOps = MathHelper.GetNumericOperations<T>();
+        _iqrMultiplier = iqrMultiplier ?? GetDefaultMultiplier();
     }
 
     public (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs)
@@ -44,5 +44,10 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
         }
 
         return (new Matrix<T>(cleanedInputs, _numOps), new Vector<T>(cleanedOutputs, _numOps));
+    }
+
+    private T GetDefaultMultiplier()
+    {
+        return _numOps.FromDouble(1.5);
     }
 }
