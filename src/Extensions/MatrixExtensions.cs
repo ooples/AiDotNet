@@ -16,4 +16,22 @@ public static class MatrixExtensions
 
         return newMatrix;
     }
+
+    public static Vector<T> GetSubColumn<T>(this Matrix<T> matrix, int columnIndex, int startRow, int length)
+    {
+        if (columnIndex < 0 || columnIndex >= matrix.Columns)
+            throw new ArgumentOutOfRangeException(nameof(columnIndex));
+        if (startRow < 0 || startRow >= matrix.Rows)
+            throw new ArgumentOutOfRangeException(nameof(startRow));
+        if (length < 0 || startRow + length > matrix.Rows)
+            throw new ArgumentOutOfRangeException(nameof(length));
+
+        var result = new Vector<T>(length, MathHelper.GetNumericOperations<T>());
+        for (int i = 0; i < length; i++)
+        {
+            result[i] = matrix[startRow + i, columnIndex];
+        }
+
+        return result;
+    }
 }

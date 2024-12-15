@@ -1,16 +1,17 @@
-﻿public abstract class BaseRegression<T> : IRegression<T>
+﻿public abstract class RegressionBase<T> : IRegression<T>
 {
-    protected INumericOperations<T> NumOps;
-    protected RegressionOptions Options;
+    protected INumericOperations<T> NumOps { get; private set; }
+    protected RegressionOptions<T> Options { get; private set; }
 
     public Vector<T> Coefficients { get; protected set; }
     public T Intercept { get; protected set; }
+
     public bool HasIntercept => Options.UseIntercept;
 
-    protected BaseRegression(INumericOperations<T> numOps, RegressionOptions options)
+    protected RegressionBase(RegressionOptions<T>? options = null)
     {
-        NumOps = numOps;
-        Options = options;
+        NumOps = MathHelper.GetNumericOperations<T>();
+        Options = options ?? new RegressionOptions<T>();
         Coefficients = new Vector<T>(0, NumOps);
         Intercept = NumOps.Zero;
     }
@@ -31,13 +32,26 @@
 
     protected Vector<T> SolveSystem(Matrix<T> a, Vector<T> b)
     {
-        return Options.DecompositionMethod switch
+        var decomposition = Options.DecompositionMethod;
+
+        if (decomposition != null)
         {
-            MatrixDecomposition.Svd => a.SvdSolve(b),
-            MatrixDecomposition.Qr => a.QrSolve(b),
-            MatrixDecomposition.Cholesky => a.CholeskySolve(b),
-            MatrixDecomposition.Lu => a.LuSolve(b),
-            _ => a.Solve(b),// Default to normal equation
-        };
+            return decomposition.Solve(b);
+        }
+        else
+        {
+            // Use normal equation if specifically selected or as a fallback
+            return SolveNormalEquation(a, b);
+        }
+    }
+
+    private Vector<T> SolveNormalEquation(Matrix<T> a, Vector<T> b)
+    {
+        var aTa = a.Transpose().Multiply(a);
+        var aTb = a.Transpose().Multiply(b);
+
+        // Use LU decomposition for solving the normal equation
+        var normalDecomposition = new NormalDecomposition<T>(aTa);
+        return normalDecomposition.Solve(aTb);
     }
 }

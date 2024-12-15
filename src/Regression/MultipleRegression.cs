@@ -1,9 +1,11 @@
 ﻿namespace AiDotNet.Regression;
 
-public class MultipleRegression<T> : BaseRegression<T>
+public class MultipleRegression<T> : RegressionBase<T>
 {
-    public MultipleRegression(INumericOperations<T> numOps, RegressionOptions options)
-        : base(numOps, options) { }
+    public MultipleRegression(RegressionOptions<T>? options = null)
+        : base(options)
+    {
+    }
 
     public override void Fit(Matrix<T> x, Vector<T> y, IRegularization<T> regularization)
     {
@@ -11,7 +13,7 @@ public class MultipleRegression<T> : BaseRegression<T>
             x = x.AddConstantColumn(NumOps.One);
 
         var xTx = x.Transpose().Multiply(x);
-        var regularizedXTx = xTx.Add(regularization.GetRegularizationMatrix(xTx.Rows, NumOps.FromDouble(Options.RegularizationStrength)));
+        var regularizedXTx = xTx.Add(regularization.RegularizeMatrix(xTx));
         var xTy = x.Transpose().Multiply(y);
 
         var solution = SolveSystem(regularizedXTx, xTy);

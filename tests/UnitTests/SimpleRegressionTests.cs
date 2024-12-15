@@ -31,7 +31,7 @@ public class SimpleRegressionTests
         // Act
       
         // Assert
-        Assert.Throws<ArgumentNullException>(() => new SimpleRegression(null, _outputs));
+        Assert.Throws<ArgumentNullException>(() => new SimpleRegression<double>(null, _outputs));
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class SimpleRegressionTests
         // Act
 
         // Assert
-        Assert.Throws<ArgumentNullException>(() => new SimpleRegression(_inputs, null));
+        Assert.Throws<ArgumentNullException>(() => new SimpleRegression<double>(_inputs, null));
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class SimpleRegressionTests
         // Act
 
         // Assert
-        Assert.Throws<ArgumentException>(() => new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions() { TrainingPctSize = tooBigTrainingSize }));
+        Assert.Throws<ArgumentException>(() => new SimpleRegression<double>(_inputs, _outputs, new SimpleRegressionOptions() { TrainingPctSize = tooBigTrainingSize }));
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class SimpleRegressionTests
         // Act
 
         // Assert
-        Assert.Throws<ArgumentException>(() => new SimpleRegression(_inputs, _outputs, new SimpleRegressionOptions() { TrainingPctSize = tooSmallTrainingSize }));
+        Assert.Throws<ArgumentException>(() => new SimpleRegression<double>(_inputs, _outputs, new SimpleRegressionOptions() { TrainingPctSize = tooSmallTrainingSize }));
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class SimpleRegressionTests
         var expectedPredictions = new double[] { 3, 4, 5, 6, 7, 8, 9, 10 };
 
         // Act
-        var simpleRegression = new SimpleRegression(_inputs, _outputs);
+        var simpleRegression = new SimpleRegression<double>(_inputs, _outputs);
         var actualPredictions = simpleRegression.Predictions;
       
         // Assert

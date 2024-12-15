@@ -142,6 +142,59 @@ public class Matrix<T> : MatrixBase<T>
         return matrix;
     }
 
+    public static Matrix<T> CreateIdentity(int size, INumericOperations<T>? numericOperations = null)
+    {
+        var numOp = numericOperations ?? MathHelper.GetNumericOperations<T>();
+        var identity = new Matrix<T>(size, size, numOp);
+        for (int i = 0; i < size; i++)
+        {
+            identity[i, i] = numOp.One;
+        }
+
+        return identity;
+    }
+
+    public static Matrix<T> CreateRandom(int rows, int columns, INumericOperations<T>? numericOperations = null)
+    {
+        var numOp = numericOperations ?? MathHelper.GetNumericOperations<T>();
+        Matrix<T> matrix = new(rows, columns, numOp);
+        Random random = new();
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                matrix[i, j] = numOp.FromDouble(random.NextDouble());
+            }
+        }
+
+        return matrix;
+    }
+
+    public static Matrix<T> BlockDiagonal(params Matrix<T>[] matrices)
+    {
+        int totalRows = matrices.Sum(m => m.Rows);
+        int totalCols = matrices.Sum(m => m.Columns);
+        Matrix<T> result = new(totalRows, totalCols);
+
+        int rowOffset = 0;
+        int colOffset = 0;
+        foreach (var matrix in matrices)
+        {
+            for (int i = 0; i < matrix.Rows; i++)
+            {
+                for (int j = 0; j < matrix.Columns; j++)
+                {
+                    result[rowOffset + i, colOffset + j] = matrix[i, j];
+                }
+            }
+            rowOffset += matrix.Rows;
+            colOffset += matrix.Columns;
+        }
+
+        return result;
+    }
+
     public new static Matrix<T> Empty()
     {
         return new Matrix<T>(0, 0);
@@ -221,18 +274,18 @@ public static class Matrix
         return new Matrix<double>(rows, columns, new DoubleOperations());
     }
 
-    public static Matrix<Complex> CreateComplexMatrix(int rows, int columns)
+    public static Matrix<Complex<T>> CreateComplexMatrix<T>(int rows, int columns)
     {
-        return new Matrix<Complex>(rows, columns, new ComplexOperations());
+        return new Matrix<Complex<T>>(rows, columns);
     }
 
-    public static Matrix<double> CreateDoubleMatrix(IEnumerable<Vector<double>> values)
+    public static Matrix<double> CreateDoubleMatrix(IEnumerable<IEnumerable<double>> values)
     {
         return new Matrix<double>(values, new DoubleOperations());
     }
 
-    public static Matrix<Complex> CreateComplexMatrix(IEnumerable<Vector<Complex>> values)
+    public static Matrix<Complex<T>> CreateComplexMatrix<T>(IEnumerable<IEnumerable<Complex<T>>> values)
     {
-        return new Matrix<Complex>(values, new ComplexOperations());
+        return new Matrix<Complex<T>>(values);
     }
 }

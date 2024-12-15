@@ -1,9 +1,9 @@
 ﻿namespace AiDotNet.Regression;
 
-public class MultivariateRegression<T> : BaseRegression<T>
+public class MultivariateRegression<T> : RegressionBase<T>
 {
-    public MultivariateRegression(INumericOperations<T> numOps, RegressionOptions options)
-        : base(numOps, options)
+    public MultivariateRegression(RegressionOptions<T>? options = null)
+        : base(options)
     {
     }
 

@@ -2,15 +2,15 @@
 
 namespace AiDotNet.Regression;
 
-public class WeightedRegression<T> : BaseRegression<T>
+public class WeightedRegression<T> : RegressionBase<T>
 {
     private readonly Vector<T> _weights;
     private readonly int _order;
 
-    public WeightedRegression(INumericOperations<T> numOps, WeightedRegressionOptions<T> options)
-        : base(numOps, options)
+    public WeightedRegression(WeightedRegressionOptions<T>? options = null)
+        : base(options)
     {
-        _weights = options.Weights ?? throw new ArgumentNullException(nameof(options), "Weights must be provided for weighted regression.");
+        _weights = options?.Weights ?? throw new ArgumentNullException(nameof(options), "Weights must be provided for weighted regression.");
         _order = options.Order;
     }
 

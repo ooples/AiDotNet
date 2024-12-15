@@ -12,4 +12,17 @@ public static class VectorExtensions
 
         return slicedVector;
     }
+
+    public static T Norm<T>(this Vector<T> vector)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sum = numOps.Zero;
+        int n = vector.Length;
+        for (int i = 0; i < n; i++)
+        {
+            sum = numOps.Add(sum, numOps.Multiply(vector[i], vector[i]));
+        }
+
+        return numOps.Sqrt(sum);
+    }
 }

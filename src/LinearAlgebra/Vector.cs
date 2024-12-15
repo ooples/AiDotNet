@@ -40,7 +40,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return new Vector<TResult>(data.Select(selector), MathHelper.GetNumericOperations<TResult>());
     }
 
-    public override VectorBase<T> Copy()
+    public new Vector<T> Copy()
     {
         return new Vector<T>([.. this], ops);
     }
@@ -85,6 +85,60 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         }
 
         return vector;
+    }
+
+    public static Vector<T> CreateRandom(int size)
+    {
+        Vector<T> vector = new(size);
+        var ops = MathHelper.GetNumericOperations<T>();
+        Random random = new();
+        for (int i = 0; i < size; i++)
+        {
+            vector[i] = ops.FromDouble(random.NextDouble());
+        }
+
+        return vector;
+    }
+
+    public static Vector<T> CreateStandardBasis(int size, int index)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var vector = new Vector<T>(size, ops)
+        {
+            [index] = ops.One
+        };
+
+        return vector;
+    }
+
+    public Vector<T> Normalize()
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        T norm = this.Norm();
+        if (NumOps.Equals(norm, NumOps.Zero))
+        {
+            throw new InvalidOperationException("Cannot normalize a zero vector.");
+        }
+
+        return this.Divide(norm);
+    }
+
+    public static Vector<T> Concatenate(params Vector<T>[] vectors)
+    {
+        int totalSize = vectors.Sum(v => v.Length);
+        Vector<T> result = new(totalSize);
+
+        int offset = 0;
+        foreach (var vector in vectors)
+        {
+            for (int i = 0; i < vector.Length; i++)
+            {
+                result[offset + i] = vector[i];
+            }
+            offset += vector.Length;
+        }
+
+        return result;
     }
 
     protected override VectorBase<T> CreateInstance(int size)

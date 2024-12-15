@@ -18,7 +18,7 @@ public class WeightedRegressionTests
         // Act
 
         // Assert
-        Assert.Throws<ArgumentNullException>(() => new WeightedRegression(null, _outputs, _weights, order));
+        Assert.Throws<ArgumentNullException>(() => new WeightedRegression<double>(new WeightedRegressionOptions<double>() { Weights = _weights, Order = order }));
     }
 
     [Fact]
@@ -30,7 +30,7 @@ public class WeightedRegressionTests
         // Act
 
         // Assert
-        Assert.Throws<ArgumentNullException>(() => new WeightedRegression(_inputs, null, _weights, order));
+        Assert.Throws<ArgumentNullException>(() => new WeightedRegression<double>(new WeightedRegressionOptions<double>() { Weights = _weights, Order = order }));
     }
 
     [Fact]

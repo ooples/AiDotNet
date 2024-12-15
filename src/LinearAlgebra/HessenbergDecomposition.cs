@@ -1,86 +1,178 @@
 ﻿namespace AiDotNet.LinearAlgebra;
 
-public class HessenbergDecomposition : IMatrixDecomposition<double>
+public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
 {
-    private Matrix<double> HessenbergMatrix { get; set; }
-    private Matrix<double> AMatrix { get; set; }
-    private Vector<double> BVector { get; set; }
+    private readonly INumericOperations<T> NumOps;
 
-    public Vector<double> SolutionVector { get; private set; }
+    public Matrix<T> HessenbergMatrix { get; private set; }
+    public Matrix<T> A { get; private set; }
 
-    public HessenbergDecomposition(IEnumerable<IEnumerable<double>> expectedValues, IEnumerable<double> actualValues)
+    public HessenbergDecomposition(Matrix<T> matrix, HessenbergAlgorithm algorithm = HessenbergAlgorithm.Householder)
     {
-        AMatrix = new Matrix<double>(expectedValues);
-        BVector = new Vector<double>(actualValues);
-        HessenbergMatrix = new Matrix<double>(AMatrix.Rows, AMatrix.Rows);
-        Decompose(AMatrix);
-        SolutionVector = Solve(HessenbergMatrix, BVector);
+        NumOps = MathHelper.GetNumericOperations<T>();
+        A = matrix;
+        HessenbergMatrix = Decompose(matrix, algorithm);
     }
 
-    public void Decompose(Matrix<double> aMatrix)
+    private Matrix<T> Decompose(Matrix<T> matrix, HessenbergAlgorithm algorithm)
     {
-        var rows = aMatrix.Rows;
-        for (int k = 0; k < rows - 2; k++)
+        return algorithm switch
         {
-            var xVector = new Vector<double>(rows - k - 1);
-            for (int i = 0; i < rows - k - 1; i++)
-            {
-                xVector[i] = HessenbergMatrix[k + 1 + i, k];
-            }
-
-            var hVector = MatrixHelper.CreateHouseholderVector(xVector);
-            HessenbergMatrix = MatrixHelper.ApplyHouseholderTransformation(HessenbergMatrix, hVector, k);
-        }
+            HessenbergAlgorithm.Householder => ComputeHessenbergHouseholder(matrix),
+            HessenbergAlgorithm.Givens => ComputeHessenbergGivens(matrix),
+            HessenbergAlgorithm.ElementaryTransformations => ComputeHessenbergElementaryTransformations(matrix),
+            HessenbergAlgorithm.ImplicitQR => ComputeHessenbergImplicitQR(matrix),
+            HessenbergAlgorithm.Lanczos => ComputeHessenbergLanczos(matrix),
+            _ => throw new ArgumentException("Unsupported Hessenberg decomposition algorithm.")
+        };
     }
 
-    public Matrix<double> Invert()
+    private Matrix<T> ComputeHessenbergHouseholder(Matrix<T> matrix)
     {
-        var rows = AMatrix.Rows;
-        var iMatrix = MatrixHelper.CreateIdentityMatrix<double>(rows);
-        var inv = new Matrix<double>(rows, rows);
+        var n = matrix.Rows;
+        var H = matrix.Copy();
 
-        for (int i = 0; i < rows; i++)
+        for (int k = 0; k < n - 2; k++)
         {
-            var e = new Vector<double>(rows);
-            e[i] = 1.0;
-            var x = Solve(iMatrix, e);
-            for (int j = 0; j < rows; j++)
+            var x = new Vector<T>(n - k - 1);
+            for (int i = 0; i < n - k - 1; i++)
             {
-                inv[j, i] = x[j];
+                x[i] = H[k + 1 + i, k];
             }
+
+            var v = MatrixHelper.CreateHouseholderVector(x);
+            H = MatrixHelper.ApplyHouseholderTransformation(H, v, k);
         }
 
-        return inv;
+        return H;
     }
 
-    public Vector<double> Solve(Matrix<double> aMatrix, Vector<double> bVector)
+    private Matrix<T> ComputeHessenbergGivens(Matrix<T> matrix)
     {
-        var rows = aMatrix.Rows;
-        var xVector = new Vector<double>(rows);
-        var yVector = new Vector<double>(rows);
+        var n = matrix.Rows;
+        var H = matrix.Copy();
 
-        // Forward substitution to solve Ly = Pb
-        for (int i = 0; i < rows; i++)
+        for (int k = 0; k < n - 2; k++)
         {
-            double sum = 0;
-            for (int j = 0; j < i; j++)
+            for (int i = n - 1; i > k + 1; i--)
             {
-                sum += HessenbergMatrix[i, j] * yVector[j];
+                var (c, s) = MatrixHelper.ComputeGivensRotation(H[i - 1, k], H[i, k]);
+                MatrixHelper.ApplyGivensRotation(H, c, s, i - 1, i, k, n);
             }
-            yVector[i] = (bVector[i] - sum) / HessenbergMatrix[i, i];
         }
 
-        // Backward substitution to solve Ux = y
-        for (int i = rows - 1; i >= 0; i--)
+        return H;
+    }
+
+    private Matrix<T> ComputeHessenbergElementaryTransformations(Matrix<T> matrix)
+    {
+        var n = matrix.Rows;
+        var H = matrix.Copy();
+
+        for (int k = 0; k < n - 2; k++)
         {
-            double sum = 0;
-            for (int j = i + 1; j < rows; j++)
+            for (int i = k + 2; i < n; i++)
             {
-                sum += HessenbergMatrix[i, j] * yVector[j];
+                if (!NumOps.Equals(H[i, k], NumOps.Zero))
+                {
+                    T factor = NumOps.Divide(H[i, k], H[k + 1, k]);
+                    for (int j = k; j < n; j++)
+                    {
+                        H[i, j] = NumOps.Subtract(H[i, j], NumOps.Multiply(factor, H[k + 1, j]));
+                    }
+                    H[i, k] = NumOps.Zero;
+                }
             }
-            xVector[i] = yVector[i] - sum;
         }
 
-        return xVector;
+        return H;
+    }
+
+    private Matrix<T> ComputeHessenbergImplicitQR(Matrix<T> matrix)
+    {
+        var n = matrix.Rows;
+        var H = matrix.Copy();
+        var Q = Matrix<T>.CreateIdentity(n, NumOps);
+
+        for (int iter = 0; iter < 100; iter++) // Max iterations
+        {
+            for (int k = 0; k < n - 1; k++)
+            {
+                var (c, s) = MatrixHelper.ComputeGivensRotation(H[k, k], H[k + 1, k]);
+                MatrixHelper.ApplyGivensRotation(H, c, s, k, k + 1, k, n);
+                MatrixHelper.ApplyGivensRotation(Q, c, s, k, k + 1, 0, n);
+            }
+
+            if (MatrixHelper.IsUpperHessenberg(H, NumOps.FromDouble(1e-10)))
+            {
+                break;
+            }
+        }
+
+        return H;
+    }
+
+    private Matrix<T> ComputeHessenbergLanczos(Matrix<T> matrix)
+    {
+        var n = matrix.Rows;
+        var H = new Matrix<T>(n, n);
+        var v = new Vector<T>(n)
+        {
+            [0] = NumOps.One
+        };
+
+        for (int j = 0; j < n; j++)
+        {
+            var w = matrix.Multiply(v);
+            if (j > 0)
+            {
+                w = w.Subtract(v.Multiply(H[j - 1, j]));
+            }
+            H[j, j] = w.DotProduct(v);
+            w = w.Subtract(v.Multiply(H[j, j]));
+            if (j < n - 1)
+            {
+                H[j, j + 1] = H[j + 1, j] = w.Norm();
+                v = w.Divide(H[j, j + 1]);
+            }
+        }
+
+        return H;
+    }
+
+    public Vector<T> Solve(Vector<T> b)
+    {
+        var n = A.Rows;
+        var y = new Vector<T>(n);
+
+        // Forward substitution
+        for (int i = 0; i < n; i++)
+        {
+            var sum = NumOps.Zero;
+            for (int j = Math.Max(0, i - 1); j < i; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(HessenbergMatrix[i, j], y[j]));
+            }
+            y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), HessenbergMatrix[i, i]);
+        }
+
+        // Backward substitution
+        var x = new Vector<T>(n);
+        for (int i = n - 1; i >= 0; i--)
+        {
+            var sum = NumOps.Zero;
+            for (int j = i + 1; j < n; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(HessenbergMatrix[i, j], x[j]));
+            }
+            x[i] = NumOps.Subtract(y[i], sum);
+        }
+
+        return x;
+    }
+
+    public Matrix<T> Invert()
+    {
+        return MatrixHelper.InvertUsingDecomposition(this);
     }
 }

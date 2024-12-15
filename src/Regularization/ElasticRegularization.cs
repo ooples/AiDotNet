@@ -16,7 +16,8 @@ public class ElasticNetRegularization<T> : IRegularization<T>
         var identity = Matrix<T>.CreateIdentity(matrix.Columns, _numOps);
         var regularizationStrength = _numOps.FromDouble(_options.Strength);
         var l2Ratio = _numOps.FromDouble(1 - _options.L1Ratio);
-        return matrix.Add(identity.Multiply(regularizationStrength.Multiply(l2Ratio)));
+
+        return matrix.Add(identity.Multiply(_numOps.Multiply(regularizationStrength, l2Ratio)));
     }
 
     public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
@@ -27,8 +28,15 @@ public class ElasticNetRegularization<T> : IRegularization<T>
 
         return coefficients.Transform(c =>
         {
-            var l1Part = _numOps.Sign(c).Multiply(_numOps.Max(_numOps.Abs(c).Subtract(regularizationStrength.Multiply(l1Ratio)), _numOps.Zero));
-            var l2Part = c.Multiply(_numOps.Subtract(_numOps.One, regularizationStrength.Multiply(l2Ratio)));
+            var subPart = _numOps.Subtract(_numOps.Abs(c), _numOps.Multiply(regularizationStrength, l1Ratio));
+            var l1Part = _numOps.Multiply(
+                _numOps.SignOrZero(c),
+                _numOps.GreaterThan(subPart, _numOps.Zero) ? subPart : _numOps.Zero
+            );
+            var l2Part = _numOps.Multiply(
+                c,
+                _numOps.Subtract(_numOps.One, _numOps.Multiply(regularizationStrength, l2Ratio))
+            );
             return _numOps.Add(l1Part, l2Part);
         });
     }

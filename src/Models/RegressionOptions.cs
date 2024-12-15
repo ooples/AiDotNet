@@ -1,7 +1,7 @@
 ﻿namespace AiDotNet.Models;
 
-public class RegressionOptions
+public class RegressionOptions<T>
 {
-    public MatrixDecomposition DecompositionMethod { get; set; } = MatrixDecomposition.Normal;
+    public IMatrixDecomposition<T>? DecompositionMethod { get; set; }
     public bool UseIntercept { get; set; } = true;
 }

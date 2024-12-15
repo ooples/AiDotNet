@@ -564,10 +564,10 @@ public static class StatisticsHelper<T>
         T onePlusHalfConfidenceLevel = NumOps.Add(NumOps.One, halfConfidenceLevel);
 
         T lowerIndexT = NumOps.Multiply(NumOps.FromDouble(bootstrapSamples), oneMinusHalfConfidenceLevel);
-        int lowerIndex = NumOps.ToInt32(NumOps.Round(lowerIndexT));
+        int lowerIndex = Convert.ToInt32(NumOps.Round(lowerIndexT));
 
         T upperIndexT = NumOps.Multiply(NumOps.FromDouble(bootstrapSamples), onePlusHalfConfidenceLevel);
-        int upperIndex = NumOps.ToInt32(NumOps.Round(upperIndexT));
+        int upperIndex = Convert.ToInt32(NumOps.Round(upperIndexT));
 
         return (NumOps.Multiply(sortedShapes[lowerIndex], sortedScales[lowerIndex]),
                 NumOps.Multiply(sortedShapes[upperIndex], sortedScales[upperIndex]));
@@ -800,11 +800,11 @@ public static class StatisticsHelper<T>
             case DistributionType.Exponential:
                 var lambda = NumOps.Divide(NumOps.One, mean);
                 var chiSquareLower = CalculateInverseChiSquareCDF(
-                    NumOps.ToInt32(NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(values.Length))), 
+                    Convert.ToInt32(NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(values.Length))), 
                     NumOps.Divide(NumOps.Subtract(NumOps.One, confidenceLevel), NumOps.FromDouble(2)));
 
                 var chiSquareUpper = CalculateInverseChiSquareCDF(
-                    NumOps.ToInt32(NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(values.Length))), 
+                    Convert.ToInt32(NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(values.Length))), 
                     NumOps.Subtract(NumOps.One, NumOps.Divide(NumOps.Subtract(NumOps.One, confidenceLevel), NumOps.FromDouble(2))));
                 lowerBound = NumOps.Multiply(NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(values.Length)), chiSquareUpper), 
                     NumOps.Divide(NumOps.One, lambda));
@@ -920,7 +920,7 @@ public static class StatisticsHelper<T>
     {
         int n = sortedData.Length;
         T position = NumOps.Multiply(NumOps.FromDouble(n - 1), quantile);
-        int index = NumOps.ToInt32(NumOps.Round(position));
+        int index = Convert.ToInt32(NumOps.Round(position));
         T fraction = NumOps.Subtract(position, NumOps.FromDouble(index));
 
         if (index + 1 < n)
@@ -1017,7 +1017,7 @@ public static class StatisticsHelper<T>
         }
 
         bootstrapMeans.Sort();
-        int lowerIndex = NumOps.ToInt32(NumOps.Divide(NumOps.Multiply(confidenceLevel, NumOps.FromDouble(bootstrapSamples)), NumOps.FromDouble(2)));
+        int lowerIndex = Convert.ToInt32(NumOps.Divide(NumOps.Multiply(confidenceLevel, NumOps.FromDouble(bootstrapSamples)), NumOps.FromDouble(2)));
         int upperIndex = bootstrapSamples - lowerIndex - 1;
 
         return (bootstrapMeans[lowerIndex], bootstrapMeans[upperIndex]);
@@ -1066,7 +1066,7 @@ public static class StatisticsHelper<T>
         var sortedPredictions = new Vector<T>([.. predicted.OrderBy(x => x)]);
         int n = sortedPredictions.Length;
         T alpha = NumOps.Subtract(NumOps.One, confidenceLevel);
-        int lowerIndex = NumOps.ToInt32(NumOps.Divide(NumOps.Multiply(alpha, NumOps.FromDouble(n)), NumOps.FromDouble(2.0)));
+        int lowerIndex = Convert.ToInt32(NumOps.Divide(NumOps.Multiply(alpha, NumOps.FromDouble(n)), NumOps.FromDouble(2.0)));
         int upperIndex = n - lowerIndex - 1;
 
         return (sortedPredictions[lowerIndex], sortedPredictions[upperIndex]);

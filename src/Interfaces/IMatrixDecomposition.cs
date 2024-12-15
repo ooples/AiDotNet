@@ -2,12 +2,8 @@
 
 public interface IMatrixDecomposition<T>
 {
-    // Decomposes the given matrix using the specific algorithm implemented by the class.
-    void Decompose(Matrix<T> aMatrix);
+    Matrix<T> A { get; }
 
-    // Solves the system Ax = b for x, where A is the decomposed matrix and b is the right-hand side vector.
-    Vector<T> Solve(Matrix<T> aMatrix, Vector<T> bVector);
-
-    // Returns the inverse of the decomposed matrix and/or matrices.
+    Vector<T> Solve(Vector<T> b);
     Matrix<T> Invert();
 }

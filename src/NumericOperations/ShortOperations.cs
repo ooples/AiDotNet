@@ -27,4 +27,10 @@ public class ShortOperations : INumericOperations<short>
     public short MaxValue => short.MaxValue;
     public bool IsNaN(short value) => false;
     public bool IsInfinity(short value) => false;
+    public short SignOrZero(short value)
+    {
+        if (value > 0) return 1;
+        if (value < 0) return -1;
+        return 0;
+    }
 }

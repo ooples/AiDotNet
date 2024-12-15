@@ -20,6 +20,13 @@ public class L1Regularization<T> : IRegularization<T>
     public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
     {
         var regularizationStrength = _numOps.FromDouble(_options.Strength);
-        return coefficients.Transform(c => _numOps.Sign(c).Multiply(_numOps.Max(_numOps.Abs(c).Subtract(regularizationStrength), _numOps.Zero)));
+        return coefficients.Transform(c =>
+        {
+            var sub = _numOps.Subtract(_numOps.Abs(c), regularizationStrength);
+            return _numOps.Multiply(
+                _numOps.SignOrZero(c),
+                _numOps.GreaterThan(sub, _numOps.Zero) ? sub : _numOps.Zero
+            );
+        });
     }
 }

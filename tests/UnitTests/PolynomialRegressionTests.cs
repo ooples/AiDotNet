@@ -1,7 +1,4 @@
-﻿using AiDotNet.Models;
-using AiDotNet.Normalization;
-using AiDotNet.Regression;
-using AiDotNet.Helpers;
+﻿using AiDotNet.Regression;
 
 namespace AiDotNetTests.UnitTests;
 
@@ -19,7 +16,7 @@ public class PolynomialRegressionTests
         // Act
 
         // Assert
-        Assert.Throws<ArgumentNullException>(() => new PolynomialRegression(null, _outputs, order));
+        Assert.Throws<ArgumentNullException>(() => new PolynomialRegression<double>(_outputs, order));
     }
 
     [Fact]
@@ -68,7 +65,7 @@ public class PolynomialRegressionTests
         const int order = 2;
 
         // Act
-        var polynomialRegression = new PolynomialRegression(_inputs, _outputs, order, new MultipleRegressionOptions() { MatrixDecomposition = AiDotNet.Enums.MatrixDecomposition.GramSchmidt });
+        var polynomialRegression = new PolynomialRegression(_inputs, _outputs, order, new MultipleRegressionOptions() { MatrixDecomposition = AiDotNet.Enums.MatrixDecompositionType.GramSchmidt });
         var actualPredictions = polynomialRegression.Predictions;
 
         // Assert
@@ -101,7 +98,7 @@ public class PolynomialRegressionTests
         var outputs = new double[] { 0.9, 0.8, 0.4, 0.2, 0.1, 0 };
 
         // Act
-        var polynomialRegressionCramer = new PolynomialRegression(inputs, outputs, order, new MultipleRegressionOptions() { MatrixDecomposition = AiDotNet.Enums.MatrixDecomposition.Cramer });
+        var polynomialRegressionCramer = new PolynomialRegression(inputs, outputs, order, new MultipleRegressionOptions() { MatrixDecomposition = AiDotNet.Enums.MatrixDecompositionType.Cramer });
         actualPredictions = polynomialRegressionCramer.Predictions;
 
         // Assert

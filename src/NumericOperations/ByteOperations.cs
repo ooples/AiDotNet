@@ -27,4 +27,9 @@ public class ByteOperations : INumericOperations<byte>
     public byte MaxValue => byte.MaxValue;
     public bool IsNaN(byte value) => false;
     public bool IsInfinity(byte value) => false;
+    public byte SignOrZero(byte value)
+    {
+        if (value > 0) return 1;
+        return 0;
+    }
 }

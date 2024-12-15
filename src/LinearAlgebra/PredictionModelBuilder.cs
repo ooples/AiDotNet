@@ -11,6 +11,9 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
 {
     private readonly PredictionModelOptions _options;
     private OptimizationAlgorithmOptions? _optimizationOptions;
+    private RegularizationOptions? _regularizationOptions;
+    private RegressionOptions<T>? _regressionOptions;
+    private FitnessCalculatorOptions? _fitnessCalculatorOptions;
     private IFeatureSelector<T>? _featureSelector;
     private INormalizer<T>? _normalizer;
     private IRegularization<T>? _regularization;
@@ -38,15 +41,17 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithRegularization(IRegularization<T> regularization)
+    public IPredictionModelBuilder<T> WithRegularization(IRegularization<T> regularization, RegularizationOptions? regularizationOptions = null)
     {
         _regularization = regularization;
+        _regularizationOptions = regularizationOptions;
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithFitnessCalculator(IFitnessCalculator<T> calculator)
+    public IPredictionModelBuilder<T> WithFitnessCalculator(IFitnessCalculator<T> calculator, FitnessCalculatorOptions? fitnessCalculatorOptions = null)
     {
         _fitnessCalculator = calculator;
+        _fitnessCalculatorOptions = fitnessCalculatorOptions;
         return this;
     }
 
@@ -56,9 +61,10 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithRegression(IRegression<T> regression)
+    public IPredictionModelBuilder<T> WithRegression(IRegression<T> regression, RegressionOptions<T>? regressionOptions = null)
     {
         _regression = regression;
+        _regressionOptions = regressionOptions;
         return this;
     }
 

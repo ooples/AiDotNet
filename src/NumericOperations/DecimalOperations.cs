@@ -27,4 +27,10 @@ public class DecimalOperations : INumericOperations<decimal>
     public decimal MaxValue => decimal.MaxValue;
     public bool IsNaN(decimal value) => false;
     public bool IsInfinity(decimal value) => false;
+    public decimal SignOrZero(decimal value)
+    {
+        if (value > 0) return 1m;
+        if (value < 0) return -1m;
+        return 0m;
+    }
 }

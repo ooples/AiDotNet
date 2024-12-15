@@ -1,5 +1,6 @@
 ﻿namespace AiDotNet.LinearAlgebra;
 
+/*
 public class ModelEvaluationService<T> : IModelEvaluator<T>
 {
     private readonly int _numberOfParameters;
@@ -54,3 +55,4 @@ public class ModelEvaluationService<T> : IModelEvaluator<T>
         return combinedMetrics;
     }
 }
+*/

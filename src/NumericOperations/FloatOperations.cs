@@ -27,4 +27,10 @@ public class FloatOperations : INumericOperations<float>
     public float MaxValue => float.MaxValue;
     public bool IsNaN(float value) => float.IsNaN(value);
     public bool IsInfinity(float value) => float.IsInfinity(value);
+    public float SignOrZero(float value)
+    {
+        if (value > 0) return 1f;
+        if (value < 0) return -1f;
+        return 0f;
+    }
 }

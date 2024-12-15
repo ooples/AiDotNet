@@ -27,4 +27,9 @@ public class UIntOperations : INumericOperations<uint>
     public uint MaxValue => uint.MaxValue;
     public bool IsNaN(uint value) => false;
     public bool IsInfinity(uint value) => false;
+    public uint SignOrZero(uint value)
+    {
+        if (value > 0) return 1U;
+        return 0U;
+    }
 }

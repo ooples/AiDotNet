@@ -27,4 +27,10 @@ public class Int32Operations : INumericOperations<int>
     public int MaxValue => int.MaxValue;
     public bool IsNaN(int value) => false;
     public bool IsInfinity(int value) => false;
+    public int SignOrZero(int value)
+    {
+        if (value > 0) return 1;
+        if (value < 0) return -1;
+        return 0;
+    }
 }

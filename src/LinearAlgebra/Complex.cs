@@ -1,71 +1,69 @@
 ﻿namespace AiDotNet.LinearAlgebra;
-
-public readonly struct Complex(double real, double imaginary) : IEquatable<Complex>
+public readonly struct Complex<T>
 {
-    public double Real { get; } = real;
-    public double Imaginary { get; } = imaginary;
+    private readonly INumericOperations<T> ops;
 
-    public double Magnitude => Math.Sqrt(Real * Real + Imaginary * Imaginary);
-    public double Phase => Math.Atan2(Imaginary, Real);
+    public T Real { get; }
+    public T Imaginary { get; }
 
-    public static Complex operator +(Complex a, Complex b)
+    public Complex(T real, T imaginary)
     {
-        return new Complex(a.Real + b.Real, a.Imaginary + b.Imaginary);
+        Real = real;
+        Imaginary = imaginary;
+        ops = MathHelper.GetNumericOperations<T>();
     }
 
-    public static bool operator !=(Complex a, Complex b)
+    public T Magnitude => ops.Sqrt(ops.Add(ops.Square(Real), ops.Square(Imaginary)));
+
+    public T Phase => ops.FromDouble(Math.Atan2(Convert.ToDouble(Imaginary), Convert.ToDouble(Real)));
+
+    public static Complex<T> operator +(Complex<T> a, Complex<T> b)
+        => new(a.ops.Add(a.Real, b.Real), a.ops.Add(a.Imaginary, b.Imaginary));
+
+    public static Complex<T> operator -(Complex<T> a, Complex<T> b)
+        => new(a.ops.Subtract(a.Real, b.Real), a.ops.Subtract(a.Imaginary, b.Imaginary));
+
+    public static Complex<T> operator *(Complex<T> a, Complex<T> b)
+        => new(
+            a.ops.Subtract(a.ops.Multiply(a.Real, b.Real), a.ops.Multiply(a.Imaginary, b.Imaginary)),
+            a.ops.Add(a.ops.Multiply(a.Real, b.Imaginary), a.ops.Multiply(a.Imaginary, b.Real))
+        );
+
+    public static Complex<T> operator /(Complex<T> a, Complex<T> b)
     {
-        return !(a == b);
+        T denominator = a.ops.Add(a.ops.Square(b.Real), a.ops.Square(b.Imaginary));
+        return new Complex<T>(
+            a.ops.Divide(a.ops.Add(a.ops.Multiply(a.Real, b.Real), a.ops.Multiply(a.Imaginary, b.Imaginary)), denominator),
+            a.ops.Divide(a.ops.Subtract(a.ops.Multiply(a.Imaginary, b.Real), a.ops.Multiply(a.Real, b.Imaginary)), denominator)
+        );
     }
 
-    public static bool operator ==(Complex a, Complex b)
-    {
-        return a.Real == b.Real && a.Imaginary == b.Imaginary;
-    }
+    public static bool operator ==(Complex<T> left, Complex<T> right)
+        => left.Equals(right);
 
-    public static Complex operator -(Complex a, Complex b)
-    {
-        return new Complex(a.Real - b.Real, a.Imaginary - b.Imaginary);
-    }
-
-    public static Complex operator -(Complex a)
-    {
-        return new Complex(-a.Real, -a.Imaginary);
-    }
-
-    public static Complex operator *(Complex a, Complex b)
-    {
-        return new Complex(a.Real * b.Real - a.Imaginary * b.Imaginary, a.Real * b.Imaginary + a.Imaginary * b.Real);
-    }
-
-    public static Complex operator /(Complex a, Complex b)
-    {
-        double denominator = b.Real * b.Real + b.Imaginary * b.Imaginary;
-        return new Complex((a.Real * b.Real + a.Imaginary * b.Imaginary) / denominator, (a.Imaginary * b.Real - a.Real * b.Imaginary) / denominator);
-    }
+    public static bool operator !=(Complex<T> left, Complex<T> right)
+        => !left.Equals(right);
 
     public override bool Equals(object? obj)
-    {
-        return obj is Complex complex && Equals(complex);
-    }
+        => obj is Complex<T> complex && Equals(complex);
 
-    public bool Equals(Complex other)
-    {
-        return Real == other.Real && Imaginary == other.Imaginary;
-    }
+    public bool Equals(Complex<T> other)
+        => ops.Equals(Real, other.Real) && ops.Equals(Imaginary, other.Imaginary);
 
     public override int GetHashCode()
     {
-        return HashCode.Combine(Real, Imaginary);
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 23 + (Real?.GetHashCode() ?? 0);
+            hash = hash * 23 + (Imaginary?.GetHashCode() ?? 0);
+            return hash;
+        }
     }
 
-    public Complex Conjugate()
-    {
-        return new Complex(Real, -Imaginary);
-    }
+    public Complex<T> Conjugate()
+        => new(Real, ops.Negate(Imaginary));
 
     public override string ToString()
-    {
-        return $"({Real} + {Imaginary}i)";
-    }
+        => $"{Real} + {Imaginary}i";
 }

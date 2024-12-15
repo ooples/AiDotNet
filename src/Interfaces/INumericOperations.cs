@@ -21,10 +21,10 @@ public interface INumericOperations<T>
     T Log(T value);
     bool GreaterThanOrEquals(T a, T b);
     bool LessThanOrEquals(T a, T b);
-    int ToInt32(T value);
     T Round(T value);
     T MinValue { get; }
     T MaxValue { get; }
     bool IsNaN(T value);
     bool IsInfinity(T value);
+    public T SignOrZero(T value);
 }

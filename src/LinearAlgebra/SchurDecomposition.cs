@@ -1,63 +1,184 @@
 ﻿namespace AiDotNet.LinearAlgebra;
 
-public class SchurDecomposition : IMatrixDecomposition<double>
+public class SchurDecomposition<T> : IMatrixDecomposition<T>
 {
-    private Matrix<double> SchurMatrix { get; set; }
-    private Matrix<double> UnitaryMatrix { get; set; }
-    private Matrix<double> AMatrix { get; set; }
-    private Vector<double> BVector { get; set; }
+    public Matrix<T> SchurMatrix { get; private set; }
+    public Matrix<T> UnitaryMatrix { get; private set; }
+    public Matrix<T> A { get; private set; }
 
-    public Vector<double> SolutionVector { get; private set; }
+    private readonly INumericOperations<T> NumOps;
 
-    public SchurDecomposition(IEnumerable<IEnumerable<double>> expectedValues, IEnumerable<double> actualValues)
+    public SchurDecomposition(Matrix<T> matrix, SchurAlgorithm algorithm = SchurAlgorithm.Francis)
     {
-        AMatrix = Matrix.CreateDoubleMatrix(expectedValues);
-        BVector = new Vector<double>(actualValues);
-        SchurMatrix = Matrix.CreateDoubleMatrix(AMatrix.Rows, AMatrix.Rows);
-        UnitaryMatrix = Matrix.CreateDoubleMatrix(AMatrix.Rows, AMatrix.Rows);
-        Decompose(AMatrix);
-        SolutionVector = Solve(SchurMatrix, BVector);
+        A = matrix;
+        NumOps = MathHelper.GetNumericOperations<T>();
+        (SchurMatrix, UnitaryMatrix) = Decompose(matrix, algorithm);
     }
 
-    public void Decompose(Matrix<double> schurMatrix)
+    private (Matrix<T> S, Matrix<T> U) Decompose(Matrix<T> matrix, SchurAlgorithm algorithm)
     {
+        return algorithm switch
+        {
+            SchurAlgorithm.Francis => ComputeSchurFrancis(matrix),
+            SchurAlgorithm.QR => ComputeSchurQR(matrix),
+            SchurAlgorithm.Implicit => ComputeSchurImplicit(matrix),
+            _ => throw new ArgumentException("Unsupported Schur decomposition algorithm.")
+        };
+    }
+
+    private (Matrix<T> S, Matrix<T> U) ComputeSchurQR(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        Matrix<T> H = MatrixHelper.ReduceToHessenbergFormat(matrix);
+        Matrix<T> U = Matrix<T>.CreateIdentity(n, NumOps);
+        Matrix<T> S = H.Copy();
+
         const int maxIterations = 100;
-        double tolerance = 1e-10;
-        schurMatrix = MatrixHelper.ReduceToHessenbergFormat(schurMatrix);
+        T tolerance = NumOps.FromDouble(1e-10);
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            // QR decomposition of H
-            var (qMatrix, rMatrix) = MatrixHelper.QRDecomposition(schurMatrix);
+            var qrDecomp = new QrDecomposition<T>(S);
+            (var Q, var R) = (qrDecomp.Q, qrDecomp.R);
+            S = R.Multiply(Q);
+            U = U.Multiply(Q);
 
-            // Update H = R * Q
-            schurMatrix = rMatrix.DotProduct(qMatrix);
-
-            // Accumulate the unitary matrix
-            UnitaryMatrix = UnitaryMatrix.DotProduct(qMatrix);
-
-            // Check for convergence
-            if (schurMatrix.IsUpperTriangularMatrix(tolerance))
-            {
+            if (MatrixHelper.IsUpperTriangularMatrix(S, tolerance))
                 break;
+        }
+
+        return (S, U);
+    }
+
+    private (Matrix<T> S, Matrix<T> U) ComputeSchurFrancis(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        Matrix<T> H = MatrixHelper.ReduceToHessenbergFormat(matrix);
+        Matrix<T> U = Matrix<T>.CreateIdentity(n, NumOps);
+    
+        const int maxIterations = 100;
+        T tolerance = NumOps.FromDouble(1e-10);
+
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            for (int i = 0; i < n - 1; i++)
+            {
+                T s = NumOps.Add(H[n-2, n-2], H[n-1, n-1]);
+                T t = NumOps.Subtract(NumOps.Multiply(H[n-2, n-2], H[n-1, n-1]), NumOps.Multiply(H[n-2, n-1], H[n-1, n-2]));
+            
+                Matrix<T> Q = ComputeFrancisQRStep(H, s, t);
+                H = Q.Transpose().Multiply(H).Multiply(Q);
+                U = U.Multiply(Q);
+            }
+
+            if (MatrixHelper.IsUpperTriangularMatrix(H, tolerance))
+                break;
+        }
+
+        return (H, U);
+    }
+
+    private Matrix<T> ComputeFrancisQRStep(Matrix<T> H, T s, T t)
+    {
+        int n = H.Rows;
+        T x = NumOps.Subtract(NumOps.Subtract(H[0, 0], s), NumOps.Divide(NumOps.Multiply(H[0, 1], H[1, 0]), NumOps.Subtract(H[1, 1], s)));
+        T y = H[1, 0];
+
+        for (int k = 0; k < n - 1; k++)
+        {
+            Matrix<T> Q = ComputeHouseholderReflection(x, y);
+            H = Q.Transpose().Multiply(H).Multiply(Q);
+
+            if (k < n - 2)
+            {
+                x = H[k + 1, k];
+                y = H[k + 2, k];
             }
         }
 
-        SchurMatrix = schurMatrix;
+        return H;
     }
 
-    public Matrix<double> Invert()
+    private (Matrix<T> S, Matrix<T> U) ComputeSchurImplicit(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        Matrix<T> H = MatrixHelper.ReduceToHessenbergFormat(matrix);
+        Matrix<T> U = Matrix<T>.CreateIdentity(n, NumOps);
+    
+        const int maxIterations = 100;
+        T tolerance = NumOps.FromDouble(1e-10);
+
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            for (int i = 0; i < n - 1; i++)
+            {
+                Matrix<T> Q = ComputeImplicitQStep(H, i);
+                H = Q.Transpose().Multiply(H).Multiply(Q);
+                U = U.Multiply(Q);
+            }
+
+            if (MatrixHelper.IsUpperTriangularMatrix(H, tolerance))
+                break;
+        }
+
+        return (H, U);
+    }
+
+    private Matrix<T> ComputeImplicitQStep(Matrix<T> H, int start)
+    {
+        int n = H.Rows;
+        T x = H[start, start];
+        T y = H[start + 1, start];
+        T z = (start + 2 < n) ? H[start + 2, start] : NumOps.Zero;
+
+        for (int k = start; k < n - 1; k++)
+        {
+            Matrix<T> Q = ComputeHouseholderReflection(x, y, z);
+            H = Q.Transpose().Multiply(H).Multiply(Q);
+
+            if (k < n - 2)
+            {
+                x = H[k + 1, k];
+                y = H[k + 2, k];
+                z = (k + 3 < n) ? H[k + 3, k] : NumOps.Zero;
+            }
+        }
+
+        return H;
+    }
+
+    private Matrix<T> ComputeHouseholderReflection(T x, T y, T? z = default)
+    {
+        int n = (NumOps.Equals(z ?? NumOps.Zero, NumOps.Zero)) ? 2 : 3;
+        Vector<T> v = new(n, NumOps)
+        {
+            [0] = x,
+            [1] = y
+        };
+        if (n == 3) v[2] = z ?? NumOps.Zero;
+
+        T alpha = NumOps.Sqrt(v.DotProduct(v));
+        if (NumOps.Equals(alpha, NumOps.Zero)) return Matrix<T>.CreateIdentity(n, NumOps);
+
+        v[0] = NumOps.Add(v[0], NumOps.Multiply(NumOps.SignOrZero(x), alpha));
+        T beta = NumOps.Sqrt(NumOps.Multiply(NumOps.FromDouble(2), v.DotProduct(v)));
+
+        if (NumOps.Equals(beta, NumOps.Zero)) return Matrix<T>.CreateIdentity(n, NumOps);
+
+        v = v.Divide(beta);
+        return Matrix<T>.CreateIdentity(n, NumOps).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
+    }
+
+    public Vector<T> Solve(Vector<T> b)
+    {
+        var y = MatrixHelper.ForwardSubstitution(UnitaryMatrix, b);
+        return MatrixHelper.BackwardSubstitution(SchurMatrix, y);
+    }
+
+    public Matrix<T> Invert()
     {
         var invU = UnitaryMatrix.Transpose();
-        var invH = MatrixHelper.InvertUpperTriangularMatrix(SchurMatrix);
-
-        return invH.DotProduct(invU);
-    }
-
-    public Vector<double> Solve(Matrix<double> schurMatrix, Vector<double> bVector)
-    {
-        var yVector = MatrixHelper.ForwardSubstitution(UnitaryMatrix, bVector);
-
-        return MatrixHelper.BackwardSubstitution(schurMatrix, yVector);
+        var invS = MatrixHelper.InvertUpperTriangularMatrix(SchurMatrix);
+        return invS.Multiply(invU);
     }
 }

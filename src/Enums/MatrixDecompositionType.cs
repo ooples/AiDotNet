@@ -12,14 +12,18 @@
 /// The QR decomposition is used for non-symmetric matrices.
 /// The SVD decomposition is used for non-symmetric matrices.
 /// </summary>
-public enum MatrixDecomposition
+public enum MatrixDecompositionType
 {
     Cramer,
     Cholesky,
-    Evd,
     GramSchmidt,
     Lu,
     Qr,
     Svd,
-    Normal
+    Normal,
+    Lq,
+    Takagi,
+    Hessenberg,
+    Schur,
+    Eigen
 }

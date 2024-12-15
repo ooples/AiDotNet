@@ -22,7 +22,7 @@ public class BinningNormalizer<T> : INormalizer<T>
         var bins = new List<T>();
         for (int i = 0; i <= DefaultBinCount; i++)
         {
-            int index = _numOps.ToInt32(_numOps.Multiply(_numOps.FromDouble((double)i / DefaultBinCount), _numOps.FromDouble(sortedVector.Length - 1)));
+            int index = Convert.ToInt32(_numOps.Multiply(_numOps.FromDouble((double)i / DefaultBinCount), _numOps.FromDouble(sortedVector.Length - 1)));
             bins.Add(sortedVector[index]);
         }
 
@@ -66,7 +66,7 @@ public class BinningNormalizer<T> : INormalizer<T>
             x = _numOps.GreaterThan(_numOps.Zero, min) ? _numOps.Zero : min;
         
             // Calculate the bin index
-            int binIndex = _numOps.ToInt32(_numOps.Multiply(x, _numOps.FromDouble(parameters.Bins.Count - 1)));
+            int binIndex = Convert.ToInt32(_numOps.Multiply(x, _numOps.FromDouble(parameters.Bins.Count - 1)));
         
             // Ensure binIndex is within valid range
             binIndex = Math.Max(0, Math.Min(parameters.Bins.Count - 2, binIndex));

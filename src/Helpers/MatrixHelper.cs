@@ -1,13 +1,13 @@
-﻿global using Complex = AiDotNet.LinearAlgebra.Complex;
-global using AiDotNet.NumericOperations;
+﻿global using AiDotNet.NumericOperations;
 
 namespace AiDotNet.Helpers;
 
 public static class MatrixHelper
 {
-    public static double CalculateDeterminantRecursive(Matrix<double> matrix)
+    public static T CalculateDeterminantRecursive<T>(Matrix<T> matrix)
     {
         var rows = matrix.Rows;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         if (rows != matrix.Columns)
         {
@@ -19,102 +19,25 @@ public static class MatrixHelper
             return matrix[0, 0];
         }
 
-        double determinant = 0;
+        T determinant = ops.Zero;
 
         for (var i = 0; i < rows; i++)
         {
             var subMatrix = CreateSubMatrix(matrix, 0, i);
-            determinant += Math.Pow(-1, i) * matrix[0, i] * CalculateDeterminantRecursive(subMatrix);
+            T subDeterminant = CalculateDeterminantRecursive(subMatrix);
+            T sign = ops.FromDouble(i % 2 == 0 ? 1 : -1);
+            T product = ops.Multiply(ops.Multiply(sign, matrix[0, i]), subDeterminant);
+            determinant = ops.Add(determinant, product);
         }
 
         return determinant;
     }
 
-    public static Matrix<T> Add<T>(this Matrix<T> left, Matrix<T> right) where T : struct
-    {
-        if (left.Rows != right.Rows || left.Columns != right.Columns)
-            throw new ArgumentException("Matrix dimensions are incompatible for addition");
-
-        var ops = MathHelper.GetNumericOperations<T>();
-        var result = new Matrix<T>(left.Rows, left.Columns, ops);
-
-        for (int i = 0; i < left.Rows; i++)
-        {
-            for (int j = 0; j < left.Columns; j++)
-            {
-                result[i, j] = ops.Add(left[i, j], right[i, j]);
-            }
-        }
-
-        return result;
-    }
-
-    public static Matrix<T> Multiply<T>(this Matrix<T> left, Matrix<T> right)
-    {
-        if (left.Columns != right.Rows)
-            throw new ArgumentException("Matrix dimensions are incompatible for multiplication");
-
-        var ops = MathHelper.GetNumericOperations<T>();
-        var result = new Matrix<T>(left.Rows, right.Columns, ops);
-
-        for (int i = 0; i < left.Rows; i++)
-        {
-            for (int j = 0; j < right.Columns; j++)
-            {
-                T sum = ops.Zero;
-                for (int k = 0; k < left.Columns; k++)
-                {
-                    sum = ops.Add(sum, ops.Multiply(left[i, k], right[k, j]));
-                }
-                result[i, j] = sum;
-            }
-        }
-
-        return result;
-    }
-
-    public static Vector<T> Multiply<T>(this Matrix<T> matrix, Vector<T> vector)
-    {
-        if (matrix.Columns != vector.Length)
-            throw new ArgumentException("Matrix columns must match vector length");
-
-        var ops = MathHelper.GetNumericOperations<T>();
-        var result = new Vector<T>(matrix.Rows, ops);
-
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            T sum = ops.Zero;
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                sum = ops.Add(sum, ops.Multiply(matrix[i, j], vector[j]));
-            }
-
-            result[i] = sum;
-        }
-
-        return result;
-    }
-
-    public static Matrix<T> Multiply<T>(this Matrix<T> matrix, T scalar)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var result = new Matrix<T>(matrix.Rows, matrix.Columns, ops);
-        
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j] = ops.Multiply(matrix[i, j], scalar);
-            }
-        }
-        
-        return result;
-    }
-
-    private static Matrix<double> CreateSubMatrix(Matrix<double> matrix, int excludeRowIndex, int excludeColumnIndex)
+    private static Matrix<T> CreateSubMatrix<T>(Matrix<T> matrix, int excludeRowIndex, int excludeColumnIndex)
     {
         var rows = matrix.Rows;
-        var subMatrix = Matrix.CreateDoubleMatrix(rows - 1, rows - 1);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var subMatrix = new Matrix<T>(rows - 1, rows - 1, ops);
 
         var r = 0;
         for (var i = 0; i < rows; i++)
@@ -141,7 +64,8 @@ public static class MatrixHelper
 
         return subMatrix;
     }
-    public static void ReplaceColumn(double[,] destination, double[,] source, int destColumn, int srcColumn)
+
+    public static void ReplaceColumn<T>(T[,] destination, T[,] source, int destColumn, int srcColumn)
     {
         //exceptions
         //Ensure the size of source matrix column is equal to the size of destination matrix column
@@ -223,59 +147,7 @@ public static class MatrixHelper
         return matrix;
     }
 
-
-    public static Vector<double> HouseholderVector(Vector<double> xVector)
-    {
-        var ops = MathHelper.GetNumericOperations<double>();
-        var result = new Vector<double>(xVector.Length, ops);
-        double norm = 0;
-        for (int i = 0; i < xVector.Length; i++)
-        {
-            norm += xVector[i] * xVector[i];
-        }
-        norm = Math.Sqrt(norm);
-
-        result[0] = xVector[0] + Math.Sign(xVector[0]) * norm;
-        for (int i = 1; i < xVector.Length; i++)
-        {
-            result[i] = xVector[i];
-        }
-
-        double vNorm = 0;
-        for (int i = 0; i < result.Length; i++)
-        {
-            vNorm += result[i] * result[i];
-        }
-        vNorm = Math.Sqrt(vNorm);
-
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] /= vNorm;
-        }
-
-        return result;
-    }
-
-    public static Matrix<T> Subtract<T>(this Matrix<T> left, Matrix<T> right)
-    {
-        if (left.Rows != right.Rows || left.Columns != right.Columns)
-            throw new ArgumentException("Matrices must have the same dimensions");
-
-        var ops = MathHelper.GetNumericOperations<T>();
-        var result = new Matrix<T>(left.Rows, left.Columns, ops);
-
-        for (int i = 0; i < left.Rows; i++)
-        {
-            for (int j = 0; j < left.Columns; j++)
-            {
-                result[i, j] = ops.Subtract(left[i, j], right[i, j]);
-            }
-        }
-
-        return result;
-    }
-
-    public static double Determinant(this Matrix<double> matrix)
+    public static T Determinant<T>(this Matrix<T> matrix)
     {
         if (matrix == null)
         {
@@ -287,8 +159,8 @@ public static class MatrixHelper
             throw new ArgumentException($"{nameof(matrix)} has to contain at least one row of values", nameof(matrix));
         }
 
-        var columns = matrix.GetRow(0).Length;
-        var rows = matrix.GetColumn(0).Length;
+        var columns = matrix.Columns;
+        var rows = matrix.Rows;
         if (rows <= 0)
         {
             throw new ArgumentException($"{nameof(rows)} needs to be an integer larger than 0");
@@ -304,95 +176,48 @@ public static class MatrixHelper
             throw new ArgumentException($"You need to have a square matrix to calculate the determinant value so the length of {nameof(rows)} {nameof(columns)} must be equal");
         }
 
+        var ops = MathHelper.GetNumericOperations<T>();
+
         if (rows == 2)
         {
-            return matrix[0, 0] * matrix[1, 1] - matrix[0, 1] * matrix[1, 0];
+            return ops.Subtract(
+                ops.Multiply(matrix[0, 0], matrix[1, 1]),
+                ops.Multiply(matrix[0, 1], matrix[1, 0])
+            );
         }
         else
         {
-            double determinant = 0;
+            T determinant = ops.Zero;
             for (int i = 0; i < rows; i++)
             {
-                var tempMatrix = Matrix.CreateDoubleMatrix(rows - 1, rows - 1);
+                var tempMatrix = new Matrix<T>(rows - 1, rows - 1);
                 for (int j = 0; j < rows - 1; j++)
                 {
                     for (int k = 0; k < rows - 1; k++)
                     {
-                        tempMatrix[j, k] = matrix[j < i ? j : j + 1, k < i ? k : k + 1];
+                        tempMatrix[j, k] = matrix[j < i ? j : j + 1, k];
                     }
                 }
 
-                determinant += Math.Pow(-1, i) * matrix[0, i] * tempMatrix.Determinant();
+                T subDeterminant = tempMatrix.Determinant();
+                T sign = ops.FromDouble(i % 2 == 0 ? 1 : -1);
+                T product = ops.Multiply(ops.Multiply(sign, matrix[0, i]), subDeterminant);
+                determinant = ops.Add(determinant, product);
             }
 
             return determinant;
         }
     }
 
-    // Helper method to apply Householder reflection to QR decomposition
-    public static (Matrix<double> qMatrix, Matrix<double> rMatrix) 
-        ApplyHouseholderTransformationToQR(Vector<double> vector, Matrix<double> qMatrix, Matrix<double> rMatrix, int k)
-    {
-        var rows = vector.Length;
-        for (int i = k; i < rows; i++)
-        {
-            double sum = 0;
-            for (int j = k; j < rows; j++)
-            {
-                sum += vector[j - k] * rMatrix[j, i];
-            }
-            for (int j = k; j < rows; j++)
-            {
-                rMatrix[j, i] -= 2 * vector[j - k] * sum;
-            }
-        }
-
-        for (int i = 0; i < rows; i++)
-        {
-            double sum = 0;
-            for (int j = k; j < rows; j++)
-            {
-                sum += vector[j - k] * qMatrix[i, j];
-            }
-            for (int j = k; j < rows; j++)
-            {
-                qMatrix[i, j] -= 2 * vector[j - k] * sum;
-            }
-        }
-
-        return (qMatrix, rMatrix);
-    }
-
-    public static (Matrix<double>, Matrix<double>) QRDecomposition(Matrix<double> matrix)
-    {
-        var rMatrix = matrix.Copy();
-        var rows = rMatrix.Rows;
-        var qMatrix = Matrix<double>.CreateIdentityMatrix<double>(rows);
-        var ops = MathHelper.GetNumericOperations<double>();
-
-        for (int k = 0; k < rows - 1; k++)
-        {
-            var xVector = new Vector<double>(rows - k, ops);
-            for (int i = k; i < rows; i++)
-            {
-                xVector[i - k] = rMatrix[i, k];
-            }
-
-            var hVector = HouseholderVector(xVector);
-            (qMatrix, rMatrix) = ApplyHouseholderTransformationToQR(hVector, qMatrix, rMatrix, k);
-        }
-
-        return (qMatrix, rMatrix);
-    }
-
-    public static Matrix<double> ReduceToHessenbergFormat(Matrix<double> matrix)
+    public static Matrix<T> ReduceToHessenbergFormat<T>(Matrix<T> matrix)
     {
         var rows = matrix.Rows;
-        var result = Matrix.CreateDoubleMatrix(rows, rows);
-        var ops = MathHelper.GetNumericOperations<double>();
+        var ops = MathHelper.GetNumericOperations<T>();
+        var result = Matrix<T>.CreateMatrix<T>(rows, rows);
+
         for (int k = 0; k < rows - 2; k++)
         {
-            var xVector = new Vector<double>(rows - k - 1, ops);
+            var xVector = new Vector<T>(rows - k - 1, ops);
             for (int i = 0; i < rows - k - 1; i++)
             {
                 xVector[i] = matrix[k + 1 + i, k];
@@ -405,37 +230,19 @@ public static class MatrixHelper
         return matrix;
     }
 
-    public static Vector<double> BackwardSubstitution(this Matrix<double> aMatrix, Vector<double> bVector)
+    public static Vector<T> BackwardSubstitution<T>(this Matrix<T> aMatrix, Vector<T> bVector)
     {
         int n = aMatrix.Rows;
-        var ops = MathHelper.GetNumericOperations<double>();
-        var xVector = new Vector<double>(n, ops);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var xVector = new Vector<T>(n, ops);
         for (int i = n - 1; i >= 0; --i)
         {
             xVector[i] = bVector[i];
             for (int j = i + 1; j < n; ++j)
             {
-                xVector[i] -= aMatrix[i, j] * xVector[j];
+                xVector[i] = ops.Subtract(xVector[i], ops.Multiply(aMatrix[i, j], xVector[j]));
             }
-            xVector[i] /= aMatrix[i, i];
-        }
-
-        return xVector;
-    }
-
-    public static Vector<Complex> BackwardSubstitution(this Matrix<double> aMatrix, Vector<Complex> bVector)
-    {
-        int n = aMatrix.Rows;
-        var ops = MathHelper.GetNumericOperations<Complex>();
-        var xVector = new Vector<Complex>(n, ops);
-        for (int i = n - 1; i >= 0; --i)
-        {
-            xVector[i] = bVector[i];
-            for (int j = i + 1; j < n; ++j)
-            {
-                xVector[i] -= new Complex(aMatrix[i, j], 0) * xVector[j];
-            }
-            xVector[i] /= new Complex(aMatrix[i, i], 0);
+            xVector[i] = ops.Divide(xVector[i], aMatrix[i, i]);
         }
 
         return xVector;
@@ -458,10 +265,15 @@ public static class MatrixHelper
         return result;
     }
 
-    public static IEnumerable<MatrixType> GetMatrixTypes<T>(this Matrix<double> matrix, IMatrixDecomposition<T> matrixDecomposition, 
-        double tolerance = double.Epsilon, int subDiagonalThreshold = 1, int superDiagonalThreshold = 1, double sparsityThreshold = 0.5, double denseThreshold = 0.5,
-        int blockRows = 2, int blockCols = 2)
+    public static IEnumerable<MatrixType> GetMatrixTypes<T>(this Matrix<T> matrix, IMatrixDecomposition<T> matrixDecomposition, 
+    T? tolerance = default, int subDiagonalThreshold = 1, int superDiagonalThreshold = 1, T? sparsityThreshold = default, T? denseThreshold = default,
+    int blockRows = 2, int blockCols = 2)
     {
+        var ops = MathHelper.GetNumericOperations<T>();
+        tolerance ??= ops.FromDouble(1e-10);
+        sparsityThreshold ??= ops.FromDouble(0.5);
+        denseThreshold ??= ops.FromDouble(0.5);
+
         var complexMatrix = matrix.ToComplexMatrix();
         foreach (var matrixType in GetEnumValues<MatrixType>())
         {
@@ -570,7 +382,8 @@ public static class MatrixHelper
                     }
                     break;
                 case MatrixType.Unitary:
-                    if (complexMatrix.IsUnitaryMatrix(matrixDecomposition))
+                    var complexDecomposition = matrixDecomposition.ToComplexDecomposition();
+                    if (complexMatrix.IsUnitaryMatrix(complexDecomposition))
                     {
                         yield return matrixType;
                     }
@@ -726,70 +539,7 @@ public static class MatrixHelper
         }
     }
 
-    public static (Matrix<double>, Vector<double>, Matrix<double>, Vector<double>, Matrix<double>, Vector<double>) SplitData(Matrix<double> X, Vector<double> y, 
-        PredictionModelOptions options)
-    {
-        int totalSamples = X.Rows;
-        int features = X.Columns;
-
-        // Calculate split sizes
-        int trainingSize = (int)(totalSamples * options.TrainingSplitPercentage);
-        int validationSize = (int)(totalSamples * options.ValidationSplitPercentage);
-        int testingSize = totalSamples - trainingSize - validationSize;
-
-        // Create matrices and vectors for split data
-        var XTrain = new Matrix<double>(trainingSize, features);
-        var yTrain = new Vector<double>(trainingSize);
-        var XVal = new Matrix<double>(validationSize, features);
-        var yVal = new Vector<double>(validationSize);
-        var XTest = new Matrix<double>(testingSize, features);
-        var yTest = new Vector<double>(testingSize);
-
-        // Create random indices
-        var random = new Random(options.RandomSeed);
-        var indices = Enumerable.Range(0, totalSamples).ToList();
-    
-        // Fisher-Yates shuffle
-        for (int i = indices.Count - 1; i > 0; i--)
-        {
-            int j = random.Next(i + 1);
-            (indices[i], indices[j]) = (indices[j], indices[i]);
-        }
-
-        // Split data
-        int currentIndex = 0;
-
-        // Fill training data
-        for (int i = 0; i < trainingSize; i++)
-        {
-            for (int j = 0; j < features; j++)
-                XTrain[i, j] = X[indices[currentIndex], j];
-            yTrain[i] = y[indices[currentIndex]];
-            currentIndex++;
-        }
-
-        // Fill validation data
-        for (int i = 0; i < validationSize; i++)
-        {
-            for (int j = 0; j < features; j++)
-                XVal[i, j] = X[indices[currentIndex], j];
-            yVal[i] = y[indices[currentIndex]];
-            currentIndex++;
-        }
-
-        // Fill test data
-        for (int i = 0; i < testingSize; i++)
-        {
-            for (int j = 0; j < features; j++)
-                XTest[i, j] = X[indices[currentIndex], j];
-            yTest[i] = y[indices[currentIndex]];
-            currentIndex++;
-        }
-
-        return (XTrain, yTrain, XVal, yVal, XTest, yTest);
-    }
-
-    public static bool IsBlockMatrix(this Matrix<double> matrix, int blockRows, int blockCols)
+    public static bool IsBlockMatrix<T>(this Matrix<T> matrix, int blockRows, int blockCols)
     {
         var rows = matrix.Rows;
         var cols = matrix.Columns;
@@ -819,9 +569,9 @@ public static class MatrixHelper
         return true;
     }
 
-    public static Matrix<double> GetBlock(this Matrix<double> matrix, int startRow, int startCol, int blockRows, int blockCols)
+    public static Matrix<T> GetBlock<T>(this Matrix<T> matrix, int startRow, int startCol, int blockRows, int blockCols)
     {
-        var block = Matrix.CreateDoubleMatrix(blockRows, blockCols);
+        var block = new Matrix<T>(blockRows, blockCols);
         for (int i = 0; i < blockRows; i++)
         {
             for (int j = 0; j < blockCols; j++)
@@ -833,19 +583,20 @@ public static class MatrixHelper
         return block;
     }
 
-    public static bool IsConsistentBlock(this Matrix<double> block)
+    public static bool IsConsistentBlock<T>(this Matrix<T> block)
     {
         var rows = block.Rows;
         var cols = block.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
         
         // Implement your own logic to check consistency within the block
         // For simplicity, let's assume the block is consistent if all elements are the same
-        double firstElement = block[0, 0];
+        T firstElement = block[0, 0];
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
-                if (block[i, j] != firstElement)
+                if (!ops.Equals(block[i, j], firstElement))
                 {
                     return false;
                 }
@@ -855,54 +606,22 @@ public static class MatrixHelper
         return true;
     }
 
-    public static double Norm(this Vector<double> vector)
+    public static bool IsUpperTriangularMatrix<T>(this Matrix<T> matrix, T? tolerance = default)
     {
-        double sum = 0.0;
-        int n = vector.Length;
-        for (int i = 0; i < n; i++)
+        var ops = MathHelper.GetNumericOperations<T>();
+    
+        // If tolerance is not provided (i.e., it's default(T)), use a small value based on the type
+        if (tolerance?.Equals(default(T)) ?? true)
         {
-            sum += Math.Pow(vector[i], 2);
+            tolerance = ops.FromDouble(1e-10); // Use a small value as default tolerance
         }
 
-        return Math.Sqrt(sum);
-    }
-
-    public static double DotProduct(this Vector<double> aVector, Vector<double> bVector)
-    {
-        double result = 0.0;
-        int n = aVector.Length;
-        for (int i = 0; i < n; i++)
-        {
-            result += aVector[i] * bVector[i];
-        }
-          
-        return result;
-    }
-
-    public static Vector<double> DotProduct(this Matrix<double> aMatrix, Vector<double> bVector)
-    {
-        int m = aMatrix.Rows, n = aMatrix.Columns;
-        var ops = MathHelper.GetNumericOperations<double>();
-        var result = new Vector<double>(m, ops);
-        for (int i = 0; i < m; i++)
-        {
-            for (int k = 0; k < n; k++)
-            {
-                result[i] += aMatrix[i, k] * bVector[k];
-            }
-        }
-
-        return result;
-    }
-
-    public static bool IsUpperTriangularMatrix(this Matrix<double> matrix, double tolerance = double.Epsilon)
-    {
         for (int i = 1; i < matrix.Rows; i++)
         {
             for (int j = 0; j < i; j++)
             {
-                // If any element below the main diagonal is non-zero, the matrix is not upper triangular.
-                if (Math.Abs(matrix[i, j]) > tolerance)
+                // If any element below the main diagonal is non-zero (greater than tolerance), the matrix is not upper triangular.
+                if (ops.GreaterThan(ops.Abs(matrix[i, j]), tolerance))
                 {
                     return false;
                 }
@@ -912,8 +631,10 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsSparseMatrix(this Matrix<double> matrix, double sparsityThreshold = 0.5)
+    public static bool IsSparseMatrix<T>(this Matrix<T> matrix, T? sparsityThreshold = default)
     {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        sparsityThreshold ??= NumOps.FromDouble(0.5);
         int rows = matrix.Rows;
         int cols = matrix.Columns;
         int totalElements = rows * cols;
@@ -923,18 +644,21 @@ public static class MatrixHelper
         {
             for (int j = 0; j < cols; j++)
             {
-                if (matrix[i, j] == 0)
+                if (NumOps.Equals(matrix[i, j], NumOps.Zero))
                 {
                     zeroCount++;
                 }
             }
         }
 
-        return (double)zeroCount / totalElements >= sparsityThreshold;
+        T sparsityRatio = NumOps.Divide(NumOps.FromDouble(zeroCount), NumOps.FromDouble(totalElements));
+        return NumOps.GreaterThanOrEquals(sparsityRatio, sparsityThreshold);
     }
 
-    public static bool IsDenseMatrix(this Matrix<double> matrix, double denseThreshold = 0.5)
+    public static bool IsDenseMatrix<T>(this Matrix<T> matrix, T? denseThreshold = default)
     {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        denseThreshold ??= NumOps.FromDouble(0.5);
         int rows = matrix.Rows;
         int cols = matrix.Columns;
         int totalElements = rows * cols;
@@ -944,25 +668,29 @@ public static class MatrixHelper
         {
             for (int j = 0; j < cols; j++)
             {
-                if (matrix[i, j] != 0)
+                if (!NumOps.Equals(matrix[i, j], NumOps.Zero))
                 {
                     nonZeroCount++;
                 }
             }
         }
 
-        return (double)nonZeroCount / totalElements >= denseThreshold;
+        T densityRatio = NumOps.Divide(NumOps.FromDouble(nonZeroCount), NumOps.FromDouble(totalElements));
+        return NumOps.GreaterThanOrEquals(densityRatio, denseThreshold);
     }
 
-    public static bool IsLowerTriangularMatrix(this Matrix<double> matrix, double tolerance = double.Epsilon)
+    public static bool IsLowerTriangularMatrix<T>(this Matrix<T> matrix, T? tolerance = default)
     {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        tolerance ??= NumOps.FromDouble(1e-10);
         var rows = matrix.Rows;
+
         for (int i = 0; i < rows - 1; i++)
         {
             for (int j = i + 1; j < rows; j++)
             {
                 // If any element above the main diagonal is non-zero, the matrix is not lower triangular.
-                if (Math.Abs(matrix[i, j]) > tolerance)
+                if (NumOps.GreaterThan(NumOps.Abs(matrix[i, j]), tolerance))
                 {
                     return false;
                 }
@@ -972,24 +700,25 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsSquareMatrix(this Matrix<double> matrix)
+    public static bool IsSquareMatrix<T>(this Matrix<T> matrix)
     {
         return matrix.Rows == matrix.Columns;
     }
 
-    public static bool IsRectangularMatrix(this Matrix<double> matrix)
+    public static bool IsRectangularMatrix<T>(this Matrix<T> matrix)
     {
         return matrix.Rows != matrix.Columns;
     }
 
-    public static bool IsSymmetricMatrix(this Matrix<double> matrix)
+    public static bool IsSymmetricMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
+        var ops = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j <= i; j++)
             {
-                if (matrix[i, j] != matrix[j, i])
+                if (!ops.Equals(matrix[i, j], matrix[j, i]))
                 {
                     return false;
                 }
@@ -999,10 +728,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsDiagonalMatrix(this Matrix<double> matrix)
+    public static bool IsDiagonalMatrix<T>(this Matrix<T> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         if (rows != cols)
         {
@@ -1013,7 +743,7 @@ public static class MatrixHelper
         {
             for (int j = 0; j < cols; j++)
             {
-                if (i != j && matrix[i, j] != 0)
+                if (i != j && !ops.Equals(matrix[i, j], ops.Zero))
                 {
                     return false;
                 }
@@ -1023,10 +753,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsIdentityMatrix(this Matrix<double> matrix)
+    public static bool IsIdentityMatrix<T>(this Matrix<T> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         if (rows != cols)
         {
@@ -1039,14 +770,14 @@ public static class MatrixHelper
             {
                 if (i == j)
                 {
-                    if (matrix[i, j] != 1)
+                    if (!ops.Equals(matrix[i, j], ops.One))
                     {
                         return false; // Diagonal elements must be 1
                     }
                 }
                 else
                 {
-                    if (matrix[i, j] != 0)
+                    if (!ops.Equals(matrix[i, j], ops.Zero))
                     {
                         return false; // Non-diagonal elements must be 0
                     }
@@ -1057,10 +788,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsSkewSymmetricMatrix(this Matrix<double> matrix)
+    public static bool IsSkewSymmetricMatrix<T>(this Matrix<T> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         if (rows != cols)
         {
@@ -1071,7 +803,7 @@ public static class MatrixHelper
         {
             for (int j = 0; j < cols; j++)
             {
-                if (matrix[i, j] != -matrix[j, i])
+                if (!ops.Equals(matrix[i, j], ops.Negate(matrix[j, i])))
                 {
                     return false;
                 }
@@ -1081,31 +813,32 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsScalarMatrix(this Matrix<double> matrix)
+    public static bool IsScalarMatrix<T>(this Matrix<T> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         if (rows != cols)
         {
             return false; // A scalar matrix must be square
         }
 
-        double diagonalValue = matrix[0, 0];
+        T diagonalValue = matrix[0, 0];
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
                 if (i == j)
                 {
-                    if (matrix[i, j] != diagonalValue)
+                    if (!ops.Equals(matrix[i, j], diagonalValue))
                     {
                         return false; // All diagonal elements must be equal
                     }
                 }
                 else
                 {
-                    if (matrix[i, j] != 0)
+                    if (!ops.Equals(matrix[i, j], ops.Zero))
                     {
                         return false; // All off-diagonal elements must be zero
                     }
@@ -1116,10 +849,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsUpperBidiagonalMatrix(this Matrix<double> matrix)
+    public static bool IsUpperBidiagonalMatrix<T>(this Matrix<T> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         if (rows != cols)
         {
@@ -1132,7 +866,7 @@ public static class MatrixHelper
             {
                 if (i > j || j > i + 1)
                 {
-                    if (matrix[i, j] != 0)
+                    if (!ops.Equals(matrix[i, j], ops.Zero))
                     {
                         return false; // Elements below the main diagonal or above the first superdiagonal must be zero
                     }
@@ -1143,10 +877,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsLowerBidiagonalMatrix(this Matrix<double> matrix)
+    public static bool IsLowerBidiagonalMatrix<T>(this Matrix<T> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         if (rows != cols)
         {
@@ -1159,7 +894,7 @@ public static class MatrixHelper
             {
                 if (i < j || i > j + 1)
                 {
-                    if (matrix[i, j] != 0)
+                    if (!ops.Equals(matrix[i, j], ops.Zero))
                     {
                         return false; // Elements above the main diagonal or below the first subdiagonal must be zero
                     }
@@ -1170,10 +905,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsTridiagonalMatrix(this Matrix<double> matrix)
+    public static bool IsTridiagonalMatrix<T>(this Matrix<T> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         if (rows != cols)
         {
@@ -1184,7 +920,7 @@ public static class MatrixHelper
         {
             for (int j = 0; j < cols; j++)
             {
-                if (Math.Abs(i - j) > 1 && matrix[i, j] != 0)
+                if (Math.Abs(i - j) > 1 && !ops.Equals(matrix[i, j], ops.Zero))
                 {
                     return false; // Elements outside the three diagonals must be zero
                 }
@@ -1194,10 +930,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsBandMatrix(this Matrix<double> matrix, int subDiagonalThreshold = 1, int superDiagonalThreshold = 1)
+    public static bool IsBandMatrix<T>(this Matrix<T> matrix, int subDiagonalThreshold = 1, int superDiagonalThreshold = 1)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         if (rows != cols)
         {
@@ -1210,7 +947,7 @@ public static class MatrixHelper
             {
                 if (Math.Abs(i - j) > subDiagonalThreshold || Math.Abs(i - j) > superDiagonalThreshold)
                 {
-                    if (matrix[i, j] != 0)
+                    if (!ops.Equals(matrix[i, j], ops.Zero))
                     {
                         return false; // Elements outside the specified bands must be zero
                     }
@@ -1221,7 +958,7 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsHermitianMatrix(this Matrix<Complex> matrix)
+    public static bool IsHermitianMatrix<T>(this Matrix<Complex<T>> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
@@ -1245,7 +982,7 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsSkewHermitianMatrix(this Matrix<Complex> matrix)
+    public static bool IsSkewHermitianMatrix<T>(this Matrix<Complex<T>> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
@@ -1255,11 +992,13 @@ public static class MatrixHelper
             return false; // A skew-Hermitian matrix must be square
         }
 
+        var ops = MathHelper.GetNumericOperations<Complex<T>>();
+
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
-                if (matrix[i, j] != -matrix[j, i].Conjugate())
+                if (!ops.Equals(matrix[i, j], ops.Negate(matrix[j, i].Conjugate())))
                 {
                     return false; // Check if element is equal to the negation of its conjugate transpose
                 }
@@ -1269,7 +1008,7 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsOrthogonalMatrix(this Matrix<double> matrix, IMatrixDecomposition<double> matrixDecomposition)
+    public static bool IsOrthogonalMatrix<T>(this Matrix<T> matrix, IMatrixDecomposition<T> matrixDecomposition)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
@@ -1282,12 +1021,14 @@ public static class MatrixHelper
         var transpose = matrix.Transpose();
         var inverse = matrixDecomposition.Invert();
 
+        var ops = MathHelper.GetNumericOperations<T>();
+
         // Check if transpose is equal to inverse
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
-                if (Math.Abs(transpose[i, j] - inverse[i, j]) > 0.0001)
+                if (ops.GreaterThan(ops.Abs(ops.Subtract(transpose[i, j], inverse[i, j])), ops.FromDouble(0.0001)))
                 {
                     return false;
                 }
@@ -1297,11 +1038,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static Matrix<Complex> ConjugateTranspose(this Matrix<Complex> matrix)
+    public static Matrix<Complex<T>> ConjugateTranspose<T>(this Matrix<Complex<T>> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
-        var result = Matrix.CreateComplexMatrix(cols, rows);
+        var result = Matrix.CreateComplexMatrix<T>(cols, rows);
 
         for (int i = 0; i < cols; i++)
         {
@@ -1314,7 +1055,7 @@ public static class MatrixHelper
         return result;
     }
 
-    public static bool IsSingularMatrix(this Matrix<double> matrix)
+    public static bool IsSingularMatrix<T>(this Matrix<T> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
@@ -1325,13 +1066,14 @@ public static class MatrixHelper
         }
 
         // Calculate the determinant
-        double determinant = matrix.GetDeterminant();
+        T determinant = matrix.GetDeterminant();
 
         // If determinant is zero, the matrix is singular
-        return Math.Abs(determinant) < double.Epsilon;
+        var ops = MathHelper.GetNumericOperations<T>();
+        return ops.LessThan(ops.Abs(determinant), ops.FromDouble(1e-10));
     }
 
-    public static bool IsNonSingularMatrix(this Matrix<double> matrix)
+    public static bool IsNonSingularMatrix<T>(this Matrix<T> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
@@ -1342,24 +1084,26 @@ public static class MatrixHelper
         }
 
         // Calculate the determinant
-        double determinant = matrix.GetDeterminant();
+        T determinant = matrix.GetDeterminant();
 
-        // If determinant is zero, the matrix is singular
-        return Math.Abs(determinant) >= double.Epsilon;
+        // If determinant is not zero, the matrix is non-singular
+        var ops = MathHelper.GetNumericOperations<T>();
+        return ops.GreaterThanOrEquals(ops.Abs(determinant), ops.FromDouble(1e-10));
     }
 
-    public static bool IsPositiveDefiniteMatrix(this Matrix<double> matrix)
+    public static bool IsPositiveDefiniteMatrix<T>(this Matrix<T> matrix)
     {
         if (!matrix.IsSymmetricMatrix())
         {
             return false; // Positive definite matrices must be symmetric
         }
 
-        var eigenvalues = matrix.Eigenvalues().ToArray();
+        var eigenvalues = matrix.Eigenvalues();
+        var ops = MathHelper.GetNumericOperations<T>();
         // Check if all eigenvalues are positive
         foreach (var eigenvalue in eigenvalues)
         {
-            if (eigenvalue <= 0)
+            if (ops.LessThanOrEquals(eigenvalue, ops.Zero))
             {
                 return false;
             }
@@ -1368,16 +1112,17 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsIdempotentMatrix(this Matrix<double> matrix)
+    public static bool IsIdempotentMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var product = matrix.Multiply(matrix);
+        var ops = MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < rows; j++)
             {
-                if (Math.Abs(matrix[i, j] - product[i, j]) > 1e-10)
+                if (ops.GreaterThan(ops.Abs(ops.Subtract(matrix[i, j], product[i, j])), ops.FromDouble(1e-10)))
                 {
                     return false;
                 }
@@ -1387,23 +1132,24 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsStochasticMatrix(this Matrix<double> matrix)
+    public static bool IsStochasticMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < rows; i++)
         {
-            double rowSum = 0;
+            T rowSum = ops.Zero;
             for (int j = 0; j < cols; j++)
             {
-                if (matrix[i, j] < 0)
+                if (ops.LessThan(matrix[i, j], ops.Zero))
                 {
                     return false; // All elements must be non-negative
                 }
-                rowSum += matrix[i, j];
+                rowSum = ops.Add(rowSum, matrix[i, j]);
             }
-            if (Math.Abs(rowSum - 1) > 1e-10)
+            if (ops.GreaterThan(ops.Abs(ops.Subtract(rowSum, ops.One)), ops.FromDouble(1e-10)))
             {
                 return false; // Each row must sum to 1
             }
@@ -1412,10 +1158,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsDoublyStochasticMatrix(this Matrix<double> matrix)
+    public static bool IsDoublyStochasticMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if matrix is square
         if (!matrix.IsSquareMatrix())
@@ -1426,16 +1173,16 @@ public static class MatrixHelper
         // Check if all elements are non-negative and rows sum to 1
         for (int i = 0; i < rows; i++)
         {
-            double rowSum = 0;
+            T rowSum = ops.Zero;
             for (int j = 0; j < cols; j++)
             {
-                if (matrix[i, j] < 0)
+                if (ops.LessThan(matrix[i, j], ops.Zero))
                 {
                     return false; // All elements must be non-negative
                 }
-                rowSum += matrix[i, j];
+                rowSum = ops.Add(rowSum, matrix[i, j]);
             }
-            if (Math.Abs(rowSum - 1) > 1e-10)
+            if (ops.GreaterThan(ops.Abs(ops.Subtract(rowSum, ops.One)), ops.FromDouble(1e-10)))
             {
                 return false; // Each row must sum to 1
             }
@@ -1444,12 +1191,12 @@ public static class MatrixHelper
         // Check if columns sum to 1
         for (int j = 0; j < cols; j++)
         {
-            double colSum = 0;
+            T colSum = ops.Zero;
             for (int i = 0; i < rows; i++)
             {
-                colSum += matrix[i, j];
+                colSum = ops.Add(colSum, matrix[i, j]);
             }
-            if (Math.Abs(colSum - 1) > 1e-10)
+            if (ops.GreaterThan(ops.Abs(ops.Subtract(colSum, ops.One)), ops.FromDouble(1e-10)))
             {
                 return false; // Each column must sum to 1
             }
@@ -1458,10 +1205,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsAdjacencyMatrix(this Matrix<double> matrix)
+    public static bool IsAdjacencyMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if the matrix is square
         if (rows != cols)
@@ -1474,7 +1222,7 @@ public static class MatrixHelper
             for (int j = 0; j < cols; j++)
             {
                 // Check if the element is either 0 or 1
-                if (matrix[i, j] != 0 && matrix[i, j] != 1)
+                if (!ops.Equals(matrix[i, j], ops.Zero) && !ops.Equals(matrix[i, j], ops.One))
                 {
                     return false;
                 }
@@ -1484,10 +1232,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsCirculantMatrix(this Matrix<double> matrix)
+    public static bool IsCirculantMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
@@ -1500,7 +1249,7 @@ public static class MatrixHelper
         {
             for (int j = 0; j < cols; j++)
             {
-                if (matrix[i, j] != matrix[0, (j + i) % cols])
+                if (!ops.Equals(matrix[i, j], matrix[0, (j + i) % cols]))
                 {
                     return false;
                 }
@@ -1520,13 +1269,14 @@ public static class MatrixHelper
             return false;
         }
 
-        return rows % Math.Sqrt(cols) == 0;
+        return rows % (int)Math.Sqrt(cols) == 0;
     }
 
-    public static bool IsVandermondeMatrix(this Matrix<double> matrix)
+    public static bool IsVandermondeMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if the matrix has at least 2 rows and if each column forms a geometric progression
         for (int j = 1; j < cols; j++)
@@ -1534,7 +1284,8 @@ public static class MatrixHelper
             for (int i = 1; i < rows; i++)
             {
                 // Check if the current element is equal to the previous element multiplied by x_i
-                if (Math.Abs(matrix[i, j] - matrix[i - 1, j] * matrix[i, 0]) > 1e-10)
+                T expectedValue = ops.Multiply(matrix[i - 1, j], matrix[i, 0]);
+                if (ops.GreaterThan(ops.Abs(ops.Subtract(matrix[i, j], expectedValue)), ops.FromDouble(1e-10)))
                 {
                     return false;
                 }
@@ -1544,10 +1295,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsCauchyMatrix(this Matrix<double> matrix)
+    public static bool IsCauchyMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
@@ -1560,17 +1312,18 @@ public static class MatrixHelper
         {
             for (int j = 0; j < cols; j++)
             {
-                double element = matrix[i, j];
-                double x = matrix[i, 0];
-                double y = matrix[0, j];
+                T element = matrix[i, j];
+                T x = matrix[i, 0];
+                T y = matrix[0, j];
 
                 // Avoid division by zero
-                if (Math.Abs(x - y) < 1e-10)
+                if (ops.LessThan(ops.Abs(ops.Subtract(x, y)), ops.FromDouble(1e-10)))
                 {
                     return false;
                 }
 
-                if (Math.Abs(element - 1.0 / (x - y)) > 1e-10)
+                T expectedValue = ops.Divide(ops.One, ops.Subtract(x, y));
+                if (ops.GreaterThan(ops.Abs(ops.Subtract(element, expectedValue)), ops.FromDouble(1e-10)))
                 {
                     return false;
                 }
@@ -1580,9 +1333,10 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsHilbertMatrix(this Matrix<double> matrix)
+    public static bool IsHilbertMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
@@ -1595,8 +1349,8 @@ public static class MatrixHelper
         {
             for (int j = 0; j < rows; j++)
             {
-                double expectedValue = 1.0 / (i + j + 1); // Hilbert matrix definition
-                if (Math.Abs(matrix[i, j] - expectedValue) > 1e-10)
+                T expectedValue = ops.Divide(ops.One, ops.FromDouble(i + j + 1)); // Hilbert matrix definition
+                if (ops.GreaterThan(ops.Abs(ops.Subtract(matrix[i, j], expectedValue)), ops.FromDouble(1e-10)))
                 {
                     return false;
                 }
@@ -1606,10 +1360,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsCompanionMatrix(this Matrix<double> matrix)
+    public static bool IsCompanionMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
@@ -1620,12 +1375,12 @@ public static class MatrixHelper
         // Check if the first row contains the coefficients of a polynomial in reverse order
         for (int j = 0; j < cols - 1; j++)
         {
-            if (matrix[0, j] != 0 && matrix[0, j] != 1)
+            if (!ops.Equals(matrix[0, j], ops.Zero) && !ops.Equals(matrix[0, j], ops.One))
             {
                 return false;
             }
         }
-        if (matrix[0, cols - 1] != 1)
+        if (!ops.Equals(matrix[0, cols - 1], ops.One))
         {
             return false;
         }
@@ -1635,11 +1390,11 @@ public static class MatrixHelper
         {
             for (int j = 0; j < cols; j++)
             {
-                if (i == j + 1 && matrix[i, j] != 1)
+                if (i == j + 1 && !ops.Equals(matrix[i, j], ops.One))
                 {
                     return false;
                 }
-                if (i != j + 1 && matrix[i, j] != 0)
+                if (i != j + 1 && !ops.Equals(matrix[i, j], ops.Zero))
                 {
                     return false;
                 }
@@ -1649,17 +1404,18 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsHankelMatrix(this Matrix<double> matrix)
+    public static bool IsHankelMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if each element is the same as the one diagonally above and to the right of it
         for (int i = 0; i < rows - 1; i++)
         {
             for (int j = 0; j < cols - 1; j++)
             {
-                if (matrix[i, j] != matrix[i + 1, j + 1])
+                if (!ops.Equals(matrix[i, j], matrix[i + 1, j + 1]))
                 {
                     return false;
                 }
@@ -1669,17 +1425,18 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsToeplitzMatrix(this Matrix<double> matrix)
+    public static bool IsToeplitzMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if each element is the same as the one diagonally above it
         for (int i = 1; i < rows; i++)
         {
             for (int j = 1; j < cols; j++)
             {
-                if (matrix[i, j] != matrix[i - 1, j - 1])
+                if (!ops.Equals(matrix[i, j], matrix[i - 1, j - 1]))
                 {
                     return false;
                 }
@@ -1689,9 +1446,10 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsLaplacianMatrix(this Matrix<double> matrix)
+    public static bool IsLaplacianMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
@@ -1701,44 +1459,45 @@ public static class MatrixHelper
 
         for (int i = 0; i < rows; i++)
         {
-            double rowSum = 0;
-            double colSum = 0;
+            T rowSum = ops.Zero;
+            T colSum = ops.Zero;
 
             for (int j = 0; j < rows; j++)
             {
                 // Check for symmetry
-                if (matrix[i, j] != matrix[j, i])
+                if (!ops.Equals(matrix[i, j], matrix[j, i]))
                 {
                     return false;
                 }
 
                 // Check if off-diagonal elements are non-positive
-                if (i != j && matrix[i, j] > 0)
+                if (i != j && ops.GreaterThan(matrix[i, j], ops.Zero))
                 {
                     return false;
                 }
 
                 // Sum the row and column elements
-                rowSum += matrix[i, j];
-                colSum += matrix[j, i];
+                rowSum = ops.Add(rowSum, matrix[i, j]);
+                colSum = ops.Add(colSum, matrix[j, i]);
             }
 
             // Check if the sum of each row and column is zero
-            if (Math.Abs(rowSum) > 1e-10 || Math.Abs(colSum) > 1e-10)
+            if (ops.GreaterThan(ops.Abs(rowSum), ops.FromDouble(1e-10)) || 
+                ops.GreaterThan(ops.Abs(colSum), ops.FromDouble(1e-10)))
             {
                 return false;
             }
 
             // Check if diagonal elements are non-negative and equal to the sum of absolute values of the off-diagonal elements
-            double offDiagonalSum = 0;
+            T offDiagonalSum = ops.Zero;
             for (int j = 0; j < rows; j++)
             {
                 if (i != j)
                 {
-                    offDiagonalSum += Math.Abs(matrix[i, j]);
+                    offDiagonalSum = ops.Add(offDiagonalSum, ops.Abs(matrix[i, j]));
                 }
             }
-            if (matrix[i, i] != offDiagonalSum)
+            if (!ops.Equals(matrix[i, i], offDiagonalSum))
             {
                 return false;
             }
@@ -1747,10 +1506,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsIncidenceMatrix(this Matrix<double> matrix)
+    public static bool IsIncidenceMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows; // number of vertices
         var cols = matrix.Columns; // number of edges
+        var ops = MathHelper.GetNumericOperations<T>();
 
         for (int j = 0; j < cols; j++)
         {
@@ -1759,13 +1519,13 @@ public static class MatrixHelper
             for (int i = 0; i < rows; i++)
             {
                 // Check if the element is either 0 or 1
-                if (matrix[i, j] != 0 && matrix[i, j] != 1)
+                if (!ops.Equals(matrix[i, j], ops.Zero) && !ops.Equals(matrix[i, j], ops.One))
                 {
                     return false;
                 }
 
                 // Count the number of 1's in the current column
-                if (matrix[i, j] == 1)
+                if (ops.Equals(matrix[i, j], ops.One))
                 {
                     countOnes++;
                 }
@@ -1781,10 +1541,11 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsPermutationMatrix(this Matrix<double> matrix)
+    public static bool IsPermutationMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         int cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
@@ -1799,19 +1560,19 @@ public static class MatrixHelper
             for (int j = 0; j < cols; j++)
             {
                 // Check if the element is either 0 or 1
-                if (matrix[i, j] != 0 && matrix[i, j] != 1)
+                if (!ops.Equals(matrix[i, j], ops.Zero) && !ops.Equals(matrix[i, j], ops.One))
                 {
                     return false;
                 }
 
                 // Count the number of 1's in the current row
-                if (matrix[i, j] == 1)
+                if (ops.Equals(matrix[i, j], ops.One))
                 {
                     rowCount++;
                 }
 
                 // Count the number of 1's in the current column
-                if (matrix[j, i] == 1)
+                if (ops.Equals(matrix[j, i], ops.One))
                 {
                     colCount++;
                 }
@@ -1827,7 +1588,7 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsInvolutoryMatrix(this Matrix<double> matrix)
+    public static bool IsInvolutoryMatrix<T>(this Matrix<T> matrix)
     {
         if (!matrix.IsSquareMatrix())
         {
@@ -1838,7 +1599,7 @@ public static class MatrixHelper
         return product.IsIdentityMatrix();
     }
 
-    public static bool IsOrthogonalProjectionMatrix(this Matrix<double> matrix)
+    public static bool IsOrthogonalProjectionMatrix<T>(this Matrix<T> matrix)
     {
         if (!matrix.IsSymmetricMatrix())
         {
@@ -1853,18 +1614,19 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsPositiveSemiDefiniteMatrix(this Matrix<double> matrix)
+    public static bool IsPositiveSemiDefiniteMatrix<T>(this Matrix<T> matrix)
     {
         if (!matrix.IsSymmetricMatrix())
         {
             return false; // Positive semi-definite matrices must be symmetric
         }
 
-        var eigenvalues = matrix.Eigenvalues().ToArray();
+        var eigenvalues = matrix.Eigenvalues();
+        var ops = MathHelper.GetNumericOperations<T>();
         // Check if all eigenvalues are non-negative
         foreach (var eigenvalue in eigenvalues)
         {
-            if (eigenvalue < 0)
+            if (ops.LessThan(eigenvalue, ops.Zero))
             {
                 return false;
             }
@@ -1873,12 +1635,12 @@ public static class MatrixHelper
         return true;
     }
 
-    public static Vector<double> Eigenvalues(this Matrix<double> matrix)
+    public static Vector<T> Eigenvalues<T>(this Matrix<T> matrix)
     {
         // QR algorithm for finding eigenvalues of a symmetric matrix
         var rows = matrix.Rows;
-        var a = Matrix.CreateDoubleMatrix(rows, rows);
-    
+        var a = new Matrix<T>(rows, rows);
+
         // Copy the matrix data manually
         for (int i = 0; i < rows; i++)
         {
@@ -1888,19 +1650,19 @@ public static class MatrixHelper
             }
         }
 
-        var ops = MathHelper.GetNumericOperations<double>();
-        var eigenvalues = new Vector<double>(rows, ops);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var eigenvalues = new Vector<T>(rows, ops);
 
         for (int k = rows - 1; k > 0; k--)
         {
-            while (Math.Abs(a[k, k - 1]) > double.Epsilon)
+            while (ops.GreaterThan(ops.Abs(a[k, k - 1]), ops.FromDouble(1e-10))) // Replace ops.Epsilon with a small value
             {
-                double mu = a[k, k];
+                T mu = a[k, k];
                 for (int i = 0; i <= k; i++)
                 {
                     for (int j = 0; j <= k; j++)
                     {
-                        a[i, j] -= mu * a[k, i] * a[k, j];
+                        a[i, j] = ops.Subtract(a[i, j], ops.Multiply(ops.Multiply(mu, a[k, i]), a[k, j]));
                     }
                 }
 
@@ -1908,7 +1670,7 @@ public static class MatrixHelper
                 {
                     for (int j = 0; j < rows; j++)
                     {
-                        a[i, j] -= mu * a[i, k] * a[j, k];
+                        a[i, j] = ops.Subtract(a[i, j], ops.Multiply(ops.Multiply(mu, a[i, k]), a[j, k]));
                     }
                 }
             }
@@ -1916,7 +1678,7 @@ public static class MatrixHelper
             eigenvalues[k] = a[k, k];
             for (int i = 0; i <= k; i++)
             {
-                a[k, i] = a[i, k] = 0.0;
+                a[k, i] = a[i, k] = ops.Zero;
             }
         }
         eigenvalues[0] = a[0, 0];
@@ -1924,10 +1686,10 @@ public static class MatrixHelper
         return eigenvalues;
     }
 
-    // Method to calculate the determinant of a matrix
-    public static double GetDeterminant(this Matrix<double> matrix)
+    public static T GetDeterminant<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Base case: for 1x1 matrix, determinant is the single element
         if (rows == 1)
@@ -1935,12 +1697,12 @@ public static class MatrixHelper
             return matrix[0, 0];
         }
 
-        double det = 0;
+        T det = ops.Zero;
         // Recursive case: compute the determinant using cofactor expansion
         for (int j = 0; j < rows; j++)
         {
             // Calculate the cofactor of matrix[0, j]
-            var submatrix = Matrix<double>.CreateMatrix<double>(rows - 1, rows - 1);
+            var submatrix = Matrix<T>.CreateMatrix<T>(rows - 1, rows - 1);
             for (int i = 1; i < rows; i++)
             {
                 for (int k = 0; k < rows; k++)
@@ -1957,13 +1719,16 @@ public static class MatrixHelper
             }
 
             // Add the cofactor to the determinant
-            det += Math.Pow(-1, j) * matrix[0, j] * submatrix.GetDeterminant();
+            T sign = ops.FromDouble(Math.Pow(-1, j));
+            T cofactor = ops.Multiply(sign, matrix[0, j]);
+            T subDet = submatrix.GetDeterminant();
+            det = ops.Add(det, ops.Multiply(cofactor, subDet));
         }
 
         return det;
     }
 
-    public static bool IsUnitaryMatrix(this Matrix<Complex> matrix, IMatrixDecomposition<Complex> matrixDecomposition)
+    public static bool IsUnitaryMatrix<T>(this Matrix<Complex<T>> matrix, IMatrixDecomposition<Complex<T>> matrixDecomposition)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
@@ -1991,16 +1756,45 @@ public static class MatrixHelper
         return true;
     }
 
-    public static bool IsZeroMatrix(this Matrix<double> matrix)
+    public static Vector<T> ExtractDiagonal<T>(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        Vector<T> diagonal = new(n);
+        for (int i = 0; i < n; i++)
+        {
+            diagonal[i] = matrix[i, i];
+        }
+
+        return diagonal;
+    }
+
+    public static Matrix<T> OuterProduct<T>(Vector<T> v1, Vector<T> v2)
+    {
+        int n = v1.Length;
+        var ops = MathHelper.GetNumericOperations<T>();
+        Matrix<T> result = new(n, n);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                result[i, j] = ops.Multiply(v1[i], v2[j]);
+            }
+        }
+
+        return result;
+    }
+
+    public static bool IsZeroMatrix<T>(this Matrix<T> matrix)
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
-                if (matrix[i, j] != 0)
+                if (!ops.Equals(matrix[i, j], ops.Zero))
                 {
                     return false;
                 }
@@ -2010,24 +1804,25 @@ public static class MatrixHelper
         return true;
     }
 
-    public static Matrix<double> InvertUpperTriangularMatrix(this Matrix<double> matrix)
+    public static Matrix<T> InvertUpperTriangularMatrix<T>(this Matrix<T> matrix)
     {
         int n = matrix.Rows;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Create the inverse matrix
-        var inverse = Matrix.CreateDoubleMatrix(n, n);
+        var inverse = Matrix<T>.CreateMatrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                if (i >= j)
+                if (i <= j)
                 {
-                    inverse[i, j] = (double)1.0 / matrix[i, j];
+                    inverse[i, j] = ops.Divide(ops.One, matrix[i, j]);
                 }
                 else
                 {
-                    inverse[i, j] = 0;
+                    inverse[i, j] = ops.Zero;
                 }
             }
         }
@@ -2035,33 +1830,35 @@ public static class MatrixHelper
         return inverse;
     }
 
-    public static Matrix<double> InvertLowerTriangularMatrix(this Matrix<double> matrix)
+    public static Matrix<T> InvertLowerTriangularMatrix<T>(this Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        var invL = Matrix.CreateDoubleMatrix(n, n);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var invL = Matrix<T>.CreateMatrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {
-            invL[i, i] = 1.0 / matrix[i, i];
+            invL[i, i] = ops.Divide(ops.One, matrix[i, i]);
             for (int j = 0; j < i; j++)
             {
-                double sum = 0;
+                T sum = ops.Zero;
                 for (int k = j; k < i; k++)
                 {
-                    sum += matrix[i, k] * invL[k, j];
+                    sum = ops.Add(sum, ops.Multiply(matrix[i, k], invL[k, j]));
                 }
-                invL[i, j] = -sum / matrix[i, i];
+                invL[i, j] = ops.Negate(ops.Divide(sum, matrix[i, i]));
             }
         }
 
         return invL;
     }
 
-    public static double Hypotenuse(double x, double y)
+    public static T Hypotenuse<T>(T x, T y)
     {
-        double xabs = Math.Abs(x), yabs = Math.Abs(y), min, max;
+        var ops = MathHelper.GetNumericOperations<T>();
+        T xabs = ops.Abs(x), yabs = ops.Abs(y), min, max;
 
-        if (xabs < yabs)
+        if (ops.LessThan(xabs, yabs))
         {
             min = xabs; max = yabs;
         }
@@ -2070,78 +1867,84 @@ public static class MatrixHelper
             min = yabs; max = xabs;
         }
 
-        if (min == 0)
+        if (ops.Equals(min, ops.Zero))
         {
             return max;
         }
 
-        double u = min / max;
+        T u = ops.Divide(min, max);
 
-        return max * Math.Sqrt(1 + u * u);
+        return ops.Multiply(max, ops.Sqrt(ops.Add(ops.One, ops.Multiply(u, u))));
     }
 
-    public static double Hypotenuse(params double[] values)
+    public static T Hypotenuse<T>(params T[] values)
     {
-        double sum = 0.0;
+        var ops = MathHelper.GetNumericOperations<T>();
+        T sum = ops.Zero;
         foreach (var value in values)
         {
-            sum += value * value;
+            sum = ops.Add(sum, ops.Multiply(value, value));
         }
 
-        return Math.Sqrt(sum);
+        return ops.Sqrt(sum);
     }
 
-    public static Vector<double> ForwardSubstitution(this Matrix<double> aMatrix, Vector<double> bVector)
+    public static Vector<T> ForwardSubstitution<T>(this Matrix<T> aMatrix, Vector<T> bVector)
     {
         int n = aMatrix.Rows;
-        var ops = MathHelper.GetNumericOperations<double>();
-        var x = new Vector<double>(n, ops);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var x = new Vector<T>(n, ops);
 
         for (int i = 0; i < n; i++)
         {
             x[i] = bVector[i];
             for (int j = 0; j < i; j++)
             {
-                x[i] -= aMatrix[i, j] * x[j];
+                x[i] = ops.Subtract(x[i], ops.Multiply(aMatrix[i, j], x[j]));
             }
-            x[i] /= aMatrix[i, i];
+            x[i] = ops.Divide(x[i], aMatrix[i, i]);
         }
 
         return x;
     }
 
-    public static Matrix<Complex> ToComplexMatrix(this Matrix<double> matrix)
+    public static Matrix<Complex<T>> ToComplexMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
-        var complexMatrix = Matrix<Complex>.CreateMatrix<Complex>(rows, rows);
+        var cols = matrix.Columns;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var complexMatrix = Matrix<Complex<T>>.CreateMatrix<Complex<T>>(rows, cols);
+
         for (int i = 0; i < rows; i++)
         {
-            for (int j = 0; j < rows; j++)
+            for (int j = 0; j < cols; j++)
             {
-                complexMatrix[i, j] = new Complex(matrix[i, j], 0);
+                complexMatrix[i, j] = new Complex<T>(matrix[i, j], ops.Zero);
             }
         }
 
         return complexMatrix;
     }
 
-    public static Vector<Complex> ToComplexVector(this Vector<double> vector)
+    public static Vector<Complex<T>> ToComplexVector<T>(this Vector<T> vector)
     {
         var count = vector.Length;
-        var ops = MathHelper.GetNumericOperations<Complex>();
-        var complexVector = new Vector<Complex>(count, ops);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var complexVector = new Vector<Complex<T>>(count);
+
         for (int i = 0; i < count; i++)
         {
-            complexVector[i] = new Complex(vector[i], 0);
+            complexVector[i] = new Complex<T>(vector[i], ops.Zero);
         }
 
         return complexVector;
     }
 
-    public static Matrix<double> ToRealMatrix(this Matrix<Complex> matrix)
+    public static Matrix<T> ToRealMatrix<T>(this Matrix<Complex<T>> matrix)
     {
         var rows = matrix.Rows;
-        var realMatrix = Matrix.CreateDoubleMatrix(rows, rows);
+        var realMatrix = new Matrix<T>(rows, rows);
+
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < rows; j++)
@@ -2153,11 +1956,84 @@ public static class MatrixHelper
         return realMatrix;
     }
 
-    public static Vector<double> ToRealVector(this Vector<Complex> vector)
+    public static bool IsUpperHessenberg<T>(Matrix<T> matrix, T tolerance)
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 2; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < i - 1; j++)
+            {
+                if (NumOps.GreaterThan(NumOps.Abs(matrix[i, j]), tolerance))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static Matrix<T> OrthogonalizeColumns<T>(Matrix<T> matrix)
+    {
+        int m = matrix.Rows;
+        int n = matrix.Columns;
+        Matrix<T> Q = new(m, n);
+        var NumOps = MathHelper.GetNumericOperations<T>();
+
+        for (int j = 0; j < n; j++)
+        {
+            Vector<T> v = matrix.GetColumn(j);
+            for (int i = 0; i < j; i++)
+            {
+                Vector<T> qi = Q.GetColumn(i);
+                T r = NumOps.Divide(v.DotProduct(qi), qi.DotProduct(qi));
+                v = v.Subtract(qi.Multiply(r));
+            }
+            T norm = v.Norm();
+            if (!NumOps.Equals(norm, NumOps.Zero))
+            {
+                v = v.Divide(norm);
+            }
+            Q.SetColumn(j, v);
+        }
+
+        return Q;
+    }
+
+    public static (T c, T s) ComputeGivensRotation<T>(T a, T b)
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        if (NumOps.Equals(b, NumOps.Zero))
+        {
+            return (NumOps.One, NumOps.Zero);
+        }
+
+        var t = NumOps.Divide(a, b);
+        var u = NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Multiply(t, t)));
+        var c = NumOps.Divide(NumOps.One, u);
+        var s = NumOps.Multiply(c, t);
+
+        return (c, s);
+    }
+
+    public static void ApplyGivensRotation<T>(Matrix<T> H, T c, T s, int i, int j, int kStart, int kEnd)
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        for (int k = kStart; k < kEnd; k++)
+        {
+            var temp1 = H[i, k];
+            var temp2 = H[j, k];
+            H[i, k] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+            H[j, k] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
+        }
+    }
+
+    public static Vector<T> ToRealVector<T>(this Vector<Complex<T>> vector)
     {
         var count = vector.Length;
-        var ops = MathHelper.GetNumericOperations<double>();
-        var realVector = new Vector<double>(count, ops);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var realVector = new Vector<T>(count, ops);
+
         for (int i = 0; i < count; i++)
         {
             realVector[i] = vector[i].Real;
@@ -2166,51 +2042,34 @@ public static class MatrixHelper
         return realVector;
     }
 
-    public static Vector<Complex> ForwardSubstitution(this Matrix<Complex> aMatrix, Vector<Complex> bVector)
-    {
-        int n = aMatrix.Rows;
-        var ops = MathHelper.GetNumericOperations<Complex>();
-        var x = new Vector<Complex>(n, ops);
-
-        for (int i = 0; i < n; i++)
-        {
-            x[i] = bVector[i];
-            for (int j = 0; j < i; j++)
-            {
-                x[i] -= aMatrix[i, j] * x[j];
-            }
-            x[i] /= aMatrix[i, i];
-        }
-
-        return x;
-    }
-
-    public static Matrix<double> ApplyHouseholderTransformation(Matrix<double> matrix, Vector<double> vector, int k)
+    public static Matrix<T> ApplyHouseholderTransformation<T>(Matrix<T> matrix, Vector<T> vector, int k)
     {
         var rows = matrix.Rows;
+        var ops = MathHelper.GetNumericOperations<T>();
+
         for (int i = k + 1; i < rows; i++)
         {
-            double sum = 0;
+            T sum = ops.Zero;
             for (int j = k + 1; j < rows; j++)
             {
-                sum += vector[j - k - 1] * matrix[j, i];
+                sum = ops.Add(sum, ops.Multiply(vector[j - k - 1], matrix[j, i]));
             }
             for (int j = k + 1; j < rows; j++)
             {
-                matrix[j, i] -= 2 * vector[j - k - 1] * sum;
+                matrix[j, i] = ops.Subtract(matrix[j, i], ops.Multiply(ops.Multiply(ops.FromDouble(2), vector[j - k - 1]), sum));
             }
         }
 
         for (int i = 0; i < rows; i++)
         {
-            double sum = 0;
+            T sum = ops.Zero;
             for (int j = k + 1; j < rows; j++)
             {
-                sum += vector[j - k - 1] * matrix[i, j];
+                sum = ops.Add(sum, ops.Multiply(vector[j - k - 1], matrix[i, j]));
             }
             for (int j = k + 1; j < rows; j++)
             {
-                matrix[i, j] -= 2 * vector[j - k - 1] * sum;
+                matrix[i, j] = ops.Subtract(matrix[i, j], ops.Multiply(ops.Multiply(ops.FromDouble(2), vector[j - k - 1]), sum));
             }
         }
 
@@ -2218,50 +2077,51 @@ public static class MatrixHelper
     }
 
 
-    public static Vector<double> CreateHouseholderVector(Vector<double> x)
+    public static Vector<T> CreateHouseholderVector<T>(Vector<T> xVector)
     {
-        var ops = MathHelper.GetNumericOperations<double>();
-        var v = new Vector<double>(x.Length, ops);
-        double norm = 0;
-        for (int i = 0; i < x.Length; i++)
-        {
-            norm += x[i] * x[i];
-        }
-        norm = Math.Sqrt(norm);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(xVector.Length, ops);
+        T norm = ops.Zero;
 
-        v[0] = x[0] + Math.Sign(x[0]) * norm;
-        for (int i = 1; i < x.Length; i++)
+        for (int i = 0; i < xVector.Length; i++)
         {
-            v[i] = x[i];
+            norm = ops.Add(norm, ops.Multiply(xVector[i], xVector[i]));
         }
+        norm = ops.Sqrt(norm);
 
-        double vNorm = 0;
-        for (int i = 0; i < v.Length; i++)
+        result[0] = ops.Add(xVector[0], ops.Multiply(ops.SignOrZero(xVector[0]), norm));
+        for (int i = 1; i < xVector.Length; i++)
         {
-            vNorm += v[i] * v[i];
-        }
-        vNorm = Math.Sqrt(vNorm);
-
-        for (int i = 0; i < v.Length; i++)
-        {
-            v[i] /= vNorm;
+            result[i] = xVector[i];
         }
 
-        return v;
+        T vNorm = ops.Zero;
+        for (int i = 0; i < result.Length; i++)
+        {
+            vNorm = ops.Add(vNorm, ops.Multiply(result[i], result[i]));
+        }
+        vNorm = ops.Sqrt(vNorm);
+
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = ops.Divide(result[i], vNorm);
+        }
+
+        return result;
     }
 
-    public static (double, Vector<double>) PowerIteration(Matrix<double> aMatrix, int maxIterations, double tolerance)
+    public static (T, Vector<T>) PowerIteration<T>(Matrix<T> aMatrix, int maxIterations, T tolerance)
     {
         var rows = aMatrix.Rows;
-        var ops = MathHelper.GetNumericOperations<double>();
-        var bVector = new Vector<double>(rows, ops);
-        var b2Vector = new Vector<double>(rows, ops);
-        double eigenvalue = 0;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var bVector = new Vector<T>(rows, ops);
+        var b2Vector = new Vector<T>(rows, ops);
+        T eigenvalue = ops.Zero;
 
         // Initial guess for the eigenvector
         for (int i = 0; i < rows; i++)
         {
-            bVector[i] = 1.0;
+            bVector[i] = ops.One;
         }
 
         for (int iter = 0; iter < maxIterations; iter++)
@@ -2269,39 +2129,42 @@ public static class MatrixHelper
             // Multiply A by the vector b
             for (int i = 0; i < rows; i++)
             {
-                b2Vector[i] = 0;
+                b2Vector[i] = ops.Zero;
                 for (int j = 0; j < rows; j++)
                 {
-                    b2Vector[i] += aMatrix[i, j] * bVector[j];
+                    b2Vector[i] = ops.Add(b2Vector[i], ops.Multiply(aMatrix[i, j], bVector[j]));
                 }
             }
 
             // Normalize the vector
-            double norm = 0;
+            T norm = ops.Zero;
             for (int i = 0; i < rows; i++)
             {
-                norm += b2Vector[i] * b2Vector[i];
+                norm = ops.Add(norm, ops.Multiply(b2Vector[i], b2Vector[i]));
             }
-            norm = Math.Sqrt(norm);
+            norm = ops.Sqrt(norm);
             for (int i = 0; i < rows; i++)
             {
-                b2Vector[i] /= norm;
+                b2Vector[i] = ops.Divide(b2Vector[i], norm);
             }
 
             // Estimate the eigenvalue
-            double newEigenvalue = 0;
+            T newEigenvalue = ops.Zero;
             for (int i = 0; i < rows; i++)
             {
-                newEigenvalue += b2Vector[i] * b2Vector[i];
+                newEigenvalue = ops.Add(newEigenvalue, ops.Multiply(b2Vector[i], b2Vector[i]));
             }
 
             // Check for convergence
-            if (Math.Abs(newEigenvalue - eigenvalue) < tolerance)
+            if (ops.LessThan(ops.Abs(ops.Subtract(newEigenvalue, eigenvalue)), tolerance))
             {
                 break;
             }
             eigenvalue = newEigenvalue;
-            Array.Copy(b2Vector.ToArray(), bVector.ToArray(), rows);
+            for (int i = 0; i < rows; i++)
+            {
+                bVector[i] = b2Vector[i];
+            }
         }
 
         return (eigenvalue, b2Vector);
@@ -2329,15 +2192,35 @@ public static class MatrixHelper
         return invertedMatrix;
     }
 
-    public static Matrix<Complex> InvertUnitaryMatrix(this Matrix<Complex> matrix)
+    public static Matrix<Complex<T>> InvertUnitaryMatrix<T>(this Matrix<Complex<T>> matrix)
     {
         return matrix.Transpose();
     }
 
-    public static Matrix<double> GaussianEliminationInversion(this Matrix<double> matrix)
+    public static Matrix<T> InvertUsingDecomposition<T>(IMatrixDecomposition<T> decomposition)
+    {
+        int n = decomposition.A.Rows;
+        var inverse = new Matrix<T>(n, n);
+
+        for (int j = 0; j < n; j++)
+        {
+            var ej = Vector<T>.CreateStandardBasis(n, j);
+            var xj = decomposition.Solve(ej);
+
+            for (int i = 0; i < n; i++)
+            {
+                inverse[i, j] = xj[i];
+            }
+        }
+
+        return inverse;
+    }
+
+    public static Matrix<T> GaussianEliminationInversion<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
-        var augmentedMatrix = Matrix.CreateDoubleMatrix(rows, 2 * rows);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var augmentedMatrix = new Matrix<T>(rows, 2 * rows);
 
         // Copy matrix into the left half of the augmented matrix
         for (int i = 0; i < rows; i++)
@@ -2351,7 +2234,7 @@ public static class MatrixHelper
         // Add identity matrix to the right half of the augmented matrix
         for (int i = 0; i < rows; i++)
         {
-            augmentedMatrix[i, i + rows] = 1;
+            augmentedMatrix[i, i + rows] = ops.One;
         }
 
         // Perform Gaussian elimination with partial pivoting
@@ -2359,11 +2242,11 @@ public static class MatrixHelper
         {
             // Find pivot row
             int maxRowIndex = i;
-            double maxValue = Math.Abs(augmentedMatrix[i, i]);
+            T maxValue = ops.Abs(augmentedMatrix[i, i]);
             for (int k = i + 1; k < rows; k++)
             {
-                double absValue = Math.Abs(augmentedMatrix[k, i]);
-                if (absValue > maxValue)
+                T absValue = ops.Abs(augmentedMatrix[k, i]);
+                if (ops.GreaterThan(absValue, maxValue))
                 {
                     maxRowIndex = k;
                     maxValue = absValue;
@@ -2380,10 +2263,10 @@ public static class MatrixHelper
             }
 
             // Make diagonal element 1
-            double pivot = augmentedMatrix[i, i];
+            T pivot = augmentedMatrix[i, i];
             for (int j = 0; j < 2 * rows; j++)
             {
-                augmentedMatrix[i, j] /= pivot;
+                augmentedMatrix[i, j] = ops.Divide(augmentedMatrix[i, j], pivot);
             }
 
             // Make other elements in the column zero
@@ -2391,17 +2274,17 @@ public static class MatrixHelper
             {
                 if (k != i)
                 {
-                    double factor = augmentedMatrix[k, i];
+                    T factor = augmentedMatrix[k, i];
                     for (int j = 0; j < 2 * rows; j++)
                     {
-                        augmentedMatrix[k, j] -= factor * augmentedMatrix[i, j];
+                        augmentedMatrix[k, j] = ops.Subtract(augmentedMatrix[k, j], ops.Multiply(factor, augmentedMatrix[i, j]));
                     }
                 }
             }
         }
 
         // Extract the right half of the augmented matrix (the inverse)
-        var inverseMatrix = Matrix<double>.CreateMatrix<double>(rows, rows);
+        var inverseMatrix = new Matrix<T>(rows, rows);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < rows; j++)
@@ -2413,20 +2296,21 @@ public static class MatrixHelper
         return inverseMatrix;
     }
 
-    public static void GaussJordanElimination(this Matrix<double> matrix, Vector<double> vector, out Matrix<double> inverseMatrix, 
-        out Vector<double> coefficients)
+    public static void GaussJordanElimination<T>(this Matrix<T> matrix, Vector<T> vector, out Matrix<T> inverseMatrix, 
+        out Vector<T> coefficients)
     {
+        var ops = MathHelper.GetNumericOperations<T>();
         var matrixA = matrix.Copy();
-        var matrixB = Matrix<double>.CreateFromVector(vector);
+        var matrixB = Matrix<T>.CreateFromVector(vector);
         int rows = matrixA.Rows, columns = matrixB.Columns, rowIndex = 0, columnIndex = 0;
         var indexArray = new int[rows];
         var indexRowArray = new int[rows];
         var indexColumnArray = new int[rows];
-        double inverse = 0.0, dummyValue = 0.0;
+        T inverse = ops.Zero, dummyValue = ops.Zero;
 
         for (int i = 0; i < rows; i++)
         {
-            var big = 0.0;
+            var big = ops.Zero;
             for (int j = 0; j < rows; j++)
             {
                 if (indexArray[j] != 1)
@@ -2435,8 +2319,8 @@ public static class MatrixHelper
                     {
                         if (indexArray[k] == 0)
                         {
-                            var currentValue = Math.Abs(matrixA[j, k]);
-                            if (currentValue >= big)
+                            var currentValue = ops.Abs(matrixA[j, k]);
+                            if (ops.GreaterThanOrEquals(currentValue, big))
                             {
                                 big = currentValue;
                                 rowIndex = j;
@@ -2452,44 +2336,44 @@ public static class MatrixHelper
             {
                 for (int j = 0; j < rows; j++)
                 {
-                    matrixA[rowIndex, j] = matrixA[columnIndex, j];
+                    (matrixA[rowIndex, j], matrixA[columnIndex, j]) = (matrixA[columnIndex, j], matrixA[rowIndex, j]);
                 }
                 for (int j = 0; j < columns; j++)
                 {
-                    matrixB[rowIndex, j] = matrixB[columnIndex, j];
+                    (matrixB[rowIndex, j], matrixB[columnIndex, j]) = (matrixB[columnIndex, j], matrixB[rowIndex, j]);
                 }
             }
             indexRowArray[i] = rowIndex;
             indexColumnArray[i] = columnIndex;
 
-            if (matrixA[columnIndex, columnIndex] == 0)
+            if (ops.Equals(matrixA[columnIndex, columnIndex], ops.Zero))
             {
                 throw new InvalidOperationException("Singular matrix");
             }
-            inverse = 1.0 / matrixA[columnIndex, columnIndex];
-            matrixA[columnIndex, columnIndex] = 1.0;
+            inverse = ops.Divide(ops.One, matrixA[columnIndex, columnIndex]);
+            matrixA[columnIndex, columnIndex] = ops.One;
 
             for (int j = 0; j < rows; j++)
             {
-                matrixA[columnIndex, j] *= inverse;
+                matrixA[columnIndex, j] = ops.Multiply(matrixA[columnIndex, j], inverse);
             }
             for (int j = 0; j < columns; j++)
             {
-                matrixB[columnIndex, j] *= inverse;
+                matrixB[columnIndex, j] = ops.Multiply(matrixB[columnIndex, j], inverse);
             }
             for (int j = 0; j < rows; j++)
             {
                 if (j != columnIndex)
                 {
                     dummyValue = matrixA[j, columnIndex];
-                    matrixA[j, columnIndex] = 0;
+                    matrixA[j, columnIndex] = ops.Zero;
                     for (int k = 0; k < rows; k++)
                     {
-                        matrixA[k, j] -= matrixA[columnIndex, j] * dummyValue;
+                        matrixA[k, j] = ops.Subtract(matrixA[k, j], ops.Multiply(matrixA[columnIndex, j], dummyValue));
                     }
                     for (int k = 0; k < columns; k++)
                     {
-                        matrixB[k, j] -= matrixB[columnIndex, j] * dummyValue;
+                        matrixB[k, j] = ops.Subtract(matrixB[k, j], ops.Multiply(matrixB[columnIndex, j], dummyValue));
                     }
                 }
             }
@@ -2501,13 +2385,13 @@ public static class MatrixHelper
             {
                 for (int j = 0; j < rows; j++)
                 {
-                    matrixA[j, indexRowArray[i]] = matrixA[j, indexColumnArray[i]];
+                    (matrixA[j, indexRowArray[i]], matrixA[j, indexColumnArray[i]]) = (matrixA[j, indexColumnArray[i]], matrixA[j, indexRowArray[i]]);
                 }
             }
         }
 
         inverseMatrix = matrixA;
-        coefficients = new Vector<double>(rows);
+        coefficients = new Vector<T>(rows);
         for (int i = 0; i < rows; i++)
         {
             coefficients[i] = matrixB[i, 0];
@@ -2528,18 +2412,24 @@ public static class MatrixHelper
         return result;
     }
 
-    public static int GetNullity(this Matrix<double> matrix, double threshold = -1)
+    public static int GetNullity<T>(this Matrix<T> matrix, T? threshold = default)
     {
         var rows = matrix.Rows;
         var columns = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<double>();
-        var weightsVector = new Vector<double>(columns, ops);
-        var thresh = threshold >= 0 ? threshold : 0.5 * Math.Sqrt(rows + columns + 1) * weightsVector[0] * double.Epsilon;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var weightsVector = new Vector<T>(columns, ops);
+        var epsilon = ops.FromDouble(1e-10); // Small number instead of Epsilon
+        var thresh = threshold != null && ops.GreaterThanOrEquals(threshold, ops.Zero)
+            ? threshold
+            : ops.Multiply(
+                ops.FromDouble(0.5 * Math.Sqrt(rows + columns + 1)),
+                ops.Multiply(weightsVector[0], epsilon)
+            );
         int nullity = 0;
 
         for (int i = 0; i < columns; i++)
         {
-            if (weightsVector[i] <= thresh)
+            if (ops.LessThanOrEquals(weightsVector[i], thresh))
             {
                 nullity++;
             }
@@ -2548,24 +2438,29 @@ public static class MatrixHelper
         return nullity;
     }
 
-    public static Matrix<double> Nullspace(this Matrix<double> matrix, double threshold = -1)
+    public static Matrix<T> Nullspace<T>(this Matrix<T> matrix, T threshold)
     {
         int rows = matrix.Rows, columns = matrix.Columns, nullIndex = 0;
-        var ops = MathHelper.GetNumericOperations<double>();
-        var weightsVector = new Vector<double>(columns, ops);
-        var thresh = threshold >= 0 ? threshold : 0.5 * Math.Sqrt(rows + columns + 1) * weightsVector[0] * double.Epsilon;
-        var nullspaceMatrix = Matrix.CreateDoubleMatrix(columns, matrix.GetNullity(thresh));
-        var vMatrix = Matrix.CreateDoubleMatrix(columns, columns);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var weightsVector = new Vector<T>(columns, ops);
+        var epsilon = ops.FromDouble(1e-10); // Small number instead of Epsilon
+        var thresh = ops.GreaterThanOrEquals(threshold, ops.Zero)
+            ? threshold
+            : ops.Multiply(
+                ops.FromDouble(0.5 * Math.Sqrt(rows + columns + 1)),
+                ops.Multiply(weightsVector[0], epsilon)
+            );
+        var nullspaceMatrix = Matrix<T>.CreateMatrix<T>(columns, matrix.GetNullity(thresh));
+        var vMatrix = matrix.Copy();
 
         for (int i = 0; i < columns; i++)
         {
-            if (weightsVector[i] <= thresh)
+            if (ops.LessThanOrEquals(weightsVector[i], thresh))
             {
                 for (int j = 0; j < columns; j++)
                 {
                     nullspaceMatrix[j, nullIndex] = vMatrix[j, i];
                 }
-
                 nullIndex++;
             }
         }
@@ -2573,23 +2468,22 @@ public static class MatrixHelper
         return nullspaceMatrix;
     }
 
-    public static Matrix<double> GetRange(this Matrix<double> matrix, double threshold = -1)
+    public static Matrix<T> GetRange<T>(this Matrix<T> matrix, T threshold)
     {
         int rows = matrix.Rows, columns = matrix.Columns, rank = 0;
-        var ops = MathHelper.GetNumericOperations<double>();
-        var weightsVector = new Vector<double>(columns, ops);
-        var rangeMatrix = Matrix.CreateDoubleMatrix(rows, matrix.GetRank(threshold));
+        var ops = MathHelper.GetNumericOperations<T>();
+        var weightsVector = new Vector<T>(columns, ops);
+        var rangeMatrix = new Matrix<T>(rows, matrix.GetRank(threshold));
         var uMatrix = matrix.Copy();
 
         for (int i = 0; i < columns; i++)
         {
-            if (weightsVector[i] > threshold)
+            if (ops.GreaterThan(weightsVector[i], threshold))
             {
                 for (int j = 0; j < rows; j++)
                 {
                     rangeMatrix[j, rank] = uMatrix[j, i];
                 }
-
                 rank++;
             }
         }
@@ -2597,18 +2491,21 @@ public static class MatrixHelper
         return rangeMatrix;
     }
 
-    public static int GetRank(this Matrix<double> matrix, double threshold = -1)
+    public static int GetRank<T>(this Matrix<T> matrix, T threshold)
     {
         var rows = matrix.Rows;
         var columns = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<double>();
-        var weightsVector = new Vector<double>(columns, ops);
-        var thresh = threshold >= 0 ? threshold : 0.5 * Math.Sqrt(rows + columns + 1) * weightsVector[0] * double.Epsilon;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var weightsVector = new Vector<T>(columns, ops);
+        var epsilon = ops.FromDouble(1e-10); // Small number instead of Epsilon
+        var thresh = ops.GreaterThanOrEquals(threshold, ops.Zero) 
+            ? threshold 
+            : ops.Multiply(ops.FromDouble(0.5 * Math.Sqrt(rows + columns + 1)), ops.Multiply(weightsVector[0], epsilon));
         int rank = 0;
 
         for (int i = 0; i < columns; i++)
         {
-            if (weightsVector[i] > thresh)
+            if (ops.GreaterThan(weightsVector[i], thresh))
             {
                 rank++;
             }
@@ -2660,52 +2557,59 @@ public static class MatrixHelper
         return newMatrix;
     }
 
-    public static void TridiagonalSolve(Vector<double> vector1, Vector<double> vector2, Vector<double> vector3,
-        Vector<double> solutionVector, Vector<double> actualVector)
+    public static void TridiagonalSolve<T>(Vector<T> vector1, Vector<T> vector2, Vector<T> vector3,
+    Vector<T> solutionVector, Vector<T> actualVector)
     {
         var size = vector1.Length;
-        double bet;
-        var ops = MathHelper.GetNumericOperations<double>();
-        var gamVector = new Vector<double>(size, ops);
+        T bet;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var gamVector = new Vector<T>(size, ops);
 
-        if (vector2[0] == 0)
+        if (ops.Equals(vector2[0], ops.Zero))
         {
             throw new InvalidOperationException("Not a tridiagonal matrix!");
         }
 
         bet = vector2[0];
-        solutionVector[0] = actualVector[0] / bet;
+        solutionVector[0] = ops.Divide(actualVector[0], bet);
         for (int i = 1; i < size; i++)
         {
-            gamVector[i] = vector3[i - 1] / bet;
-            bet = vector2[i] - vector1[i] * gamVector[i];
+            gamVector[i] = ops.Divide(vector3[i - 1], bet);
+            bet = ops.Subtract(vector2[i], ops.Multiply(vector1[i], gamVector[i]));
 
-            if (bet == 0)
+            if (ops.Equals(bet, ops.Zero))
             {
                 throw new InvalidOperationException("Not a tridiagonal matrix!");
             }
 
-            solutionVector[i] = actualVector[i] - vector1[i] * solutionVector[i - 1] / bet;
+            solutionVector[i] = ops.Divide(
+                ops.Subtract(actualVector[i], ops.Multiply(vector1[i], solutionVector[i - 1])),
+                bet
+            );
         }
 
         for (int i = size - 2; i >= 0; i--)
         {
-            solutionVector[i] -= gamVector[i + 1] * solutionVector[i + 1];
+            solutionVector[i] = ops.Subtract(
+                solutionVector[i],
+                ops.Multiply(gamVector[i + 1], solutionVector[i + 1])
+            );
         }
     }
 
-    public static void BandDiagonalMultiply(int leftSide, int rightSide, Matrix<double> matrix, Vector<double> solutionVector, Vector<double> actualVector)
+    public static void BandDiagonalMultiply<T>(int leftSide, int rightSide, Matrix<T> matrix, Vector<T> solutionVector, Vector<T> actualVector)
     {
         var size = matrix.Rows;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < size; i++)
         {
             var k = i - leftSide;
             var temp = Math.Min(leftSide + rightSide + 1, size - k);
-            solutionVector[i] = 0;
+            solutionVector[i] = ops.Zero;
             for (int j = Math.Max(0, -k); j < temp; j++)
             {
-                solutionVector[i] += matrix[i, j] * actualVector[j + k];
+                solutionVector[i] = ops.Add(solutionVector[i], ops.Multiply(matrix[i, j], actualVector[j + k]));
             }
         }
     }

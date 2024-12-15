@@ -1,11 +1,11 @@
 ﻿namespace AiDotNet.Regression;
 
-public class PolynomialRegression<T> : BaseRegression<T>
+public class PolynomialRegression<T> : RegressionBase<T>
 {
-    private readonly PolynomialRegressionOptions _polyOptions;
+    private readonly PolynomialRegressionOptions<T> _polyOptions;
 
-    public PolynomialRegression(INumericOperations<T> numOps, PolynomialRegressionOptions options)
-        : base(numOps, options)
+    public PolynomialRegression(PolynomialRegressionOptions<T> options)
+        : base(options)
     {
         _polyOptions = options;
     }
@@ -18,7 +18,7 @@ public class PolynomialRegression<T> : BaseRegression<T>
             polyX = polyX.AddConstantColumn(NumOps.One);
 
         var xTx = polyX.Transpose().Multiply(polyX);
-        var regularizedXTx = xTx.Add(regularization.GetRegularizationMatrix(xTx.Rows, NumOps.FromDouble(Options.RegularizationStrength)));
+        var regularizedXTx = xTx.Add(regularization.RegularizeMatrix(xTx));
         var xTy = polyX.Transpose().Multiply(y);
 
         var solution = SolveSystem(regularizedXTx, xTy);
@@ -26,7 +26,7 @@ public class PolynomialRegression<T> : BaseRegression<T>
         if (Options.UseIntercept)
         {
             Intercept = solution[0];
-            Coefficients = new Vector<T>(solution.Skip(1).ToArray(), NumOps);
+            Coefficients = new Vector<T>([.. solution.Skip(1)], NumOps);
         }
         else
         {

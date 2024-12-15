@@ -27,4 +27,10 @@ public class Int64Operations : INumericOperations<long>
     public long MaxValue => long.MaxValue;
     public bool IsNaN(long value) => false;
     public bool IsInfinity(long value) => false;
+    public long SignOrZero(long value)
+    {
+        if (value > 0) return 1L;
+        if (value < 0) return -1L;
+        return 0L;
+    }
 }

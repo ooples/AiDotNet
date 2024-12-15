@@ -386,12 +386,6 @@ public static class VectorHelper
         return result;
     }
 
-    public static Vector<T> Add<T>(this VectorBase<T> vector, T scalar)
-    {
-        var operations = MathHelper.GetNumericOperations<T>();
-        return vector.Transform(value => operations.Add(value, scalar));
-    }
-
     public static VectorBase<TResult> Transform<T, TResult>(this Vector<T> vector, Func<T, TResult> function)
     {
         return vector.Transform(function);
