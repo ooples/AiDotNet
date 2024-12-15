@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.Models;
 
 public class NormalizationParameters<T>
 {

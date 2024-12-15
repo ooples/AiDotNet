@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.DecompositionMethods;
 
 public class EigenDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -70,7 +70,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
             A = r.Multiply(q);
             Q = Q.Multiply(q);
 
-            if (MatrixHelper.IsUpperTriangularMatrix(A, NumOps.FromDouble(1e-10)))
+            if (A.IsUpperTriangularMatrix(NumOps.FromDouble(1e-10)))
                 break;
         }
 

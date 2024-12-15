@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.DecompositionMethods;
 
 public class NormalDecomposition<T> : IMatrixDecomposition<T>
 {

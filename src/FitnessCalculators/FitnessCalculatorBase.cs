@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.FitnessCalculators;
 
 public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
 {
@@ -12,10 +12,10 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     }
 
     public abstract T CalculateFitnessScore(
-        ErrorStats<T> errorStats, 
-        BasicStats<T> basicStats, 
+        ErrorStats<T> errorStats,
+        BasicStats<T> basicStats,
         BasicStats<T> predictedStats,
-        Vector<T> actualValues, 
+        Vector<T> actualValues,
         Vector<T> predictedValues,
         Matrix<T> features,
         PredictionStats<T> predictionStats);
@@ -24,8 +24,8 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
 
     public bool IsBetterFitness(T newScore, T currentBestScore)
     {
-        return _isHigherScoreBetter 
-            ? _numOps.GreaterThan(newScore, currentBestScore) 
+        return _isHigherScoreBetter
+            ? _numOps.GreaterThan(newScore, currentBestScore)
             : _numOps.LessThan(newScore, currentBestScore);
     }
 }

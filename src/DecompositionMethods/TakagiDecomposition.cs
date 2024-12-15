@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.DecompositionMethods;
 
 public class TakagiDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -142,7 +142,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
         int n = matrix.Rows;
         var S = new Matrix<T>(n, n);
         var U = Matrix<Complex<T>>.CreateIdentity(n);
-        var A = MatrixHelper.ToComplexMatrix(matrix);
+        var A = matrix.ToComplexMatrix();
 
         const int maxIterations = 100;
         var tolerance = NumOps.FromDouble(1e-10);
@@ -374,10 +374,10 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     {
         var invSigma = SigmaMatrix.InvertDiagonalMatrix();
         var invU = UnitaryMatrix.InvertUnitaryMatrix();
-        var invSigmaComplex = MatrixHelper.ToComplexMatrix(invSigma);
+        var invSigmaComplex = invSigma.ToComplexMatrix();
         var inv = invU.Multiply(invSigmaComplex).Multiply(invU.Transpose());
 
-        return MatrixHelper.ToRealMatrix<T>(inv);
+        return inv.ToRealMatrix();
     }
 
     public Vector<T> Solve(Vector<T> bVector)
@@ -387,9 +387,9 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
         {
             bComplex[i] = new Complex<T>(bVector[i], NumOps.Zero);
         }
-        var yVector = MatrixHelper.ForwardSubstitution(UnitaryMatrix, bComplex);
+        var yVector = UnitaryMatrix.ForwardSubstitution(bComplex);
 
-        var result = MatrixHelper.BackwardSubstitution(SigmaMatrix.ToComplexMatrix(), yVector);
-        return MatrixHelper.ToRealVector<T>(result);
+        var result = SigmaMatrix.ToComplexMatrix().BackwardSubstitution(yVector);
+        return result.ToRealVector();
     }
 }

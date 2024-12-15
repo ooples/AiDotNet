@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.DecompositionMethods;
 
 public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -230,7 +230,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
                 var B = matrix.SubMatrix(i + size, i, n - i - size, size);
                 var subLCholesky = new CholeskyDecomposition<T>(L.SubMatrix(i, i, size, size));
                 var X = subLCholesky.SolveMatrix(B.Transpose());
-                
+
                 for (int r = 0; r < n - i - size; r++)
                 {
                     for (int c = 0; c < size; c++)

@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Helpers;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.NumericOperations;
 using System.Linq;
 

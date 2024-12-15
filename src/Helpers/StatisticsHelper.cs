@@ -822,6 +822,24 @@ public static class StatisticsHelper<T>
         return (lowerBound, upperBound);
     }
 
+    public static T CalculatePearsonCorrelation(Vector<T> x, Vector<T> y)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var n = numOps.FromDouble(x.Length);
+
+        var sumX = x.Aggregate(numOps.Zero, numOps.Add);
+        var sumY = y.Aggregate(numOps.Zero, numOps.Add);
+        var sumXY = x.Zip(y, numOps.Multiply).Aggregate(numOps.Zero, numOps.Add);
+        var sumXSquare = x.Select(numOps.Square).Aggregate(numOps.Zero, numOps.Add);
+        var sumYSquare = y.Select(numOps.Square).Aggregate(numOps.Zero, numOps.Add);
+
+        var numerator = numOps.Subtract(numOps.Multiply(n, sumXY), numOps.Multiply(sumX, sumY));
+        var denominatorX = numOps.Sqrt(numOps.Subtract(numOps.Multiply(n, sumXSquare), numOps.Square(sumX)));
+        var denominatorY = numOps.Sqrt(numOps.Subtract(numOps.Multiply(n, sumYSquare), numOps.Square(sumY)));
+
+        return numOps.Divide(numerator, numOps.Multiply(denominatorX, denominatorY));
+    }
+
     public static (T LowerInterval, T UpperInterval) CalculatePredictionIntervals(Vector<T> actual, Vector<T> predicted, T confidenceLevel)
     {
         int n = actual.Length;

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.DecompositionMethods;
 
 public class CramerDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -94,7 +94,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
             m++;
         }
 
-        T sign = ((row + col) % 2 == 0) ? NumOps.One : NumOps.Negate(NumOps.One);
+        T sign = (row + col) % 2 == 0 ? NumOps.One : NumOps.Negate(NumOps.One);
         return NumOps.Multiply(sign, Determinant(minor));
     }
 
