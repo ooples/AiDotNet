@@ -10,7 +10,6 @@ public interface IOptimizationAlgorithm<T>
         Matrix<T> XTest,
         Vector<T> yTest,
         PredictionModelOptions modelOptions,
-        OptimizationAlgorithmOptions optimizationOptions,
         IRegression<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
@@ -18,5 +17,5 @@ public interface IOptimizationAlgorithm<T>
         IFitnessCalculator<T> fitnessCalculator,
         IFitDetector<T> fitDetector);
 
-    bool ShouldEarlyStop(List<OptimizationIterationInfo<T>> iterationHistory, OptimizationAlgorithmOptions options, IFitnessCalculator<T> fitnessCalculator);
+    bool ShouldEarlyStop(List<OptimizationIterationInfo<T>> iterationHistory, IFitnessCalculator<T> fitnessCalculator);
 }

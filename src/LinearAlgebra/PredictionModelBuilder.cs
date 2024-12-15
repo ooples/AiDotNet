@@ -10,10 +10,6 @@ namespace AiDotNet.LinearAlgebra;
 public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
 {
     private readonly PredictionModelOptions _options;
-    private OptimizationAlgorithmOptions? _optimizationOptions;
-    private RegularizationOptions? _regularizationOptions;
-    private RegressionOptions<T>? _regressionOptions;
-    private FitnessCalculatorOptions? _fitnessCalculatorOptions;
     private IFeatureSelector<T>? _featureSelector;
     private INormalizer<T>? _normalizer;
     private IRegularization<T>? _regularization;
@@ -29,59 +25,55 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         _options = options ?? new PredictionModelOptions();
     }
 
-    public IPredictionModelBuilder<T> WithFeatureSelector(IFeatureSelector<T> selector)
+    public IPredictionModelBuilder<T> ConfigureFeatureSelector(IFeatureSelector<T> selector)
     {
         _featureSelector = selector;
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithNormalizer(INormalizer<T> normalizer)
+    public IPredictionModelBuilder<T> ConfigureNormalizer(INormalizer<T> normalizer)
     {
         _normalizer = normalizer;
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithRegularization(IRegularization<T> regularization, RegularizationOptions? regularizationOptions = null)
+    public IPredictionModelBuilder<T> ConfigureRegularization(IRegularization<T> regularization)
     {
         _regularization = regularization;
-        _regularizationOptions = regularizationOptions;
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithFitnessCalculator(IFitnessCalculator<T> calculator, FitnessCalculatorOptions? fitnessCalculatorOptions = null)
+    public IPredictionModelBuilder<T> ConfigureFitnessCalculator(IFitnessCalculator<T> calculator)
     {
         _fitnessCalculator = calculator;
-        _fitnessCalculatorOptions = fitnessCalculatorOptions;
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithFitDetector(IFitDetector<T> detector)
+    public IPredictionModelBuilder<T> ConfigureFitDetector(IFitDetector<T> detector)
     {
         _fitDetector = detector;
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithRegression(IRegression<T> regression, RegressionOptions<T>? regressionOptions = null)
+    public IPredictionModelBuilder<T> ConfigureRegression(IRegression<T> regression)
     {
         _regression = regression;
-        _regressionOptions = regressionOptions;
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithOptimizer(IOptimizationAlgorithm<T> optimizationAlgorithm, OptimizationAlgorithmOptions? optimizationOptions = null)
+    public IPredictionModelBuilder<T> ConfigureOptimizer(IOptimizationAlgorithm<T> optimizationAlgorithm)
     {
         _optimizer = optimizationAlgorithm;
-        _optimizationOptions = optimizationOptions;
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithDataPreprocessor(IDataPreprocessor<T> dataPreprocessor)
+    public IPredictionModelBuilder<T> ConfigureDataPreprocessor(IDataPreprocessor<T> dataPreprocessor)
     {
         _dataPreprocessor = dataPreprocessor;
         return this;
     }
 
-    public IPredictionModelBuilder<T> WithOutlierRemoval(IOutlierRemoval<T> outlierRemoval)
+    public IPredictionModelBuilder<T> ConfigureOutlierRemoval(IOutlierRemoval<T> outlierRemoval)
     {
         _outlierRemoval = outlierRemoval;
         return this;
@@ -102,7 +94,6 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         // Use defaults for these interfaces if they aren't set
         var normalizer = _normalizer ?? new NoNormalizer<T>();
         var optimizer = _optimizer ?? new NormalOptimizer<T>();
-        var optimizerOptions = _optimizationOptions ?? new OptimizationAlgorithmOptions();
         var featureSelector = _featureSelector ?? new NoFeatureSelector<T>();
         var fitDetector = _fitDetector ?? new DefaultFitDetector<T>();
         var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator<T>();
@@ -117,7 +108,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         // Optimize the model
-        var optimizationResult = optimizer.Optimize(XTrain, yTrain, XVal, yVal, XTest, yTest, _options, optimizerOptions, _regression, regularization, normalizer, 
+        var optimizationResult = optimizer.Optimize(XTrain, yTrain, XVal, yVal, XTest, yTest, _options, _regression, regularization, normalizer, 
             normInfo, fitnessCalculator, fitDetector);
 
         return new PredictionModelResult<T>

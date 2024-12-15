@@ -2,15 +2,15 @@
 
 public interface IPredictionModelBuilder<T>
 {
-    IPredictionModelBuilder<T> WithFeatureSelector(IFeatureSelector<T> selector);
-    IPredictionModelBuilder<T> WithNormalizer(INormalizer<T> normalizer);
-    IPredictionModelBuilder<T> WithRegularization(IRegularization<T> regularization, RegularizationOptions? regularizationOptions = null);
-    IPredictionModelBuilder<T> WithFitnessCalculator(IFitnessCalculator<T> calculator, FitnessCalculatorOptions? _fitnessCalculatorOptions = null);
-    IPredictionModelBuilder<T> WithFitDetector(IFitDetector<T> detector);
-    IPredictionModelBuilder<T> WithRegression(IRegression<T> regression, RegressionOptions<T>? regressionOptions = null);
-    IPredictionModelBuilder<T> WithOptimizer(IOptimizationAlgorithm<T> optimizationAlgorithm, OptimizationAlgorithmOptions? optimizationOptions = null);
-    IPredictionModelBuilder<T> WithDataPreprocessor(IDataPreprocessor<T> dataPreprocessor);
-    IPredictionModelBuilder<T> WithOutlierRemoval(IOutlierRemoval<T> outlierRemoval);
+    IPredictionModelBuilder<T> ConfigureFeatureSelector(IFeatureSelector<T> selector);
+    IPredictionModelBuilder<T> ConfigureNormalizer(INormalizer<T> normalizer);
+    IPredictionModelBuilder<T> ConfigureRegularization(IRegularization<T> regularization);
+    IPredictionModelBuilder<T> ConfigureFitnessCalculator(IFitnessCalculator<T> calculator);
+    IPredictionModelBuilder<T> ConfigureFitDetector(IFitDetector<T> detector);
+    IPredictionModelBuilder<T> ConfigureRegression(IRegression<T> regression);
+    IPredictionModelBuilder<T> ConfigureOptimizer(IOptimizationAlgorithm<T> optimizationAlgorithm);
+    IPredictionModelBuilder<T> ConfigureDataPreprocessor(IDataPreprocessor<T> dataPreprocessor);
+    IPredictionModelBuilder<T> ConfigureOutlierRemoval(IOutlierRemoval<T> outlierRemoval);
     PredictionModelResult<T> Build(Matrix<T> x, Vector<T> y);
     Vector<T> Predict(Matrix<T> newData, PredictionModelResult<T> model);
     void SaveModel(PredictionModelResult<T> model, string filePath);

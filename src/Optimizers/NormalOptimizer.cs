@@ -4,10 +4,12 @@ public class NormalOptimizer<T> : IOptimizationAlgorithm<T>
 {
     private readonly Random _random = new();
     private readonly INumericOperations<T> _numOps;
+    private readonly OptimizationAlgorithmOptions _optimizationOptions;
 
-    public NormalOptimizer(INumericOperations<T>? numericOperations = null)
+    public NormalOptimizer(OptimizationAlgorithmOptions? optimizationOptions = null)
     {
-        _numOps = numericOperations ?? MathHelper.GetNumericOperations<T>();
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _optimizationOptions = optimizationOptions ?? new OptimizationAlgorithmOptions();
     }
 
     public OptimizationResult<T> Optimize(
@@ -18,7 +20,6 @@ public class NormalOptimizer<T> : IOptimizationAlgorithm<T>
         Matrix<T> XTest,
         Vector<T> yTest,
         PredictionModelOptions modelOptions,
-        OptimizationAlgorithmOptions optimizationOptions,
         IRegression<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
@@ -28,7 +29,7 @@ public class NormalOptimizer<T> : IOptimizationAlgorithm<T>
     {
         var bestSolution = new Vector<T>(XTrain.Columns, _numOps);
         var bestIntercept = _numOps.Zero;
-        T bestFitness = optimizationOptions.MaximizeFitness ? _numOps.MinValue : _numOps.MaxValue;
+        T bestFitness = _optimizationOptions.MaximizeFitness ? _numOps.MinValue : _numOps.MaxValue;
         var fitnessHistory = new List<T>();
         var iterationHistory = new List<OptimizationIterationInfo<T>>();
         var bestSelectedFeatures = new List<Vector<T>>();
@@ -52,7 +53,7 @@ public class NormalOptimizer<T> : IOptimizationAlgorithm<T>
         PredictionStats<T>? bestValidationPredictionStats = null;
         PredictionStats<T>? bestTestPredictionStats = null;
 
-        for (int iteration = 0; iteration < optimizationOptions.MaxIterations; iteration++)
+        for (int iteration = 0; iteration < _optimizationOptions.MaxIterations; iteration++)
         {
             // Randomly select features
             var selectedFeatures = RandomlySelectFeatures(XTrain.Columns, modelOptions.MinimumFeatures, modelOptions.MaximumFeatures);
@@ -87,9 +88,9 @@ public class NormalOptimizer<T> : IOptimizationAlgorithm<T>
             var testActualBasicStats = new BasicStats<T>(yTest);
             var testPredictedBasicStats = new BasicStats<T>(testPredictions);
 
-            var trainingPredictionStats = new PredictionStats<T>(yTrain, trainingPredictions, featureCount, _numOps.FromDouble(optimizationOptions.ConfidenceLevel), _numOps);
-            var validationPredictionStats = new PredictionStats<T>(yVal, validationPredictions, featureCount, _numOps.FromDouble(optimizationOptions.ConfidenceLevel), _numOps);
-            var testPredictionStats = new PredictionStats<T>(yTest, testPredictions, featureCount, _numOps.FromDouble(optimizationOptions.ConfidenceLevel), _numOps);
+            var trainingPredictionStats = new PredictionStats<T>(yTrain, trainingPredictions, featureCount, _numOps.FromDouble(_optimizationOptions.ConfidenceLevel), _numOps);
+            var validationPredictionStats = new PredictionStats<T>(yVal, validationPredictions, featureCount, _numOps.FromDouble(_optimizationOptions.ConfidenceLevel), _numOps);
+            var testPredictionStats = new PredictionStats<T>(yTest, testPredictions, featureCount, _numOps.FromDouble(_optimizationOptions.ConfidenceLevel), _numOps);
 
             // Detect fit type
             var fitDetectionResult = fitDetector.DetectFit(
@@ -141,7 +142,7 @@ public class NormalOptimizer<T> : IOptimizationAlgorithm<T>
             });
 
             // Check for early stopping
-            if (optimizationOptions.UseEarlyStopping && ShouldEarlyStop(iterationHistory, optimizationOptions, fitnessCalculator))
+            if (_optimizationOptions.UseEarlyStopping && ShouldEarlyStop(iterationHistory, fitnessCalculator))
             {
                 break;
             }
@@ -194,14 +195,14 @@ public class NormalOptimizer<T> : IOptimizationAlgorithm<T>
         };
     }
 
-    public bool ShouldEarlyStop(List<OptimizationIterationInfo<T>> iterationHistory, OptimizationAlgorithmOptions options, IFitnessCalculator<T> fitnessCalculator)
+    public bool ShouldEarlyStop(List<OptimizationIterationInfo<T>> iterationHistory, IFitnessCalculator<T> fitnessCalculator)
     {
-        if (iterationHistory.Count < options.EarlyStoppingPatience)
+        if (iterationHistory.Count < _optimizationOptions.EarlyStoppingPatience)
         {
             return false;
         }
 
-        var recentIterations = iterationHistory.Skip(Math.Max(0, iterationHistory.Count - options.EarlyStoppingPatience)).ToList();
+        var recentIterations = iterationHistory.Skip(Math.Max(0, iterationHistory.Count - _optimizationOptions.EarlyStoppingPatience)).ToList();
 
         // Find the best fitness score
         T bestFitness = iterationHistory[0].Fitness;
@@ -238,7 +239,7 @@ public class NormalOptimizer<T> : IOptimizationAlgorithm<T>
             }
         }
 
-        return noImprovement || consecutiveBadFits >= options.BadFitPatience;
+        return noImprovement || consecutiveBadFits >= _optimizationOptions.BadFitPatience;
     }
 
     private List<int> RandomlySelectFeatures(int totalFeatures, int minFeatures, int maxFeatures)
