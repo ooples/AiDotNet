@@ -63,7 +63,7 @@ public class NormalOptimizer<T> : IOptimizationAlgorithm<T>
             var XTestSubset = XTest.SubMatrix(0, XTest.Rows - 1, selectedFeatures);
 
             // Fit the model
-            regressionMethod.Fit(XTrainSubset, yTrain, regularization);
+            regressionMethod.Fit(XTrainSubset, yTrain);
 
             // Denormalize coefficients and intercept
             var denormalizedCoefficients = normalizer.DenormalizeCoefficients(regressionMethod.Coefficients, normInfo.XParams, normInfo.YParams);

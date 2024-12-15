@@ -4,13 +4,13 @@ public class PolynomialRegression<T> : RegressionBase<T>
 {
     private readonly PolynomialRegressionOptions<T> _polyOptions;
 
-    public PolynomialRegression(PolynomialRegressionOptions<T> options)
-        : base(options)
+    public PolynomialRegression(PolynomialRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+        : base(options, regularization)
     {
-        _polyOptions = options;
+        _polyOptions = options ?? new PolynomialRegressionOptions<T>();
     }
 
-    public override void Fit(Matrix<T> x, Vector<T> y, IRegularization<T> regularization)
+    public override void Fit(Matrix<T> x, Vector<T> y)
     {
         var polyX = CreatePolynomialFeatures(x);
 
@@ -18,7 +18,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
             polyX = polyX.AddConstantColumn(NumOps.One);
 
         var xTx = polyX.Transpose().Multiply(polyX);
-        var regularizedXTx = xTx.Add(regularization.RegularizeMatrix(xTx));
+        var regularizedXTx = xTx.Add(Regularization.RegularizeMatrix(xTx));
         var xTy = polyX.Transpose().Multiply(y);
 
         var solution = SolveSystem(regularizedXTx, xTy);

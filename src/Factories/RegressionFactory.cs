@@ -4,18 +4,18 @@ namespace AiDotNet.Factories;
 
 public static class RegressionFactory
 {
-    public static MultivariateRegression<T> CreateRidgeRegression<T>(INumericOperations<T> numOps, RegressionOptions<T> options)
+    public static MultivariateRegression<T> CreateRidgeRegression<T>(RegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
     {
-        return new MultivariateRegression<T>(numOps, options);
+        return new MultivariateRegression<T>(options, regularization);
     }
 
-    public static MultivariateRegression<T> CreateLassoRegression<T>(INumericOperations<T> numOps, RegressionOptions<T> options)
+    public static MultivariateRegression<T> CreateLassoRegression<T>(RegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
     {
-        return new MultivariateRegression<T>(numOps, options);
+        return new MultivariateRegression<T>(options, regularization);
     }
 
-    public static MultivariateRegression<T> CreateElasticNetRegression<T>(INumericOperations<T> numOps, RegressionOptions<T> options)
+    public static MultivariateRegression<T> CreateElasticNetRegression<T>(RegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
     {
-        return new MultivariateRegression<T>(numOps, options);
+        return new MultivariateRegression<T>(options, regularization);
     }
 }

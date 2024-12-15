@@ -2,12 +2,12 @@ namespace AiDotNet.Regression;
 
 public class SimpleRegression<T> : RegressionBase<T>
 {
-    public SimpleRegression(RegressionOptions<T>? options = null)
-        : base(options)
+    public SimpleRegression(RegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+        : base(options, regularization)
     {
     }
 
-    public override void Fit(Matrix<T> x, Vector<T> y, IRegularization<T> regularization)
+    public override void Fit(Matrix<T> x, Vector<T> y)
     {
         if (x.Columns != 1)
             throw new ArgumentException("Simple regression expects only one feature column.");
@@ -16,7 +16,7 @@ public class SimpleRegression<T> : RegressionBase<T>
             x = x.AddConstantColumn(NumOps.One);
 
         var xTx = x.Transpose().Multiply(x);
-        var regularizedXTx = xTx.Add(regularization.RegularizeMatrix(xTx));
+        var regularizedXTx = xTx.Add(Regularization.RegularizeMatrix(xTx));
         var xTy = x.Transpose().Multiply(y);
 
         var solution = SolveSystem(regularizedXTx, xTy);

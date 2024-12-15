@@ -7,14 +7,14 @@ public class WeightedRegression<T> : RegressionBase<T>
     private readonly Vector<T> _weights;
     private readonly int _order;
 
-    public WeightedRegression(WeightedRegressionOptions<T>? options = null)
-        : base(options)
+    public WeightedRegression(WeightedRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+        : base(options, regularization)
     {
         _weights = options?.Weights ?? throw new ArgumentNullException(nameof(options), "Weights must be provided for weighted regression.");
         _order = options.Order;
     }
 
-    public override void Fit(Matrix<T> x, Vector<T> y, IRegularization<T> regularization)
+    public override void Fit(Matrix<T> x, Vector<T> y)
     {
         var expandedX = ExpandFeatures(x);
 
@@ -23,7 +23,7 @@ public class WeightedRegression<T> : RegressionBase<T>
 
         var weightMatrix = Matrix<T>.CreateDiagonal(_weights, NumOps);
         var xTWx = expandedX.Transpose().Multiply(weightMatrix).Multiply(expandedX);
-        var regularizedXTWx = xTWx.Add(regularization.RegularizeMatrix(xTWx));
+        var regularizedXTWx = xTWx.Add(Regularization.RegularizeMatrix(xTWx));
         var xTWy = expandedX.Transpose().Multiply(weightMatrix).Multiply(y);
 
         var solution = SolveSystem(regularizedXTWx, xTWy);

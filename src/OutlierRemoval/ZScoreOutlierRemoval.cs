@@ -5,10 +5,10 @@ public class ZScoreOutlierRemoval<T> : IOutlierRemoval<T>
     private readonly T _threshold;
     private readonly INumericOperations<T> _numOps;
 
-    public ZScoreOutlierRemoval(T threshold, INumericOperations<T> numOps)
+    public ZScoreOutlierRemoval(T threshold)
     {
         _threshold = threshold;
-        _numOps = numOps;
+        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     public (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs)

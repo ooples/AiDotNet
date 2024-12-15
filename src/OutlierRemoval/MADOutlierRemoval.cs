@@ -5,10 +5,10 @@ public class MADOutlierRemoval<T> : IOutlierRemoval<T>
     private readonly T _threshold;
     private readonly INumericOperations<T> _numOps;
 
-    public MADOutlierRemoval(T threshold, INumericOperations<T> numOps)
+    public MADOutlierRemoval(T threshold)
     {
         _threshold = threshold;
-        _numOps = numOps;
+        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     public (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs)

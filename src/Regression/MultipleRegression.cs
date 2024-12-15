@@ -2,18 +2,18 @@
 
 public class MultipleRegression<T> : RegressionBase<T>
 {
-    public MultipleRegression(RegressionOptions<T>? options = null)
-        : base(options)
+    public MultipleRegression(RegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+        : base(options, regularization)
     {
     }
 
-    public override void Fit(Matrix<T> x, Vector<T> y, IRegularization<T> regularization)
+    public override void Fit(Matrix<T> x, Vector<T> y)
     {
         if (Options.UseIntercept)
             x = x.AddConstantColumn(NumOps.One);
 
         var xTx = x.Transpose().Multiply(x);
-        var regularizedXTx = xTx.Add(regularization.RegularizeMatrix(xTx));
+        var regularizedXTx = xTx.Add(Regularization.RegularizeMatrix(xTx));
         var xTy = x.Transpose().Multiply(y);
 
         var solution = SolveSystem(regularizedXTx, xTy);

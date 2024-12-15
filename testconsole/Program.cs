@@ -16,7 +16,6 @@ internal class Program
 
         int[,] matrixA = { { 1, 2, 3 }, { 4, 5, 6 } };
         int[,] matrixB = { { 1, 2, 3 }, { 3, 4, 5 }, { 5, 6, 7 } };
-        matrixA.DotProductMatrices(matrixB);
 
         //var simpleRegression = new SimpleRegression(inputs, outputs);
         //var metrics1 = simpleRegression.Metrics;
