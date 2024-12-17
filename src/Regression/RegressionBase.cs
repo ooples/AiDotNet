@@ -1,4 +1,6 @@
-﻿public abstract class RegressionBase<T> : IRegression<T>
+﻿global using AiDotNet.DecompositionMethods;
+
+public abstract class RegressionBase<T> : IRegression<T>
 {
     protected INumericOperations<T> NumOps { get; private set; }
     protected RegressionOptions<T> Options { get; private set; }

@@ -20,9 +20,9 @@ public class OptimizationResult<T>
 
     private readonly INumericOperations<T> _numOps;
 
-    public OptimizationResult(INumericOperations<T>? numOps = null)
+    public OptimizationResult()
     {
-        _numOps = numOps ?? MathHelper.GetNumericOperations<T>();
+        _numOps = MathHelper.GetNumericOperations<T>();
         BestCoefficients = Vector<T>.Empty();
         FitnessHistory = Vector<T>.Empty();
         SelectedFeatures = [];

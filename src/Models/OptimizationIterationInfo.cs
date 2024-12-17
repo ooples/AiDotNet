@@ -9,6 +9,7 @@ public class OptimizationIterationInfo<T>
         get { return _fitness; }
         set { _fitness = value; }
     }
+
     public FitDetectorResult<T> FitDetectionResult { get; set; }
 
     public OptimizationIterationInfo()

@@ -123,6 +123,23 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return this.Divide(norm);
     }
 
+    public IEnumerable<int> NonZeroIndices()
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < Length; i++)
+        {
+            if (!NumOps.Equals(this[i], NumOps.Zero))
+            {
+                yield return i;
+            }
+        }
+    }
+
+    public int NonZeroCount()
+    {
+        return NonZeroIndices().Count();
+    }
+
     public static Vector<T> Concatenate(params Vector<T>[] vectors)
     {
         int totalSize = vectors.Sum(v => v.Length);
