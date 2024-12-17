@@ -840,6 +840,24 @@ public static class StatisticsHelper<T>
         return numOps.Divide(numerator, numOps.Multiply(denominatorX, denominatorY));
     }
 
+    public static List<T> CalculateLearningCurve(Vector<T> yActual, Vector<T> yPredicted, int steps)
+    {
+        var learningCurveList = new List<T>();
+        var stepSize = yActual.Length / steps;
+
+        for (int i = 1; i <= steps; i++)
+        {
+            var subsetSize = i * stepSize;
+            var subsetActual = new Vector<T>(yActual.Take(subsetSize));
+            var subsetPredicted = new Vector<T>(yPredicted.Take(subsetSize));
+
+            var r2 = CalculateR2(subsetActual, subsetPredicted);
+            learningCurveList.Add(r2);
+        }
+
+        return learningCurveList;
+    }
+
     public static (T LowerInterval, T UpperInterval) CalculatePredictionIntervals(Vector<T> actual, Vector<T> predicted, T confidenceLevel)
     {
         int n = actual.Length;

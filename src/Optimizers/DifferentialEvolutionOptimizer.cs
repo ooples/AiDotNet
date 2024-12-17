@@ -19,7 +19,6 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
             Vector<T> yVal,
             Matrix<T> XTest,
             Vector<T> yTest,
-            PredictionModelOptions modelOptions,
             IRegression<T> regressionMethod,
             IRegularization<T> regularization,
             INormalizer<T> normalizer,
@@ -29,10 +28,9 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
     {
         int dimensions = XTrain.Columns;
         var population = InitializePopulation(dimensions, _deOptions.PopulationSize);
-            
-        T bestFitness = _numOps.MinValue;
-        Vector<T> bestSolution = new Vector<T>(dimensions, _numOps);
+        Vector<T> bestSolution = new(dimensions, _numOps);
         T bestIntercept = _numOps.Zero;
+        T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
         FitDetectorResult<T> bestFitDetectionResult = new();
         Vector<T> bestTrainingPredictions = new(yTrain.Length, _numOps);
         Vector<T> bestValidationPredictions = new(yVal.Length, _numOps);

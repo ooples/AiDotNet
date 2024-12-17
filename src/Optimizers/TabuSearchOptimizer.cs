@@ -18,7 +18,6 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         Vector<T> yVal,
         Matrix<T> XTest,
         Vector<T> yTest,
-        PredictionModelOptions modelOptions,
         IRegression<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
@@ -28,11 +27,10 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     {
         var currentSolution = InitializeRandomSolution(XTrain.Columns);
         var bestSolution = currentSolution.Copy();
-        T bestFitness = _numOps.MinValue;
         var tabuList = new Queue<Vector<T>>(_tabuOptions.TabuListSize);
-
         T bestIntercept = _numOps.Zero;
-        FitDetectorResult<T> bestFitDetectionResult = new FitDetectorResult<T>();
+        T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
+        FitDetectorResult<T> bestFitDetectionResult = new();
         Vector<T> bestTrainingPredictions = Vector<T>.Empty();
         Vector<T> bestValidationPredictions = Vector<T>.Empty();
         Vector<T> bestTestPredictions = Vector<T>.Empty();
@@ -48,7 +46,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         PredictionStats<T> bestTrainingPredictionStats = PredictionStats<T>.Empty();
         PredictionStats<T> bestValidationPredictionStats = PredictionStats<T>.Empty();
         PredictionStats<T> bestTestPredictionStats = PredictionStats<T>.Empty();
-        List<Vector<T>> bestSelectedFeatures = new();
+        List<Vector<T>> bestSelectedFeatures = [];
         Matrix<T> bestTestFeatures = Matrix<T>.Empty();
         Matrix<T> bestTrainingFeatures = Matrix<T>.Empty();
         Matrix<T> bestValidationFeatures = Matrix<T>.Empty();

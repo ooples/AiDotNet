@@ -99,7 +99,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator<T>();
         var regularization = _regularization ?? new NoRegularization<T>();
         var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T>();
-        var dataPreprocessor = _dataPreprocessor ?? new DataPreprocessor<T>(normalizer, featureSelector, outlierRemoval, _options);
+        var dataPreprocessor = _dataPreprocessor ?? new DataPreprocessor<T>(normalizer, featureSelector, outlierRemoval);
 
         // Preprocess the data
         var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
@@ -108,7 +108,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         // Optimize the model
-        var optimizationResult = optimizer.Optimize(XTrain, yTrain, XVal, yVal, XTest, yTest, _options, _regression, regularization, normalizer, 
+        var optimizationResult = optimizer.Optimize(XTrain, yTrain, XVal, yVal, XTest, yTest, _regression, regularization, normalizer, 
             normInfo, fitnessCalculator, fitDetector);
 
         return new PredictionModelResult<T>

@@ -4,11 +4,13 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
 {
     protected readonly INumericOperations<T> _numOps;
     protected readonly OptimizationAlgorithmOptions _options;
+    protected readonly PredictionModelOptions _predictionOptions;
 
-    protected OptimizerBase(OptimizationAlgorithmOptions? options = null)
+    protected OptimizerBase(OptimizationAlgorithmOptions? options = null, PredictionModelOptions? predictionOptions = null)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new OptimizationAlgorithmOptions();
+        _predictionOptions = predictionOptions ?? new PredictionModelOptions();
     }
 
     public abstract OptimizationResult<T> Optimize(
@@ -18,7 +20,6 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         Vector<T> yVal,
         Matrix<T> XTest,
         Vector<T> yTest,
-        PredictionModelOptions modelOptions,
         IRegression<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
@@ -36,43 +37,64 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         return (trainingPredictions, validationPredictions, testPredictions);
     }
 
-    protected (ErrorStats<T> TrainingErrorStats, ErrorStats<T> ValidationErrorStats, ErrorStats<T> TestErrorStats)
+    protected (BasicStats<T> TrainingActual, BasicStats<T> TrainingPredicted, 
+            BasicStats<T> ValidationActual, BasicStats<T> ValidationPredicted, 
+            BasicStats<T> TestActual, BasicStats<T> TestPredicted)
+    CalculateBasicStats(Vector<T> yTrain, Vector<T> yVal, Vector<T> yTest,
+                        Vector<T> trainingPredictions, Vector<T> validationPredictions, Vector<T> testPredictions)
+    {
+        return (
+            new BasicStats<T>(new BasicStatsInputs<T> { Values = yTrain }),
+            new BasicStats<T>(new BasicStatsInputs<T> { Values = trainingPredictions }),
+            new BasicStats<T>(new BasicStatsInputs<T> { Values = yVal }),
+            new BasicStats<T>(new BasicStatsInputs<T> { Values = validationPredictions }),
+            new BasicStats<T>(new BasicStatsInputs<T> { Values = yTest }),
+            new BasicStats<T>(new BasicStatsInputs<T> { Values = testPredictions })
+        );
+    }
+
+    protected (ErrorStats<T> Training, ErrorStats<T> Validation, ErrorStats<T> Test)
     CalculateErrorStats(Vector<T> yTrain, Vector<T> yVal, Vector<T> yTest, 
                         Vector<T> trainingPredictions, Vector<T> validationPredictions, Vector<T> testPredictions, 
                         int featureCount)
     {
-        var trainingErrorStats = new ErrorStats<T>(yTrain, trainingPredictions, featureCount);
-        var validationErrorStats = new ErrorStats<T>(yVal, validationPredictions, featureCount);
-        var testErrorStats = new ErrorStats<T>(yTest, testPredictions, featureCount);
-        return (trainingErrorStats, validationErrorStats, testErrorStats);
-    }
-
-    protected (BasicStats<T> TrainingActual, BasicStats<T> TrainingPredicted, 
-                BasicStats<T> ValidationActual, BasicStats<T> ValidationPredicted, 
-                BasicStats<T> TestActual, BasicStats<T> TestPredicted)
-    CalculateBasicStats(Vector<T> yTrain, Vector<T> yVal, Vector<T> yTest, 
-                        Vector<T> trainingPredictions, Vector<T> validationPredictions, Vector<T> testPredictions)
-    {
         return (
-            new BasicStats<T>(yTrain),
-            new BasicStats<T>(trainingPredictions),
-            new BasicStats<T>(yVal),
-            new BasicStats<T>(validationPredictions),
-            new BasicStats<T>(yTest),
-            new BasicStats<T>(testPredictions)
+            new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = yTrain, Predicted = trainingPredictions, FeatureCount = featureCount }),
+            new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = yVal, Predicted = validationPredictions, FeatureCount = featureCount }),
+            new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = yTest, Predicted = testPredictions, FeatureCount = featureCount })
         );
     }
 
-    protected (PredictionStats<T> TrainingPredictionStats, PredictionStats<T> ValidationPredictionStats, PredictionStats<T> TestPredictionStats)
+    protected (PredictionStats<T> Training, PredictionStats<T> Validation, PredictionStats<T> Test)
     CalculatePredictionStats(Vector<T> yTrain, Vector<T> yVal, Vector<T> yTest, 
                              Vector<T> trainingPredictions, Vector<T> validationPredictions, Vector<T> testPredictions, 
                              int featureCount)
     {
-        var confidenceLevel = _numOps.FromDouble(_options.ConfidenceLevel);
         return (
-            new PredictionStats<T>(yTrain, trainingPredictions, featureCount, confidenceLevel, _numOps),
-            new PredictionStats<T>(yVal, validationPredictions, featureCount, confidenceLevel, _numOps),
-            new PredictionStats<T>(yTest, testPredictions, featureCount, confidenceLevel, _numOps)
+            new PredictionStats<T>(new PredictionStatsInputs<T> 
+            { 
+                Actual = yTrain, 
+                Predicted = trainingPredictions, 
+                NumberOfParameters = featureCount, 
+                ConfidenceLevel = _predictionOptions.ConfidenceLevel, 
+                LearningCurveSteps = _predictionOptions.LearningCurveSteps 
+            }),
+            new PredictionStats<T>(new PredictionStatsInputs<T> 
+            { 
+                Actual = yVal, 
+                Predicted = validationPredictions, 
+                NumberOfParameters = featureCount, 
+                ConfidenceLevel = _predictionOptions.ConfidenceLevel, 
+                LearningCurveSteps = _predictionOptions.LearningCurveSteps 
+            }),
+            new PredictionStats<T>(new PredictionStatsInputs<T> 
+            { 
+                Actual = yTest, 
+                Predicted = testPredictions, 
+                NumberOfParameters = featureCount, 
+                ConfidenceLevel = _predictionOptions.ConfidenceLevel, 
+                LearningCurveSteps = _predictionOptions.LearningCurveSteps 
+            })
         );
     }
 

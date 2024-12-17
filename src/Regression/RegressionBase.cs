@@ -1,5 +1,7 @@
 ﻿global using AiDotNet.DecompositionMethods;
 
+namespace AiDotNet.Regression;
+
 public abstract class RegressionBase<T> : IRegression<T>
 {
     protected INumericOperations<T> NumOps { get; private set; }

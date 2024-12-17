@@ -18,7 +18,6 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         Vector<T> yVal,
         Matrix<T> XTest,
         Vector<T> yTest,
-        PredictionModelOptions modelOptions,
         IRegression<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
@@ -29,12 +28,10 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         int populationSize = _geneticOptions.PopulationSize;
         double mutationRate = _geneticOptions.MutationRate;
         double crossoverRate = _geneticOptions.CrossoverRate;
-
         var population = InitializePopulation(XTrain.Columns, populationSize);
         var bestSolution = Vector<T>.Empty();
+        T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
         var bestIntercept = _numOps.Zero;
-        var bestFitness = _numOps.MaxValue;
-
         var fitnessHistory = new List<T>();
         var iterationHistory = new List<OptimizationIterationInfo<T>>();
 

@@ -1,9 +1,7 @@
-﻿namespace AiDotNet.Models;
+﻿namespace AiDotNet.Statistics;
 
 public class BasicStats<T>
 {
-    private readonly INumericOperations<T> NumOps;
-
     public T Mean { get; private set; }
     public T Variance { get; private set; }
     public T StandardDeviation { get; private set; }
@@ -18,31 +16,34 @@ public class BasicStats<T>
     public T InterquartileRange { get; private set; }
     public T MAD { get; private set; }
 
-    public BasicStats(Vector<T> values)
-    {
-        NumOps = MathHelper.GetNumericOperations<T>();
-        
-        // Initialize all class variables
-        Mean = NumOps.Zero;
-        Variance = NumOps.Zero;
-        StandardDeviation = NumOps.Zero;
-        Skewness = NumOps.Zero;
-        Kurtosis = NumOps.Zero;
-        Min = NumOps.Zero;
-        Max = NumOps.Zero;
-        N = 0;
-        Median = NumOps.Zero;
-        FirstQuartile = NumOps.Zero;
-        ThirdQuartile = NumOps.Zero;
-        InterquartileRange = NumOps.Zero;
-        MAD = NumOps.Zero;
 
-        CalculateStats(values);
+    private readonly INumericOperations<T> _numOps;
+
+    internal BasicStats(BasicStatsInputs<T> inputs)
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+
+        // Initialize all class variables
+        Mean = _numOps.Zero;
+        Variance = _numOps.Zero;
+        StandardDeviation = _numOps.Zero;
+        Skewness = _numOps.Zero;
+        Kurtosis = _numOps.Zero;
+        Min = _numOps.Zero;
+        Max = _numOps.Zero;
+        N = 0;
+        Median = _numOps.Zero;
+        FirstQuartile = _numOps.Zero;
+        ThirdQuartile = _numOps.Zero;
+        InterquartileRange = _numOps.Zero;
+        MAD = _numOps.Zero;
+
+        CalculateStats(inputs.Values);
     }
 
     public static BasicStats<T> Empty()
     {
-        return new BasicStats<T>(Vector<T>.Empty());
+        return new BasicStats<T>(new());
     }
 
     private void CalculateStats(Vector<T> values)
@@ -53,13 +54,13 @@ public class BasicStats<T>
 
         Mean = values.Average();
         Variance = values.Variance();
-        StandardDeviation = NumOps.Sqrt(Variance);
+        StandardDeviation = _numOps.Sqrt(Variance);
         (Skewness, Kurtosis) = StatisticsHelper<T>.CalculateSkewnessAndKurtosis(values, Mean, StandardDeviation, N);
         Min = values.Min();
         Max = values.Max();
         Median = StatisticsHelper<T>.CalculateMedian(values);
         (FirstQuartile, ThirdQuartile) = StatisticsHelper<T>.CalculateQuantiles(values);
-        InterquartileRange = NumOps.Subtract(ThirdQuartile, FirstQuartile);
+        InterquartileRange = _numOps.Subtract(ThirdQuartile, FirstQuartile);
         MAD = StatisticsHelper<T>.CalculateMeanAbsoluteDeviation(values, Median);
     }
 }

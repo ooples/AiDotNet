@@ -1,6 +1,8 @@
-﻿public class PredictionStats<T>
+﻿namespace AiDotNet.Statistics;
+
+public class PredictionStats<T>
 {
-    private readonly INumericOperations<T> _ops;
+    private readonly INumericOperations<T> NumOps;
 
     // Intervals
     public (T Lower, T Upper) PredictionInterval { get; private set; }
@@ -24,41 +26,43 @@
     public T R2 { get; private set; }
     public T AdjustedR2 { get; private set; }
     public T ExplainedVarianceScore { get; private set; }
+    public List<T> LearningCurve { get; private set; }
 
     // Distribution Fit
     public DistributionFitResult<T> BestDistributionFit { get; private set; } = new();
 
-    public PredictionStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters, T confidenceLevel, INumericOperations<T>? ops = null)
+    internal PredictionStats(PredictionStatsInputs<T> inputs)
     {
-        _ops = ops ?? MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
 
         // Initialize all properties
-        PredictionInterval = (Lower: _ops.Zero, Upper: _ops.Zero);
-        ConfidenceInterval = (Lower: _ops.Zero, Upper: _ops.Zero);
-        CredibleInterval = (Lower: _ops.Zero, Upper: _ops.Zero);
-        ToleranceInterval = (Lower: _ops.Zero, Upper: _ops.Zero);
-        ForecastInterval = (Lower: _ops.Zero, Upper: _ops.Zero);
-        BootstrapInterval = (Lower: _ops.Zero, Upper: _ops.Zero);
-        SimultaneousPredictionInterval = (Lower: _ops.Zero, Upper: _ops.Zero);
-        JackknifeInterval = (Lower: _ops.Zero, Upper: _ops.Zero);
-        PercentileInterval = (Lower: _ops.Zero, Upper: _ops.Zero);
+        PredictionInterval = (Lower: NumOps.Zero, Upper: NumOps.Zero);
+        ConfidenceInterval = (Lower: NumOps.Zero, Upper: NumOps.Zero);
+        CredibleInterval = (Lower: NumOps.Zero, Upper: NumOps.Zero);
+        ToleranceInterval = (Lower: NumOps.Zero, Upper: NumOps.Zero);
+        ForecastInterval = (Lower: NumOps.Zero, Upper: NumOps.Zero);
+        BootstrapInterval = (Lower: NumOps.Zero, Upper: NumOps.Zero);
+        SimultaneousPredictionInterval = (Lower: NumOps.Zero, Upper: NumOps.Zero);
+        JackknifeInterval = (Lower: NumOps.Zero, Upper: NumOps.Zero);
+        PercentileInterval = (Lower: NumOps.Zero, Upper: NumOps.Zero);
         QuantileIntervals = [];
-        PredictionIntervalCoverage = _ops.Zero;
-        MeanPredictionError = _ops.Zero;
-        MedianPredictionError = _ops.Zero;
-        R2 = _ops.Zero;
-        AdjustedR2 = _ops.Zero;
-        ExplainedVarianceScore = _ops.Zero;
+        PredictionIntervalCoverage = NumOps.Zero;
+        MeanPredictionError = NumOps.Zero;
+        MedianPredictionError = NumOps.Zero;
+        R2 = NumOps.Zero;
+        AdjustedR2 = NumOps.Zero;
+        ExplainedVarianceScore = NumOps.Zero;
+        LearningCurve = [];
 
-        CalculatePredictionStats(actual, predicted, numberOfParameters, confidenceLevel);
+        CalculatePredictionStats(inputs.Actual, inputs.Predicted, inputs.NumberOfParameters, NumOps.FromDouble(inputs.ConfidenceLevel), inputs.LearningCurveSteps);
     }
 
     public static PredictionStats<T> Empty()
     {
-        return new PredictionStats<T>(Vector<T>.Empty(), Vector<T>.Empty(), 0, MathHelper.GetNumericOperations<T>().Zero);
+        return new PredictionStats<T>(new());
     }
 
-    private void CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters, T confidenceLevel)
+    private void CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters, T confidenceLevel, int learningCurveSteps)
     {
         BestDistributionFit = StatisticsHelper<T>.DetermineBestFitDistribution(predicted);
 
@@ -68,6 +72,7 @@
         R2 = StatisticsHelper<T>.CalculateR2(actual, predicted);
         AdjustedR2 = StatisticsHelper<T>.CalculateAdjustedR2(R2, actual.Length, numberOfParameters);
         ExplainedVarianceScore = StatisticsHelper<T>.CalculateExplainedVarianceScore(actual, predicted);
+        LearningCurve = StatisticsHelper<T>.CalculateLearningCurve(actual, predicted, learningCurveSteps);
 
         PredictionInterval = StatisticsHelper<T>.CalculatePredictionIntervals(actual, predicted, confidenceLevel);
         PredictionIntervalCoverage = StatisticsHelper<T>.CalculatePredictionIntervalCoverage(actual, predicted, PredictionInterval.Lower, PredictionInterval.Upper);
@@ -75,7 +80,7 @@
         CredibleInterval = StatisticsHelper<T>.CalculateCredibleIntervals(predicted, confidenceLevel, BestDistributionFit.DistributionType);
         ToleranceInterval = StatisticsHelper<T>.CalculateToleranceInterval(actual, predicted, confidenceLevel);
         ForecastInterval = StatisticsHelper<T>.CalculateForecastInterval(actual, predicted, confidenceLevel);
-        QuantileIntervals = StatisticsHelper<T>.CalculateQuantileIntervals(actual, predicted, [_ops.FromDouble(0.25), _ops.FromDouble(0.5), _ops.FromDouble(0.75)]);
+        QuantileIntervals = StatisticsHelper<T>.CalculateQuantileIntervals(actual, predicted, [NumOps.FromDouble(0.25), NumOps.FromDouble(0.5), NumOps.FromDouble(0.75)]);
         BootstrapInterval = StatisticsHelper<T>.CalculateBootstrapInterval(actual, predicted, confidenceLevel);
         SimultaneousPredictionInterval = StatisticsHelper<T>.CalculateSimultaneousPredictionInterval(actual, predicted, confidenceLevel);
         JackknifeInterval = StatisticsHelper<T>.CalculateJackknifeInterval(actual, predicted);

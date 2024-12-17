@@ -19,7 +19,6 @@ public class AntColonyOptimizer<T> : OptimizerBase<T>
         Vector<T> yVal,
         Matrix<T> XTest,
         Vector<T> yTest,
-        PredictionModelOptions modelOptions,
         IRegression<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
@@ -30,8 +29,8 @@ public class AntColonyOptimizer<T> : OptimizerBase<T>
         int dimensions = XTrain.Columns;
         var pheromones = InitializePheromones(dimensions);
         var bestSolution = Vector<T>.Empty();
-        T bestFitness = _numOps.MaxValue;
         T bestIntercept = _numOps.Zero;
+        T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
         FitDetectorResult<T> bestFitDetectionResult = new();
         Vector<T> bestTrainingPredictions = new(yTrain.Length, _numOps);
         Vector<T> bestValidationPredictions = new(yVal.Length, _numOps);

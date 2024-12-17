@@ -9,7 +9,6 @@ public interface IOptimizationAlgorithm<T>
         Vector<T> yVal,
         Matrix<T> XTest,
         Vector<T> yTest,
-        PredictionModelOptions modelOptions,
         IRegression<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,

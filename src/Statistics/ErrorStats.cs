@@ -1,6 +1,4 @@
-﻿using AiDotNet.Interfaces;
-using AiDotNet.Helpers;
-namespace AiDotNet.Models;
+﻿namespace AiDotNet.Statistics;
 
 public class ErrorStats<T>
 {
@@ -23,7 +21,7 @@ public class ErrorStats<T>
     public T RSS { get; private set; }
     public List<T> ErrorList { get; private set; } = new List<T>();
 
-    public ErrorStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters)
+    internal ErrorStats(ErrorStatsInputs<T> inputs)
     {
         NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -46,12 +44,12 @@ public class ErrorStats<T>
 
         ErrorList = [];
 
-        CalculateErrorStats(actual, predicted, numberOfParameters);
+        CalculateErrorStats(inputs.Actual, inputs.Predicted, inputs.FeatureCount);
     }
 
     public static ErrorStats<T> Empty()
     {
-        return new ErrorStats<T>(Vector<T>.Empty(), Vector<T>.Empty(), 0);
+        return new ErrorStats<T>(new());
     }
 
     private void CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters)
@@ -174,7 +172,7 @@ public class ErrorStats<T>
     {
         if (sampleSize <= 0 || NumOps.LessThanOrEquals(rss, NumOps.Zero)) return NumOps.Zero;
         T logData = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), NumOps.Divide(rss, NumOps.FromDouble(sampleSize)));
-        return NumOps.Add(NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(parameterSize)), 
+        return NumOps.Add(NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(parameterSize)),
                           NumOps.Multiply(NumOps.FromDouble(sampleSize), NumOps.Add(NumOps.Log(logData), NumOps.One)));
     }
 
@@ -182,7 +180,7 @@ public class ErrorStats<T>
     {
         if (sampleSize <= 0 || NumOps.LessThanOrEquals(rss, NumOps.Zero)) return NumOps.Zero;
         T logData = NumOps.Divide(rss, NumOps.FromDouble(sampleSize));
-        return NumOps.Add(NumOps.Multiply(NumOps.FromDouble(sampleSize), NumOps.Log(logData)), 
+        return NumOps.Add(NumOps.Multiply(NumOps.FromDouble(sampleSize), NumOps.Log(logData)),
                           NumOps.Multiply(NumOps.FromDouble(parameterSize), NumOps.Log(NumOps.FromDouble(sampleSize))));
     }
 }

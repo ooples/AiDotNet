@@ -19,7 +19,6 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
             Vector<T> yVal,
             Matrix<T> XTest,
             Vector<T> yTest,
-            PredictionModelOptions modelOptions,
             IRegression<T> regressionMethod,
             IRegularization<T> regularization,
             INormalizer<T> normalizer,
@@ -31,9 +30,8 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
             var currentSolution = InitializeRandomSolution(dimensions);
             var bestSolution = currentSolution.Copy();
             T temperature = _numOps.FromDouble(_saOptions.InitialTemperature);
-
-            T bestFitness = _numOps.MinValue;
             T bestIntercept = _numOps.Zero;
+            T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
             FitDetectorResult<T> bestFitDetectionResult = new();
             Vector<T> bestTrainingPredictions = new(yTrain.Length, _numOps);
             Vector<T> bestValidationPredictions = new(yVal.Length, _numOps);

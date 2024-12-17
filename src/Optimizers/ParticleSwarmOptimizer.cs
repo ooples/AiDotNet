@@ -19,7 +19,6 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
         Vector<T> yVal,
         Matrix<T> XTest,
         Vector<T> yTest,
-        PredictionModelOptions modelOptions,
         IRegression<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
@@ -29,8 +28,7 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
     {
         var swarm = InitializeSwarm(XTrain.Columns, _psoOptions.SwarmSize);
         var velocities = InitializeVelocities(XTrain.Columns, _psoOptions.SwarmSize);
-
-        T bestFitness = _options.MaximizeFitness ? _numOps.MinValue : _numOps.MaxValue;
+        T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
         Vector<T> bestSolution = new(XTrain.Columns, _numOps);
         T bestIntercept = _numOps.Zero;
         FitDetectorResult<T> bestFitDetectionResult = new();

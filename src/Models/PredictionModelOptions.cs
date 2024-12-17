@@ -6,7 +6,6 @@ public class PredictionModelOptions
     public double ValidationSplitPercentage { get; set; } = 0.15;
     public double TestingSplitPercentage { get; set; } = 0.15;
     public int RandomSeed { get; set; }
-    public bool NormalizeBeforeFeatureSelection { get; set; } = true;
-    public int MinimumFeatures { get; set; }
-    public int MaximumFeatures { get; set; }
+    public double ConfidenceLevel { get; set; } = 0.95;
+    public int LearningCurveSteps { get; set; } = 10;
 }

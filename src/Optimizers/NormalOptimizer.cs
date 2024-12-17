@@ -17,7 +17,6 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         Vector<T> yVal,
         Matrix<T> XTest,
         Vector<T> yTest,
-        PredictionModelOptions modelOptions,
         IRegression<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
@@ -27,7 +26,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     {
         var bestSolution = new Vector<T>(XTrain.Columns, _numOps);
         var bestIntercept = _numOps.Zero;
-        T bestFitness = _optimizationOptions.MaximizeFitness ? _numOps.MinValue : _numOps.MaxValue;
+        T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
         var fitnessHistory = new List<T>();
         var iterationHistory = new List<OptimizationIterationInfo<T>>();
         var bestSelectedFeatures = new List<Vector<T>>();
@@ -54,7 +53,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         for (int iteration = 0; iteration < _optimizationOptions.MaxIterations; iteration++)
         {
             // Randomly select features
-            var selectedFeatures = RandomlySelectFeatures(XTrain.Columns, modelOptions.MinimumFeatures, modelOptions.MaximumFeatures);
+            var selectedFeatures = RandomlySelectFeatures(XTrain.Columns, _options.MinimumFeatures, _options.MaximumFeatures);
 
             // Create subsets of the data with selected features
             var XTrainSubset = XTrain.SubMatrix(0, XTrain.Rows - 1, selectedFeatures);

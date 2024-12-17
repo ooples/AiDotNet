@@ -5,16 +5,14 @@ public class DataPreprocessor<T> : IDataPreprocessor<T>
     private readonly INormalizer<T> _normalizer;
     private readonly IFeatureSelector<T> _featureSelector;
     private readonly IOutlierRemoval<T> _outlierRemoval;
-    private readonly bool _normalizeBeforeFeatureSelection;
-    private readonly PredictionModelOptions _options;
+    private readonly DataProcessorOptions _options;
 
-    public DataPreprocessor(INormalizer<T> normalizer, IFeatureSelector<T> featureSelector, IOutlierRemoval<T> outlierRemoval, PredictionModelOptions options)
+    public DataPreprocessor(INormalizer<T> normalizer, IFeatureSelector<T> featureSelector, IOutlierRemoval<T> outlierRemoval, DataProcessorOptions? options = null)
     {
         _normalizer = normalizer;
         _featureSelector = featureSelector;
         _outlierRemoval = outlierRemoval;
-        _options = options;
-        _normalizeBeforeFeatureSelection = options.NormalizeBeforeFeatureSelection;
+        _options = options ?? new();
     }
 
     public (Matrix<T> X, Vector<T> y, NormalizationInfo<T> normInfo) PreprocessData(Matrix<T> X, Vector<T> y)
@@ -23,7 +21,7 @@ public class DataPreprocessor<T> : IDataPreprocessor<T>
 
         (X, y) = _outlierRemoval.RemoveOutliers(X, y);
 
-        if (_normalizeBeforeFeatureSelection)
+        if (_options.NormalizeBeforeFeatureSelection)
         {
             (X, normInfo.XParams) = _normalizer.NormalizeMatrix(X);
             (y, normInfo.YParams) = _normalizer.NormalizeVector(y);
