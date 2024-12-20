@@ -7,5 +7,12 @@ public enum FitType
     Underfit,
     HighBias,
     HighVariance,
-    Unstable
+    Unstable,
+    SevereMulticollinearity,
+    ModerateMulticollinearity,
+    PoorFit,
+    StrongPositiveAutocorrelation,
+    StrongNegativeAutocorrelation,
+    WeakAutocorrelation,
+    NoAutocorrelation
 }

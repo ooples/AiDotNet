@@ -27,6 +27,10 @@ public class PredictionStats<T>
     public T AdjustedR2 { get; private set; }
     public T ExplainedVarianceScore { get; private set; }
     public List<T> LearningCurve { get; private set; }
+    public T Accuracy { get; private set; }
+    public T Precision { get; private set; }
+    public T Recall { get; private set; }
+    public T F1Score { get; private set; }
 
     // Distribution Fit
     public DistributionFitResult<T> BestDistributionFit { get; private set; } = new();
@@ -53,8 +57,13 @@ public class PredictionStats<T>
         AdjustedR2 = NumOps.Zero;
         ExplainedVarianceScore = NumOps.Zero;
         LearningCurve = [];
+        Accuracy = NumOps.Zero;
+        Precision = NumOps.Zero;
+        Recall = NumOps.Zero;
+        F1Score = NumOps.Zero;
 
-        CalculatePredictionStats(inputs.Actual, inputs.Predicted, inputs.NumberOfParameters, NumOps.FromDouble(inputs.ConfidenceLevel), inputs.LearningCurveSteps);
+        CalculatePredictionStats(inputs.Actual, inputs.Predicted, inputs.NumberOfParameters, NumOps.FromDouble(inputs.ConfidenceLevel), inputs.LearningCurveSteps, 
+            inputs.PredictionType);
     }
 
     public static PredictionStats<T> Empty()
@@ -62,7 +71,7 @@ public class PredictionStats<T>
         return new PredictionStats<T>(new());
     }
 
-    private void CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters, T confidenceLevel, int learningCurveSteps)
+    private void CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters, T confidenceLevel, int learningCurveSteps, PredictionType predictionType)
     {
         BestDistributionFit = StatisticsHelper<T>.DetermineBestFitDistribution(predicted);
 
@@ -85,5 +94,26 @@ public class PredictionStats<T>
         SimultaneousPredictionInterval = StatisticsHelper<T>.CalculateSimultaneousPredictionInterval(actual, predicted, confidenceLevel);
         JackknifeInterval = StatisticsHelper<T>.CalculateJackknifeInterval(actual, predicted);
         PercentileInterval = StatisticsHelper<T>.CalculatePercentileInterval(predicted, confidenceLevel);
+
+        Accuracy = StatisticsHelper<T>.CalculateAccuracy(actual, predicted, predictionType);
+        (Precision, Recall, F1Score) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, predictionType);
+    }
+
+    public T GetMetric(MetricType metricType)
+    {
+        return metricType switch
+        {
+            MetricType.R2 => R2,
+            MetricType.AdjustedR2 => AdjustedR2,
+            MetricType.ExplainedVarianceScore => ExplainedVarianceScore,
+            MetricType.MeanPredictionError => MeanPredictionError,
+            MetricType.MedianPredictionError => MedianPredictionError,
+            MetricType.Accuracy => Accuracy,
+            MetricType.Precision => Precision,
+            MetricType.Recall => Recall,
+            MetricType.F1Score => F1Score,
+            MetricType.PredictionIntervalCoverage => PredictionIntervalCoverage,
+            _ => throw new ArgumentException($"Unknown metric type: {metricType}")
+        };
     }
 }

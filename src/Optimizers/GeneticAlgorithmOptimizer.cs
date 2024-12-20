@@ -39,18 +39,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         var bestTrainingPredictions = Vector<T>.Empty();
         var bestValidationPredictions = Vector<T>.Empty();
         var bestTestPredictions = Vector<T>.Empty();
-        var bestTrainingErrorStats = ErrorStats<T>.Empty();
-        var bestValidationErrorStats = ErrorStats<T>.Empty();
-        var bestTestErrorStats = ErrorStats<T>.Empty();
-        var bestTrainingActualBasicStats = BasicStats<T>.Empty();
-        var bestTrainingPredictedBasicStats = BasicStats<T>.Empty();
-        var bestValidationActualBasicStats = BasicStats<T>.Empty();
-        var bestValidationPredictedBasicStats = BasicStats<T>.Empty();
-        var bestTestActualBasicStats = BasicStats<T>.Empty();
-        var bestTestPredictedBasicStats = BasicStats<T>.Empty();
-        var bestTrainingPredictionStats = PredictionStats<T>.Empty();
-        var bestValidationPredictionStats = PredictionStats<T>.Empty();
-        var bestTestPredictionStats = PredictionStats<T>.Empty();
+        var bestEvaluationData = new ModelEvaluationData<T>();
         var bestSelectedFeatures = new List<Vector<T>>();
         var bestTestFeatures = Matrix<T>.Empty();
         var bestTrainingFeatures = Matrix<T>.Empty();
@@ -62,12 +51,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
             {
                 var currentSolution = population[i];
 
-                var (currentFitness, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions,
-                    trainingErrorStats, validationErrorStats, testErrorStats,
-                    trainingActualBasicStats, trainingPredictedBasicStats,
-                    validationActualBasicStats, validationPredictedBasicStats,
-                    testActualBasicStats, testPredictedBasicStats,
-                    trainingPredictionStats, validationPredictionStats, testPredictionStats) = 
+                var (currentFitness, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions, evaluationData) = 
                     EvaluateSolution(
                         XTrain, XVal, XTest,
                         yTrain, yVal, yTest,
@@ -83,18 +67,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
                     trainingPredictions,
                     validationPredictions,
                     testPredictions,
-                    trainingErrorStats,
-                    validationErrorStats,
-                    testErrorStats,
-                    trainingActualBasicStats,
-                    trainingPredictedBasicStats,
-                    validationActualBasicStats,
-                    validationPredictedBasicStats,
-                    testActualBasicStats,
-                    testPredictedBasicStats,
-                    trainingPredictionStats,
-                    validationPredictionStats,
-                    testPredictionStats,
+                    evaluationData,
                     [.. Enumerable.Range(0, XTrain.Columns)],
                     XTrain,
                     XTest,
@@ -108,18 +81,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
                     ref bestTrainingPredictions,
                     ref bestValidationPredictions,
                     ref bestTestPredictions,
-                    ref bestTrainingErrorStats,
-                    ref bestValidationErrorStats,
-                    ref bestTestErrorStats,
-                    ref bestTrainingActualBasicStats,
-                    ref bestTrainingPredictedBasicStats,
-                    ref bestValidationActualBasicStats,
-                    ref bestValidationPredictedBasicStats,
-                    ref bestTestActualBasicStats,
-                    ref bestTestPredictedBasicStats,
-                    ref bestTrainingPredictionStats,
-                    ref bestValidationPredictionStats,
-                    ref bestTestPredictionStats,
+                    ref bestEvaluationData,
                     ref bestSelectedFeatures,
                     ref bestTestFeatures,
                     ref bestTrainingFeatures,
@@ -151,30 +113,30 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
                 X = bestTrainingFeatures,
                 Y = yTrain,
                 Predictions = bestTrainingPredictions,
-                ErrorStats = bestTrainingErrorStats,
-                ActualBasicStats = bestTrainingActualBasicStats,
-                PredictedBasicStats = bestTrainingPredictedBasicStats,
-                PredictionStats = bestTrainingPredictionStats
+                ErrorStats = bestEvaluationData.TrainingErrorStats,
+                ActualBasicStats = bestEvaluationData.TrainingActualBasicStats,
+                PredictedBasicStats = bestEvaluationData.TrainingPredictedBasicStats,
+                PredictionStats = bestEvaluationData.TrainingPredictionStats
             },
             new OptimizationResult<T>.DatasetResult
             {
                 X = bestValidationFeatures,
                 Y = yVal,
                 Predictions = bestValidationPredictions,
-                ErrorStats = bestValidationErrorStats,
-                ActualBasicStats = bestValidationActualBasicStats,
-                PredictedBasicStats = bestValidationPredictedBasicStats,
-                PredictionStats = bestValidationPredictionStats
+                ErrorStats = bestEvaluationData.ValidationErrorStats,
+                ActualBasicStats = bestEvaluationData.ValidationActualBasicStats,
+                PredictedBasicStats = bestEvaluationData.ValidationPredictedBasicStats,
+                PredictionStats = bestEvaluationData.ValidationPredictionStats
             },
             new OptimizationResult<T>.DatasetResult
             {
                 X = bestTestFeatures,
                 Y = yTest,
                 Predictions = bestTestPredictions,
-                ErrorStats = bestTestErrorStats,
-                ActualBasicStats = bestTestActualBasicStats,
-                PredictedBasicStats = bestTestPredictedBasicStats,
-                PredictionStats = bestTestPredictionStats
+                ErrorStats = bestEvaluationData.TestErrorStats,
+                ActualBasicStats = bestEvaluationData.TestActualBasicStats,
+                PredictedBasicStats = bestEvaluationData.TestPredictedBasicStats,
+                PredictionStats = bestEvaluationData.TestPredictionStats
             },
             bestFitDetectionResult,
             iterationHistory.Count,

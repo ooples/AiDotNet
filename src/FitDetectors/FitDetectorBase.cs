@@ -9,56 +9,13 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
         _numOps = MathHelper.GetNumericOperations<T>();
     }
 
-    public abstract FitDetectorResult<T> DetectFit(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats);
+    public abstract FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData);
 
-    protected abstract FitType DetermineFitType(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats);
+    protected abstract FitType DetermineFitType(ModelEvaluationData<T> evaluationData);
 
-    protected abstract T CalculateConfidenceLevel(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats);
+    protected abstract T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData);
 
-    protected virtual List<string> GenerateRecommendations(
-    FitType fitType,
-    BasicStats<T> trainingBasicStats,
-    BasicStats<T> validationBasicStats,
-    BasicStats<T> testBasicStats,
-    PredictionStats<T> trainingPredictionStats,
-    PredictionStats<T> validationPredictionStats,
-    PredictionStats<T> testPredictionStats)
+    protected virtual List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
     {
         var recommendations = new List<string>();
 

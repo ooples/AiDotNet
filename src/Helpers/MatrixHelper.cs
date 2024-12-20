@@ -2216,7 +2216,7 @@ public static class MatrixHelper
         return inverse;
     }
 
-    public static Matrix<T> GaussianEliminationInversion<T>(this Matrix<T> matrix)
+    public static Matrix<T> InverseGaussianJordanElimination<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
         var ops = MathHelper.GetNumericOperations<T>();
@@ -2251,6 +2251,12 @@ public static class MatrixHelper
                     maxRowIndex = k;
                     maxValue = absValue;
                 }
+            }
+
+            // Check for singularity
+            if (ops.Equals(maxValue, ops.Zero))
+            {
+                throw new InvalidOperationException("Matrix is singular and cannot be inverted.");
             }
 
             // Swap current row with pivot row
@@ -2294,108 +2300,6 @@ public static class MatrixHelper
         }
 
         return inverseMatrix;
-    }
-
-    public static void GaussJordanElimination<T>(this Matrix<T> matrix, Vector<T> vector, out Matrix<T> inverseMatrix, 
-        out Vector<T> coefficients)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var matrixA = matrix.Copy();
-        var matrixB = Matrix<T>.CreateFromVector(vector);
-        int rows = matrixA.Rows, columns = matrixB.Columns, rowIndex = 0, columnIndex = 0;
-        var indexArray = new int[rows];
-        var indexRowArray = new int[rows];
-        var indexColumnArray = new int[rows];
-        T inverse = ops.Zero, dummyValue = ops.Zero;
-
-        for (int i = 0; i < rows; i++)
-        {
-            var big = ops.Zero;
-            for (int j = 0; j < rows; j++)
-            {
-                if (indexArray[j] != 1)
-                {
-                    for (int k = 0; k < rows; k++)
-                    {
-                        if (indexArray[k] == 0)
-                        {
-                            var currentValue = ops.Abs(matrixA[j, k]);
-                            if (ops.GreaterThanOrEquals(currentValue, big))
-                            {
-                                big = currentValue;
-                                rowIndex = j;
-                                columnIndex = k;
-                            }
-                        }
-                    }
-                }
-            }
-            indexArray[columnIndex] += 1;
-
-            if (rowIndex != columnIndex)
-            {
-                for (int j = 0; j < rows; j++)
-                {
-                    (matrixA[rowIndex, j], matrixA[columnIndex, j]) = (matrixA[columnIndex, j], matrixA[rowIndex, j]);
-                }
-                for (int j = 0; j < columns; j++)
-                {
-                    (matrixB[rowIndex, j], matrixB[columnIndex, j]) = (matrixB[columnIndex, j], matrixB[rowIndex, j]);
-                }
-            }
-            indexRowArray[i] = rowIndex;
-            indexColumnArray[i] = columnIndex;
-
-            if (ops.Equals(matrixA[columnIndex, columnIndex], ops.Zero))
-            {
-                throw new InvalidOperationException("Singular matrix");
-            }
-            inverse = ops.Divide(ops.One, matrixA[columnIndex, columnIndex]);
-            matrixA[columnIndex, columnIndex] = ops.One;
-
-            for (int j = 0; j < rows; j++)
-            {
-                matrixA[columnIndex, j] = ops.Multiply(matrixA[columnIndex, j], inverse);
-            }
-            for (int j = 0; j < columns; j++)
-            {
-                matrixB[columnIndex, j] = ops.Multiply(matrixB[columnIndex, j], inverse);
-            }
-            for (int j = 0; j < rows; j++)
-            {
-                if (j != columnIndex)
-                {
-                    dummyValue = matrixA[j, columnIndex];
-                    matrixA[j, columnIndex] = ops.Zero;
-                    for (int k = 0; k < rows; k++)
-                    {
-                        matrixA[k, j] = ops.Subtract(matrixA[k, j], ops.Multiply(matrixA[columnIndex, j], dummyValue));
-                    }
-                    for (int k = 0; k < columns; k++)
-                    {
-                        matrixB[k, j] = ops.Subtract(matrixB[k, j], ops.Multiply(matrixB[columnIndex, j], dummyValue));
-                    }
-                }
-            }
-        }
-
-        for (int i = rows - 1; i >= 0; i--)
-        {
-            if (indexRowArray[i] != indexColumnArray[i])
-            {
-                for (int j = 0; j < rows; j++)
-                {
-                    (matrixA[j, indexRowArray[i]], matrixA[j, indexColumnArray[i]]) = (matrixA[j, indexColumnArray[i]], matrixA[j, indexRowArray[i]]);
-                }
-            }
-        }
-
-        inverseMatrix = matrixA;
-        coefficients = new Vector<T>(rows);
-        for (int i = 0; i < rows; i++)
-        {
-            coefficients[i] = matrixB[i, 0];
-        }
     }
 
     public static Matrix<T> Extract<T>(this Matrix<T> matrix, int rows, int columns)
@@ -2612,5 +2516,146 @@ public static class MatrixHelper
                 solutionVector[i] = ops.Add(solutionVector[i], ops.Multiply(matrix[i, j], actualVector[j + k]));
             }
         }
+    }
+
+    public static Matrix<T> InverseNewton<T>(Matrix<T> A, int maxIterations = 100, T? tolerance = default)
+    {
+        if (A.Rows != A.Columns)
+            throw new ArgumentException("Matrix must be square.");
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = A.Rows;
+        var X = A.Transpose();
+        var I = Matrix<T>.CreateIdentity(n, ops);
+        tolerance ??= ops.FromDouble(1e-10);
+
+        for (int k = 0; k < maxIterations; k++)
+        {
+            var R = I.Subtract(A.Multiply(X));
+            if (ops.LessThan(R.FrobeniusNorm(), tolerance))
+            {
+                return X;
+            }
+
+            X = X.Add(X.Multiply(R));
+        }
+
+        throw new InvalidOperationException("Newton's method did not converge.");
+    }
+
+    public static Matrix<T> InverseStrassen<T>(Matrix<T> A)
+    {
+        if (A.Rows != A.Columns)
+            throw new ArgumentException("Matrix must be square.");
+
+        int n = A.Rows;
+        var ops = MathHelper.GetNumericOperations<T>();
+
+        if (n == 1)
+        {
+            return new Matrix<T>(1, 1, ops) { [0, 0] = ops.Divide(ops.One, A[0, 0]) };
+        }
+
+        if (n % 2 != 0)
+        {
+            throw new ArgumentException("Matrix size must be a power of 2 for Strassen's algorithm.");
+        }
+
+        int m = n / 2;
+
+        var A11 = A.Submatrix(0, 0, m, m);
+        var A12 = A.Submatrix(0, m, m, m);
+        var A21 = A.Submatrix(m, 0, m, m);
+        var A22 = A.Submatrix(m, m, m, m);
+
+        var A11_inv = InverseStrassen(A11);
+        var S = A22.Subtract(A21.Multiply(A11_inv).Multiply(A12));
+        var S_inv = InverseStrassen(S);
+        var P = A11_inv.Add(A11_inv.Multiply(A12).Multiply(S_inv).Multiply(A21).Multiply(A11_inv));
+        var Q = A11_inv.Multiply(A12).Multiply(S_inv).Negate();
+        var R = S_inv.Multiply(A21).Multiply(A11_inv).Negate();
+
+        var result = new Matrix<T>(n, n, ops);
+        result.SetSubmatrix(0, 0, P);
+        result.SetSubmatrix(0, m, Q);
+        result.SetSubmatrix(m, 0, R);
+        result.SetSubmatrix(m, m, S_inv);
+
+        return result;
+    }
+
+    private static Matrix<T> Submatrix<T>(this Matrix<T> matrix, int startRow, int startCol, int rows, int cols)
+    {
+        var submatrix = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                submatrix[i, j] = matrix[startRow + i, startCol + j];
+            }
+        }
+
+        return submatrix;
+    }
+
+    private static void SetSubmatrix<T>(this Matrix<T> matrix, int startRow, int startCol, Matrix<T> submatrix)
+    {
+        for (int i = 0; i < submatrix.Rows; i++)
+        {
+            for (int j = 0; j < submatrix.Columns; j++)
+            {
+                matrix[startRow + i, startCol + j] = submatrix[i, j];
+            }
+        }
+    }
+
+    public static T FrobeniusNorm<T>(this Matrix<T> matrix)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        T sum = ops.Zero;
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                sum = ops.Add(sum, ops.Multiply(matrix[i, j], matrix[i, j]));
+            }
+        }
+
+        return ops.Sqrt(sum);
+    }
+
+    public static Matrix<T> Negate<T>(this Matrix<T> matrix)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var result = new Matrix<T>(matrix.Rows, matrix.Columns, ops);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = ops.Negate(matrix[i, j]);
+            }
+        }
+
+        return result;
+    }
+
+    public static Matrix<T> Inverse<T>(this Matrix<T> matrix, InverseType inverseType = InverseType.GaussianJordan, int maxIterations = 100, T? tolerance = default)
+    {
+        return inverseType switch
+        {
+            InverseType.Strassen => InverseStrassen(matrix),
+            InverseType.Newton => InverseNewton(matrix, maxIterations, tolerance),
+            InverseType.GaussianJordan => InverseGaussianJordanElimination(matrix),
+            _ => throw new ArgumentException("Invalid inverse type", nameof(inverseType)),
+        };
+    }
+
+    public static Matrix<T> CalculateHatMatrix<T>(Matrix<T> features)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var transposeFeatures = features.Transpose();
+        var inverseMatrix = transposeFeatures.Multiply(features).Inverse();
+
+        return features.Multiply(inverseMatrix.Multiply(transposeFeatures));
     }
 }

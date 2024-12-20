@@ -37,18 +37,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         var bestTrainingFeatures = new Matrix<T>(XTrain.Rows, 0, _numOps);
         var bestValidationFeatures = new Matrix<T>(XVal.Rows, 0, _numOps);
         var bestTestFeatures = new Matrix<T>(XTest.Rows, 0, _numOps);
-        var bestTrainingErrorStats = ErrorStats<T>.Empty();
-        var bestValidationErrorStats = ErrorStats<T>.Empty();
-        var bestTestErrorStats = ErrorStats<T>.Empty();
-        var bestTrainingActualBasicStats = BasicStats<T>.Empty();
-        var bestTrainingPredictedBasicStats = BasicStats<T>.Empty();
-        var bestValidationActualBasicStats = BasicStats<T>.Empty();
-        var bestValidationPredictedBasicStats = BasicStats<T>.Empty();
-        var bestTestActualBasicStats = BasicStats<T>.Empty();
-        var bestTestPredictedBasicStats = BasicStats<T>.Empty();
-        var bestTrainingPredictionStats = PredictionStats<T>.Empty();
-        var bestValidationPredictionStats = PredictionStats<T>.Empty();
-        var bestTestPredictionStats = PredictionStats<T>.Empty();
+        var bestEvaluationData = new ModelEvaluationData<T>();
 
         for (int iteration = 0; iteration < _optimizationOptions.MaxIterations; iteration++)
         {
@@ -62,34 +51,18 @@ public class NormalOptimizer<T> : OptimizerBase<T>
             var featureCount = selectedFeatures.Count + (regressionMethod.HasIntercept ? 1 : 0);
 
             var (currentFitnessScore, fitDetectionResult, 
-                 trainingPredictions, validationPredictions, testPredictions,
-                 trainingErrorStats, validationErrorStats, testErrorStats,
-                 trainingActualBasicStats, trainingPredictedBasicStats,
-                 validationActualBasicStats, validationPredictedBasicStats,
-                 testActualBasicStats, testPredictedBasicStats,
-                 trainingPredictionStats, validationPredictionStats, testPredictionStats) = 
-                EvaluateSolution(XTrainSubset, XValSubset, XTestSubset, 
-                                          yTrain, yVal, yTest, 
-                                          regressionMethod, normalizer, normInfo, 
-                                          fitnessCalculator, fitDetector, featureCount);
+             trainingPredictions, validationPredictions, testPredictions,
+             evaluationData) = EvaluateSolution(XTrainSubset, XValSubset, XTestSubset, 
+                             yTrain, yVal, yTest, 
+                             regressionMethod, normalizer, normInfo, 
+                             fitnessCalculator, fitDetector, featureCount);
 
             UpdateBestSolution(
                 currentFitnessScore, regressionMethod.Coefficients, regressionMethod.Intercept,
-                fitDetectionResult, trainingPredictions, validationPredictions, testPredictions,
-                trainingErrorStats, validationErrorStats, testErrorStats,
-                trainingActualBasicStats, trainingPredictedBasicStats,
-                validationActualBasicStats, validationPredictedBasicStats,
-                testActualBasicStats, testPredictedBasicStats,
-                trainingPredictionStats, validationPredictionStats, testPredictionStats,
-                selectedFeatures, XTrain, XTestSubset, XTrainSubset, XValSubset,
-                fitnessCalculator,
+                fitDetectionResult, trainingPredictions, validationPredictions, testPredictions, evaluationData,
+                selectedFeatures, XTrain, XTestSubset, XTrainSubset, XValSubset, fitnessCalculator,
                 ref bestFitness, ref bestSolution, ref bestIntercept, ref bestFitDetectionResult,
-                ref bestTrainingPredictions, ref bestValidationPredictions, ref bestTestPredictions,
-                ref bestTrainingErrorStats, ref bestValidationErrorStats, ref bestTestErrorStats,
-                ref bestTrainingActualBasicStats, ref bestTrainingPredictedBasicStats,
-                ref bestValidationActualBasicStats, ref bestValidationPredictedBasicStats,
-                ref bestTestActualBasicStats, ref bestTestPredictedBasicStats,
-                ref bestTrainingPredictionStats, ref bestValidationPredictionStats, ref bestTestPredictionStats,
+                ref bestTrainingPredictions, ref bestValidationPredictions, ref bestTestPredictions, ref bestEvaluationData, 
                 ref bestSelectedFeatures, ref bestTestFeatures, ref bestTrainingFeatures, ref bestValidationFeatures);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(fitnessHistory, iterationHistory, iteration, bestFitness, bestFitDetectionResult, fitnessCalculator))
@@ -99,16 +72,16 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         }
 
         var trainingResult = OptimizerHelper.CreateDatasetResult(
-            bestTrainingPredictions, bestTrainingErrorStats, bestTrainingActualBasicStats,
-            bestTrainingPredictedBasicStats, bestTrainingPredictionStats, bestTrainingFeatures, yTrain);
+            bestTrainingPredictions, bestEvaluationData.TrainingErrorStats, bestEvaluationData.TrainingActualBasicStats,
+            bestEvaluationData.TrainingPredictedBasicStats, bestEvaluationData.TrainingPredictionStats, bestTrainingFeatures, yTrain);
 
         var validationResult = OptimizerHelper.CreateDatasetResult(
-            bestValidationPredictions, bestValidationErrorStats, bestValidationActualBasicStats,
-            bestValidationPredictedBasicStats, bestValidationPredictionStats, bestValidationFeatures, yVal);
+            bestValidationPredictions, bestEvaluationData.ValidationErrorStats, bestEvaluationData.ValidationActualBasicStats,
+            bestEvaluationData.ValidationPredictedBasicStats, bestEvaluationData.ValidationPredictionStats, bestValidationFeatures, yVal);
 
         var testResult = OptimizerHelper.CreateDatasetResult(
-            bestTestPredictions, bestTestErrorStats, bestTestActualBasicStats,
-            bestTestPredictedBasicStats, bestTestPredictionStats, bestTestFeatures, yTest);
+            bestTestPredictions, bestEvaluationData.TestErrorStats, bestEvaluationData.TestActualBasicStats,
+            bestEvaluationData.TestPredictedBasicStats, bestEvaluationData.TestPredictionStats, bestTestFeatures, yTest);
 
         return OptimizerHelper.CreateOptimizationResult(
             bestSolution, bestIntercept, bestFitness, fitnessHistory, bestSelectedFeatures,

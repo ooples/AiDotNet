@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using Microsoft.SqlServer.Server;
+using System.Linq;
 
 namespace AiDotNet.Helpers;
 
@@ -1106,5 +1107,636 @@ public static class StatisticsHelper<T>
         int upperIndex = n - lowerIndex - 1;
 
         return (sortedPredictions[lowerIndex], sortedPredictions[upperIndex]);
+    }
+
+    public static T CalculateRSS(Vector<T> actual, Vector<T> predicted)
+    {
+        return actual.Subtract(predicted).Select(x => NumOps.Square(x)).Aggregate(NumOps.Zero, NumOps.Add);
+    }
+
+    public static T CalculateMAE(Vector<T> actual, Vector<T> predicted)
+    {
+        return NumOps.Divide(actual.Subtract(predicted).Select(NumOps.Abs).Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(actual.Length));
+    }
+
+    public static T CalculateMSE(Vector<T> actual, Vector<T> predicted)
+    {
+        return NumOps.Divide(actual.Subtract(predicted).Select(x => NumOps.Square(x)).Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(actual.Length));
+    }
+
+    public static T CalculateMAPE(Vector<T> actual, Vector<T> predicted)
+    {
+        var mape = actual.Zip(predicted, (a, p) => NumOps.Abs(NumOps.Divide(NumOps.Subtract(a, p), a)))
+                            .Where(x => !NumOps.Equals(x, NumOps.Zero))
+                            .Aggregate(NumOps.Zero, NumOps.Add);
+        return NumOps.Multiply(NumOps.Divide(mape, NumOps.FromDouble(actual.Length)), NumOps.FromDouble(100));
+    }
+
+    public static T CalculateMedianAbsoluteError(Vector<T> actual, Vector<T> predicted)
+    {
+        var absoluteErrors = actual.Subtract(predicted).Select(NumOps.Abs).OrderBy(x => x).ToArray();
+        int n = absoluteErrors.Length;
+        return n % 2 == 0
+            ? NumOps.Divide(NumOps.Add(absoluteErrors[n / 2 - 1], absoluteErrors[n / 2]), NumOps.FromDouble(2))
+            : absoluteErrors[n / 2];
+    }
+
+    public static T CalculateMaxError(Vector<T> actual, Vector<T> predicted)
+    {
+        return actual.Subtract(predicted).Select(NumOps.Abs).Max();
+    }
+
+    public static T CalculateSampleStandardError(Vector<T> actual, Vector<T> predicted, int numberOfParameters)
+    {
+        T mse = CalculateMSE(actual, predicted);
+        int degreesOfFreedom = actual.Length - numberOfParameters;
+        return NumOps.Sqrt(NumOps.Divide(mse, NumOps.FromDouble(degreesOfFreedom)));
+    }
+
+    public static T CalculatePopulationStandardError(Vector<T> actual, Vector<T> predicted)
+    {
+        return NumOps.Sqrt(CalculateMSE(actual, predicted));
+    }
+
+    public static T CalculateMeanBiasError(Vector<T> actual, Vector<T> predicted)
+    {
+        return NumOps.Divide(actual.Subtract(predicted).Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(actual.Length));
+    }
+
+    public static T CalculateTheilUStatistic(Vector<T> actual, Vector<T> predicted)
+    {
+        T numerator = NumOps.Sqrt(CalculateMSE(actual, predicted));
+        T denominatorActual = NumOps.Sqrt(NumOps.Divide(actual.Select(x => NumOps.Square(x)).Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(actual.Length)));
+        T denominatorPredicted = NumOps.Sqrt(NumOps.Divide(predicted.Select(x => NumOps.Square(x)).Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(predicted.Length)));
+
+        return NumOps.Divide(numerator, NumOps.Add(denominatorActual, denominatorPredicted));
+    }
+
+    public static T CalculateDurbinWatsonStatistic(Vector<T> actual, Vector<T> predicted)
+    {
+        var errors = actual.Subtract(predicted);
+        return CalculateDurbinWatsonStatistic([.. errors]);
+    }
+
+    public static T CalculateDurbinWatsonStatistic(List<T> residualList)
+    {
+        T sumSquaredDifferences = NumOps.Zero;
+        T sumSquaredErrors = NumOps.Zero;
+
+        for (int i = 1; i < residualList.Count; i++)
+        {
+            sumSquaredDifferences = NumOps.Add(sumSquaredDifferences, NumOps.Square(NumOps.Subtract(residualList[i], residualList[i - 1])));
+            sumSquaredErrors = NumOps.Add(sumSquaredErrors, NumOps.Square(residualList[i]));
+        }
+        sumSquaredErrors = NumOps.Add(sumSquaredErrors, NumOps.Square(residualList[0]));
+
+        return NumOps.Divide(sumSquaredDifferences, sumSquaredErrors);
+    }
+
+    public static T CalculateAICAlternative(int sampleSize, int parameterSize, T rss)
+    {
+        if (sampleSize <= 0 || NumOps.LessThanOrEquals(rss, NumOps.Zero)) return NumOps.Zero;
+        T logData = NumOps.Divide(rss, NumOps.FromDouble(sampleSize));
+
+        return NumOps.Add(NumOps.Multiply(NumOps.FromDouble(sampleSize), NumOps.Log(logData)), NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(parameterSize)));
+    }
+
+    public static T CalculateAIC(int sampleSize, int parameterSize, T rss)
+    {
+        if (sampleSize <= 0 || NumOps.LessThanOrEquals(rss, NumOps.Zero)) return NumOps.Zero;
+        T logData = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), NumOps.Divide(rss, NumOps.FromDouble(sampleSize)));
+
+        return NumOps.Add(NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(parameterSize)),
+                            NumOps.Multiply(NumOps.FromDouble(sampleSize), NumOps.Add(NumOps.Log(logData), NumOps.One)));
+    }
+
+    public static T CalculateBIC(int sampleSize, int parameterSize, T rss)
+    {
+        if (sampleSize <= 0 || NumOps.LessThanOrEquals(rss, NumOps.Zero)) return NumOps.Zero;
+        T logData = NumOps.Divide(rss, NumOps.FromDouble(sampleSize));
+
+        return NumOps.Add(NumOps.Multiply(NumOps.FromDouble(sampleSize), NumOps.Log(logData)),
+                            NumOps.Multiply(NumOps.FromDouble(parameterSize), NumOps.Log(NumOps.FromDouble(sampleSize))));
+    }
+
+    public static T CalculateAccuracy(Vector<T> actual, Vector<T> predicted)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var correctPredictions = numOps.Zero;
+        var totalPredictions = numOps.FromDouble(actual.Length);
+
+        for (int i = 0; i < actual.Length; i++)
+        {
+            if (numOps.Equals(actual[i], predicted[i]))
+            {
+                correctPredictions = numOps.Add(correctPredictions, numOps.One);
+            }
+        }
+
+        return numOps.Divide(correctPredictions, totalPredictions);
+    }
+
+    public static T CalculateAccuracy(Vector<T> actual, Vector<T> predicted, PredictionType predictionType, T? tolerance = default)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var correctPredictions = numOps.Zero;
+        var totalPredictions = numOps.FromDouble(actual.Length);
+        tolerance ??= numOps.FromDouble(0.05); // default of 5%
+
+        for (int i = 0; i < actual.Length; i++)
+        {
+            if (predictionType == PredictionType.Binary)
+            {
+                if (numOps.Equals(actual[i], predicted[i]))
+                {
+                    correctPredictions = numOps.Add(correctPredictions, numOps.One);
+                }
+            }
+            else // Regression
+            {
+                var difference = numOps.Abs(numOps.Subtract(actual[i], predicted[i]));
+                var threshold = numOps.Multiply(actual[i], tolerance);
+                if (numOps.LessThanOrEquals(difference, threshold))
+                {
+                    correctPredictions = numOps.Add(correctPredictions, numOps.One);
+                }
+            }
+        }
+
+        return numOps.Divide(correctPredictions, totalPredictions);
+    }
+
+    public static (T Precision, T Recall, T F1Score) CalculatePrecisionRecallF1(Vector<T> actual, Vector<T> predicted, PredictionType predictionType, T? threshold = default)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var truePositives = numOps.Zero;
+        var falsePositives = numOps.Zero;
+        var falseNegatives = numOps.Zero;
+        threshold ??= numOps.FromDouble(0.1); // default of 10%
+
+        for (int i = 0; i < actual.Length; i++)
+        {
+            if (predictionType == PredictionType.Binary)
+            {
+                if (numOps.Equals(predicted[i], numOps.One))
+                {
+                    if (numOps.Equals(actual[i], numOps.One))
+                    {
+                        truePositives = numOps.Add(truePositives, numOps.One);
+                    }
+                    else
+                    {
+                        falsePositives = numOps.Add(falsePositives, numOps.One);
+                    }
+                }
+                else if (numOps.Equals(actual[i], numOps.One))
+                {
+                    falseNegatives = numOps.Add(falseNegatives, numOps.One);
+                }
+            }
+            else // Regression
+            {
+                var difference = numOps.Abs(numOps.Subtract(actual[i], predicted[i]));
+                if (numOps.LessThanOrEquals(difference, threshold))
+                {
+                    truePositives = numOps.Add(truePositives, numOps.One);
+                }
+                else if (numOps.GreaterThan(predicted[i], actual[i]))
+                {
+                    falsePositives = numOps.Add(falsePositives, numOps.One);
+                }
+                else
+                {
+                    falseNegatives = numOps.Add(falseNegatives, numOps.One);
+                }
+            }
+        }
+
+        var precision = numOps.Divide(truePositives, numOps.Add(truePositives, falsePositives));
+        var recall = numOps.Divide(truePositives, numOps.Add(truePositives, falseNegatives));
+        var f1Score = CalculateF1Score(precision, recall);
+
+        return (precision, recall, f1Score);
+    }
+
+    public static T CalculateF1Score(T precision, T recall)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var numerator = numOps.Multiply(numOps.FromDouble(2), numOps.Multiply(precision, recall));
+        var denominator = numOps.Add(precision, recall);
+        return numOps.Equals(denominator, numOps.Zero) ? numOps.Zero : numOps.Divide(numerator, denominator);
+    }
+
+    public static Matrix<T> CalculateCorrelationMatrix(Matrix<T> features, ModelStatsOptions options)
+    {
+        int featureCount = features.Columns;
+        var correlationMatrix = new Matrix<T>(featureCount, featureCount, NumOps);
+
+        for (int i = 0; i < featureCount; i++)
+        {
+            for (int j = 0; j < featureCount; j++)
+            {
+                if (i == j)
+                {
+                    correlationMatrix[i, j] = NumOps.One;
+                }
+                else
+                {
+                    Vector<T> vectorI = features.GetColumn(i);
+                    Vector<T> vectorJ = features.GetColumn(j);
+
+                    T correlation = CalculatePearsonCorrelation(vectorI, vectorJ);
+                    correlationMatrix[i, j] = correlation;
+
+                    // Check for multicollinearity
+                    if (NumOps.GreaterThan(NumOps.Abs(correlation), NumOps.FromDouble(options.MulticollinearityThreshold)))
+                    {
+                        // You might want to log this or handle it in some way
+                        Console.WriteLine($"High correlation detected between features {i} and {j}: {correlation}");
+                    }
+                }
+            }
+        }
+
+        return correlationMatrix;
+    }
+
+    public static List<T> CalculateVIF(Matrix<T> correlationMatrix, ModelStatsOptions options)
+    {
+        var vifValues = new List<T>();
+
+        for (int i = 0; i < correlationMatrix.Rows; i++)
+        {
+            var subMatrix = correlationMatrix.RemoveRow(i).RemoveColumn(i);
+            var inverseSubMatrix = subMatrix.Inverse();
+            var rSquared = NumOps.Subtract(NumOps.One, NumOps.Divide(NumOps.One, inverseSubMatrix[0, 0]));
+            var vif = NumOps.Divide(NumOps.One, NumOps.Subtract(NumOps.One, rSquared));
+            vifValues.Add(vif);
+
+            // Check if VIF exceeds the maximum allowed value
+            if (NumOps.GreaterThan(vif, NumOps.FromDouble(options.MaxVIF)))
+            {
+                // You might want to log this or handle it in some way
+                Console.WriteLine($"High VIF detected for feature {i}: {vif}");
+            }
+        }
+
+        return vifValues;
+    }
+
+    public static T CalculateConditionNumber(Matrix<T> matrix, ModelStatsOptions options)
+    {
+        return options.ConditionNumberMethod switch
+        {
+            ConditionNumberMethod.SVD => CalculateConditionNumberSVD(matrix),
+            ConditionNumberMethod.L1Norm => CalculateConditionNumberL1Norm(matrix),
+            ConditionNumberMethod.InfinityNorm => CalculateConditionNumberLInfNorm(matrix),
+            ConditionNumberMethod.PowerIteration => CalculateConditionNumberPowerIteration(matrix),
+            _ => throw new ArgumentException("Unsupported condition number calculation method", nameof(options))
+        };
+    }
+
+    private static T CalculateConditionNumberSVD(Matrix<T> matrix)
+    {
+        var svd = new SvdDecomposition<T>(matrix);
+        var singularValues = svd.S;
+
+        if (singularValues.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        T maxSingularValue = singularValues.Max();
+        T minSingularValue = singularValues.Min();
+
+        if (NumOps.Equals(minSingularValue, NumOps.Zero))
+        {
+            return NumOps.MaxValue;
+        }
+
+        return NumOps.Divide(maxSingularValue, minSingularValue);
+    }
+
+    private static T CalculateConditionNumberL1Norm(Matrix<T> matrix)
+    {
+        T normA = MatrixL1Norm(matrix);
+        Matrix<T> inverseMatrix = matrix.Inverse();
+        T normAInverse = MatrixL1Norm(inverseMatrix);
+
+        return NumOps.Multiply(normA, normAInverse);
+    }
+
+    private static T CalculateConditionNumberLInfNorm(Matrix<T> matrix)
+    {
+        T normA = MatrixInfinityNorm(matrix);
+        Matrix<T> inverseMatrix = matrix.Inverse();
+        T normAInverse = MatrixInfinityNorm(inverseMatrix);
+
+        return NumOps.Multiply(normA, normAInverse);
+    }
+
+    private static T CalculateConditionNumberPowerIteration(Matrix<T> matrix, int maxIterations = 100, T? tolerance = default)
+    {
+        tolerance ??= NumOps.FromDouble(1e-10);
+
+        T largestEigenvalue = PowerIteration(matrix, maxIterations, tolerance);
+        T smallestEigenvalue = PowerIteration(matrix.Inverse(), maxIterations, tolerance);
+
+        return NumOps.Divide(largestEigenvalue, smallestEigenvalue);
+    }
+
+    private static T MatrixL1Norm(Matrix<T> matrix)
+    {
+        T maxColumnSum = NumOps.Zero;
+        for (int j = 0; j < matrix.Columns; j++)
+        {
+            T columnSum = NumOps.Zero;
+            for (int i = 0; i < matrix.Rows; i++)
+            {
+                columnSum = NumOps.Add(columnSum, NumOps.Abs(matrix[i, j]));
+            }
+            maxColumnSum = NumOps.GreaterThan(maxColumnSum, columnSum) ? maxColumnSum : columnSum;
+        }
+
+        return maxColumnSum;
+    }
+
+    private static T MatrixInfinityNorm(Matrix<T> matrix)
+    {
+        T maxRowSum = NumOps.Zero;
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            T rowSum = NumOps.Zero;
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                rowSum = NumOps.Add(rowSum, NumOps.Abs(matrix[i, j]));
+            }
+            maxRowSum = NumOps.GreaterThan(maxRowSum, rowSum) ? maxRowSum : rowSum;
+        }
+
+        return maxRowSum;
+    }
+
+    private static T PowerIteration(Matrix<T> matrix, int maxIterations, T tolerance)
+    {
+        Vector<T> v = Vector<T>.CreateRandom(matrix.Rows);
+        T eigenvalue = NumOps.Zero;
+
+        for (int i = 0; i < maxIterations; i++)
+        {
+            Vector<T> Av = matrix * v;
+            T newEigenvalue = v.DotProduct(Av);
+
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(newEigenvalue, eigenvalue)), tolerance))
+            {
+                return newEigenvalue;
+            }
+
+            eigenvalue = newEigenvalue;
+            v = Av.Normalize();
+        }
+
+        return eigenvalue;
+    }
+
+    public static T CalculateDIC(ModelStats<T> modelStats)
+    {
+        // DIC = D(θ̄) + 2pD
+        // where D(θ̄) is the deviance at the posterior mean, and pD is the effective number of parameters
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var devianceAtPosteriorMean = _numOps.Multiply(_numOps.FromDouble(-2), modelStats.LogLikelihood);
+        var effectiveNumberOfParameters = modelStats.EffectiveNumberOfParameters;
+
+        return _numOps.Add(devianceAtPosteriorMean, _numOps.Multiply(_numOps.FromDouble(2), effectiveNumberOfParameters));
+    }
+
+    public static T CalculateWAIC(ModelStats<T> modelStats)
+    {
+        // WAIC = -2 * (lppd - pWAIC)
+        // where lppd is the log pointwise predictive density, and pWAIC is the effective number of parameters
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var lppd = modelStats.LogPointwisePredictiveDensity;
+        var pWAIC = modelStats.EffectiveNumberOfParameters;
+
+        return _numOps.Multiply(_numOps.FromDouble(-2), _numOps.Subtract(lppd, pWAIC));
+    }
+
+    public static T CalculateLOO(ModelStats<T> modelStats)
+    {
+        // LOO = -2 * (Σ log(p(yi | y-i)))
+        // where p(yi | y-i) is the leave-one-out predictive density for the i-th observation
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var looSum = modelStats.LeaveOneOutPredictiveDensities.Aggregate(_numOps.Zero,
+            (acc, density) => _numOps.Add(acc, _numOps.Log(density))
+        );
+
+        return _numOps.Multiply(_numOps.FromDouble(-2), looSum);
+    }
+
+    public static T CalculatePosteriorPredictiveCheck(ModelStats<T> modelStats)
+    {
+        // Calculate the proportion of posterior predictive samples that are more extreme than the observed data
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var observedStatistic = modelStats.ObservedTestStatistic;
+        var posteriorPredictiveSamples = modelStats.PosteriorPredictiveSamples;
+        var moreExtremeSamples = posteriorPredictiveSamples.Count(sample => _numOps.GreaterThan(sample, observedStatistic));
+
+        return _numOps.Divide(_numOps.FromDouble(moreExtremeSamples), _numOps.FromDouble(posteriorPredictiveSamples.Count));
+    }
+
+    public static T CalculateBayesFactor(ModelStats<T> modelStats)
+    {
+        // Bayes Factor = P(D|M1) / P(D|M2)
+        // where P(D|M1) is the marginal likelihood of the current model and P(D|M2) is the marginal likelihood of a reference model
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var currentModelMarginalLikelihood = modelStats.MarginalLikelihood;
+        var referenceModelMarginalLikelihood = modelStats.ReferenceModelMarginalLikelihood;
+
+        return _numOps.Divide(currentModelMarginalLikelihood, referenceModelMarginalLikelihood);
+    }
+
+    public static T CalculateLikelihood(T actual, T predicted)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        T residual = _numOps.Subtract(actual, predicted);
+
+        return _numOps.Exp(_numOps.Multiply(_numOps.FromDouble(-0.5), _numOps.Multiply(residual, residual)));
+    }
+
+    public static IEnumerable<T> GeneratePosteriorPredictiveSamples(Matrix<T> features, Vector<T> coefficients, int numSamples)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var random = new Random();
+        var samples = new List<T>();
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            var predictedValues = features.Multiply(coefficients);
+            var noise = Vector<T>.CreateRandom(predictedValues.Length);
+            samples.Add(CalculateObservedTestStatistic(predictedValues, predictedValues.Add(noise)));
+        }
+
+        return samples;
+    }
+
+    public static List<T> CalculateLeaveOneOutPredictiveDensities(Matrix<T> features, Vector<T> actualValues, Func<Matrix<T>, Vector<T>, Vector<T>> modelFitFunction)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var looPredictiveDensities = new List<T>();
+
+        for (int i = 0; i < features.Rows; i++)
+        {
+            var trainingFeatures = features.RemoveRow(i);
+            var trainingValues = actualValues.RemoveAt(i);
+            var coefficients = modelFitFunction(trainingFeatures, trainingValues);
+            var predictedValue = features.GetRow(i).DotProduct(coefficients);
+            looPredictiveDensities.Add(CalculateLikelihood(actualValues[i], predictedValue));
+        }
+
+        return looPredictiveDensities;
+    }
+
+    public static T CalculateLogPointwisePredictiveDensity(Vector<T> actualValues, Vector<T> predictedValues)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        T lppd = _numOps.Zero;
+
+        for (int i = 0; i < actualValues.Length; i++)
+        {
+            T likelihood = CalculateLikelihood(actualValues[i], predictedValues[i]);
+            lppd = _numOps.Add(lppd, _numOps.Log(likelihood));
+        }
+
+        return lppd;
+    }
+
+    public static T CalculateLogLikelihood(Vector<T> actualValues, Vector<T> predictedValues)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        T logLikelihood = _numOps.Zero;
+
+        for (int i = 0; i < actualValues.Length; i++)
+        {
+            T residual = _numOps.Subtract(actualValues[i], predictedValues[i]);
+            logLikelihood = _numOps.Add(logLikelihood, _numOps.Log(_numOps.Abs(residual)));
+        }
+
+        return _numOps.Multiply(_numOps.FromDouble(-0.5), logLikelihood);
+    }
+
+    public static T CalculateEffectiveNumberOfParameters(Matrix<T> features, Vector<T> coefficients)
+    {
+        // Calculate the hat matrix (H = X(X'X)^(-1)X')
+        var transposeFeatures = features.Transpose();
+        var inverseMatrix = (transposeFeatures * features).Inverse();
+        var hatMatrix = features * (inverseMatrix * transposeFeatures);
+    
+        // The effective number of parameters is the trace of the hat matrix
+        return hatMatrix.Diagonal().Sum();
+    }
+
+    public static T CalculateObservedTestStatistic(Vector<T> actualValues, Vector<T> predictedValues, TestStatisticType testType = TestStatisticType.ChiSquare)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        
+        switch (testType)
+        {
+            case TestStatisticType.ChiSquare:
+                // Chi-square test statistic
+                T chiSquare = _numOps.Zero;
+                for (int i = 0; i < actualValues.Length; i++)
+                {
+                    T residual = _numOps.Subtract(actualValues[i], predictedValues[i]);
+                    chiSquare = _numOps.Add(chiSquare, _numOps.Divide(_numOps.Multiply(residual, residual), predictedValues[i]));
+                }
+                return chiSquare;
+
+            case TestStatisticType.FTest:
+                // F-test statistic
+                T sst = CalculateTotalSumOfSquares(actualValues);
+                T sse = CalculateResidualSumOfSquares(actualValues, predictedValues);
+                int dfModel = predictedValues.Length - 1;
+                int dfResidual = actualValues.Length - predictedValues.Length;
+                
+                T msModel = _numOps.Divide(_numOps.Subtract(sst, sse), _numOps.FromDouble(dfModel));
+                T msResidual = _numOps.Divide(sse, _numOps.FromDouble(dfResidual));
+                
+                return _numOps.Divide(msModel, msResidual);
+
+            default:
+                throw new ArgumentException("Unsupported test statistic type");
+        }
+    }
+
+    public static T CalculateMarginalLikelihood(Vector<T> actualValues, Vector<T> predictedValues, int numParameters)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        
+        // Calculate log-likelihood
+        T logLikelihood = CalculateLogLikelihood(actualValues, predictedValues);
+        
+        // Calculate BIC (Bayesian Information Criterion)
+        T n = _numOps.FromDouble(actualValues.Length);
+        T k = _numOps.FromDouble(numParameters);
+        T bic = _numOps.Multiply(_numOps.FromDouble(-2), logLikelihood);
+        bic = _numOps.Add(bic, _numOps.Multiply(k, _numOps.Log(n)));
+        
+        // Approximate marginal likelihood using BIC
+        return _numOps.Exp(_numOps.Multiply(_numOps.FromDouble(-0.5), bic));
+    }
+
+    public static T CalculateTotalSumOfSquares(Vector<T> values)
+    {
+        T mean = values.Mean();
+        var meanVector = Vector<T>.CreateDefault(values.Length, mean);
+        var differences = values.Subtract(meanVector);
+
+        return differences.DotProduct(differences);
+    }
+
+    public static T CalculateResidualSumOfSquares(Vector<T> actual, Vector<T> predicted)
+    {
+        var residuals = actual.Subtract(predicted);
+        return residuals.DotProduct(residuals);
+    }
+
+    public static List<T> CalculatePosteriorPredictiveSamples(Vector<T> actual, Vector<T> predicted, int featureCount, int numSamples = 1000)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var n = actual.Length;
+        var rss = CalculateResidualSumOfSquares(actual, predicted);
+        var sigma2 = _numOps.Divide(rss, _numOps.FromDouble(n - featureCount));
+        var standardError = _numOps.Sqrt(sigma2);
+
+        var random = new Random();
+        var samples = new List<T>(numSamples);
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            var sample = _numOps.Zero;
+            for (int j = 0; j < n; j++)
+            {
+                var noise = _numOps.Multiply(standardError, _numOps.FromDouble(random.NextGaussian()));
+                sample = _numOps.Add(sample, _numOps.Add(predicted[j], noise));
+            }
+            samples.Add(_numOps.Divide(sample, _numOps.FromDouble(n)));
+        }
+
+        return samples;
+    }
+
+    public static T CalculateReferenceModelMarginalLikelihood(Vector<T> actual)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var n = actual.Length;
+        var mean = actual.Mean();
+        var variance = _numOps.Divide(CalculateTotalSumOfSquares(actual), _numOps.FromDouble(n - 1));
+
+        // Calculate log marginal likelihood for the reference model (intercept-only model)
+        var logML = _numOps.Multiply(_numOps.FromDouble(-0.5), _numOps.FromDouble(n * Math.Log(2 * Math.PI)));
+        logML = _numOps.Subtract(logML, _numOps.Multiply(_numOps.FromDouble(0.5 * n), _numOps.Log(variance)));
+        logML = _numOps.Subtract(logML, _numOps.Divide(_numOps.FromDouble(n - 1), _numOps.FromDouble(2)));
+
+        return _numOps.Exp(logML);
     }
 }

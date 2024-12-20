@@ -265,6 +265,49 @@ public class Matrix<T> : MatrixBase<T>
             yield return GetColumn(i);
         }
     }
+
+    public Matrix<T> RemoveRow(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= Rows)
+            throw new ArgumentOutOfRangeException(nameof(rowIndex));
+
+        var newMatrix = new Matrix<T>(Rows - 1, Columns);
+        int newRow = 0;
+
+        for (int i = 0; i < Rows; i++)
+        {
+            if (i == rowIndex) continue;
+
+            for (int j = 0; j < Columns; j++)
+            {
+                newMatrix[newRow, j] = this[i, j];
+            }
+            newRow++;
+        }
+
+        return newMatrix;
+    }
+
+    public Matrix<T> RemoveColumn(int columnIndex)
+    {
+        if (columnIndex < 0 || columnIndex >= Columns)
+            throw new ArgumentOutOfRangeException(nameof(columnIndex));
+
+        var newMatrix = new Matrix<T>(Rows, Columns - 1);
+
+        for (int i = 0; i < Rows; i++)
+        {
+            int newColumn = 0;
+            for (int j = 0; j < Columns; j++)
+            {
+                if (j == columnIndex) continue;
+                newMatrix[i, newColumn] = this[i, j];
+                newColumn++;
+            }
+        }
+
+        return newMatrix;
+    }
 }
 
 public static class Matrix

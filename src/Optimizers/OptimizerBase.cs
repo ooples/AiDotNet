@@ -4,13 +4,17 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
 {
     protected readonly INumericOperations<T> _numOps;
     protected readonly OptimizationAlgorithmOptions _options;
-    protected readonly PredictionModelOptions _predictionOptions;
+    protected readonly PredictionStatsOptions _predictionOptions;
+    protected readonly ModelStatsOptions _modelStatsOptions;
 
-    protected OptimizerBase(OptimizationAlgorithmOptions? options = null, PredictionModelOptions? predictionOptions = null)
+    protected OptimizerBase(OptimizationAlgorithmOptions? options = null, 
+                        PredictionStatsOptions? predictionOptions = null,
+                        ModelStatsOptions? modelOptions = null)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new OptimizationAlgorithmOptions();
-        _predictionOptions = predictionOptions ?? new PredictionModelOptions();
+        _predictionOptions = predictionOptions ?? new PredictionStatsOptions();
+        _modelStatsOptions = modelOptions ?? new ModelStatsOptions();
     }
 
     public abstract OptimizationResult<T> Optimize(
@@ -98,13 +102,17 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         );
     }
 
-    protected (T CurrentFitnessScore, FitDetectorResult<T> FitDetectionResult, 
-                Vector<T> TrainingPredictions, Vector<T> ValidationPredictions, Vector<T> TestPredictions,
-                ErrorStats<T> TrainingErrorStats, ErrorStats<T> ValidationErrorStats, ErrorStats<T> TestErrorStats,
-                BasicStats<T> TrainingActualBasicStats, BasicStats<T> TrainingPredictedBasicStats,
-                BasicStats<T> ValidationActualBasicStats, BasicStats<T> ValidationPredictedBasicStats,
-                BasicStats<T> TestActualBasicStats, BasicStats<T> TestPredictedBasicStats,
-                PredictionStats<T> TrainingPredictionStats, PredictionStats<T> ValidationPredictionStats, PredictionStats<T> TestPredictionStats)
+    protected ModelStats<T> CalculateModelStats(Matrix<T> X, int featureCount)
+    {
+        return new ModelStats<T>(new ModelStatsInputs<T>
+        {
+            XMatrix = X,
+            FeatureCount = featureCount
+        });
+    }
+
+    protected (T CurrentFitnessScore, FitDetectorResult<T> FitDetectionResult, Vector<T> TrainingPredictions, Vector<T> ValidationPredictions, 
+        Vector<T> TestPredictions, ModelEvaluationData<T> evaluationData)
     EvaluateSolution(
         Matrix<T> XTrainSubset, Matrix<T> XValSubset, Matrix<T> XTestSubset,
         Vector<T> yTrain, Vector<T> yVal, Vector<T> yTest,
@@ -134,26 +142,35 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         var (trainingPredictionStats, validationPredictionStats, testPredictionStats) = CalculatePredictionStats(
             yTrain, yVal, yTest, trainingPredictions, validationPredictions, testPredictions, featureCount);
 
+        var modelStats = CalculateModelStats(XTrainSubset, featureCount);
+
+        var evaluationData = new ModelEvaluationData<T>()
+        {
+            TrainingErrorStats = trainingErrorStats,
+            ValidationErrorStats = validationErrorStats,
+            TestErrorStats = testErrorStats,
+            TrainingPredictedBasicStats = trainingPredictedBasicStats,
+            ValidationPredictedBasicStats = validationPredictedBasicStats,
+            TestPredictedBasicStats = testPredictedBasicStats,
+            TrainingActualBasicStats = trainingActualBasicStats,
+            ValidationActualBasicStats = validationActualBasicStats,
+            TestActualBasicStats = testActualBasicStats,
+            TrainingPredictionStats = trainingPredictionStats,
+            ValidationPredictionStats = validationPredictionStats,
+            TestPredictionStats = testPredictionStats,
+            ModelStats = modelStats
+        };
+
         // Detect fit type
-        var fitDetectionResult = fitDetector.DetectFit(
-            trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingActualBasicStats, trainingPredictedBasicStats,
-            validationActualBasicStats, validationPredictedBasicStats,
-            testActualBasicStats, testPredictedBasicStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var fitDetectionResult = fitDetector.DetectFit(evaluationData);
 
         // Calculate fitness score
         T currentFitnessScore = fitnessCalculator.CalculateFitnessScore(
-            validationErrorStats, validationActualBasicStats, validationPredictedBasicStats,
-            yVal, validationPredictions, XValSubset, validationPredictionStats);
+            evaluationData.ValidationErrorStats, validationActualBasicStats, validationPredictedBasicStats,
+            yVal, validationPredictions, XValSubset, evaluationData.ValidationPredictionStats);
 
         return (currentFitnessScore, fitDetectionResult, 
-                trainingPredictions, validationPredictions, testPredictions,
-                trainingErrorStats, validationErrorStats, testErrorStats,
-                trainingActualBasicStats, trainingPredictedBasicStats,
-                validationActualBasicStats, validationPredictedBasicStats,
-                testActualBasicStats, testPredictedBasicStats,
-                trainingPredictionStats, validationPredictionStats, testPredictionStats);
+            trainingPredictions, validationPredictions, testPredictions, evaluationData);
     }
 
     protected void UpdateBestSolution(
@@ -164,18 +181,7 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         Vector<T> trainingPredictions,
         Vector<T> validationPredictions,
         Vector<T> testPredictions,
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingActualBasicStats,
-        BasicStats<T> trainingPredictedBasicStats,
-        BasicStats<T> validationActualBasicStats,
-        BasicStats<T> validationPredictedBasicStats,
-        BasicStats<T> testActualBasicStats,
-        BasicStats<T> testPredictedBasicStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats,
+        ModelEvaluationData<T> evaluationData,
         List<int> selectedFeatures,
         Matrix<T> XTrain,
         Matrix<T> XTestSubset,
@@ -189,18 +195,7 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         ref Vector<T> bestTrainingPredictions,
         ref Vector<T> bestValidationPredictions,
         ref Vector<T> bestTestPredictions,
-        ref ErrorStats<T> bestTrainingErrorStats,
-        ref ErrorStats<T> bestValidationErrorStats,
-        ref ErrorStats<T> bestTestErrorStats,
-        ref BasicStats<T> bestTrainingActualBasicStats,
-        ref BasicStats<T> bestTrainingPredictedBasicStats,
-        ref BasicStats<T> bestValidationActualBasicStats,
-        ref BasicStats<T> bestValidationPredictedBasicStats,
-        ref BasicStats<T> bestTestActualBasicStats,
-        ref BasicStats<T> bestTestPredictedBasicStats,
-        ref PredictionStats<T> bestTrainingPredictionStats,
-        ref PredictionStats<T> bestValidationPredictionStats,
-        ref PredictionStats<T> bestTestPredictionStats,
+        ref ModelEvaluationData<T> bestEvaluationData,
         ref List<Vector<T>> bestSelectedFeatures,
         ref Matrix<T> bestTestFeatures,
         ref Matrix<T> bestTrainingFeatures,
@@ -215,18 +210,7 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
             bestTrainingPredictions = trainingPredictions;
             bestValidationPredictions = validationPredictions;
             bestTestPredictions = testPredictions;
-            bestTrainingErrorStats = trainingErrorStats;
-            bestValidationErrorStats = validationErrorStats;
-            bestTestErrorStats = testErrorStats;
-            bestTrainingActualBasicStats = trainingActualBasicStats;
-            bestTrainingPredictedBasicStats = trainingPredictedBasicStats;
-            bestValidationActualBasicStats = validationActualBasicStats;
-            bestValidationPredictedBasicStats = validationPredictedBasicStats;
-            bestTestActualBasicStats = testActualBasicStats;
-            bestTestPredictedBasicStats = testPredictedBasicStats;
-            bestTrainingPredictionStats = trainingPredictionStats;
-            bestValidationPredictionStats = validationPredictionStats;
-            bestTestPredictionStats = testPredictionStats;
+            bestEvaluationData = evaluationData;
             bestSelectedFeatures = [.. selectedFeatures.Select(XTrain.GetColumn)];
             bestTestFeatures = XTestSubset;
             bestTrainingFeatures = XTrainSubset;

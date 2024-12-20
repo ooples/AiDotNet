@@ -36,18 +36,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
             Vector<T> bestTrainingPredictions = new(yTrain.Length, _numOps);
             Vector<T> bestValidationPredictions = new(yVal.Length, _numOps);
             Vector<T> bestTestPredictions = new(yTest.Length, _numOps);
-            ErrorStats<T> bestTrainingErrorStats = ErrorStats<T>.Empty();
-            ErrorStats<T> bestValidationErrorStats = ErrorStats<T>.Empty();
-            ErrorStats<T> bestTestErrorStats = ErrorStats<T>.Empty();
-            BasicStats<T> bestTrainingActualBasicStats = BasicStats<T>.Empty();
-            BasicStats<T> bestTrainingPredictedBasicStats = BasicStats<T>.Empty();
-            BasicStats<T> bestValidationActualBasicStats = BasicStats<T>.Empty();
-            BasicStats<T> bestValidationPredictedBasicStats = BasicStats<T>.Empty();
-            BasicStats<T> bestTestActualBasicStats = BasicStats<T>.Empty();
-            BasicStats<T> bestTestPredictedBasicStats = BasicStats<T>.Empty();
-            PredictionStats<T> bestTrainingPredictionStats = PredictionStats<T>.Empty();
-            PredictionStats<T> bestValidationPredictionStats = PredictionStats<T>.Empty();
-            PredictionStats<T> bestTestPredictionStats = PredictionStats<T>.Empty();
+            ModelEvaluationData<T> bestEvaluationData = new();
             List<Vector<T>> bestSelectedFeatures = [];
             Matrix<T> bestTestFeatures = new(XTest.Rows, XTest.Columns, _numOps);
             Matrix<T> bestTrainingFeatures = new(XTrain.Rows, XTrain.Columns, _numOps);
@@ -66,13 +55,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
                 var XTestSubset = OptimizerHelper.SelectFeatures(XTest, selectedFeatures);
 
                 var (currentFitnessScore, fitDetectionResult, 
-                     trainingPredictions, validationPredictions, testPredictions,
-                     trainingErrorStats, validationErrorStats, testErrorStats,
-                     trainingActualBasicStats, trainingPredictedBasicStats,
-                     validationActualBasicStats, validationPredictedBasicStats,
-                     testActualBasicStats, testPredictedBasicStats,
-                     trainingPredictionStats, validationPredictionStats, testPredictionStats) = 
-                    EvaluateSolution(
+                     trainingPredictions, validationPredictions, testPredictions, evaluationData) = EvaluateSolution(
                         XTrainSubset, XValSubset, XTestSubset,
                         yTrain, yVal, yTest,
                         regressionMethod, normalizer, normInfo,
@@ -88,18 +71,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
                         trainingPredictions,
                         validationPredictions,
                         testPredictions,
-                        trainingErrorStats,
-                        validationErrorStats,
-                        testErrorStats,
-                        trainingActualBasicStats,
-                        trainingPredictedBasicStats,
-                        validationActualBasicStats,
-                        validationPredictedBasicStats,
-                        testActualBasicStats,
-                        testPredictedBasicStats,
-                        trainingPredictionStats,
-                        validationPredictionStats,
-                        testPredictionStats,
+                        evaluationData,
                         selectedFeatures,
                         XTrain,
                         XTestSubset,
@@ -113,18 +85,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
                         ref bestTrainingPredictions,
                         ref bestValidationPredictions,
                         ref bestTestPredictions,
-                        ref bestTrainingErrorStats,
-                        ref bestValidationErrorStats,
-                        ref bestTestErrorStats,
-                        ref bestTrainingActualBasicStats,
-                        ref bestTrainingPredictedBasicStats,
-                        ref bestValidationActualBasicStats,
-                        ref bestValidationPredictedBasicStats,
-                        ref bestTestActualBasicStats,
-                        ref bestTestPredictedBasicStats,
-                        ref bestTrainingPredictionStats,
-                        ref bestValidationPredictionStats,
-                        ref bestTestPredictionStats,
+                        ref bestEvaluationData,
                         ref bestSelectedFeatures,
                         ref bestTestFeatures,
                         ref bestTrainingFeatures,
@@ -150,30 +111,30 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
                     X = bestTrainingFeatures,
                     Y = yTrain,
                     Predictions = bestTrainingPredictions,
-                    ErrorStats = bestTrainingErrorStats,
-                    ActualBasicStats = bestTrainingActualBasicStats,
-                    PredictedBasicStats = bestTrainingPredictedBasicStats,
-                    PredictionStats = bestTrainingPredictionStats
+                    ErrorStats = bestEvaluationData.TrainingErrorStats,
+                    ActualBasicStats = bestEvaluationData.TrainingActualBasicStats,
+                    PredictedBasicStats = bestEvaluationData.TrainingPredictedBasicStats,
+                    PredictionStats = bestEvaluationData.TrainingPredictionStats
                 },
                 new OptimizationResult<T>.DatasetResult
                 {
                     X = bestValidationFeatures,
                     Y = yVal,
                     Predictions = bestValidationPredictions,
-                    ErrorStats = bestValidationErrorStats,
-                    ActualBasicStats = bestValidationActualBasicStats,
-                    PredictedBasicStats = bestValidationPredictedBasicStats,
-                    PredictionStats = bestValidationPredictionStats
+                    ErrorStats = bestEvaluationData.ValidationErrorStats,
+                    ActualBasicStats = bestEvaluationData.ValidationActualBasicStats,
+                    PredictedBasicStats = bestEvaluationData.ValidationPredictedBasicStats,
+                    PredictionStats = bestEvaluationData.ValidationPredictionStats
                 },
                 new OptimizationResult<T>.DatasetResult
                 {
                     X = bestTestFeatures,
                     Y = yTest,
                     Predictions = bestTestPredictions,
-                    ErrorStats = bestTestErrorStats,
-                    ActualBasicStats = bestTestActualBasicStats,
-                    PredictedBasicStats = bestTestPredictedBasicStats,
-                    PredictionStats = bestTestPredictionStats
+                    ErrorStats = bestEvaluationData.TestErrorStats,
+                    ActualBasicStats = bestEvaluationData.TestActualBasicStats,
+                    PredictedBasicStats = bestEvaluationData.TestPredictedBasicStats,
+                    PredictionStats = bestEvaluationData.TestPredictionStats
                 },
                 bestFitDetectionResult,
                 iterationHistory.Count,

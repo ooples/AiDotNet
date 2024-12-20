@@ -9,7 +9,7 @@ namespace AiDotNet.LinearAlgebra;
 
 public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
 {
-    private readonly PredictionModelOptions _options;
+    private readonly PredictionStatsOptions _options;
     private IFeatureSelector<T>? _featureSelector;
     private INormalizer<T>? _normalizer;
     private IRegularization<T>? _regularization;
@@ -20,9 +20,9 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     private IDataPreprocessor<T>? _dataPreprocessor;
     private IOutlierRemoval<T>? _outlierRemoval;
 
-    public PredictionModelBuilder(PredictionModelOptions? options = null)
+    public PredictionModelBuilder(PredictionStatsOptions? options = null)
     {
-        _options = options ?? new PredictionModelOptions();
+        _options = options ?? new PredictionStatsOptions();
     }
 
     public IPredictionModelBuilder<T> ConfigureFeatureSelector(IFeatureSelector<T> selector)

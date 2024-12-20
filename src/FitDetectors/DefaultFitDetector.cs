@@ -7,22 +7,10 @@
         _numOps = MathHelper.GetNumericOperations<T>();
     }
 
-    public FitDetectorResult<T> DetectFit(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats)
+    public FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
     {
-        var fitType = DetermineFitType(trainingPredictionStats, validationPredictionStats, testPredictionStats);
-        var confidenceLevel = CalculateConfidenceLevel(trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var fitType = DetermineFitType(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
+        var confidenceLevel = CalculateConfidenceLevel(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
         var recommendations = GenerateRecommendations(fitType);
 
         return new FitDetectorResult<T>

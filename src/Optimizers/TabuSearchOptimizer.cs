@@ -34,18 +34,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         Vector<T> bestTrainingPredictions = Vector<T>.Empty();
         Vector<T> bestValidationPredictions = Vector<T>.Empty();
         Vector<T> bestTestPredictions = Vector<T>.Empty();
-        ErrorStats<T> bestTrainingErrorStats = ErrorStats<T>.Empty();
-        ErrorStats<T> bestValidationErrorStats = ErrorStats<T>.Empty();
-        ErrorStats<T> bestTestErrorStats = ErrorStats<T>.Empty();
-        BasicStats<T> bestTrainingActualBasicStats = BasicStats<T>.Empty();
-        BasicStats<T> bestTrainingPredictedBasicStats = BasicStats<T>.Empty();
-        BasicStats<T> bestValidationActualBasicStats = BasicStats<T>.Empty();
-        BasicStats<T> bestValidationPredictedBasicStats = BasicStats<T>.Empty();
-        BasicStats<T> bestTestActualBasicStats = BasicStats<T>.Empty();
-        BasicStats<T> bestTestPredictedBasicStats = BasicStats<T>.Empty();
-        PredictionStats<T> bestTrainingPredictionStats = PredictionStats<T>.Empty();
-        PredictionStats<T> bestValidationPredictionStats = PredictionStats<T>.Empty();
-        PredictionStats<T> bestTestPredictionStats = PredictionStats<T>.Empty();
+        ModelEvaluationData<T> bestEvaluationData = new();
         List<Vector<T>> bestSelectedFeatures = [];
         Matrix<T> bestTestFeatures = Matrix<T>.Empty();
         Matrix<T> bestTrainingFeatures = Matrix<T>.Empty();
@@ -69,12 +58,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
             var XValSubset = OptimizerHelper.SelectFeatures(XVal, selectedFeatures);
             var XTestSubset = OptimizerHelper.SelectFeatures(XTest, selectedFeatures);
 
-            var (currentFitnessScore, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions,
-                    trainingErrorStats, validationErrorStats, testErrorStats,
-                    trainingActualBasicStats, trainingPredictedBasicStats,
-                    validationActualBasicStats, validationPredictedBasicStats,
-                    testActualBasicStats, testPredictedBasicStats,
-                    trainingPredictionStats, validationPredictionStats, testPredictionStats) = EvaluateSolution(
+            var (currentFitnessScore, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions, evaluationData) = EvaluateSolution(
                         XTrainSubset, XValSubset, XTestSubset,
                         yTrain, yVal, yTest,
                         regressionMethod, normalizer, normInfo,
@@ -82,20 +66,10 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
 
             UpdateBestSolution(
                     currentFitnessScore, currentSolution, _numOps.Zero, fitDetectionResult,
-                    trainingPredictions, validationPredictions, testPredictions,
-                    trainingErrorStats, validationErrorStats, testErrorStats,
-                    trainingActualBasicStats, trainingPredictedBasicStats,
-                    validationActualBasicStats, validationPredictedBasicStats,
-                    testActualBasicStats, testPredictedBasicStats,
-                    trainingPredictionStats, validationPredictionStats, testPredictionStats,
+                    trainingPredictions, validationPredictions, testPredictions, evaluationData,
                     selectedFeatures, XTrain, XTestSubset, XTrainSubset, XValSubset, fitnessCalculator,
                     ref bestFitness, ref bestSolution, ref bestIntercept, ref bestFitDetectionResult,
-                    ref bestTrainingPredictions, ref bestValidationPredictions, ref bestTestPredictions,
-                    ref bestTrainingErrorStats, ref bestValidationErrorStats, ref bestTestErrorStats,
-                    ref bestTrainingActualBasicStats, ref bestTrainingPredictedBasicStats,
-                    ref bestValidationActualBasicStats, ref bestValidationPredictedBasicStats,
-                    ref bestTestActualBasicStats, ref bestTestPredictedBasicStats,
-                    ref bestTrainingPredictionStats, ref bestValidationPredictionStats, ref bestTestPredictionStats,
+                    ref bestTrainingPredictions, ref bestValidationPredictions, ref bestTestPredictions, ref bestEvaluationData,
                     ref bestSelectedFeatures, ref bestTestFeatures, ref bestTrainingFeatures, ref bestValidationFeatures);
 
             UpdateTabuList(tabuList, currentSolution);
@@ -112,9 +86,36 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
             bestFitness,
             fitnessHistory,
             bestSelectedFeatures,
-            OptimizerHelper.CreateDatasetResult(bestTrainingPredictions, bestTrainingErrorStats, bestTrainingActualBasicStats, bestTrainingPredictedBasicStats, bestTrainingPredictionStats, bestTrainingFeatures, yTrain),
-            OptimizerHelper.CreateDatasetResult(bestValidationPredictions, bestValidationErrorStats, bestValidationActualBasicStats, bestValidationPredictedBasicStats, bestValidationPredictionStats, bestValidationFeatures, yVal),
-            OptimizerHelper.CreateDatasetResult(bestTestPredictions, bestTestErrorStats, bestTestActualBasicStats, bestTestPredictedBasicStats, bestTestPredictionStats, bestTestFeatures, yTest),
+            new OptimizationResult<T>.DatasetResult
+            {
+                X = bestTrainingFeatures,
+                Y = yTrain,
+                Predictions = bestTrainingPredictions,
+                ErrorStats = bestEvaluationData.TrainingErrorStats,
+                ActualBasicStats = bestEvaluationData.TrainingActualBasicStats,
+                PredictedBasicStats = bestEvaluationData.TrainingPredictedBasicStats,
+                PredictionStats = bestEvaluationData.TrainingPredictionStats
+            },
+            new OptimizationResult<T>.DatasetResult
+            {
+                X = bestValidationFeatures,
+                Y = yVal,
+                Predictions = bestValidationPredictions,
+                ErrorStats = bestEvaluationData.ValidationErrorStats,
+                ActualBasicStats = bestEvaluationData.ValidationActualBasicStats,
+                PredictedBasicStats = bestEvaluationData.ValidationPredictedBasicStats,
+                PredictionStats = bestEvaluationData.ValidationPredictionStats
+            },
+            new OptimizationResult<T>.DatasetResult
+            {
+                X = bestTestFeatures,
+                Y = yTest,
+                Predictions = bestTestPredictions,
+                ErrorStats = bestEvaluationData.TestErrorStats,
+                ActualBasicStats = bestEvaluationData.TestActualBasicStats,
+                PredictedBasicStats = bestEvaluationData.TestPredictedBasicStats,
+                PredictionStats = bestEvaluationData.TestPredictionStats
+            },
             bestFitDetectionResult,
             fitnessHistory.Count,
             _numOps);
@@ -166,12 +167,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         var XValSubset = OptimizerHelper.SelectFeatures(XVal, selectedFeatures);
         var XTestSubset = OptimizerHelper.SelectFeatures(XTest, selectedFeatures);
 
-        var (currentFitnessScore, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions,
-                    trainingErrorStats, validationErrorStats, testErrorStats,
-                    trainingActualBasicStats, trainingPredictedBasicStats,
-                    validationActualBasicStats, validationPredictedBasicStats,
-                    testActualBasicStats, testPredictedBasicStats,
-                    trainingPredictionStats, validationPredictionStats, testPredictionStats) = EvaluateSolution(
+        var (currentFitnessScore, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions, evaluationData) = EvaluateSolution(
                         XTrainSubset, XValSubset, XTestSubset,
                         yTrain, yVal, yTest,
                         regressionMethod, normalizer, normInfo,

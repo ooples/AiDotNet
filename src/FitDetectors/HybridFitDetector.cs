@@ -16,31 +16,11 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
         _options = options ?? new HybridFitDetectorOptions();
     }
 
-    public override FitDetectorResult<T> DetectFit(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
     {
-        var residualResult = _residualAnalyzer.DetectFit(
-            trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingTargetStats, validationTargetStats, testTargetStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var residualResult = _residualAnalyzer.DetectFit(evaluationData);
 
-        var learningCurveResult = _learningCurveDetector.DetectFit(
-            trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingTargetStats, validationTargetStats, testTargetStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var learningCurveResult = _learningCurveDetector.DetectFit(evaluationData);
 
         var hybridFitType = CombineFitTypes(residualResult.FitType, learningCurveResult.FitType);
         var hybridConfidence = CombineConfidenceLevels(residualResult.ConfidenceLevel ?? _numOps.Zero, learningCurveResult.ConfidenceLevel ?? _numOps.Zero);
@@ -57,60 +37,20 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
         };
     }
 
-    protected override FitType DetermineFitType(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats)
+    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var residualFitType = _residualAnalyzer.DetectFit(
-            trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingTargetStats, validationTargetStats, testTargetStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats).FitType;
+        var residualFitType = _residualAnalyzer.DetectFit(evaluationData).FitType;
 
-        var learningCurveFitType = _learningCurveDetector.DetectFit(
-            trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingTargetStats, validationTargetStats, testTargetStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats).FitType;
+        var learningCurveFitType = _learningCurveDetector.DetectFit(evaluationData).FitType;
 
         return CombineFitTypes(residualFitType, learningCurveFitType);
     }
 
-    protected override T CalculateConfidenceLevel(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var residualConfidence = _residualAnalyzer.DetectFit(
-            trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingTargetStats, validationTargetStats, testTargetStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats).ConfidenceLevel;
+        var residualConfidence = _residualAnalyzer.DetectFit(evaluationData).ConfidenceLevel;
 
-        var learningCurveConfidence = _learningCurveDetector.DetectFit(
-            trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingTargetStats, validationTargetStats, testTargetStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats).ConfidenceLevel;
+        var learningCurveConfidence = _learningCurveDetector.DetectFit(evaluationData).ConfidenceLevel;
 
         return CombineConfidenceLevels(residualConfidence ?? _numOps.Zero, learningCurveConfidence ?? _numOps.Zero);
     }

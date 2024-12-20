@@ -9,33 +9,13 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
         _options = options ?? new();
     }
 
-    public override FitDetectorResult<T> DetectFit(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
     {
-        var fitType = DetermineFitType(trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingTargetStats, validationTargetStats, testTargetStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var fitType = DetermineFitType(evaluationData);
 
-        var confidenceLevel = CalculateConfidenceLevel(trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingTargetStats, validationTargetStats, testTargetStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var confidenceLevel = CalculateConfidenceLevel(evaluationData);
 
-        var recommendations = GenerateRecommendations(fitType, 
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var recommendations = GenerateRecommendations(fitType, evaluationData);
 
         return new FitDetectorResult<T>
         {
@@ -45,28 +25,16 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
         };
     }
 
-    protected override FitType DetermineFitType(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats)
+    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         var minDataPoints = _options.MinDataPoints;
-        if (trainingPredictionStats.LearningCurve.Count < minDataPoints || validationPredictionStats.LearningCurve.Count < minDataPoints)
+        if (evaluationData.TrainingPredictionStats.LearningCurve.Count < minDataPoints || evaluationData.ValidationPredictionStats.LearningCurve.Count < minDataPoints)
         {
             return FitType.Unstable;
         }
 
-        var trainingSlope = CalculateSlope(trainingPredictionStats.LearningCurve);
-        var validationSlope = CalculateSlope(validationPredictionStats.LearningCurve);
+        var trainingSlope = CalculateSlope(evaluationData.TrainingPredictionStats.LearningCurve);
+        var validationSlope = CalculateSlope(evaluationData.ValidationPredictionStats.LearningCurve);
         var convergenceThreshold = _numOps.FromDouble(_options.ConvergenceThreshold);
 
         if (_numOps.LessThan(_numOps.Abs(trainingSlope), convergenceThreshold) &&
@@ -88,22 +56,10 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
         return FitType.Unstable;
     }
 
-    protected override T CalculateConfidenceLevel(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var trainingVariance = CalculateVariance(trainingPredictionStats.LearningCurve);
-        var validationVariance = CalculateVariance(validationPredictionStats.LearningCurve);
+        var trainingVariance = CalculateVariance(evaluationData.TrainingPredictionStats.LearningCurve);
+        var validationVariance = CalculateVariance(evaluationData.ValidationPredictionStats.LearningCurve);
 
         var totalVariance = _numOps.Add(trainingVariance, validationVariance);
         return _numOps.Subtract(_numOps.One, _numOps.Divide(totalVariance, _numOps.FromDouble(2)));

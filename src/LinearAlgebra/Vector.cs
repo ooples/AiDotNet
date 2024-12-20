@@ -135,6 +135,18 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         }
     }
 
+    public Vector<T> RemoveAt(int index)
+    {
+        if (index < 0 || index >= Length)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        var newData = new T[Length - 1];
+        Array.Copy(data, 0, newData, 0, index);
+        Array.Copy(data, index + 1, newData, index, Length - index - 1);
+
+        return new Vector<T>(newData, ops);
+    }
+
     public int NonZeroCount()
     {
         return NonZeroIndices().Count();

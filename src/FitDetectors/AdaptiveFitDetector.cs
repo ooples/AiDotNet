@@ -15,33 +15,13 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
         _hybridDetector = new HybridFitDetector<T>(_residualAnalyzer, _learningCurveDetector, _options.HybridOptions);
     }
 
-    public override FitDetectorResult<T> DetectFit(
-            ErrorStats<T> trainingErrorStats,
-            ErrorStats<T> validationErrorStats,
-            ErrorStats<T> testErrorStats,
-            BasicStats<T> trainingBasicStats,
-            BasicStats<T> validationBasicStats,
-            BasicStats<T> testBasicStats,
-            BasicStats<T> trainingTargetStats,
-            BasicStats<T> validationTargetStats,
-            BasicStats<T> testTargetStats,
-            PredictionStats<T> trainingPredictionStats,
-            PredictionStats<T> validationPredictionStats,
-            PredictionStats<T> testPredictionStats)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
     {
-        var fitType = DetermineFitType(trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingTargetStats, validationTargetStats, testTargetStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var fitType = DetermineFitType(evaluationData);
 
-        var confidenceLevel = CalculateConfidenceLevel(trainingErrorStats, validationErrorStats, testErrorStats,
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingTargetStats, validationTargetStats, testTargetStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var confidenceLevel = CalculateConfidenceLevel(evaluationData);
 
-        var recommendations = GenerateRecommendations(fitType, 
-            trainingBasicStats, validationBasicStats, testBasicStats,
-            trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var recommendations = GenerateRecommendations(fitType, evaluationData);
 
         return new FitDetectorResult<T>
         {
@@ -51,106 +31,57 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
         };
     }
 
-    protected override FitType DetermineFitType(
-        ErrorStats<T> trainingErrorStats,
-        ErrorStats<T> validationErrorStats,
-        ErrorStats<T> testErrorStats,
-        BasicStats<T> trainingBasicStats,
-        BasicStats<T> validationBasicStats,
-        BasicStats<T> testBasicStats,
-        BasicStats<T> trainingTargetStats,
-        BasicStats<T> validationTargetStats,
-        BasicStats<T> testTargetStats,
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats)
+    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var dataComplexity = AssessDataComplexity(trainingBasicStats, validationBasicStats, testBasicStats);
-        var modelPerformance = AssessModelPerformance(trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var dataComplexity = AssessDataComplexity(evaluationData.TrainingPredictedBasicStats, evaluationData.ValidationPredictedBasicStats, evaluationData.TestPredictedBasicStats);
+        var modelPerformance = AssessModelPerformance(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
 
         FitDetectorResult<T> result;
 
         if (dataComplexity == DataComplexity.Simple && modelPerformance == ModelPerformance.Good)
         {
-            result = _residualAnalyzer.DetectFit(trainingErrorStats, validationErrorStats, testErrorStats,
-                trainingBasicStats, validationBasicStats, testBasicStats,
-                trainingTargetStats, validationTargetStats, testTargetStats,
-                trainingPredictionStats, validationPredictionStats, testPredictionStats);
+            result = _residualAnalyzer.DetectFit(evaluationData);
         }
         else if (dataComplexity == DataComplexity.Moderate || modelPerformance == ModelPerformance.Moderate)
         {
-            result = _learningCurveDetector.DetectFit(trainingErrorStats, validationErrorStats, testErrorStats,
-                trainingBasicStats, validationBasicStats, testBasicStats,
-                trainingTargetStats, validationTargetStats, testTargetStats,
-                trainingPredictionStats, validationPredictionStats, testPredictionStats);
+            result = _learningCurveDetector.DetectFit(evaluationData);
         }
         else
         {
-            result = _hybridDetector.DetectFit(trainingErrorStats, validationErrorStats, testErrorStats,
-                trainingBasicStats, validationBasicStats, testBasicStats,
-                trainingTargetStats, validationTargetStats, testTargetStats,
-                trainingPredictionStats, validationPredictionStats, testPredictionStats);
+            result = _hybridDetector.DetectFit(evaluationData);
         }
 
         return result.FitType;
     }
 
-    protected override T CalculateConfidenceLevel(
-            ErrorStats<T> trainingErrorStats,
-            ErrorStats<T> validationErrorStats,
-            ErrorStats<T> testErrorStats,
-            BasicStats<T> trainingBasicStats,
-            BasicStats<T> validationBasicStats,
-            BasicStats<T> testBasicStats,
-            BasicStats<T> trainingTargetStats,
-            BasicStats<T> validationTargetStats,
-            BasicStats<T> testTargetStats,
-            PredictionStats<T> trainingPredictionStats,
-            PredictionStats<T> validationPredictionStats,
-            PredictionStats<T> testPredictionStats)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var dataComplexity = AssessDataComplexity(trainingBasicStats, validationBasicStats, testBasicStats);
-        var modelPerformance = AssessModelPerformance(trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var dataComplexity = AssessDataComplexity(evaluationData.TrainingPredictedBasicStats, evaluationData.ValidationPredictedBasicStats, evaluationData.TestPredictedBasicStats);
+        var modelPerformance = AssessModelPerformance(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
 
         FitDetectorResult<T> result;
 
         if (dataComplexity == DataComplexity.Simple && modelPerformance == ModelPerformance.Good)
         {
-            result = _residualAnalyzer.DetectFit(trainingErrorStats, validationErrorStats, testErrorStats,
-                trainingBasicStats, validationBasicStats, testBasicStats,
-                trainingTargetStats, validationTargetStats, testTargetStats,
-                trainingPredictionStats, validationPredictionStats, testPredictionStats);
+            result = _residualAnalyzer.DetectFit(evaluationData);
         }
         else if (dataComplexity == DataComplexity.Moderate || modelPerformance == ModelPerformance.Moderate)
         {
-            result = _learningCurveDetector.DetectFit(trainingErrorStats, validationErrorStats, testErrorStats,
-                trainingBasicStats, validationBasicStats, testBasicStats,
-                trainingTargetStats, validationTargetStats, testTargetStats,
-                trainingPredictionStats, validationPredictionStats, testPredictionStats);
+            result = _learningCurveDetector.DetectFit(evaluationData);
         }
         else
         {
-            result = _hybridDetector.DetectFit(trainingErrorStats, validationErrorStats, testErrorStats,
-                trainingBasicStats, validationBasicStats, testBasicStats,
-                trainingTargetStats, validationTargetStats, testTargetStats,
-                trainingPredictionStats, validationPredictionStats, testPredictionStats);
+            result = _hybridDetector.DetectFit(evaluationData);
         }
 
         return result.ConfidenceLevel ?? _numOps.Zero;
     }
 
-    protected override List<string> GenerateRecommendations(
-    FitType fitType,
-    BasicStats<T> trainingBasicStats,
-    BasicStats<T> validationBasicStats,
-    BasicStats<T> testBasicStats,
-    PredictionStats<T> trainingPredictionStats,
-    PredictionStats<T> validationPredictionStats,
-    PredictionStats<T> testPredictionStats)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
     {
         var recommendations = new List<string>();
-        var dataComplexity = AssessDataComplexity(trainingBasicStats, validationBasicStats, testBasicStats);
-        var modelPerformance = AssessModelPerformance(trainingPredictionStats, validationPredictionStats, testPredictionStats);
+        var dataComplexity = AssessDataComplexity(evaluationData.TrainingPredictedBasicStats, evaluationData.ValidationPredictedBasicStats, evaluationData.TestPredictedBasicStats);
+        var modelPerformance = AssessModelPerformance(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
 
         recommendations.Add(GetAdaptiveRecommendation(dataComplexity, modelPerformance));
 

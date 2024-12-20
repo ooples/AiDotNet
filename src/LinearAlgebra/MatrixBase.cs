@@ -121,6 +121,19 @@ public abstract class MatrixBase<T>
         return new Vector<T>([.. Enumerable.Range(0, rows).Select(row => this[row, col])], ops);
     }
 
+    public virtual Vector<T> Diagonal()
+    {
+        int minDimension = Math.Min(Rows, Columns);
+        var diagonal = new Vector<T>(minDimension, ops);
+
+        for (int i = 0; i < minDimension; i++)
+        {
+            diagonal[i] = this[i, i];
+        }
+
+        return diagonal;
+    }
+
     public Matrix<T> SubMatrix(int startRow, int startCol, int numRows, int numCols)
     {
         if (startRow < 0 || startCol < 0 || startRow + numRows > Rows || startCol + numCols > Columns)
