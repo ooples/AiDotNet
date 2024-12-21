@@ -1,13 +1,13 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.DataProcessor;
 
-public class DataPreprocessor<T> : IDataPreprocessor<T>
+public class DefaultDataPreprocessor<T> : IDataPreprocessor<T>
 {
     private readonly INormalizer<T> _normalizer;
     private readonly IFeatureSelector<T> _featureSelector;
     private readonly IOutlierRemoval<T> _outlierRemoval;
     private readonly DataProcessorOptions _options;
 
-    public DataPreprocessor(INormalizer<T> normalizer, IFeatureSelector<T> featureSelector, IOutlierRemoval<T> outlierRemoval, DataProcessorOptions? options = null)
+    public DefaultDataPreprocessor(INormalizer<T> normalizer, IFeatureSelector<T> featureSelector, IOutlierRemoval<T> outlierRemoval, DataProcessorOptions? options = null)
     {
         _normalizer = normalizer;
         _featureSelector = featureSelector;

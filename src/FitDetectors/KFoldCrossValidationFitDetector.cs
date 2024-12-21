@@ -49,7 +49,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
         else if (_numOps.GreaterThan(avgValidationR2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
                  _numOps.LessThan(_numOps.Abs(testDifference), _numOps.FromDouble(_options.StabilityThreshold)))
         {
-            return FitType.Good;
+            return FitType.GoodFit;
         }
         else
         {
@@ -75,7 +75,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
 
         switch (fitType)
         {
-            case FitType.Good:
+            case FitType.GoodFit:
                 recommendations.Add("The model shows good fit based on K-Fold Cross-Validation.");
                 recommendations.Add("Consider deploying the model or fine-tuning for even better performance.");
                 break;

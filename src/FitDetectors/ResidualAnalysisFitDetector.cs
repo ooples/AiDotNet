@@ -60,7 +60,7 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
                 _numOps.LessThan(validationResidualStd, stdThreshold) &&
                 _numOps.LessThan(testResidualStd, stdThreshold))
             {
-                return FitType.Good;
+                return FitType.GoodFit;
             }
             else
             {
@@ -87,7 +87,7 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
             return FitType.Unstable;
         }
 
-        return FitType.Good;
+        return FitType.GoodFit;
     }
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)

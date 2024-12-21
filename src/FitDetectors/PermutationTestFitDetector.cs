@@ -37,7 +37,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
             validationPValue < _options.SignificanceLevel && 
             testPValue < _options.SignificanceLevel)
         {
-            return FitType.Good;
+            return FitType.GoodFit;
         }
         else if (trainingPValue < _options.SignificanceLevel && 
                  (validationPValue >= _options.SignificanceLevel || testPValue >= _options.SignificanceLevel))
@@ -79,7 +79,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
 
         switch (fitType)
         {
-            case FitType.Good:
+            case FitType.GoodFit:
                 recommendations.Add("The model shows good fit across all datasets based on permutation tests.");
                 recommendations.Add("Consider deploying the model or fine-tuning for even better performance.");
                 break;

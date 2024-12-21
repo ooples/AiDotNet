@@ -52,7 +52,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
                  _numOps.GreaterThan(evaluationData.ValidationPredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
                  _numOps.GreaterThan(evaluationData.TestPredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)))
         {
-            return FitType.Good;
+            return FitType.GoodFit;
         }
         else
         {
@@ -104,7 +104,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
                 recommendations.Add("- Applying cross-validation with more folds");
                 recommendations.Add("- Investigating for potential concept drift in your time series");
                 break;
-            case FitType.Good:
+            case FitType.GoodFit:
                 recommendations.Add("Model shows good fit. Consider:");
                 recommendations.Add("- Fine-tuning hyperparameters for potential improvements");
                 recommendations.Add("- Monitoring model performance over time for potential degradation");

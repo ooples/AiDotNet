@@ -1739,4 +1739,135 @@ public static class StatisticsHelper<T>
 
         return _numOps.Exp(logML);
     }
+
+    public static T CalculatePrecisionRecallAUC(Vector<T> actual, Vector<T> predicted)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        if (actual.Length != predicted.Length)
+            throw new ArgumentException("Actual and predicted vectors must have the same length.");
+
+        var sortedPairs = actual.Zip(predicted, (a, p) => new { Actual = a, Predicted = p })
+                                .OrderByDescending(pair => pair.Predicted)
+                                .ToList();
+
+        T totalPositives = _numOps.FromDouble(actual.Where(a => _numOps.GreaterThan(a, _numOps.Zero)).Length);
+        T totalNegatives = _numOps.Subtract(_numOps.FromDouble(actual.Length), totalPositives);
+
+        if (_numOps.Equals(totalPositives, _numOps.Zero) || _numOps.Equals(totalNegatives, _numOps.Zero))
+            throw new ArgumentException("Both positive and negative samples are required to calculate AUC.");
+
+        T truePositives = _numOps.Zero;
+        T falsePositives = _numOps.Zero;
+        T auc = _numOps.Zero;
+        T prevRecall = _numOps.Zero;
+        T prevPrecision = _numOps.One;
+
+        foreach (var pair in sortedPairs)
+        {
+            if (_numOps.GreaterThan(pair.Actual, _numOps.Zero))
+            {
+                truePositives = _numOps.Add(truePositives, _numOps.One);
+            }
+            else
+            {
+                falsePositives = _numOps.Add(falsePositives, _numOps.One);
+            }
+
+            T recall = _numOps.Divide(truePositives, totalPositives);
+            T precision = _numOps.Divide(truePositives, _numOps.Add(truePositives, falsePositives));
+
+            T deltaRecall = _numOps.Subtract(recall, prevRecall);
+            T avgPrecision = _numOps.Divide(_numOps.Add(precision, prevPrecision), _numOps.FromDouble(2.0));
+            auc = _numOps.Add(auc, _numOps.Multiply(deltaRecall, avgPrecision));
+
+            prevRecall = recall;
+            prevPrecision = precision;
+        }
+
+        return auc;
+    }
+
+    public static T CalculateAUC(Vector<T> fpr, Vector<T> tpr)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        T auc = _numOps.Zero;
+        for (int i = 1; i < fpr.Length; i++)
+        {
+            var width = _numOps.Subtract(fpr[i], fpr[i - 1]);
+            var height = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(tpr[i], tpr[i - 1]));
+            auc = _numOps.Add(auc, _numOps.Multiply(width, height));
+        }
+
+        return auc;
+    }
+
+    public static Vector<T> GenerateThresholds(Vector<T> predictedValues)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var uniqueValues = new HashSet<T>(predictedValues);
+        var thresholds = new Vector<T>(uniqueValues.Count, _numOps);
+        int index = 0;
+        foreach (var value in uniqueValues)
+        {
+            thresholds[index++] = value;
+        }
+
+        return thresholds;
+    }
+
+    public static (Vector<T> fpr, Vector<T> tpr) CalculateROCCurve(Vector<T> actualValues, Vector<T> predictedValues)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        var thresholds = GenerateThresholds(predictedValues);
+        var fpr = new Vector<T>(thresholds.Length, _numOps);
+        var tpr = new Vector<T>(thresholds.Length, _numOps);
+
+        for (int i = 0; i < thresholds.Length; i++)
+        {
+            var confusionMatrix = StatisticsHelper<T>.CalculateConfusionMatrix(actualValues, predictedValues, thresholds[i]);
+            fpr[i] = _numOps.Divide(confusionMatrix.FalsePositives, _numOps.Add(confusionMatrix.FalsePositives, confusionMatrix.TrueNegatives));
+            tpr[i] = _numOps.Divide(confusionMatrix.TruePositives, _numOps.Add(confusionMatrix.TruePositives, confusionMatrix.FalseNegatives));
+        }
+
+        return (fpr, tpr);
+    }
+
+    public static (T, T) CalculateAucF1Score(ModelEvaluationData<T> evaluationData)
+    {
+        var actual = evaluationData.ModelStats.Actual;
+        var predicted = evaluationData.ModelStats.Predicted;
+        var auc = StatisticsHelper<T>.CalculatePrecisionRecallAUC(actual, predicted);
+        var (_, _, f1Score) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, PredictionType.Regression);
+
+        return (auc, f1Score);
+    }
+
+    public static ConfusionMatrix<T> CalculateConfusionMatrix(Vector<T> actual, Vector<T> predicted, T threshold)
+    {
+        if (actual.Length != predicted.Length)
+            throw new ArgumentException("Actual and predicted vectors must have the same size.");
+
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        T truePositives = _numOps.Zero;
+        T trueNegatives = _numOps.Zero;
+        T falsePositives = _numOps.Zero;
+        T falseNegatives = _numOps.Zero;
+
+        for (int i = 0; i < actual.Length; i++)
+        {
+            bool actualPositive = _numOps.GreaterThan(actual[i], _numOps.Zero);
+            bool predictedPositive = _numOps.GreaterThanOrEquals(predicted[i], threshold);
+
+            if (actualPositive && predictedPositive)
+                truePositives = _numOps.Add(truePositives, _numOps.One);
+            else if (!actualPositive && !predictedPositive)
+                trueNegatives = _numOps.Add(trueNegatives, _numOps.One);
+            else if (!actualPositive && predictedPositive)
+                falsePositives = _numOps.Add(falsePositives, _numOps.One);
+            else
+                falseNegatives = _numOps.Add(falseNegatives, _numOps.One);
+        }
+
+        return new ConfusionMatrix<T>(truePositives, trueNegatives, falsePositives, falseNegatives);
+    }
 }

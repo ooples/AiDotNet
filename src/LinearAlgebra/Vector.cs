@@ -135,6 +135,17 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         }
     }
 
+    public Matrix<T> Transpose()
+    {
+        var result = new Matrix<T>(1, this.Length);
+        for (int i = 0; i < this.Length; i++)
+        {
+            result[0, i] = this[i];
+        }
+
+        return result;
+    }
+
     public Vector<T> RemoveAt(int index)
     {
         if (index < 0 || index >= Length)

@@ -81,4 +81,9 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
             return Negate(One);
         return Zero;
     }
+    public int ToInt32(Complex<T> value)
+    {
+        double magnitude = Convert.ToDouble(value.Magnitude);
+        return (int)Math.Round(magnitude);
+    }
 }

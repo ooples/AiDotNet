@@ -2,7 +2,7 @@
 
 public enum FitType
 {
-    Good,
+    GoodFit,
     Overfit,
     Underfit,
     HighBias,
@@ -11,8 +11,10 @@ public enum FitType
     SevereMulticollinearity,
     ModerateMulticollinearity,
     PoorFit,
+    VeryPoorFit,
     StrongPositiveAutocorrelation,
     StrongNegativeAutocorrelation,
     WeakAutocorrelation,
-    NoAutocorrelation
+    NoAutocorrelation,
+    Moderate,
 }

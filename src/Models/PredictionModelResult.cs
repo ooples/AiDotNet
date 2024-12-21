@@ -4,11 +4,22 @@ global using Formatting = Newtonsoft.Json.Formatting;
 namespace AiDotNet.Models;
 
 [Serializable]
-public class PredictionModelResult<T>
+public class PredictionModelResult<T> : IPredictiveModel<T>
 {
     public IRegression<T>? Model { get; set; }
     public OptimizationResult<T> OptimizationResult { get; set; } = new();
     public NormalizationInfo<T> NormalizationInfo { get; set; } = new();
+
+    public PredictionModelResult(IRegression<T> model, OptimizationResult<T> optimizationResult, NormalizationInfo<T> normalizationInfo)
+    {
+        Model = model;
+        OptimizationResult = optimizationResult;
+        NormalizationInfo = normalizationInfo;
+    }
+
+    public PredictionModelResult()
+    {
+    }
 
     public Vector<T> Predict(Matrix<T> newData)
     {

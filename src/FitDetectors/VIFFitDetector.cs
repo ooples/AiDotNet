@@ -45,7 +45,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
             var primaryMetric = evaluationData.ValidationPredictionStats.GetMetric(_options.PrimaryMetric);
             if (_numOps.GreaterThan(primaryMetric, _numOps.FromDouble(_options.GoodFitThreshold)))
             {
-                return FitType.Good;
+                return FitType.GoodFit;
             }
             else
             {
@@ -85,7 +85,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
                 recommendations.Add("- Combining or removing some correlated features");
                 recommendations.Add("- Using regularization techniques");
                 break;
-            case FitType.Good:
+            case FitType.GoodFit:
                 recommendations.Add("The model shows good fit with acceptable multicollinearity levels.");
                 recommendations.Add("Consider fine-tuning for even better performance.");
                 break;

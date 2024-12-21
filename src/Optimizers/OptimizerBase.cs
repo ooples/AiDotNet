@@ -1,3 +1,5 @@
+using AiDotNet.Models;
+
 namespace AiDotNet.Optimizers;
 
 public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
@@ -102,12 +104,13 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         );
     }
 
-    protected ModelStats<T> CalculateModelStats(Matrix<T> X, int featureCount)
+    protected ModelStats<T> CalculateModelStats(Matrix<T> X, int featureCount, IPredictiveModel<T> model)
     {
         return new ModelStats<T>(new ModelStatsInputs<T>
         {
             XMatrix = X,
-            FeatureCount = featureCount
+            FeatureCount = featureCount,
+            Model = model
         });
     }
 
@@ -142,7 +145,7 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         var (trainingPredictionStats, validationPredictionStats, testPredictionStats) = CalculatePredictionStats(
             yTrain, yVal, yTest, trainingPredictions, validationPredictions, testPredictions, featureCount);
 
-        var modelStats = CalculateModelStats(XTrainSubset, featureCount);
+        var modelStats = CalculateModelStats(XTrainSubset, featureCount, new PredictionModelResult<T>(regressionMethod, new(), normInfo));
 
         var evaluationData = new ModelEvaluationData<T>()
         {
@@ -277,7 +280,7 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         int consecutiveBadFits = 0;
         foreach (var iteration in recentIterations.Reverse<OptimizationIterationInfo<T>>())
         {
-            if (iteration.FitDetectionResult.FitType != FitType.Good)
+            if (iteration.FitDetectionResult.FitType != FitType.GoodFit)
             {
                 consecutiveBadFits++;
             }

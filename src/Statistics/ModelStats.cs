@@ -17,6 +17,12 @@ public class ModelStats<T>
     public T ReferenceModelMarginalLikelihood { get; set; }
     public T LogLikelihood { get; set; }
     public T EffectiveNumberOfParameters { get; set; }
+    public Vector<T> Actual { get; }
+    public Vector<T> Predicted { get; }
+    public Matrix<T> FeatureMatrix { get; }
+    public IPredictiveModel<T>? Model { get; }
+    public List<string> FeatureNames { get; set; }
+    public Dictionary<string, Vector<T>> FeatureValues { get; set; }
 
     public ModelStats(ModelStatsInputs<T> inputs, ModelStatsOptions? options = null)
     {
@@ -34,6 +40,12 @@ public class ModelStats<T>
         ReferenceModelMarginalLikelihood = _numOps.Zero;
         LogLikelihood = _numOps.Zero;
         EffectiveNumberOfParameters = _numOps.Zero;
+        Actual = inputs.Actual;
+        Predicted = inputs.Predicted;
+        FeatureMatrix = inputs.XMatrix;
+        Model = inputs.Model;
+        FeatureNames = inputs.FeatureNames ?? new List<string>();
+        FeatureValues = inputs.FeatureValues ?? new Dictionary<string, Vector<T>>();
 
         CalculateModelStats(inputs);
     }

@@ -44,7 +44,7 @@ public class CrossValidationFitDetector<T> : FitDetectorBase<T>
             _numOps.GreaterThan(validationR2, _goodFitThreshold) &&
             _numOps.GreaterThan(testR2, _goodFitThreshold))
         {
-            return FitType.Good;
+            return FitType.GoodFit;
         }
         else if (_numOps.GreaterThan(r2Difference, _overfitThreshold) &&
                  _numOps.GreaterThan(trainingR2, validationR2))
@@ -88,7 +88,7 @@ public class CrossValidationFitDetector<T> : FitDetectorBase<T>
 
         switch (fitType)
         {
-            case FitType.Good:
+            case FitType.GoodFit:
                 recommendations.Add("The model shows good fit across all datasets. Consider deploying the model.");
                 break;
             case FitType.Overfit:

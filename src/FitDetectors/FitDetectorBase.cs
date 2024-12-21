@@ -21,7 +21,7 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
 
         switch (fitType)
         {
-            case FitType.Good:
+            case FitType.GoodFit:
                 recommendations.Add("The model appears to be well-fitted. Consider deploying it and monitoring its performance on new data.");
                 break;
             case FitType.HighVariance:

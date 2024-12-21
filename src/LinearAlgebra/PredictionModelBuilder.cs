@@ -4,6 +4,7 @@ global using AiDotNet.Regularization;
 global using AiDotNet.Optimizers;
 global using AiDotNet.Normalizers;
 global using AiDotNet.OutlierRemoval;
+using AiDotNet.DataProcessor;
 
 namespace AiDotNet.LinearAlgebra;
 
@@ -99,7 +100,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator<T>();
         var regularization = _regularization ?? new NoRegularization<T>();
         var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T>();
-        var dataPreprocessor = _dataPreprocessor ?? new DataPreprocessor<T>(normalizer, featureSelector, outlierRemoval);
+        var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T>(normalizer, featureSelector, outlierRemoval);
 
         // Preprocess the data
         var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);

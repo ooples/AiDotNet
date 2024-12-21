@@ -35,7 +35,7 @@ public class BayesianFitDetector<T> : FitDetectorBase<T>
             _numOps.LessThan(waic, _numOps.FromDouble(_options.GoodFitThreshold)) &&
             _numOps.LessThan(loo, _numOps.FromDouble(_options.GoodFitThreshold)))
         {
-            return FitType.Good;
+            return FitType.GoodFit;
         }
         else if (_numOps.GreaterThan(dic, _numOps.FromDouble(_options.OverfitThreshold)) ||
                  _numOps.GreaterThan(waic, _numOps.FromDouble(_options.OverfitThreshold)) ||
@@ -84,7 +84,7 @@ public class BayesianFitDetector<T> : FitDetectorBase<T>
                 recommendations.Add("- Adding more relevant features or interactions");
                 recommendations.Add("- Exploring non-linear relationships in the data");
                 break;
-            case FitType.Good:
+            case FitType.GoodFit:
                 recommendations.Add("Model shows good fit. Consider:");
                 recommendations.Add("- Fine-tuning hyperparameters for potential improvements");
                 recommendations.Add("- Conducting sensitivity analysis on priors");

@@ -40,7 +40,7 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
         if (_numOps.LessThan(_numOps.Abs(trainingSlope), convergenceThreshold) &&
             _numOps.LessThan(_numOps.Abs(validationSlope), convergenceThreshold))
         {
-            return FitType.Good;
+            return FitType.GoodFit;
         }
 
         if (_numOps.LessThan(trainingSlope, _numOps.Zero) && _numOps.GreaterThan(validationSlope, _numOps.Zero))

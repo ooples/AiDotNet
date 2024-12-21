@@ -59,7 +59,7 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     {
         var fitTypeScores = new Dictionary<FitType, int>
         {
-            { FitType.Good, 0 },
+            { FitType.GoodFit, 0 },
             { FitType.Overfit, 0 },
             { FitType.Underfit, 0 },
             { FitType.HighVariance, 0 },

@@ -11,6 +11,7 @@ public interface INumericOperations<T>
     T One { get; }
     T Sqrt(T value);
     T FromDouble(double value);
+    int ToInt32(T value);
     bool GreaterThan(T a, T b);
     bool LessThan(T a, T b);
     T Abs(T value);

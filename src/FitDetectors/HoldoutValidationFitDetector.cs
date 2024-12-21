@@ -50,7 +50,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
         else if (_numOps.GreaterThan(validationR2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
                  _numOps.LessThan(_numOps.Abs(_numOps.Subtract(validationR2, testR2)), _numOps.FromDouble(_options.StabilityThreshold)))
         {
-            return FitType.Good;
+            return FitType.GoodFit;
         }
         else
         {
@@ -76,7 +76,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
 
         switch (fitType)
         {
-            case FitType.Good:
+            case FitType.GoodFit:
                 recommendations.Add("The model shows good fit based on holdout validation.");
                 recommendations.Add("Consider deploying the model or fine-tuning for even better performance.");
                 break;

@@ -34,4 +34,26 @@ public static class MatrixExtensions
 
         return result;
     }
+
+    public static T LogDeterminant<T>(this Matrix<T> matrix)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+            
+        if (matrix.Rows != matrix.Columns)
+        {
+            throw new ArgumentException("Matrix must be square to calculate determinant.");
+        }
+
+        // Use LU decomposition to calculate log determinant
+        var lu = new LuDecomposition<T>(matrix);
+        var U = lu.U;
+
+        T logDet = numOps.Zero;
+        for (int i = 0; i < U.Rows; i++)
+        {
+            logDet = numOps.Add(logDet, numOps.Log(numOps.Abs(U[i, i])));
+        }
+
+        return logDet;
+    }
 }

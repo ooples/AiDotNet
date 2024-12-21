@@ -41,7 +41,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
             _numOps.GreaterThan(meanValidationR2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
             _numOps.GreaterThan(meanTestR2, _numOps.FromDouble(_options.GoodFitThreshold)))
         {
-            return FitType.Good;
+            return FitType.GoodFit;
         }
         else if (_numOps.GreaterThan(r2Difference, _numOps.FromDouble(_options.OverfitThreshold)) &&
                  _numOps.GreaterThan(meanTrainingR2, meanValidationR2))
@@ -87,7 +87,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
 
         switch (fitType)
         {
-            case FitType.Good:
+            case FitType.GoodFit:
                 recommendations.Add("The model shows good fit across all datasets based on bootstrap analysis.");
                 recommendations.Add("Consider deploying the model or fine-tuning for even better performance.");
                 break;

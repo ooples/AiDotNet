@@ -9,7 +9,7 @@ public abstract class MatrixBase<T>
     protected readonly int cols;
     protected readonly INumericOperations<T> ops;
 
-    protected MatrixBase(int rows, int cols, INumericOperations<T> operations)
+    protected MatrixBase(int rows, int cols, INumericOperations<T>? operations = null)
     {
         if (rows <= 0) throw new ArgumentException("Rows must be positive", nameof(rows));
         if (cols <= 0) throw new ArgumentException("Columns must be positive", nameof(cols));
@@ -17,7 +17,7 @@ public abstract class MatrixBase<T>
         this.rows = rows;
         this.cols = cols;
         this.data = new T[rows * cols];
-        this.ops = operations;
+        this.ops = operations ?? MathHelper.GetNumericOperations<T>();
     }
 
     protected MatrixBase(IEnumerable<IEnumerable<T>> values, INumericOperations<T> operations)
@@ -80,7 +80,7 @@ public abstract class MatrixBase<T>
         return result;
     }
 
-    public virtual void SetColumn(int columnIndex, VectorBase<T> vector)
+    public virtual void SetColumn(int columnIndex, Vector<T> vector)
     {
         if (columnIndex < 0 || columnIndex >= Columns)
             throw new ArgumentOutOfRangeException(nameof(columnIndex));
@@ -92,7 +92,7 @@ public abstract class MatrixBase<T>
         }
     }
 
-    public virtual void SetRow(int rowIndex, VectorBase<T> vector)
+    public virtual void SetRow(int rowIndex, Vector<T> vector)
     {
         if (rowIndex < 0 || rowIndex >= Rows)
             throw new ArgumentOutOfRangeException(nameof(rowIndex));

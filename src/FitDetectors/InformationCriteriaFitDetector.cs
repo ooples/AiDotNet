@@ -40,7 +40,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
 
         if (aicDiff < _options.AicThreshold && bicDiff < _options.BicThreshold)
         {
-            return FitType.Good;
+            return FitType.GoodFit;
         }
         else if (aicDiff > _options.OverfitThreshold || bicDiff > _options.OverfitThreshold)
         {
@@ -87,7 +87,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
 
         switch (fitType)
         {
-            case FitType.Good:
+            case FitType.GoodFit:
                 recommendations.Add("The model shows good fit based on information criteria.");
                 recommendations.Add("Consider deploying the model or fine-tuning for even better performance.");
                 break;

@@ -29,7 +29,7 @@
         T threshold02 = _numOps.FromDouble(0.2);
 
         if (_numOps.GreaterThan(training.R2, threshold09) && _numOps.GreaterThan(validation.R2, threshold09) && _numOps.GreaterThan(test.R2, threshold09))
-            return FitType.Good;
+            return FitType.GoodFit;
         if (_numOps.GreaterThan(training.R2, threshold09) && _numOps.LessThan(validation.R2, threshold07))
             return FitType.Overfit;
         if (_numOps.LessThan(training.R2, threshold07) && _numOps.LessThan(validation.R2, threshold07))
