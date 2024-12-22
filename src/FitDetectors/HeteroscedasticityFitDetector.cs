@@ -75,7 +75,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
 
         var scaledResiduals = squaredResiduals.Divide(meanSquaredResidual);
         var auxiliaryRegression = new SimpleRegression<T>();
-        auxiliaryRegression.Fit(X, scaledResiduals);
+        auxiliaryRegression.Train(X, scaledResiduals);
 
         // Calculate R-squared using PredictionStats
         var predictionStatsInputs = new PredictionStatsInputs<T>
@@ -113,7 +113,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
         augmentedX.SetColumn(column, Vector<T>.CreateDefault(X.Rows, _numOps.One));
 
         var auxiliaryRegression = new SimpleRegression<T>();
-        auxiliaryRegression.Fit(augmentedX, new Vector<T>(squaredResiduals));
+        auxiliaryRegression.Train(augmentedX, new Vector<T>(squaredResiduals));
         var predictionStatsInputs = new PredictionStatsInputs<T>
         {
             Actual = new Vector<T>(squaredResiduals),

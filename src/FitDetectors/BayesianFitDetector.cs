@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.FitDetectors;
 
 public class BayesianFitDetector<T> : FitDetectorBase<T>

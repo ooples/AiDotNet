@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Statistics;
 
 public class ModelStats<T>
@@ -44,8 +46,8 @@ public class ModelStats<T>
         Predicted = inputs.Predicted;
         FeatureMatrix = inputs.XMatrix;
         Model = inputs.Model;
-        FeatureNames = inputs.FeatureNames ?? new List<string>();
-        FeatureValues = inputs.FeatureValues ?? new Dictionary<string, Vector<T>>();
+        FeatureNames = inputs.FeatureNames ?? [];
+        FeatureValues = inputs.FeatureValues ?? [];
 
         CalculateModelStats(inputs);
     }

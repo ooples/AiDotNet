@@ -1,4 +1,5 @@
 ﻿global using AiDotNet.Regression;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.Factories;
 

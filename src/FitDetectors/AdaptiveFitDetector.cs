@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.FitDetectors;
+﻿using AiDotNet.Models.Options;
+
+namespace AiDotNet.FitDetectors;
 
 public class AdaptiveFitDetector<T> : FitDetectorBase<T>
 {

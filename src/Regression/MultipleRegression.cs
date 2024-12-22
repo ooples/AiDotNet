@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Regression;
+﻿using AiDotNet.Models.Options;
+
+namespace AiDotNet.Regression;
 
 public class MultipleRegression<T> : RegressionBase<T>
 {
@@ -7,7 +9,7 @@ public class MultipleRegression<T> : RegressionBase<T>
     {
     }
 
-    public override void Fit(Matrix<T> x, Vector<T> y)
+    public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (Options.UseIntercept)
             x = x.AddConstantColumn(NumOps.One);

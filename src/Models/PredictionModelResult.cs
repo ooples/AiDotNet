@@ -4,21 +4,28 @@ global using Formatting = Newtonsoft.Json.Formatting;
 namespace AiDotNet.Models;
 
 [Serializable]
-public class PredictionModelResult<T> : IPredictiveModel<T>
+internal class PredictionModelResult<T> : IPredictiveModel<T>
 {
-    public IRegression<T>? Model { get; set; }
-    public OptimizationResult<T> OptimizationResult { get; set; } = new();
-    public NormalizationInfo<T> NormalizationInfo { get; set; } = new();
+    public IRegression<T>? Model { get; private set; }
+    public OptimizationResult<T> OptimizationResult { get; private set; } = new();
+    public NormalizationInfo<T> NormalizationInfo { get; private set; } = new();
+    public ModelMetadata<T> ModelMetadata { get; private set; } = new();
 
     public PredictionModelResult(IRegression<T> model, OptimizationResult<T> optimizationResult, NormalizationInfo<T> normalizationInfo)
     {
         Model = model;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
+        ModelMetadata = model.GetModelMetadata();
     }
 
     public PredictionModelResult()
     {
+    }
+
+    public ModelMetadata<T> GetModelMetadata()
+    {
+        return ModelMetadata;
     }
 
     public Vector<T> Predict(Matrix<T> newData)
@@ -33,47 +40,52 @@ public class PredictionModelResult<T> : IPredictiveModel<T>
             throw new InvalidOperationException("Normalizer is not initialized.");
         }
 
-        // Preprocess the new data using the same normalization
         var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeMatrix(newData);
-    
-        // Make predictions
         var normalizedPredictions = Model.Predict(normalizedNewData);
-    
-        // Denormalize the predictions
         return NormalizationInfo.Normalizer.DenormalizeVector(normalizedPredictions, NormalizationInfo.YParams);
+    }
+
+    public byte[] Serialize()
+    {
+        var jsonString = JsonConvert.SerializeObject(this, Formatting.Indented, new JsonSerializerSettings
+        {
+            TypeNameHandling = TypeNameHandling.All
+        });
+
+        return Encoding.UTF8.GetBytes(jsonString);
+    }
+
+    public void Deserialize(byte[] data)
+    {
+        var jsonString = Encoding.UTF8.GetString(data);
+        var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T>>(jsonString, new JsonSerializerSettings
+        {
+            TypeNameHandling = TypeNameHandling.All
+        });
+
+        if (deserializedObject != null)
+        {
+            Model = deserializedObject.Model;
+            OptimizationResult = deserializedObject.OptimizationResult;
+            NormalizationInfo = deserializedObject.NormalizationInfo;
+            ModelMetadata = deserializedObject.ModelMetadata;
+        }
+        else
+        {
+            throw new InvalidOperationException("Failed to deserialize the model.");
+        }
     }
 
     public void SaveModel(string filePath)
     {
-        string jsonString = JsonConvert.SerializeObject(this, Formatting.Indented, new JsonSerializerSettings
-        {
-            TypeNameHandling = TypeNameHandling.All
-        });
-        File.WriteAllText(filePath, jsonString);
+        File.WriteAllBytes(filePath, Serialize());
     }
 
     public static PredictionModelResult<T> LoadModel(string filePath)
     {
-        string jsonString = File.ReadAllText(filePath);
-        return JsonConvert.DeserializeObject<PredictionModelResult<T>>(jsonString, new JsonSerializerSettings
-        {
-            TypeNameHandling = TypeNameHandling.All
-        }) ?? new();
-    }
-
-    public string SerializeToJson()
-    {
-        return JsonConvert.SerializeObject(this, Formatting.Indented, new JsonSerializerSettings
-        {
-            TypeNameHandling = TypeNameHandling.All
-        });
-    }
-
-    public static PredictionModelResult<T> DeserializeFromJson(string jsonString)
-    {
-        return JsonConvert.DeserializeObject<PredictionModelResult<T>>(jsonString, new JsonSerializerSettings
-        {
-            TypeNameHandling = TypeNameHandling.All
-        }) ?? new();
+        var data = File.ReadAllBytes(filePath);
+        var result = new PredictionModelResult<T>();
+        result.Deserialize(data);
+        return result;
     }
 }

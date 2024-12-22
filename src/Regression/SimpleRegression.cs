@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Regression;
 
 public class SimpleRegression<T> : RegressionBase<T>
@@ -7,7 +9,7 @@ public class SimpleRegression<T> : RegressionBase<T>
     {
     }
 
-    public override void Fit(Matrix<T> x, Vector<T> y)
+    public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (x.Columns != 1)
             throw new ArgumentException("Simple regression expects only one feature column.");

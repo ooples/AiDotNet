@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.FitDetectors;
 
 public class JackknifeFitDetector<T> : FitDetectorBase<T>

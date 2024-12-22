@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.FitDetectors;
 
 public class LearningCurveFitDetector<T> : FitDetectorBase<T>

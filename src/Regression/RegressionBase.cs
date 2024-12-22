@@ -1,4 +1,6 @@
 ﻿global using AiDotNet.DecompositionMethods;
+global using AiDotNet.Factories;
+global using AiDotNet.Models.Options;
 
 namespace AiDotNet.Regression;
 
@@ -22,7 +24,7 @@ public abstract class RegressionBase<T> : IRegression<T>
         Intercept = NumOps.Zero;
     }
 
-    public abstract void Fit(Matrix<T> x, Vector<T> y);
+    public abstract void Train(Matrix<T> x, Vector<T> y);
 
     public virtual Vector<T> Predict(Matrix<T> input)
     {
@@ -34,6 +36,90 @@ public abstract class RegressionBase<T> : IRegression<T>
         }
 
         return predictions;
+    }
+
+    public virtual ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = GetModelType(),
+            Coefficients = Coefficients,
+            Intercept = Intercept,
+            FeatureImportances = CalculateFeatureImportances(),
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "HasIntercept", HasIntercept }
+            }
+        };
+    }
+
+    protected virtual ModelType GetModelType()
+    {
+        return this switch
+        {
+            SimpleRegression<T> => ModelType.SimpleRegression,
+            MultipleRegression<T> => ModelType.MultipleRegression,
+            PolynomialRegression<T> => ModelType.PolynomialRegression,
+            WeightedRegression<T> => ModelType.WeightedRegression,
+            _ => throw new InvalidOperationException($"Unknown model type: {GetType().Name}")
+        };
+    }
+
+    protected virtual Vector<T> CalculateFeatureImportances()
+    {
+        return Coefficients.Transform(NumOps.Abs);
+    }
+
+    public virtual byte[] Serialize()
+    {
+        var modelMetadata = new ModelMetadata<T>
+        {
+            Coefficients = Coefficients,
+            Intercept = Intercept,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "RegularizationType", (T)Convert.ChangeType((int)GetRegularizationType(Regularization), typeof(T)) }
+            }
+        };
+
+        var jsonString = JsonConvert.SerializeObject(modelMetadata);
+        return Encoding.UTF8.GetBytes(jsonString);
+    }
+
+    private RegularizationType GetRegularizationType(IRegularization<T> regularization)
+    {
+        return regularization switch
+        {
+            NoRegularization<T> => RegularizationType.None,
+            L1Regularization<T> => RegularizationType.L1,
+            L2Regularization<T> => RegularizationType.L2,
+            ElasticNetRegularization<T> => RegularizationType.ElasticNet,
+            _ => throw new ArgumentException($"Unknown regularization type: {regularization.GetType().Name}")
+        };
+    }
+
+    public virtual void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+
+        if (modelMetadata == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+        }
+
+        Coefficients = modelMetadata.Coefficients ?? new Vector<T>(0, NumOps);
+        Intercept = modelMetadata.Intercept ?? NumOps.Zero;
+
+        if (modelMetadata.AdditionalInfo.TryGetValue("RegularizationType", out var regularizationTypeValue))
+        {
+            var regularizationType = (RegularizationType)Convert.ToInt32(regularizationTypeValue);
+            Regularization = RegularizationFactory.CreateRegularization<T>(regularizationType);
+        }
+        else
+        {
+            Regularization = new NoRegularization<T>();
+        }
     }
 
     protected Vector<T> SolveSystem(Matrix<T> a, Vector<T> b)

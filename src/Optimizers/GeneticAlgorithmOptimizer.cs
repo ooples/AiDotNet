@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Optimizers;
 
 public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>

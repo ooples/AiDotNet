@@ -1,5 +1,3 @@
-using AiDotNet.Models;
-
 namespace AiDotNet.Optimizers;
 
 public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
@@ -123,7 +121,7 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         IFitnessCalculator<T> fitnessCalculator, IFitDetector<T> fitDetector, int featureCount)
     {
         // Fit the model
-        regressionMethod.Fit(XTrainSubset, yTrain);
+        regressionMethod.Train(XTrainSubset, yTrain);
 
         // Denormalize coefficients and intercept
         var denormalizedCoefficients = normalizer.DenormalizeCoefficients(regressionMethod.Coefficients, normInfo.XParams, normInfo.YParams);
@@ -145,8 +143,9 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         var (trainingPredictionStats, validationPredictionStats, testPredictionStats) = CalculatePredictionStats(
             yTrain, yVal, yTest, trainingPredictions, validationPredictions, testPredictions, featureCount);
 
-        var modelStats = CalculateModelStats(XTrainSubset, featureCount, new PredictionModelResult<T>(regressionMethod, new(), normInfo));
+        var predictionModelResult = new PredictionModelResult<T>(regressionMethod, new OptimizationResult<T>(), normInfo);
 
+        var modelStats = CalculateModelStats(XTrainSubset, featureCount, predictionModelResult);
         var evaluationData = new ModelEvaluationData<T>()
         {
             TrainingErrorStats = trainingErrorStats,

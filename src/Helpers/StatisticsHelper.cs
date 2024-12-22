@@ -1,4 +1,5 @@
-﻿using Microsoft.SqlServer.Server;
+﻿using AiDotNet.Models.Options;
+using Microsoft.SqlServer.Server;
 using System.Linq;
 
 namespace AiDotNet.Helpers;

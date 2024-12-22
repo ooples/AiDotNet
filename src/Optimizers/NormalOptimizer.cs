@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Optimizers;
+﻿using AiDotNet.Models.Options;
+
+namespace AiDotNet.Optimizers;
 
 public class NormalOptimizer<T> : OptimizerBase<T>
 {

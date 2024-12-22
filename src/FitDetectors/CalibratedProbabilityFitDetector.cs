@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.FitDetectors;
 
 public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>

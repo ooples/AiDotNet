@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Regression;
+﻿using AiDotNet.Models.Options;
+
+namespace AiDotNet.Regression;
 
 public class PolynomialRegression<T> : RegressionBase<T>
 {
@@ -10,7 +12,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
         _polyOptions = options ?? new PolynomialRegressionOptions<T>();
     }
 
-    public override void Fit(Matrix<T> x, Vector<T> y)
+    public override void Train(Matrix<T> x, Vector<T> y)
     {
         var polyX = CreatePolynomialFeatures(x);
 

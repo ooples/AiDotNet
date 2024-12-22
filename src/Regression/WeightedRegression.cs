@@ -14,7 +14,7 @@ public class WeightedRegression<T> : RegressionBase<T>
         _order = options.Order;
     }
 
-    public override void Fit(Matrix<T> x, Vector<T> y)
+    public override void Train(Matrix<T> x, Vector<T> y)
     {
         var expandedX = ExpandFeatures(x);
 

@@ -34,7 +34,7 @@ public class RecursiveFeatureElimination<T> : IFeatureSelector<T>
 
             // Assuming we have a dummy target vector for feature importance calculation
             var dummyTarget = new Vector<T>(allFeaturesMatrix.Rows, _numOps);
-            _model.Fit(subMatrix, dummyTarget);
+            _model.Train(subMatrix, dummyTarget);
 
             var featureImportances = _model.Coefficients.Select((c, i) => (_numOps.Abs(c), i)).ToList();
             featureImportances.Sort((a, b) => _numOps.GreaterThan(b.Item1, a.Item1) ? -1 : (_numOps.Equals(b.Item1, a.Item1) ? 0 : 1));

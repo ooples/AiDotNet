@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Optimizers;
 
 public class ParticleSwarmOptimizer<T> : OptimizerBase<T>

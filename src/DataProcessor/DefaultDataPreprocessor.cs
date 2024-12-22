@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.DataProcessor;
+﻿using AiDotNet.Models.Options;
+
+namespace AiDotNet.DataProcessor;
 
 public class DefaultDataPreprocessor<T> : IDataPreprocessor<T>
 {

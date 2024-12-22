@@ -4,7 +4,7 @@ global using AiDotNet.Regularization;
 global using AiDotNet.Optimizers;
 global using AiDotNet.Normalizers;
 global using AiDotNet.OutlierRemoval;
-using AiDotNet.DataProcessor;
+global using AiDotNet.DataProcessor;
 
 namespace AiDotNet.LinearAlgebra;
 
@@ -80,7 +80,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         return this;
     }
 
-    public PredictionModelResult<T> Build(Matrix<T> x, Vector<T> y)
+    public IPredictiveModel<T> Build(Matrix<T> x, Vector<T> y)
     {
         // Validate inputs
         if (x == null)
@@ -112,36 +112,35 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         var optimizationResult = optimizer.Optimize(XTrain, yTrain, XVal, yVal, XTest, yTest, _regression, regularization, normalizer, 
             normInfo, fitnessCalculator, fitDetector);
 
-        return new PredictionModelResult<T>
-        {
-            Model = _regression,
-            OptimizationResult = optimizationResult,
-            NormalizationInfo = normInfo
-        };
+        return new PredictionModelResult<T>(_regression, optimizationResult, normInfo);
     }
 
-    public Vector<T> Predict(Matrix<T> newData, PredictionModelResult<T> modelResult)
+    public Vector<T> Predict(Matrix<T> newData, IPredictiveModel<T> modelResult)
     {
         return modelResult.Predict(newData);
     }
 
-    public void SaveModel(PredictionModelResult<T> modelResult, string filePath)
+    public void SaveModel(IPredictiveModel<T> modelResult, string filePath)
     {
-        modelResult.SaveModel(filePath);
+        File.WriteAllBytes(filePath, SerializeModel(modelResult));
     }
 
-    public PredictionModelResult<T> LoadModel(string filePath)
+    public IPredictiveModel<T> LoadModel(string filePath)
     {
-        return PredictionModelResult<T>.LoadModel(filePath);
+        byte[] modelData = File.ReadAllBytes(filePath);
+        return DeserializeModel(modelData);
     }
 
-    public string SerializeModel(PredictionModelResult<T> modelResult)
+    public byte[] SerializeModel(IPredictiveModel<T> modelResult)
     {
-        return modelResult.SerializeToJson();
+        return modelResult.Serialize();
     }
 
-    public PredictionModelResult<T> DeserializeModel(string jsonString)
+    public IPredictiveModel<T> DeserializeModel(byte[] modelData)
     {
-        return PredictionModelResult<T>.DeserializeFromJson(jsonString);
+        var result = new PredictionModelResult<T>();
+        result.Deserialize(modelData);
+
+        return result;
     }
 }

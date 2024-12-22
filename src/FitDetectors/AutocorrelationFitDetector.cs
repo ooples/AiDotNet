@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.FitDetectors;
 
 public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
