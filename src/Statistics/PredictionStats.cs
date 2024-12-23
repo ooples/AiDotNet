@@ -1,4 +1,7 @@
-﻿namespace AiDotNet.Statistics;
+﻿using AiDotNet.Models.Inputs;
+using AiDotNet.Models.Results;
+
+namespace AiDotNet.Statistics;
 
 public class PredictionStats<T>
 {

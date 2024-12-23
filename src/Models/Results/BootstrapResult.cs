@@ -1,4 +1,4 @@
-namespace AiDotNet.Models
+namespace AiDotNet.Models.Results
 {
     public class BootstrapResult<T>
     {

@@ -1,3 +1,5 @@
+using AiDotNet.Models.Results;
+
 namespace AiDotNet.FitDetectors;
 
 public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
@@ -119,7 +121,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
                 bootstrapPredicted[j] = predicted[j];
             }
 
-            bootstrapMSEs[i] = StatisticsHelper<T>.CalculateMSE(bootstrapSample, bootstrapPredicted);
+            bootstrapMSEs[i] = StatisticsHelper<T>.CalculateMeanSquaredError(bootstrapSample, bootstrapPredicted);
         }
 
         return bootstrapMSEs;

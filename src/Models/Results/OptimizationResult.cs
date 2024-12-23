@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models;
+﻿namespace AiDotNet.Models.Results;
 
 public class OptimizationResult<T>
 {
@@ -8,13 +8,13 @@ public class OptimizationResult<T>
     public int Iterations { get; set; }
     public Vector<T> FitnessHistory { get; set; }
     public List<Vector<T>> SelectedFeatures { get; set; }
-    
+
     public DatasetResult TrainingResult { get; set; }
     public DatasetResult ValidationResult { get; set; }
     public DatasetResult TestResult { get; set; }
-    
+
     public FitDetectorResult<T> FitDetectionResult { get; set; }
-    
+
     public Vector<T> CoefficientLowerBounds { get; set; }
     public Vector<T> CoefficientUpperBounds { get; set; }
 

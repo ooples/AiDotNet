@@ -1,8 +1,5 @@
 ﻿namespace AiDotNet.Interfaces;
 
-public interface IRegression<T> : IFullModel<T>
+public interface IRegression<T> : ILinearModel<T>
 {
-    Vector<T> Coefficients { get; }
-    T Intercept { get; }
-    bool HasIntercept { get; }
 }

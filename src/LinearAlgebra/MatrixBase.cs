@@ -20,13 +20,13 @@ public abstract class MatrixBase<T>
         this.ops = operations ?? MathHelper.GetNumericOperations<T>();
     }
 
-    protected MatrixBase(IEnumerable<IEnumerable<T>> values, INumericOperations<T> operations)
+    protected MatrixBase(IEnumerable<IEnumerable<T>> values, INumericOperations<T>? operations = null)
     {
         var valuesList = values.Select(v => v.ToArray()).ToList();
         this.rows = valuesList.Count;
         this.cols = valuesList.First().Length;
         this.data = new T[rows * cols];
-        this.ops = operations;
+        this.ops = operations ?? MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < rows; i++)
         {
@@ -39,6 +39,22 @@ public abstract class MatrixBase<T>
             for (int j = 0; j < cols; j++)
             {
                 data[i * cols + j] = row[j];
+            }
+        }
+    }
+
+    protected MatrixBase(T[,] data, INumericOperations<T>? operations = null)
+    {
+        this.rows = data.GetLength(0);
+        this.cols = data.GetLength(1);
+        this.data = new T[rows * cols];
+        this.ops = operations ?? MathHelper.GetNumericOperations<T>();
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                this.data[i * cols + j] = data[i, j];
             }
         }
     }

@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Statistics;
+﻿using AiDotNet.Models.Inputs;
+
+namespace AiDotNet.Statistics;
 
 public class BasicStats<T>
 {

@@ -1,4 +1,6 @@
-﻿public class DefaultFitDetector<T> : IFitDetector<T>
+﻿using AiDotNet.Models.Results;
+
+public class DefaultFitDetector<T> : IFitDetector<T>
 {
     private readonly INumericOperations<T> _numOps;
 

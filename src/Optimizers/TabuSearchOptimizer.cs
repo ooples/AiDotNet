@@ -1,3 +1,5 @@
+using AiDotNet.Models.Results;
+
 namespace AiDotNet.Optimizers;
 
 public class TabuSearchOptimizer<T> : OptimizerBase<T>

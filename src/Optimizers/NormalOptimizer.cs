@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Models.Options;
+using AiDotNet.Models.Results;
 
 namespace AiDotNet.Optimizers;
 

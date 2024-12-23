@@ -146,6 +146,17 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return result;
     }
 
+    public Vector<T> GetElements(int[] indices)
+    {
+        var newVector = new T[indices.Length];
+        for (int i = 0; i < indices.Length; i++)
+        {
+            newVector[i] = this[indices[i]];
+        }
+
+        return new Vector<T>(newVector);
+    }
+
     public Vector<T> RemoveAt(int index)
     {
         if (index < 0 || index >= Length)

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models;
+﻿namespace AiDotNet.Models.Inputs;
 
 public class ModelStatsInputs<T>
 {

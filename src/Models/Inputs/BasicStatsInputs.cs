@@ -1,4 +1,4 @@
-namespace AiDotNet.Models;
+namespace AiDotNet.Models.Inputs;
 
 internal class BasicStatsInputs<T>
 {

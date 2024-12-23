@@ -1,3 +1,5 @@
+using AiDotNet.Models.Results;
+
 namespace AiDotNet.Helpers;
 
 public static class OptimizerHelper

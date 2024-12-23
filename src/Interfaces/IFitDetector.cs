@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Interfaces;
+﻿using AiDotNet.Models.Results;
+
+namespace AiDotNet.Interfaces;
 
 public interface IFitDetector<T>
 {

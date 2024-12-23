@@ -1,6 +1,4 @@
-﻿using AiDotNet.Models.Options;
-using Microsoft.SqlServer.Server;
-using System.Linq;
+﻿global using AiDotNet.Models.Results;
 
 namespace AiDotNet.Helpers;
 
@@ -8,7 +6,7 @@ public static class StatisticsHelper<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    public static T CalculateMedian(Vector<T> values)
+    public static T CalculateMedian(IEnumerable<T> values)
     {
         var sortedValues = values.ToArray();
         Array.Sort(sortedValues);
@@ -33,16 +31,136 @@ public static class StatisticsHelper<T>
         return NumOps.Divide(sumOfSquares, NumOps.FromDouble(values.Length - 1));
     }
 
+    public static T CalculateVariance(IEnumerable<T> values)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var enumerable = values.ToList();
+        int count = enumerable.Count;
+
+        if (count < 2)
+        {
+            return numOps.Zero;
+        }
+
+        T sum = enumerable.Aggregate(numOps.Zero, (acc, val) => numOps.Add(acc, val));
+        T mean = numOps.Divide(sum, numOps.FromDouble(count));
+
+        T sumOfSquaredDifferences = enumerable
+            .Select(x => numOps.Square(numOps.Subtract(x, mean)))
+            .Aggregate(numOps.Zero, (acc, val) => numOps.Add(acc, val));
+
+        return numOps.Divide(sumOfSquaredDifferences, numOps.FromDouble(count - 1));
+    }
+
     public static T CalculateStandardDeviation(Vector<T> values)
     {
         return NumOps.Sqrt(CalculateVariance(values, values.Average()));
     }
 
-    public static T CalculateMeanSquaredError(Vector<T> actualValues, Vector<T> predictedValues)
+    public static T CalculateMeanSquaredError(IEnumerable<T> actualValues, IEnumerable<T> predictedValues)
     {
         T sumOfSquaredErrors = actualValues.Zip(predictedValues, (a, p) => NumOps.Square(NumOps.Subtract(a, p)))
                                            .Aggregate(NumOps.Zero, NumOps.Add);
-        return NumOps.Divide(sumOfSquaredErrors, NumOps.FromDouble(actualValues.Length));
+        return NumOps.Divide(sumOfSquaredErrors, NumOps.FromDouble(actualValues.Count()));
+    }
+
+    public static T CalculateVarianceReduction(Vector<T> y, List<int> leftIndices, List<int> rightIndices)
+    {
+        T totalVariance = StatisticsHelper<T>.CalculateVariance(y);
+        T leftVariance = StatisticsHelper<T>.CalculateVariance(leftIndices.Select(i => y[i]));
+        T rightVariance = StatisticsHelper<T>.CalculateVariance(rightIndices.Select(i => y[i]));
+
+        T leftWeight = NumOps.Divide(NumOps.FromDouble(leftIndices.Count), NumOps.FromDouble(y.Length));
+        T rightWeight = NumOps.Divide(NumOps.FromDouble(rightIndices.Count), NumOps.FromDouble(y.Length));
+
+        return NumOps.Subtract(totalVariance, NumOps.Add(NumOps.Multiply(leftWeight, leftVariance), NumOps.Multiply(rightWeight, rightVariance)));
+    }
+
+    public static T CalculateSplitScore(Vector<T> y, List<int> leftIndices, List<int> rightIndices, SplitCriterion splitCriterion)
+    {
+        return splitCriterion switch
+        {
+            SplitCriterion.VarianceReduction => CalculateVarianceReduction(y, leftIndices, rightIndices),
+            SplitCriterion.MeanSquaredError => CalculateMeanSquaredError(y, leftIndices, rightIndices),
+            SplitCriterion.MeanAbsoluteError => CalculateMeanAbsoluteError(y, leftIndices, rightIndices),
+            SplitCriterion.FriedmanMSE => CalculateFriedmanMSE(y, leftIndices, rightIndices),
+            _ => throw new ArgumentException("Invalid split criterion"),
+        };
+    }
+
+    public static T CalculateMeanAbsolutePercentageError(Vector<T> actual, Vector<T> predicted)
+    {
+        if (actual.Length != predicted.Length)
+            throw new ArgumentException("Actual and predicted vectors must have the same length.");
+
+        var epsilon = NumOps.FromDouble(1e-10); // Small constant to avoid division by zero
+        var validPairs = 0;
+        var sumAbsPercentageErrors = NumOps.Zero;
+
+        for (int i = 0; i < actual.Length; i++)
+        {
+            if (NumOps.LessThanOrEquals(NumOps.Abs(actual[i]), epsilon))
+            {
+                // Skip this pair if actual value is too close to zero
+                continue;
+            }
+
+            var absolutePercentageError = NumOps.Abs(NumOps.Divide(NumOps.Subtract(actual[i], predicted[i]), actual[i]));
+            sumAbsPercentageErrors = NumOps.Add(sumAbsPercentageErrors, absolutePercentageError);
+            validPairs++;
+        }
+
+        if (validPairs == 0)
+            return NumOps.Zero;
+
+        return NumOps.Multiply(NumOps.Divide(sumAbsPercentageErrors, NumOps.FromDouble(validPairs)), NumOps.FromDouble(100));
+    }
+
+    public static T CalculateMeanAbsoluteError(Vector<T> y, List<int> leftIndices, List<int> rightIndices)
+    {
+        T leftMedian = StatisticsHelper<T>.CalculateMedian(leftIndices.Select(i => y[i]));
+        T rightMedian = StatisticsHelper<T>.CalculateMedian(rightIndices.Select(i => y[i]));
+
+        T leftMAE = StatisticsHelper<T>.CalculateMean(leftIndices.Select(i => NumOps.Abs(NumOps.Subtract(y[i], leftMedian))));
+        T rightMAE = StatisticsHelper<T>.CalculateMean(rightIndices.Select(i => NumOps.Abs(NumOps.Subtract(y[i], rightMedian))));
+
+        T leftWeight = NumOps.Divide(NumOps.FromDouble(leftIndices.Count), NumOps.FromDouble(y.Count()));
+        T rightWeight = NumOps.Divide(NumOps.FromDouble(rightIndices.Count), NumOps.FromDouble(y.Count()));
+
+        return NumOps.Negate(NumOps.Add(NumOps.Multiply(leftWeight, leftMAE), NumOps.Multiply(rightWeight, rightMAE)));
+    }
+
+    public static T CalculateFriedmanMSE(Vector<T> y, List<int> leftIndices, List<int> rightIndices)
+    {
+        T leftMean = StatisticsHelper<T>.CalculateMean(leftIndices.Select(i => y[i]));
+        T rightMean = StatisticsHelper<T>.CalculateMean(rightIndices.Select(i => y[i]));
+
+        T totalMean = StatisticsHelper<T>.CalculateMean(y);
+
+        T leftWeight = NumOps.Divide(NumOps.FromDouble(leftIndices.Count), NumOps.FromDouble(y.Count()));
+        T rightWeight = NumOps.Divide(NumOps.FromDouble(rightIndices.Count), NumOps.FromDouble(y.Count()));
+
+        T meanDifference = NumOps.Subtract(leftMean, rightMean);
+        return NumOps.Multiply(NumOps.Multiply(leftWeight, rightWeight), NumOps.Square(meanDifference));
+    }
+
+    public static T CalculateMeanSquaredError(Vector<T> y, List<int> leftIndices, List<int> rightIndices)
+    {
+        T leftMean = StatisticsHelper<T>.CalculateMean(leftIndices.Select(i => y[i]));
+        T rightMean = StatisticsHelper<T>.CalculateMean(rightIndices.Select(i => y[i]));
+
+        T leftMSE = StatisticsHelper<T>.CalculateMeanSquaredError(leftIndices.Select(i => y[i]), leftMean);
+        T rightMSE = StatisticsHelper<T>.CalculateMeanSquaredError(rightIndices.Select(i => y[i]), rightMean);
+
+        T leftWeight = NumOps.Divide(NumOps.FromDouble(leftIndices.Count), NumOps.FromDouble(y.Count()));
+        T rightWeight = NumOps.Divide(NumOps.FromDouble(rightIndices.Count), NumOps.FromDouble(y.Count()));
+
+        return NumOps.Add(NumOps.Multiply(leftWeight, leftMSE), NumOps.Multiply(rightWeight, rightMSE));
+    }
+
+    public static T CalculateMeanSquaredError(IEnumerable<T> values, T mean)
+    {
+        return NumOps.Divide(values.Aggregate(NumOps.Zero, (acc, x) => NumOps.Add(acc, NumOps.Square(NumOps.Subtract(x, mean)))), NumOps.FromDouble(values.Count()));
     }
 
     public static T CalculateRootMeanSquaredError(Vector<T> actualValues, Vector<T> predictedValues)
@@ -68,9 +186,9 @@ public static class StatisticsHelper<T>
         return NumOps.Subtract(NumOps.One, NumOps.Divide(residualSumSquares, totalSumSquares));
     }
 
-    public static T CalculateMean(Vector<T> values)
+    public static T CalculateMean(IEnumerable<T> values)
     {
-        return NumOps.Divide(values.Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(values.Length));
+        return NumOps.Divide(values.Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(values.Count()));
     }
 
     public static T CalculateAdjustedR2(T r2, int n, int p)
@@ -1110,33 +1228,11 @@ public static class StatisticsHelper<T>
         return (sortedPredictions[lowerIndex], sortedPredictions[upperIndex]);
     }
 
-    public static T CalculateRSS(Vector<T> actual, Vector<T> predicted)
-    {
-        return actual.Subtract(predicted).Select(x => NumOps.Square(x)).Aggregate(NumOps.Zero, NumOps.Add);
-    }
-
-    public static T CalculateMAE(Vector<T> actual, Vector<T> predicted)
-    {
-        return NumOps.Divide(actual.Subtract(predicted).Select(NumOps.Abs).Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(actual.Length));
-    }
-
-    public static T CalculateMSE(Vector<T> actual, Vector<T> predicted)
-    {
-        return NumOps.Divide(actual.Subtract(predicted).Select(x => NumOps.Square(x)).Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(actual.Length));
-    }
-
-    public static T CalculateMAPE(Vector<T> actual, Vector<T> predicted)
-    {
-        var mape = actual.Zip(predicted, (a, p) => NumOps.Abs(NumOps.Divide(NumOps.Subtract(a, p), a)))
-                            .Where(x => !NumOps.Equals(x, NumOps.Zero))
-                            .Aggregate(NumOps.Zero, NumOps.Add);
-        return NumOps.Multiply(NumOps.Divide(mape, NumOps.FromDouble(actual.Length)), NumOps.FromDouble(100));
-    }
-
     public static T CalculateMedianAbsoluteError(Vector<T> actual, Vector<T> predicted)
     {
         var absoluteErrors = actual.Subtract(predicted).Select(NumOps.Abs).OrderBy(x => x).ToArray();
         int n = absoluteErrors.Length;
+
         return n % 2 == 0
             ? NumOps.Divide(NumOps.Add(absoluteErrors[n / 2 - 1], absoluteErrors[n / 2]), NumOps.FromDouble(2))
             : absoluteErrors[n / 2];
@@ -1149,14 +1245,15 @@ public static class StatisticsHelper<T>
 
     public static T CalculateSampleStandardError(Vector<T> actual, Vector<T> predicted, int numberOfParameters)
     {
-        T mse = CalculateMSE(actual, predicted);
+        T mse = CalculateMeanSquaredError(actual, predicted);
         int degreesOfFreedom = actual.Length - numberOfParameters;
+
         return NumOps.Sqrt(NumOps.Divide(mse, NumOps.FromDouble(degreesOfFreedom)));
     }
 
     public static T CalculatePopulationStandardError(Vector<T> actual, Vector<T> predicted)
     {
-        return NumOps.Sqrt(CalculateMSE(actual, predicted));
+        return NumOps.Sqrt(CalculateMeanSquaredError(actual, predicted));
     }
 
     public static T CalculateMeanBiasError(Vector<T> actual, Vector<T> predicted)
@@ -1166,7 +1263,7 @@ public static class StatisticsHelper<T>
 
     public static T CalculateTheilUStatistic(Vector<T> actual, Vector<T> predicted)
     {
-        T numerator = NumOps.Sqrt(CalculateMSE(actual, predicted));
+        T numerator = NumOps.Sqrt(CalculateMeanSquaredError(actual, predicted));
         T denominatorActual = NumOps.Sqrt(NumOps.Divide(actual.Select(x => NumOps.Square(x)).Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(actual.Length)));
         T denominatorPredicted = NumOps.Sqrt(NumOps.Divide(predicted.Select(x => NumOps.Square(x)).Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(predicted.Length)));
 

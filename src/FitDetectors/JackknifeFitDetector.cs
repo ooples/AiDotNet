@@ -1,4 +1,5 @@
 using AiDotNet.Models.Options;
+using AiDotNet.Models.Results;
 
 namespace AiDotNet.FitDetectors;
 
@@ -111,7 +112,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
                 }
             }
 
-            var mse = StatisticsHelper<T>.CalculateMSE(jackknifeSample, jackknifePredicted);
+            var mse = StatisticsHelper<T>.CalculateMeanSquaredError(jackknifeSample, jackknifePredicted);
             jackknifeMSEs[i] = mse;
         }
 

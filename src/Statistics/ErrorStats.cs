@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Statistics;
+﻿using AiDotNet.Models.Inputs;
+
+namespace AiDotNet.Statistics;
 
 public class ErrorStats<T>
 {
@@ -57,11 +59,11 @@ public class ErrorStats<T>
         int n = actual.Length;
 
         // Calculate basic error metrics
-        MAE = StatisticsHelper<T>.CalculateMAE(actual, predicted);
-        RSS = StatisticsHelper<T>.CalculateRSS(actual, predicted);
-        MSE = StatisticsHelper<T>.CalculateMSE(actual, predicted);
+        MAE = StatisticsHelper<T>.CalculateMeanAbsoluteError(actual, predicted);
+        RSS = StatisticsHelper<T>.CalculateResidualSumOfSquares(actual, predicted);
+        MSE = StatisticsHelper<T>.CalculateMeanSquaredError(actual, predicted);
         RMSE = NumOps.Sqrt(MSE);
-        MAPE = StatisticsHelper<T>.CalculateMAPE(actual, predicted);
+        MAPE = StatisticsHelper<T>.CalculateMeanAbsolutePercentageError(actual, predicted);
         MedianAbsoluteError = StatisticsHelper<T>.CalculateMedianAbsoluteError(actual, predicted);
         MaxError = StatisticsHelper<T>.CalculateMaxError(actual, predicted);
 

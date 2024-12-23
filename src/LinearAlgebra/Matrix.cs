@@ -12,6 +12,11 @@ public class Matrix<T> : MatrixBase<T>
     {
     }
 
+    public Matrix(T[,] data, INumericOperations<T>? numericOperations = null)
+        : base(data, numericOperations ?? MathHelper.GetNumericOperations<T>())
+    {
+    }
+
     protected override MatrixBase<T> CreateInstance(int rows, int cols)
     {
         return new Matrix<T>(rows, cols, ops);
@@ -307,6 +312,21 @@ public class Matrix<T> : MatrixBase<T>
         }
 
         return newMatrix;
+    }
+
+    public Matrix<T> GetRows(int[] indices)
+    {
+        var newRows = indices.Length;
+        var newMatrix = new T[newRows, Columns];
+        for (int i = 0; i < newRows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                newMatrix[i, j] = this[indices[i], j];
+            }
+        }
+
+        return new Matrix<T>(newMatrix);
     }
 }
 

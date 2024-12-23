@@ -6,4 +6,7 @@ public enum ModelType
     MultipleRegression,
     PolynomialRegression,
     WeightedRegression,
+    RandomForest,
+    DecisionTree,
+    GradientBoosting
 }

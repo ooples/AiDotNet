@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Models;
+﻿using AiDotNet.Models.Results;
+
+namespace AiDotNet.Models;
 
 public class OptimizationIterationInfo<T>
 {

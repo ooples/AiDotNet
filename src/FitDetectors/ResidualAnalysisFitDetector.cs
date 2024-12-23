@@ -1,3 +1,5 @@
+using AiDotNet.Models.Results;
+
 namespace AiDotNet.FitDetectors;
 
 public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>

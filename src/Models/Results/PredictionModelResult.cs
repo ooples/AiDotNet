@@ -1,7 +1,7 @@
 ﻿global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
 
-namespace AiDotNet.Models;
+namespace AiDotNet.Models.Results;
 
 [Serializable]
 internal class PredictionModelResult<T> : IPredictiveModel<T>
