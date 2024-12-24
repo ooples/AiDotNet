@@ -9,5 +9,9 @@ public enum ModelType
     RandomForest,
     DecisionTree,
     GradientBoosting,
-    AdaBoostR2
+    AdaBoostR2,
+    ExtremelyRandomizedTrees,
+    QuantileRegressionForests,
+    ConditionalInferenceTree,
+    M5ModelTree
 }

@@ -88,6 +88,645 @@ public static class StatisticsHelper<T>
         };
     }
 
+    public static T CalculatePValue(Vector<T> leftY, Vector<T> rightY, TestStatisticType testType)
+    {
+        return testType switch
+        {
+            TestStatisticType.TTest => TTest(leftY, rightY).PValue,
+            TestStatisticType.MannWhitneyU => MannWhitneyUTest(leftY, rightY).PValue,
+            TestStatisticType.PermutationTest => PermutationTest(leftY, rightY).PValue,
+            TestStatisticType.ChiSquare => ChiSquareTest(leftY, rightY).PValue,
+            TestStatisticType.FTest => FTest(leftY, rightY).PValue,
+            _ => throw new ArgumentException("Invalid statistical test type", nameof(testType))
+        };
+    }
+
+    public static TTestResult<T> TTest(Vector<T> leftY, Vector<T> rightY, T? significanceLevel = default)
+    {
+        significanceLevel ??= NumOps.FromDouble(0.05); // Default significance level
+
+        T leftMean = CalculateMean(leftY);
+        T rightMean = CalculateMean(rightY);
+        T leftVariance = CalculateVariance(leftY, leftMean);
+        T rightVariance = CalculateVariance(rightY, rightMean);
+
+        T pooledStandardError = NumOps.Sqrt(NumOps.Add(
+            NumOps.Divide(leftVariance, NumOps.FromDouble(leftY.Length)),
+            NumOps.Divide(rightVariance, NumOps.FromDouble(rightY.Length))
+        ));
+
+        T tStatistic = NumOps.Divide(NumOps.Subtract(leftMean, rightMean), pooledStandardError);
+        int degreesOfFreedom = leftY.Length + rightY.Length - 2;
+
+        T pValue = CalculatePValueFromTDistribution(tStatistic, degreesOfFreedom);
+
+        return new TTestResult<T>(tStatistic, degreesOfFreedom, pValue, significanceLevel);
+    }
+
+    public static MannWhitneyUTestResult<T> MannWhitneyUTest(Vector<T> leftY, Vector<T> rightY, T? significanceLevel = default)
+    {
+        significanceLevel ??= NumOps.FromDouble(0.05); // Default significance level
+
+        var allValues = leftY.Concat(rightY).ToList();
+        var ranks = CalculateRanks(allValues);
+
+        T leftRankSum = NumOps.Zero;
+        for (int i = 0; i < leftY.Length; i++)
+        {
+            leftRankSum = NumOps.Add(leftRankSum, ranks[i]);
+        }
+
+        T u1 = NumOps.Subtract(
+            NumOps.Multiply(NumOps.FromDouble(leftY.Length), NumOps.FromDouble(rightY.Length)),
+            NumOps.Subtract(leftRankSum, NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(leftY.Length), NumOps.FromDouble(leftY.Length + 1)), NumOps.FromDouble(2)))
+        );
+
+        T u2 = NumOps.Subtract(
+            NumOps.Multiply(NumOps.FromDouble(leftY.Length), NumOps.FromDouble(rightY.Length)),
+            u1
+        );
+
+        T u = NumOps.LessThan(u1, u2) ? u1 : u2;
+
+        // Calculate p-value using normal approximation
+        T mean = NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(leftY.Length), NumOps.FromDouble(rightY.Length)), NumOps.FromDouble(2));
+        T standardDeviation = NumOps.Sqrt(NumOps.Divide(
+            NumOps.Multiply(NumOps.FromDouble(leftY.Length), NumOps.FromDouble(rightY.Length)),
+            NumOps.FromDouble(12)
+        ));
+
+        T zScore = NumOps.Divide(NumOps.Subtract(u, mean), standardDeviation);
+        T pValue = CalculatePValueFromZScore(zScore);
+
+        return new MannWhitneyUTestResult<T>(u, zScore, pValue, significanceLevel);
+    }
+
+    public static PermutationTestResult<T> PermutationTest(Vector<T> leftY, Vector<T> rightY, T? significanceLevel = default)
+    {
+        significanceLevel ??= NumOps.FromDouble(0.05); // Default significance level
+        int permutations = 1000; // Number of permutations
+        T observedDifference = NumOps.Subtract(CalculateMean(leftY), CalculateMean(rightY));
+        int countExtremeValues = 0;
+
+        var allValues = leftY.Concat(rightY).ToList();
+        int totalSize = allValues.Count;
+
+        for (int i = 0; i < permutations; i++)
+        {
+            Shuffle(allValues);
+            var permutedLeft = allValues.Take(leftY.Length).ToList();
+            var permutedRight = allValues.Skip(leftY.Length).ToList();
+
+            T permutedDifference = NumOps.Subtract(CalculateMean(permutedLeft), CalculateMean(permutedRight));
+            if (NumOps.GreaterThanOrEquals(NumOps.Abs(permutedDifference), NumOps.Abs(observedDifference)))
+            {
+                countExtremeValues++;
+            }
+        }
+
+        T pValue = NumOps.Divide(NumOps.FromDouble(countExtremeValues), NumOps.FromDouble(permutations));
+
+        return new PermutationTestResult<T>(observedDifference, pValue, permutations, countExtremeValues, significanceLevel);
+    }
+
+    public static ChiSquareTestResult<T> ChiSquareTest(Vector<T> leftY, Vector<T> rightY, T? significanceLevel = default)
+    {
+        significanceLevel ??= NumOps.FromDouble(0.05); // Default significance level
+
+        // Combine both vectors and get unique categories
+        var allValues = leftY.Concat(rightY).ToList();
+        var categories = allValues.Distinct().OrderBy(x => x).ToList();
+        int categoryCount = categories.Count;
+
+        // Calculate observed frequencies
+        var leftObserved = new Vector<T>(categoryCount);
+        var rightObserved = new Vector<T>(categoryCount);
+
+        for (int i = 0; i < categoryCount; i++)
+        {
+            leftObserved[i] = NumOps.FromDouble(leftY.Count(y => NumOps.Equals(y, categories[i])));
+            rightObserved[i] = NumOps.FromDouble(rightY.Count(y => NumOps.Equals(y, categories[i])));
+        }
+
+        // Calculate expected frequencies
+        T leftTotal = NumOps.FromDouble(leftY.Length);
+        T rightTotal = NumOps.FromDouble(rightY.Length);
+        T totalObservations = NumOps.Add(leftTotal, rightTotal);
+
+        var leftExpected = new Vector<T>(categoryCount);
+        var rightExpected = new Vector<T>(categoryCount);
+
+        for (int i = 0; i < categoryCount; i++)
+        {
+            T categoryTotal = NumOps.Add(leftObserved[i], rightObserved[i]);
+            leftExpected[i] = NumOps.Divide(NumOps.Multiply(categoryTotal, leftTotal), totalObservations);
+            rightExpected[i] = NumOps.Divide(NumOps.Multiply(categoryTotal, rightTotal), totalObservations);
+        }
+
+        // Calculate chi-square statistic
+        T chiSquare = NumOps.Zero;
+        for (int i = 0; i < categoryCount; i++)
+        {
+            if (NumOps.GreaterThan(leftExpected[i], NumOps.Zero))
+            {
+                chiSquare = NumOps.Add(chiSquare, 
+                    NumOps.Divide(NumOps.Square(NumOps.Subtract(leftObserved[i], leftExpected[i])), leftExpected[i]));
+            }
+            if (NumOps.GreaterThan(rightExpected[i], NumOps.Zero))
+            {
+                chiSquare = NumOps.Add(chiSquare, 
+                    NumOps.Divide(NumOps.Square(NumOps.Subtract(rightObserved[i], rightExpected[i])), rightExpected[i]));
+            }
+        }
+
+        // Calculate degrees of freedom
+        int degreesOfFreedom = categoryCount - 1;
+
+        // Calculate p-value using chi-square distribution
+        T pValue = ChiSquareCDF(chiSquare, degreesOfFreedom);
+
+        // Calculate critical value
+        T criticalValue = InverseChiSquareCDF(NumOps.Subtract(NumOps.FromDouble(1), significanceLevel), degreesOfFreedom);
+
+        // Determine if the result is significant
+        bool isSignificant = NumOps.LessThan(pValue, significanceLevel);
+
+        return new ChiSquareTestResult<T>
+        {
+            ChiSquareStatistic = chiSquare,
+            PValue = pValue,
+            DegreesOfFreedom = degreesOfFreedom,
+            LeftObserved = leftObserved,
+            RightObserved = rightObserved,
+            LeftExpected = leftExpected,
+            RightExpected = rightExpected,
+            CriticalValue = criticalValue,
+            IsSignificant = isSignificant
+        };
+    }
+
+    private static T InverseChiSquareCDF(T probability, int degreesOfFreedom)
+    {
+        if (NumOps.LessThanOrEquals(probability, NumOps.Zero) || NumOps.GreaterThanOrEquals(probability, NumOps.FromDouble(1)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(probability), "Probability must be between 0 and 1.");
+        }
+
+        if (degreesOfFreedom <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(degreesOfFreedom), "Degrees of freedom must be positive.");
+        }
+
+        // Initial guess
+        T x = NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(degreesOfFreedom));
+        T delta = NumOps.FromDouble(1);
+        int maxIterations = 100;
+        T epsilon = NumOps.FromDouble(1e-8);
+
+        for (int i = 0; i < maxIterations && NumOps.GreaterThan(NumOps.Abs(delta), epsilon); i++)
+        {
+            T fx = ChiSquareCDF(x, degreesOfFreedom);
+            T dfx = ChiSquarePDF(x, degreesOfFreedom);
+
+            if (NumOps.Equals(dfx, NumOps.Zero))
+            {
+                break;
+            }
+
+            delta = NumOps.Divide(NumOps.Subtract(fx, probability), dfx);
+            x = NumOps.Subtract(x, delta);
+
+            if (NumOps.LessThanOrEquals(x, NumOps.Zero))
+            {
+                x = NumOps.Divide(x, NumOps.FromDouble(2));
+            }
+        }
+
+        return x;
+    }
+
+    private static T ChiSquarePDF(T x, int degreesOfFreedom)
+    {
+        T halfDf = NumOps.Divide(NumOps.FromDouble(degreesOfFreedom), NumOps.FromDouble(2));
+        T halfX = NumOps.Divide(x, NumOps.FromDouble(2));
+        T numerator = NumOps.Multiply(
+            NumOps.Exp(NumOps.Subtract(NumOps.Multiply(halfDf, NumOps.Log(halfX)), halfX)),
+            NumOps.Power(halfX, NumOps.Subtract(halfDf, NumOps.FromDouble(1)))
+        );
+        T denominator = NumOps.Multiply(NumOps.Sqrt(NumOps.FromDouble(2)), GammaFunction(halfDf));
+        return NumOps.Divide(numerator, denominator);
+    }
+
+    private static T GammaFunction(T x)
+    {
+        // Lanczos approximation for the Gamma function
+        T[] p = { NumOps.FromDouble(676.5203681218851),
+                  NumOps.FromDouble(-1259.1392167224028),
+                  NumOps.FromDouble(771.32342877765313),
+                  NumOps.FromDouble(-176.61502916214059),
+                  NumOps.FromDouble(12.507343278686905),
+                  NumOps.FromDouble(-0.13857109526572012),
+                  NumOps.FromDouble(9.9843695780195716e-6),
+                  NumOps.FromDouble(1.5056327351493116e-7) };
+
+        if (NumOps.LessThanOrEquals(x, NumOps.FromDouble(0.5)))
+        {
+            return NumOps.Divide(
+                MathHelper.Pi<T>(),
+                NumOps.Multiply(
+                    MathHelper.Sin(NumOps.Multiply(MathHelper.Pi<T>(), x)),
+                    GammaFunction(NumOps.Subtract(NumOps.FromDouble(1), x))
+                )
+            );
+        }
+
+        x = NumOps.Subtract(x, NumOps.FromDouble(1));
+        T y = NumOps.Add(x, NumOps.FromDouble(7.5));
+        T sum = NumOps.FromDouble(0.99999999999980993);
+
+        for (int i = 0; i < p.Length; i++)
+        {
+            sum = NumOps.Add(sum, NumOps.Divide(p[i], NumOps.Add(x, NumOps.FromDouble(i + 1))));
+        }
+
+        T t = NumOps.Multiply(
+            NumOps.Sqrt(NumOps.FromDouble(2 * Math.PI)),
+            NumOps.Multiply(
+                NumOps.Power(y, NumOps.Add(x, NumOps.FromDouble(0.5))),
+                NumOps.Multiply(
+                    NumOps.Exp(NumOps.Negate(y)),
+                    sum
+                )
+            )
+        );
+
+        return t;
+    }
+
+    private static T ChiSquareCDF(T x, int df)
+    {
+        return NumOps.Subtract(NumOps.FromDouble(1), GammaRegularized(NumOps.Divide(NumOps.FromDouble(df), NumOps.FromDouble(2)), NumOps.Divide(x, NumOps.FromDouble(2))));
+    }
+
+    private static T GammaRegularized(T a, T x)
+    {
+        if (NumOps.LessThanOrEquals(x, NumOps.Zero) || NumOps.LessThanOrEquals(a, NumOps.Zero))
+        {
+            return NumOps.Zero;
+        }
+
+        if (NumOps.GreaterThan(x, NumOps.Add(a, NumOps.FromDouble(1))))
+        {
+            return NumOps.Subtract(NumOps.FromDouble(1), GammaRegularizedContinuedFraction(a, x));
+        }
+
+        return GammaRegularizedSeries(a, x);
+    }
+
+    private static T GammaRegularizedSeries(T a, T x)
+    {
+        T sum = NumOps.FromDouble(1.0 / Convert.ToDouble(a));
+        T term = sum;
+        for (int n = 1; n < 100; n++)
+        {
+            term = NumOps.Multiply(term, NumOps.Divide(x, NumOps.Add(a, NumOps.FromDouble(n))));
+            sum = NumOps.Add(sum, term);
+            if (NumOps.LessThan(NumOps.Abs(term), NumOps.Multiply(NumOps.Abs(sum), NumOps.FromDouble(1e-15))))
+            {
+                break;
+            }
+        }
+
+        return NumOps.Multiply(NumOps.Exp(NumOps.Add(NumOps.Multiply(a, NumOps.Log(x)), NumOps.Negate(x))), sum);
+    }
+
+    private static T GammaRegularizedContinuedFraction(T a, T x)
+    {
+        T b = NumOps.Add(x, NumOps.Subtract(NumOps.FromDouble(1), a));
+        T c = NumOps.Divide(NumOps.FromDouble(1), NumOps.FromDouble(1e-30));
+        T d = NumOps.Divide(NumOps.FromDouble(1), b);
+        T h = d;
+        for (int i = 1; i <= 100; i++)
+        {
+            T an = NumOps.Negate(NumOps.Multiply(NumOps.FromDouble(i), NumOps.Add(NumOps.FromDouble(i), NumOps.Negate(a))));
+            b = NumOps.Add(b, NumOps.FromDouble(2));
+            d = NumOps.Divide(NumOps.FromDouble(1), NumOps.Add(NumOps.Multiply(an, d), b));
+            c = NumOps.Add(b, NumOps.Divide(an, c));
+            T del = NumOps.Multiply(c, d);
+            h = NumOps.Multiply(h, del);
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(del, NumOps.FromDouble(1))), NumOps.FromDouble(1e-15)))
+            {
+                break;
+            }
+        }
+
+        return NumOps.Multiply(NumOps.Exp(NumOps.Add(NumOps.Multiply(a, NumOps.Log(x)), NumOps.Negate(x))), h);
+    }
+
+    public static FTestResult<T> FTest(Vector<T> leftY, Vector<T> rightY, T? significanceLevel = default)
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+
+        // Use default significance level if not provided
+        significanceLevel ??= NumOps.FromDouble(0.05);
+
+        if (leftY == null || rightY == null)
+            throw new ArgumentNullException("Input vectors cannot be null.");
+
+        if (leftY.Length < 2 || rightY.Length < 2)
+            throw new ArgumentException("Both input vectors must have at least two elements.");
+
+        
+
+        T leftVariance = CalculateVariance(leftY);
+        T rightVariance = CalculateVariance(rightY);
+
+        if (NumOps.Equals(leftVariance, NumOps.Zero) && NumOps.Equals(rightVariance, NumOps.Zero))
+            throw new InvalidOperationException("Both groups have zero variance. F-test cannot be performed.");
+
+        T fStatistic = NumOps.Divide(NumOps.GreaterThan(leftVariance, rightVariance) ? leftVariance : rightVariance, 
+                                     NumOps.LessThan(leftVariance, rightVariance) ? leftVariance : rightVariance);
+
+        int numeratorDf = leftY.Length - 1;
+        int denominatorDf = rightY.Length - 1;
+
+        // Calculate p-value using F-distribution
+        T pValue = CalculatePValueFromFDistribution(fStatistic, numeratorDf, denominatorDf);
+
+        // Calculate confidence intervals (95% by default)
+        T confidenceLevel = NumOps.FromDouble(0.95);
+        T lowerCI = CalculateFDistributionQuantile(NumOps.Divide(NumOps.Subtract(NumOps.FromDouble(1), confidenceLevel), NumOps.FromDouble(2)), numeratorDf, denominatorDf);
+        T upperCI = CalculateFDistributionQuantile(NumOps.Add(NumOps.Divide(NumOps.Subtract(NumOps.FromDouble(1), confidenceLevel), NumOps.FromDouble(2)), confidenceLevel), numeratorDf, denominatorDf);
+
+        return new FTestResult<T>(
+            fStatistic,
+            pValue,
+            numeratorDf,
+            denominatorDf,
+            leftVariance,
+            rightVariance,
+            lowerCI,
+            upperCI,
+            significanceLevel
+        );
+    }
+
+    private static T CalculatePValueFromFDistribution(T fStatistic, int numeratorDf, int denominatorDf)
+    {
+        // Use the regularized incomplete beta function to calculate the cumulative F-distribution
+        T x = NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(numeratorDf), fStatistic), NumOps.Add(NumOps.Multiply(NumOps.FromDouble(numeratorDf), fStatistic), NumOps.FromDouble(denominatorDf)));
+        T a = NumOps.Divide(NumOps.FromDouble(numeratorDf), NumOps.FromDouble(2));
+        T b = NumOps.Divide(NumOps.FromDouble(denominatorDf), NumOps.FromDouble(2));
+
+        return RegularizedIncompleteBetaFunction(x, a, b);
+    }
+
+    private static T CalculateFDistributionQuantile(T probability, int numeratorDf, int denominatorDf)
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        T epsilon = NumOps.FromDouble(1e-10);
+        int maxIterations = 100;
+
+        // Initial guess using Wilson-Hilferty approximation
+        T v1 = NumOps.FromDouble(numeratorDf);
+        T v2 = NumOps.FromDouble(denominatorDf);
+        T p = NumOps.Subtract(NumOps.FromDouble(1), probability); // We need the upper tail probability
+        T x = NumOps.Power(
+            NumOps.Divide(
+                NumOps.Subtract(
+                    NumOps.FromDouble(1),
+                    NumOps.Divide(NumOps.FromDouble(2), NumOps.Multiply(NumOps.FromDouble(9), v2))
+                ),
+                NumOps.Subtract(
+                    NumOps.FromDouble(1),
+                    NumOps.Divide(NumOps.FromDouble(2), NumOps.Multiply(NumOps.FromDouble(9), v1))
+                )
+            ),
+            NumOps.FromDouble(3)
+        );
+        x = NumOps.Multiply(x, NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-2.0 / 9.0), NumOps.Add(NumOps.Divide(NumOps.FromDouble(1), v1), NumOps.Divide(NumOps.FromDouble(1), v2)))));
+        x = NumOps.Multiply(x, NumOps.Power(NumOps.Divide(v2, v1), NumOps.Divide(NumOps.FromDouble(1), NumOps.FromDouble(3))));
+        x = NumOps.Multiply(x, NumOps.Power(NumOps.Divide(NumOps.FromDouble(1), p), NumOps.Divide(NumOps.FromDouble(2), NumOps.FromDouble(numeratorDf))));
+
+        for (int i = 0; i < maxIterations; i++)
+        {
+            T fx = RegularizedIncompleteBetaFunction(
+                NumOps.Divide(NumOps.Multiply(v1, x), NumOps.Add(v1, NumOps.Multiply(v2, x))),
+                NumOps.Divide(v1, NumOps.FromDouble(2)),
+                NumOps.Divide(v2, NumOps.FromDouble(2))
+            );
+            T dfx = BetaPDF(
+                NumOps.Divide(NumOps.Multiply(v1, x), NumOps.Add(v1, NumOps.Multiply(v2, x))),
+                NumOps.Divide(v1, NumOps.FromDouble(2)),
+                NumOps.Divide(v2, NumOps.FromDouble(2))
+            );
+            dfx = NumOps.Multiply(dfx, NumOps.Divide(NumOps.Multiply(v1, v2), NumOps.Square(NumOps.Add(v1, NumOps.Multiply(v2, x)))));
+
+            T delta = NumOps.Divide(NumOps.Subtract(fx, p), dfx);
+            x = NumOps.Subtract(x, delta);
+
+            if (NumOps.LessThan(NumOps.Abs(delta), epsilon))
+                break;
+        }
+
+        return x;
+    }
+
+    private static T BetaPDF(T x, T a, T b)
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        return NumOps.Exp(
+            NumOps.Add(
+                NumOps.Add(
+                    NumOps.Multiply(NumOps.Subtract(a, NumOps.FromDouble(1)), NumOps.Log(x)),
+                    NumOps.Multiply(NumOps.Subtract(b, NumOps.FromDouble(1)), NumOps.Log(NumOps.Subtract(NumOps.FromDouble(1), x)))
+                ),
+                NumOps.Negate(LogBeta(a, b))
+            )
+        );
+    }
+
+    private static T LogBeta(T a, T b)
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        return NumOps.Add(
+            NumOps.Add(
+                LogGamma(a),
+                LogGamma(b)
+            ),
+            NumOps.Negate(LogGamma(NumOps.Add(a, b)))
+        );
+    }
+
+    private static T LogGamma(T x)
+    {
+        // Lanczos approximation for log(Gamma(x))
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        T[] c = [
+            NumOps.FromDouble(76.18009172947146),
+            NumOps.FromDouble(-86.50532032941677),
+            NumOps.FromDouble(24.01409824083091),
+            NumOps.FromDouble(-1.231739572450155),
+            NumOps.FromDouble(0.1208650973866179e-2),
+            NumOps.FromDouble(-0.5395239384953e-5)
+        ];
+        T sum = NumOps.FromDouble(1.000000000190015);
+        for (int i = 0; i < 6; i++)
+        {
+            sum = NumOps.Add(sum, NumOps.Divide(c[i], NumOps.Add(x, NumOps.FromDouble(i + 1))));
+        }
+        return NumOps.Add(
+            NumOps.Add(
+                NumOps.Multiply(
+                    NumOps.Subtract(
+                        NumOps.Multiply(
+                            NumOps.Subtract(x, NumOps.FromDouble(0.5)),
+                            NumOps.Log(NumOps.Add(x, NumOps.FromDouble(5.5)))
+                        ),
+                        NumOps.Add(x, NumOps.FromDouble(5.5))
+                    ),
+                    NumOps.FromDouble(0.5)
+                ),
+                NumOps.Log(NumOps.Multiply(NumOps.FromDouble(2.5066282746310005), sum))
+            ),
+            NumOps.Log(x)
+        );
+    }
+
+    private static T RegularizedIncompleteBetaFunction(T x, T a, T b)
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+    
+        if (NumOps.LessThanOrEquals(x, NumOps.Zero) || NumOps.GreaterThanOrEquals(x, NumOps.FromDouble(1)))
+            return x;
+
+        // Compute the factor x^a * (1-x)^b / Beta(a,b)
+        T factor = NumOps.Exp(
+            NumOps.Add(
+                NumOps.Add(
+                    NumOps.Multiply(a, NumOps.Log(x)),
+                    NumOps.Multiply(b, NumOps.Log(NumOps.Subtract(NumOps.FromDouble(1), x)))
+                ),
+                NumOps.Negate(LogBeta(a, b))
+            )
+        );
+
+        // Use the continued fraction representation
+        bool useComplementaryFunction = NumOps.GreaterThan(x, NumOps.Divide(NumOps.Add(a, NumOps.FromDouble(1)), NumOps.Add(NumOps.Add(a, b), NumOps.FromDouble(2))));
+        T c = useComplementaryFunction ? NumOps.Subtract(NumOps.FromDouble(1), x) : x;
+        T a1 = useComplementaryFunction ? b : a;
+        T b1 = useComplementaryFunction ? a : b;
+
+        const int maxIterations = 200;
+        T epsilon = NumOps.FromDouble(1e-15);
+        T fpmin = NumOps.FromDouble(1e-30);
+
+        T qab = NumOps.Add(a, b);
+        T qap = NumOps.Add(a, NumOps.FromDouble(1));
+        T qam = NumOps.Subtract(a, NumOps.FromDouble(1));
+        T d = NumOps.FromDouble(1);
+        T h = factor;
+
+        for (int m = 1; m <= maxIterations; m++)
+        {
+            T m1 = NumOps.FromDouble(m);
+            T m2 = NumOps.FromDouble(2 * m);
+            T aa = NumOps.Multiply(m1, NumOps.Subtract(b1, m1));
+            aa = NumOps.Divide(aa, NumOps.Multiply(qap, qam));
+
+            T d1 = NumOps.Add(NumOps.Multiply(m2, c), aa);
+            if (NumOps.LessThan(NumOps.Abs(d1), fpmin))
+                d1 = fpmin;
+        
+            T c1 = NumOps.Add(NumOps.FromDouble(1), NumOps.Divide(aa, m2));
+            if (NumOps.LessThan(NumOps.Abs(c1), fpmin))
+                c1 = fpmin;
+
+            d = NumOps.Divide(NumOps.FromDouble(1), NumOps.Multiply(d1, d));
+            h = NumOps.Multiply(h, NumOps.Multiply(d, c1));
+
+            aa = NumOps.Negate(NumOps.Multiply(NumOps.Add(a1, m1), NumOps.Add(qab, m1)));
+            aa = NumOps.Divide(aa, NumOps.Multiply(qap, NumOps.Add(qap, NumOps.FromDouble(1))));
+
+            d1 = NumOps.Add(NumOps.Multiply(m2, x), aa);
+            if (NumOps.LessThan(NumOps.Abs(d1), fpmin))
+                d1 = fpmin;
+
+            c1 = NumOps.Add(NumOps.FromDouble(1), NumOps.Divide(aa, m2));
+            if (NumOps.LessThan(NumOps.Abs(c1), fpmin))
+                c1 = fpmin;
+
+            d = NumOps.Divide(NumOps.FromDouble(1), NumOps.Multiply(d1, d));
+            T del = NumOps.Multiply(d, c1);
+            h = NumOps.Multiply(h, del);
+
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(del, NumOps.FromDouble(1))), epsilon))
+                break;
+        }
+
+        return useComplementaryFunction ? NumOps.Subtract(NumOps.FromDouble(1), h) : h;
+    }
+
+    private static T CalculatePValueFromTDistribution(T tStatistic, int degreesOfFreedom)
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+        T x = NumOps.Divide(NumOps.FromDouble(degreesOfFreedom), NumOps.Add(NumOps.Square(tStatistic), NumOps.FromDouble(degreesOfFreedom)));
+        T a = NumOps.Divide(NumOps.FromDouble(degreesOfFreedom), NumOps.FromDouble(2));
+        T b = NumOps.FromDouble(0.5);
+
+        // Calculate the cumulative distribution function (CDF) of the t-distribution
+        T cdf = RegularizedIncompleteBetaFunction(x, a, b);
+
+        // The p-value is twice the area in the tail
+        return NumOps.Multiply(NumOps.FromDouble(2), NumOps.LessThan(cdf, NumOps.FromDouble(0.5)) ? cdf : NumOps.Subtract(NumOps.FromDouble(1), cdf));
+    }
+
+    private static T CalculatePValueFromZScore(T zScore)
+    {
+        var NumOps = MathHelper.GetNumericOperations<T>();
+    
+        // Use the error function (erf) to calculate the cumulative distribution function (CDF)
+        T cdf = NumOps.Divide(
+            NumOps.Add(
+                NumOps.FromDouble(1),
+                MathHelper.Erf(NumOps.Divide(zScore, NumOps.Sqrt(NumOps.FromDouble(2))))
+            ),
+            NumOps.FromDouble(2)
+        );
+
+        // The p-value is twice the area in the tail
+        return NumOps.Multiply(NumOps.FromDouble(2), NumOps.LessThan(cdf, NumOps.FromDouble(0.5)) ? cdf : NumOps.Subtract(NumOps.FromDouble(1), cdf));
+    }
+
+    private static List<T> CalculateRanks(List<T> values)
+    {
+        var sortedWithIndices = values.Select((value, index) => new { Value = value, Index = index })
+                                      .OrderBy(x => x.Value)
+                                      .ToList();
+
+        var ranks = new T[values.Count];
+        for (int i = 0; i < sortedWithIndices.Count; i++)
+        {
+            ranks[sortedWithIndices[i].Index] = NumOps.FromDouble(i + 1);
+        }
+
+        return [.. ranks];
+    }
+
+    private static void Shuffle(List<T> list)
+    {
+        Random rng = new();
+        int n = list.Count;
+        while (n > 1)
+        {
+            n--;
+            int k = rng.Next(n + 1);
+            T value = list[k];
+            list[k] = list[n];
+            list[n] = value;
+        }
+    }
+
     public static T CalculateMeanAbsolutePercentageError(Vector<T> actual, Vector<T> predicted)
     {
         if (actual.Length != predicted.Length)
@@ -393,27 +1032,6 @@ public static class StatisticsHelper<T>
                     )
                 )
             )
-        );
-    }
-
-    public static T LogGamma(T x)
-    {
-        // Lanczos approximation for log of Gamma function
-        T[] c = { NumOps.FromDouble(76.18009172947146), NumOps.FromDouble(-86.50532032941677), NumOps.FromDouble(24.01409824083091),
-                  NumOps.FromDouble(-1.231739572450155), NumOps.FromDouble(0.1208650973866179e-2), NumOps.FromDouble(-0.5395239384953e-5) };
-        T sum = NumOps.FromDouble(0.99999999999980993);
-        for (int i = 0; i < 6; i++)
-            sum = NumOps.Add(sum, NumOps.Divide(c[i], NumOps.Add(NumOps.Add(x, NumOps.FromDouble(i)), NumOps.One)));
-
-        return NumOps.Add(
-            NumOps.Subtract(
-                NumOps.Multiply(
-                    NumOps.Add(x, NumOps.FromDouble(0.5)),
-                    NumOps.Log(NumOps.Add(x, NumOps.FromDouble(5.5)))
-                ),
-                NumOps.Add(x, NumOps.FromDouble(5.5))
-            ),
-            NumOps.Log(NumOps.Multiply(NumOps.FromDouble(2.5066282746310005), NumOps.Divide(sum, x)))
         );
     }
 
@@ -824,12 +1442,49 @@ public static class StatisticsHelper<T>
         T k = NumOps.One;
         T lambda = StatisticsHelper<T>.CalculateMean(values);
 
-        // Implement a simple optimization algorithm here to find best k and lambda
-        // This is a placeholder and should be replaced with a proper optimization method
-        for (int i = 0; i < 100; i++)
+        const int maxIterations = 100;
+        T epsilon = NumOps.FromDouble(1e-6);
+
+        for (int iteration = 0; iteration < maxIterations; iteration++)
         {
-            k = NumOps.Add(k, NumOps.FromDouble(0.1));
-            lambda = NumOps.Power(StatisticsHelper<T>.CalculateMean(values.Transform(x => NumOps.Power(x, k))), NumOps.Divide(NumOps.One, k));
+            T sumXk = NumOps.Zero;
+            T sumXkLnX = NumOps.Zero;
+            T sumLnX = NumOps.Zero;
+
+            foreach (var x in values)
+            {
+                T xk = NumOps.Power(x, k);
+                sumXk = NumOps.Add(sumXk, xk);
+                sumXkLnX = NumOps.Add(sumXkLnX, NumOps.Multiply(xk, NumOps.Log(x)));
+                sumLnX = NumOps.Add(sumLnX, NumOps.Log(x));
+            }
+
+            T n = NumOps.FromDouble(values.Length);
+            T kInverse = NumOps.Divide(NumOps.One, k);
+
+            // Update lambda
+            lambda = NumOps.Power(NumOps.Divide(sumXk, n), kInverse);
+
+            // Calculate the gradient and Hessian for k
+            T gradient = NumOps.Add(
+                NumOps.Divide(NumOps.One, k),
+                NumOps.Divide(sumLnX, n)
+            );
+            gradient = NumOps.Subtract(gradient, NumOps.Divide(sumXkLnX, sumXk));
+
+            T hessian = NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.Square(k)));
+
+            // Update k using Newton-Raphson method
+            T kNew = NumOps.Subtract(k, NumOps.Divide(gradient, hessian));
+
+            // Check for convergence
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(kNew, k)), epsilon))
+            {
+                k = kNew;
+                break;
+            }
+
+            k = kNew;
         }
 
         T goodnessOfFit = CalculateGoodnessOfFit(values, x => CalculateWeibullPDF(k, lambda, x));

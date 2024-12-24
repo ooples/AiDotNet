@@ -32,6 +32,45 @@ public static class MathHelper
             throw new NotSupportedException($"Numeric operations for type {typeof(T)} are not supported.");
     }
 
+    public static T Pi<T>()
+    {
+        return GetNumericOperations<T>().FromDouble(Math.PI);
+    }
+
+    public static T Sin<T>(T x)
+    {
+        return GetNumericOperations<T>().FromDouble(Math.Sin(Convert.ToDouble(x)));
+    }
+
+    public static T Erf<T>(T x)
+    {
+        var NumOps = GetNumericOperations<T>();
+        T sign = NumOps.GreaterThanOrEquals(x, NumOps.Zero) ? NumOps.FromDouble(1) : NumOps.FromDouble(-1);
+        x = NumOps.Abs(x);
+
+        T a1 = NumOps.FromDouble(0.254829592);
+        T a2 = NumOps.FromDouble(-0.284496736);
+        T a3 = NumOps.FromDouble(1.421413741);
+        T a4 = NumOps.FromDouble(-1.453152027);
+        T a5 = NumOps.FromDouble(1.061405429);
+        T p = NumOps.FromDouble(0.3275911);
+
+        T t = NumOps.Divide(NumOps.FromDouble(1), NumOps.Add(NumOps.FromDouble(1), NumOps.Multiply(p, x)));
+        T y = NumOps.Subtract(NumOps.FromDouble(1), 
+            NumOps.Multiply(
+                NumOps.Exp(NumOps.Negate(NumOps.Square(x))),
+                NumOps.Add(a1, 
+                    NumOps.Multiply(t, 
+                        NumOps.Add(a2, 
+                            NumOps.Multiply(t, 
+                                NumOps.Add(a3, 
+                                    NumOps.Multiply(t, 
+                                        NumOps.Add(a4, 
+                                            NumOps.Multiply(a5, t))))))))));
+
+        return NumOps.Multiply(sign, y);
+    }
+
     public static T CalculateYIntercept<T>(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients)
     {
         var numOps = GetNumericOperations<T>();

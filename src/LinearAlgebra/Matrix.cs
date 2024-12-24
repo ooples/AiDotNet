@@ -239,6 +239,17 @@ public class Matrix<T> : MatrixBase<T>
         return FromColumnVectors(vectors);
     }
 
+    public static Matrix<T> FromVector(Vector<T> vector)
+    {
+        var matrix = new Matrix<T>(vector.Length, 1);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            matrix[i, 0] = vector[i];
+        }
+
+        return matrix;
+    }
+
     public static Matrix<T> FromRowVectors(IEnumerable<IEnumerable<T>> vectors)
     {
         if (vectors == null)

@@ -3,5 +3,8 @@
 public enum TestStatisticType
 {
     ChiSquare,
-    FTest
+    FTest,
+    TTest,
+    MannWhitneyU,
+    PermutationTest
 }

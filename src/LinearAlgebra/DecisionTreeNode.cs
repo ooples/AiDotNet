@@ -13,6 +13,9 @@ public class DecisionTreeNode<T>
     public int LeftSampleCount { get; set; }
     public int RightSampleCount { get; set; }
     public List<T> SampleValues { get; set; } = [];
+    public SimpleRegression<T>? LinearModel { get; set; }
+    public Vector<T>? Predictions { get; set; }
+    public T SumSquaredError { get; set; }
 
     private INumericOperations<T> NumOps { get; set; }
 
@@ -26,6 +29,7 @@ public class DecisionTreeNode<T>
         SplitValue = NumOps.Zero;
         Prediction = NumOps.Zero;
         Threshold = NumOps.Zero;
+        SumSquaredError = NumOps.Zero;
     }
 
     public DecisionTreeNode(int featureIndex, T splitValue)
@@ -38,6 +42,7 @@ public class DecisionTreeNode<T>
         SplitValue = NumOps.Zero;
         Prediction = NumOps.Zero;
         Threshold = NumOps.Zero;
+        SumSquaredError = NumOps.Zero;
     }
 
     public DecisionTreeNode(T prediction)
@@ -49,5 +54,25 @@ public class DecisionTreeNode<T>
         SplitValue = NumOps.Zero;
         Prediction = NumOps.Zero;
         Threshold = NumOps.Zero;
+        SumSquaredError = NumOps.Zero;
+    }
+
+    public void UpdateNodeStatistics()
+    {
+        SumSquaredError = CalculateSumSquaredError();
+    }
+
+    private T CalculateSumSquaredError()
+    {
+        if (Samples == null || Samples.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        return Samples.Aggregate(NumOps.Zero, (sum, sample) =>
+        {
+            var error = NumOps.Subtract(sample.Target, Prediction);
+            return NumOps.Add(sum, NumOps.Multiply(error, error));
+        });
     }
 }
