@@ -1,26 +1,23 @@
 namespace AiDotNet.Regression;
 
-public class RandomForestRegression<T> : IAsyncTreeBasedModel<T>
+public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
-    private readonly RandomForestRegressionOptions _options;
+    private RandomForestRegressionOptions _options;
     private List<DecisionTreeRegression<T>> _trees;
-    private INumericOperations<T> _numOps;
     private Random _random;
 
-    public int NumberOfTrees => _options.NumberOfTrees;
-    public int MaxDepth => _options.MaxDepth;
-    public Vector<T> FeatureImportances { get; private set; }
+    public override int NumberOfTrees => _options.NumberOfTrees;
+    public override int MaxDepth => _options.MaxDepth;
 
-    public RandomForestRegression(RandomForestRegressionOptions options)
+    public RandomForestRegression(RandomForestRegressionOptions options, IRegularization<T>? regularization = null)
+        : base(options, regularization)
     {
         _options = options;
         _trees = [];
-        _numOps = MathHelper.GetNumericOperations<T>();
         _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
-        FeatureImportances = Vector<T>.Empty();
     }
 
-    public async Task TrainAsync(Matrix<T> x, Vector<T> y)
+    public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
         _trees.Clear();
         var numFeatures = x.Columns;
@@ -38,46 +35,39 @@ public class RandomForestRegression<T> : IAsyncTreeBasedModel<T>
                 MaxDepth = _options.MaxDepth,
                 MinSamplesSplit = _options.MinSamplesSplit,
                 MaxFeatures = featuresToConsider / (double)numFeatures,
-                Seed = _random.Next()
+                Seed = _random.Next(),
+                SplitCriterion = _options.SplitCriterion
             };
-            var tree = new DecisionTreeRegression<T>(treeOptions);
+            var tree = new DecisionTreeRegression<T>(treeOptions, Regularization);
             tree.Train(bootstrapX, bootstrapY);
             return tree;
         }));
 
         _trees = await ParallelProcessingHelper.ProcessTasksInParallel(treeTasks);
 
-        CalculateFeatureImportances(x.Columns);
+        await CalculateFeatureImportancesAsync(x.Columns);
     }
 
-    public void Train(Matrix<T> x, Vector<T> y)
+    public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        TrainAsync(x, y).GetAwaiter().GetResult();
-    }
-
-    public async Task<Vector<T>> PredictAsync(Matrix<T> input)
-    {
-        var predictionTasks = _trees.Select(tree => Task.Run(() => tree.Predict(input)));
+        var regularizedInput = Regularization.RegularizeMatrix(input);
+        var predictionTasks = _trees.Select(tree => Task.Run(() => tree.Predict(regularizedInput)));
         var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks);
 
         var result = new T[input.Rows];
         for (int i = 0; i < input.Rows; i++)
         {
-            result[i] = _numOps.Divide(
-                predictions.Aggregate(_numOps.Zero, (acc, p) => _numOps.Add(acc, p[i])),
-                _numOps.FromDouble(_trees.Count)
+            result[i] = NumOps.Divide(
+                predictions.Aggregate(NumOps.Zero, (acc, p) => NumOps.Add(acc, p[i])),
+                NumOps.FromDouble(_trees.Count)
             );
         }
 
-        return new Vector<T>(result, _numOps);
+        var regularizedPredictions = new Vector<T>(result, NumOps);
+        return Regularization.RegularizeCoefficients(regularizedPredictions);
     }
 
-    public Vector<T> Predict(Matrix<T> input)
-    {
-        return PredictAsync(input).GetAwaiter().GetResult();
-    }
-
-    public ModelMetadata<T> GetModelMetadata()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
         {
@@ -88,7 +78,8 @@ public class RandomForestRegression<T> : IAsyncTreeBasedModel<T>
                 { "MaxDepth", _options.MaxDepth },
                 { "MinSamplesSplit", _options.MinSamplesSplit },
                 { "MaxFeatures", _options.MaxFeatures },
-                { "FeatureImportances", FeatureImportances }
+                { "FeatureImportances", FeatureImportances },
+                { "RegularizationType", Regularization.GetType().Name }
             }
         };
     }
@@ -100,49 +91,64 @@ public class RandomForestRegression<T> : IAsyncTreeBasedModel<T>
         {
             indices[i] = _random.Next(numSamples);
         }
+
         return indices;
     }
 
-    private void CalculateFeatureImportances(int numFeatures)
+    protected override async Task CalculateFeatureImportancesAsync(int numFeatures)
     {
         var importances = new T[numFeatures];
-        foreach (var tree in _trees)
+
+        // Calculate importances in parallel for each tree
+        var importanceTasks = _trees.Select(tree => Task.Run(() =>
         {
+            var treeImportances = new T[numFeatures];
             for (int i = 0; i < numFeatures; i++)
             {
-                importances[i] = _numOps.Add(importances[i], tree.GetFeatureImportance(i));
+                treeImportances[i] = tree.GetFeatureImportance(i);
             }
+            return treeImportances;
+        }));
+
+        var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks);
+
+        // Aggregate importances
+        for (int i = 0; i < numFeatures; i++)
+        {
+            importances[i] = allImportances.Aggregate(NumOps.Zero, (acc, treeImportance) => NumOps.Add(acc, treeImportance[i]));
         }
 
         // Normalize importances
-        T sum = importances.Aggregate(_numOps.Zero, (acc, x) => _numOps.Add(acc, x));
+        T sum = importances.Aggregate(NumOps.Zero, NumOps.Add);
         for (int i = 0; i < numFeatures; i++)
         {
-            importances[i] = _numOps.Divide(importances[i], sum);
+            importances[i] = NumOps.Divide(importances[i], sum);
         }
 
         FeatureImportances = new Vector<T>(importances);
     }
 
-    public byte[] Serialize()
+    public override byte[] Serialize()
     {
         var serializableModel = new
         {
             Options = _options,
-            Trees = _trees.Select(tree => Convert.ToBase64String(tree.Serialize())).ToList()
+            Trees = _trees.Select(tree => Convert.ToBase64String(tree.Serialize())).ToList(),
+            Regularization = Regularization.GetType().Name
         };
 
         var json = JsonConvert.SerializeObject(serializableModel, Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
 
-    public void Deserialize(byte[] data)
+    public override void Deserialize(byte[] data)
     {
         var json = Encoding.UTF8.GetString(data);
         var deserializedModel = JsonConvert.DeserializeAnonymousType(json, new
         {
             Options = new RandomForestRegressionOptions(),
-            Trees = new List<string>()
+            Trees = new List<string>(),
+            Regularization = ""
         });
 
         if (deserializedModel == null)
@@ -150,10 +156,7 @@ public class RandomForestRegression<T> : IAsyncTreeBasedModel<T>
             throw new InvalidOperationException("Failed to deserialize the model");
         }
 
-        if (!_options.Equals(deserializedModel.Options))
-        {
-            throw new InvalidOperationException("Deserialized options do not match the current model's options");
-        }
+        _options = deserializedModel.Options;
 
         _trees = [.. deserializedModel.Trees.Select(treeData =>
         {
@@ -165,12 +168,12 @@ public class RandomForestRegression<T> : IAsyncTreeBasedModel<T>
                 Seed = _options.Seed,
                 SplitCriterion = _options.SplitCriterion
             };
-            var tree = new DecisionTreeRegression<T>(treeOptions);
+            var tree = new DecisionTreeRegression<T>(treeOptions, Regularization);
             tree.Deserialize(Convert.FromBase64String(treeData));
             return tree;
         })];
 
-        // Reinitialize other fields if necessary
-        _numOps = MathHelper.GetNumericOperations<T>();
+        // Reinitialize other fields
+        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
     }
 }

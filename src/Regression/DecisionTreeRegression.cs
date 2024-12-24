@@ -1,45 +1,49 @@
 namespace AiDotNet.Regression;
 
-public class DecisionTreeRegression<T> : ITreeBasedModel<T>
+public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
 {
     private readonly DecisionTreeOptions _options;
     private readonly Random _random;
-    private DecisionTreeNode<T>? _root;
     private Vector<T> _featureImportances;
-    private readonly INumericOperations<T> _numOps;
+    private readonly IRegularization<T> _regularization;
 
-    public int NumberOfTrees => 1;
+    public override int NumberOfTrees => 1;
 
-    public int MaxDepth => _options.MaxDepth;
-
-    public Vector<T> FeatureImportances => _featureImportances;
-
-    public DecisionTreeRegression(DecisionTreeOptions options)
+    public DecisionTreeRegression(DecisionTreeOptions? options = null, IRegularization<T>? regularization = null)
+        : base(options, regularization)
     {
-        _options = options;
+        _options = options ?? new DecisionTreeOptions();
+        _regularization = regularization ?? new NoRegularization<T>();
         _featureImportances = Vector<T>.Empty();
-        _random = new Random(options.Seed ?? Environment.TickCount);
-        _numOps = MathHelper.GetNumericOperations<T>();
+        _random = new Random(_options.Seed ?? Environment.TickCount);
     }
 
-    public void Train(Matrix<T> x, Vector<T> y)
+    public override void Train(Matrix<T> x, Vector<T> y)
     {
-        _root = BuildTree(x, y, 0);
-        CalculateFeatureImportances(x);
+        // Apply regularization to the input data
+        var regularizedX = _regularization.RegularizeMatrix(x);
+        var regularizedY = _regularization.RegularizeCoefficients(y);
+
+        Root = BuildTree(regularizedX, regularizedY, 0);
+        CalculateFeatureImportances(regularizedX);
     }
 
-    public Vector<T> Predict(Matrix<T> input)
+    public override Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = new T[input.Rows];
-        for (int i = 0; i < input.Rows; i++)
+        // Apply regularization to the input data
+        var regularizedInput = _regularization.RegularizeMatrix(input);
+
+        var predictions = new T[regularizedInput.Rows];
+        for (int i = 0; i < regularizedInput.Rows; i++)
         {
-            predictions[i] = PredictSingle(input.GetRow(i), _root);
+            predictions[i] = PredictSingle(regularizedInput.GetRow(i), Root);
         }
 
-        return new Vector<T>(predictions);
+        // Apply regularization to the predictions
+        return _regularization.RegularizeCoefficients(new Vector<T>(predictions));
     }
 
-    public ModelMetadata<T> GetModelMetadata()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
         {
@@ -68,39 +72,203 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
         return _featureImportances[featureIndex];
     }
 
-    public byte[] Serialize()
+    public override byte[] Serialize()
     {
-        using (var ms = new MemoryStream())
-        using (var writer = new BinaryWriter(ms))
-        {
-            // Serialize options
-            writer.Write(_options.MaxDepth);
-            writer.Write(_options.MinSamplesSplit);
-            writer.Write(_options.MaxFeatures);
-            writer.Write(_options.Seed ?? -1);
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        // Serialize options
+        writer.Write(_options.MaxDepth);
+        writer.Write(_options.MinSamplesSplit);
+        writer.Write(_options.MaxFeatures);
+        writer.Write(_options.Seed ?? -1);
 
-            // Serialize the tree structure
-            SerializeNode(_root, writer);
+        // Serialize the tree structure
+        SerializeNode(Root, writer);
 
-            return ms.ToArray();
-        }
+        return ms.ToArray();
     }
 
-    public void Deserialize(byte[] data)
+    public override void Deserialize(byte[] data)
     {
-        using (var ms = new MemoryStream(data))
-        using (var reader = new BinaryReader(ms))
-        {
-            // Deserialize options
-            _options.MaxDepth = reader.ReadInt32();
-            _options.MinSamplesSplit = reader.ReadInt32();
-            _options.MaxFeatures = reader.ReadDouble();
-            int seed = reader.ReadInt32();
-            _options.Seed = seed == -1 ? null : seed;
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+        // Deserialize options
+        _options.MaxDepth = reader.ReadInt32();
+        _options.MinSamplesSplit = reader.ReadInt32();
+        _options.MaxFeatures = reader.ReadDouble();
+        int seed = reader.ReadInt32();
+        _options.Seed = seed == -1 ? null : seed;
 
-            // Deserialize the tree structure
-            _root = DeserializeNode(reader);
+        // Deserialize the tree structure
+        Root = DeserializeNode(reader);
+    }
+
+    public void TrainWithWeights(Matrix<T> x, Vector<T> y, Vector<T> sampleWeights)
+    {
+        // Validate inputs
+        if (x.Rows != y.Length || x.Rows != sampleWeights.Length)
+        {
+            throw new ArgumentException("Input dimensions mismatch");
         }
+
+        // Initialize the root node
+        Root = new DecisionTreeNode<T>();
+
+        // Build the tree recursively
+        BuildTreeWithWeights(Root, x, y, sampleWeights, 0);
+
+        // Calculate feature importances
+        CalculateFeatureImportances(x);
+    }
+
+    private (int featureIndex, T threshold) FindBestSplitWithWeights(Matrix<T> x, Vector<T> y, Vector<T> weights, IEnumerable<int> featureIndices)
+    {
+        int bestFeatureIndex = -1;
+        T bestThreshold = NumOps.Zero;
+        T bestScore = NumOps.MinValue;
+
+        foreach (int featureIndex in featureIndices)
+        {
+            var featureValues = x.GetColumn(featureIndex);
+            var uniqueValues = featureValues.Distinct().OrderBy(v => v).ToList();
+
+            for (int i = 0; i < uniqueValues.Count - 1; i++)
+            {
+                T threshold = NumOps.Divide(NumOps.Add(uniqueValues[i], uniqueValues[i + 1]), NumOps.FromDouble(2));
+                T score = CalculateWeightedSplitScore(featureValues, y, weights, threshold);
+
+                if (NumOps.GreaterThan(score, bestScore))
+                {
+                    bestScore = score;
+                    bestFeatureIndex = featureIndex;
+                    bestThreshold = threshold;
+                }
+            }
+        }
+
+        return (bestFeatureIndex, bestThreshold);
+    }
+
+    private T CalculateWeightedSplitScore(Vector<T> featureValues, Vector<T> y, Vector<T> weights, T threshold)
+    {
+        var leftIndices = new List<int>();
+        var rightIndices = new List<int>();
+
+        for (int i = 0; i < featureValues.Length; i++)
+        {
+            if (NumOps.LessThanOrEquals(featureValues[i], threshold))
+            {
+                leftIndices.Add(i);
+            }
+            else
+            {
+                rightIndices.Add(i);
+            }
+        }
+
+        if (leftIndices.Count == 0 || rightIndices.Count == 0)
+        {
+            return NumOps.MinValue;
+        }
+
+        T leftScore = CalculateWeightedVarianceReduction(y.GetElements(leftIndices), weights.GetElements(leftIndices));
+        T rightScore = CalculateWeightedVarianceReduction(y.GetElements(rightIndices), weights.GetElements(rightIndices));
+
+        T totalWeight = weights.Sum();
+        T leftWeight = weights.GetElements(leftIndices).Sum();
+        T rightWeight = weights.GetElements(rightIndices).Sum();
+
+        return NumOps.Subtract(
+            NumOps.Multiply(totalWeight, CalculateWeightedVarianceReduction(y, weights)),
+            NumOps.Add(
+                NumOps.Multiply(leftWeight, leftScore),
+                NumOps.Multiply(rightWeight, rightScore)
+            )
+        );
+    }
+
+    private T CalculateWeightedVarianceReduction(Vector<T> y, Vector<T> weights)
+    {
+        T totalWeight = weights.Sum();
+        T weightedMean = NumOps.Divide(y.DotProduct(weights), totalWeight);
+        T weightedVariance = NumOps.Zero;
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            T diff = NumOps.Subtract(y[i], weightedMean);
+            weightedVariance = NumOps.Add(weightedVariance, NumOps.Multiply(weights[i], NumOps.Multiply(diff, diff)));
+        }
+
+        weightedVariance = NumOps.Divide(weightedVariance, totalWeight);
+        return weightedVariance;
+    }
+
+    private void BuildTreeWithWeights(DecisionTreeNode<T> node, Matrix<T> x, Vector<T> y, Vector<T> weights, int depth)
+    {
+        if (depth >= Options.MaxDepth || x.Rows <= Options.MinSamplesSplit)
+        {
+            // Create a leaf node
+            node.Prediction = CalculateWeightedLeafValue(y, weights);
+            return;
+        }
+
+        int featuresToConsider = (int)Math.Min(x.Columns, Math.Max(1, Options.MaxFeatures * x.Columns));
+        var featureIndices = Enumerable.Range(0, x.Columns).OrderBy(_ => _random.Next()).Take(featuresToConsider);
+
+        // Find the best split
+        var (featureIndex, threshold) = FindBestSplitWithWeights(x, y, weights, featureIndices);
+
+        if (featureIndex == -1)
+        {
+            // No valid split found, create a leaf node
+            node.Prediction = CalculateWeightedLeafValue(y, weights);
+            return;
+        }
+
+        // Split the data
+        var (leftIndices, rightIndices) = SplitDataWithWeights(x, y, weights, featureIndex, threshold);
+
+        if (leftIndices.Count == 0 || rightIndices.Count == 0)
+        {
+            // If split results in empty node, create a leaf
+            node.Prediction = CalculateWeightedLeafValue(y, weights);
+            return;
+        }
+
+        // Create child nodes and continue building the tree
+        node.FeatureIndex = featureIndex;
+        node.Threshold = threshold;
+        node.Left = new DecisionTreeNode<T>();
+        node.Right = new DecisionTreeNode<T>();
+
+        BuildTreeWithWeights(node.Left, x.GetRows(leftIndices), y.GetElements(leftIndices), weights.GetElements(leftIndices), depth + 1);
+        BuildTreeWithWeights(node.Right, x.GetRows(rightIndices), y.GetElements(rightIndices), weights.GetElements(rightIndices), depth + 1);
+    }
+
+    private (List<int> leftIndices, List<int> rightIndices) SplitDataWithWeights(Matrix<T> x, Vector<T> y, Vector<T> weights, int featureIndex, T threshold)
+    {
+        var leftIndices = new List<int>();
+        var rightIndices = new List<int>();
+
+        for (int i = 0; i < x.Rows; i++)
+        {
+            if (NumOps.LessThanOrEquals(x[i, featureIndex], threshold))
+            {
+                leftIndices.Add(i);
+            }
+            else
+            {
+                rightIndices.Add(i);
+            }
+        }
+
+        return (leftIndices, rightIndices);
+    }
+
+    private T CalculateWeightedLeafValue(Vector<T> y, Vector<T> weights)
+    {
+        T totalWeight = weights.Sum();
+        return NumOps.Divide(y.DotProduct(weights), totalWeight);
     }
 
     private DecisionTreeNode<T>? BuildTree(Matrix<T> x, Vector<T> y, int depth)
@@ -115,8 +283,8 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
         }
 
         int bestFeatureIndex = -1;
-        T bestSplitValue = _numOps.Zero;
-        T bestScore = _numOps.MinValue;
+        T bestSplitValue = NumOps.Zero;
+        T bestScore = NumOps.MinValue;
 
         int featuresToConsider = (int)Math.Min(x.Columns, Math.Max(1, _options.MaxFeatures * x.Columns));
         var featureIndices = Enumerable.Range(0, x.Columns).OrderBy(_ => _random.Next()).Take(featuresToConsider).ToList();
@@ -133,7 +301,7 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
 
                 for (int i = 0; i < x.Rows; i++)
                 {
-                    if (_numOps.LessThan(x[i, featureIndex], splitValue))
+                    if (NumOps.LessThan(x[i, featureIndex], splitValue))
                     {
                         leftIndices.Add(i);
                     }
@@ -147,7 +315,7 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
 
                 T score = StatisticsHelper<T>.CalculateSplitScore(y, leftIndices, rightIndices, _options.SplitCriterion);
 
-                if (_numOps.GreaterThan(score, bestScore))
+                if (NumOps.GreaterThan(score, bestScore))
                 {
                     bestScore = score;
                     bestFeatureIndex = featureIndex;
@@ -172,7 +340,7 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
 
         for (int i = 0; i < x.Rows; i++)
         {
-            if (_numOps.LessThan(x[i, bestFeatureIndex], bestSplitValue))
+            if (NumOps.LessThan(x[i, bestFeatureIndex], bestSplitValue))
             {
                 leftX.Add(x.GetRow(i));
                 leftY.Add(y[i]);
@@ -189,7 +357,10 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
             FeatureIndex = bestFeatureIndex,
             SplitValue = bestSplitValue,
             Left = BuildTree(new Matrix<T>(leftX), new Vector<T>(leftY), depth + 1),
-            Right = BuildTree(new Matrix<T>(rightX), new Vector<T>(rightY), depth + 1)
+            Right = BuildTree(new Matrix<T>(rightX), new Vector<T>(rightY), depth + 1),
+            LeftSampleCount = leftX.Count,
+            RightSampleCount = rightX.Count,
+            Samples = [.. x.EnumerateRows().Select((_, i) => new Sample<T>(x.GetRow(i), y[i]))]
         };
 
         return node;
@@ -199,7 +370,7 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
     {
         if (node == null)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
         if (node.IsLeaf)
@@ -207,7 +378,7 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
             return node.Prediction;
         }
 
-        if (_numOps.LessThan(input[node.FeatureIndex], node.SplitValue))
+        if (NumOps.LessThan(input[node.FeatureIndex], node.SplitValue))
         {
             return PredictSingle(input, node.Left);
         }
@@ -219,8 +390,8 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
 
     private void CalculateFeatureImportances(Matrix<T> x)
     {
-        _featureImportances = new Vector<T>([.. Enumerable.Repeat(_numOps.Zero, x.Columns)]);
-        CalculateFeatureImportancesRecursive(_root, x.Columns);
+        _featureImportances = new Vector<T>([.. Enumerable.Repeat(NumOps.Zero, x.Columns)]);
+        CalculateFeatureImportancesRecursive(Root, x.Columns);
         NormalizeFeatureImportances();
     }
 
@@ -232,7 +403,7 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
         }
 
         T nodeImportance = CalculateNodeImportance(node);
-        _featureImportances[node.FeatureIndex] = _numOps.Add(_featureImportances[node.FeatureIndex], nodeImportance);
+        _featureImportances[node.FeatureIndex] = NumOps.Add(_featureImportances[node.FeatureIndex], nodeImportance);
 
         CalculateFeatureImportancesRecursive(node.Left, numFeatures);
         CalculateFeatureImportancesRecursive(node.Right, numFeatures);
@@ -242,34 +413,34 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
     {
         if (node.IsLeaf || node.Left == null || node.Right == null)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
         T parentVariance = StatisticsHelper<T>.CalculateVariance(node.Samples.Select(s => s.Target));
         T leftVariance = StatisticsHelper<T>.CalculateVariance(node.Left.Samples.Select(s => s.Target));
         T rightVariance = StatisticsHelper<T>.CalculateVariance(node.Right.Samples.Select(s => s.Target));
 
-        T leftWeight = _numOps.Divide(_numOps.FromDouble(node.Left.Samples.Count), _numOps.FromDouble(node.Samples.Count));
-        T rightWeight = _numOps.Divide(_numOps.FromDouble(node.Right.Samples.Count), _numOps.FromDouble(node.Samples.Count));
+        T leftWeight = NumOps.Divide(NumOps.FromDouble(node.Left.Samples.Count), NumOps.FromDouble(node.Samples.Count));
+        T rightWeight = NumOps.Divide(NumOps.FromDouble(node.Right.Samples.Count), NumOps.FromDouble(node.Samples.Count));
 
-        T varianceReduction = _numOps.Subtract(parentVariance, _numOps.Add(_numOps.Multiply(leftWeight, leftVariance), _numOps.Multiply(rightWeight, rightVariance)));
+        T varianceReduction = NumOps.Subtract(parentVariance, NumOps.Add(NumOps.Multiply(leftWeight, leftVariance), NumOps.Multiply(rightWeight, rightVariance)));
 
         // Normalize by the number of samples to give less weight to deeper nodes
-        return _numOps.Multiply(varianceReduction, _numOps.FromDouble(node.Samples.Count));
+        return NumOps.Multiply(varianceReduction, NumOps.FromDouble(node.Samples.Count));
     }
 
     private void NormalizeFeatureImportances()
     {
-        T sum = _featureImportances.Aggregate(_numOps.Zero, (acc, x) => _numOps.Add(acc, x));
+        T sum = _featureImportances.Aggregate(NumOps.Zero, (acc, x) => NumOps.Add(acc, x));
     
-        if (_numOps.Equals(sum, _numOps.Zero))
+        if (NumOps.Equals(sum, NumOps.Zero))
         {
             return;
         }
 
         for (int i = 0; i < _featureImportances.Length; i++)
         {
-            _featureImportances[i] = _numOps.Divide(_featureImportances[i], sum);
+            _featureImportances[i] = NumOps.Divide(_featureImportances[i], sum);
         }
     }
 
@@ -310,5 +481,81 @@ public class DecisionTreeRegression<T> : ITreeBasedModel<T>
         };
 
         return node;
+    }
+
+    protected override void CalculateFeatureImportances(int featureCount)
+    {
+        _featureImportances = new Vector<T>(featureCount);
+        T totalImportance = NumOps.Zero;
+
+        // Traverse the tree and calculate feature importances
+        CalculateNodeImportance(Root, NumOps.One);
+
+        // Normalize feature importances
+        if (!NumOps.Equals(totalImportance, NumOps.Zero))
+        {
+            for (int i = 0; i < _featureImportances.Length; i++)
+            {
+                _featureImportances[i] = NumOps.Divide(_featureImportances[i], totalImportance);
+            }
+        }
+
+        void CalculateNodeImportance(DecisionTreeNode<T>? node, T nodeWeight)
+        {
+            if (node == null || node.IsLeaf)
+            {
+                return;
+            }
+
+            T improvement = CalculateImpurityImprovement(node);
+            T weightedImprovement = NumOps.Multiply(improvement, nodeWeight);
+
+            _featureImportances[node.FeatureIndex] = NumOps.Add(_featureImportances[node.FeatureIndex], weightedImprovement);
+            totalImportance = NumOps.Add(totalImportance, weightedImprovement);
+
+            T leftWeight = NumOps.Multiply(nodeWeight, NumOps.FromDouble(node.LeftSampleCount / (double)(node.LeftSampleCount + node.RightSampleCount)));
+            T rightWeight = NumOps.Multiply(nodeWeight, NumOps.FromDouble(node.RightSampleCount / (double)(node.LeftSampleCount + node.RightSampleCount)));
+
+            CalculateNodeImportance(node.Left, leftWeight);
+            CalculateNodeImportance(node.Right, rightWeight);
+        }
+
+        T CalculateImpurityImprovement(DecisionTreeNode<T> node)
+        {
+            T parentImpurity = CalculateNodeImpurity(node);
+            T leftImpurity = CalculateNodeImpurity(node.Left);
+            T rightImpurity = CalculateNodeImpurity(node.Right);
+
+            T leftWeight = NumOps.FromDouble(node.LeftSampleCount / (double)(node.LeftSampleCount + node.RightSampleCount));
+            T rightWeight = NumOps.FromDouble(node.RightSampleCount / (double)(node.LeftSampleCount + node.RightSampleCount));
+
+            T weightedChildImpurity = NumOps.Add(
+                NumOps.Multiply(leftWeight, leftImpurity),
+                NumOps.Multiply(rightWeight, rightImpurity)
+            );
+
+            return NumOps.Subtract(parentImpurity, weightedChildImpurity);
+        }
+
+        T CalculateNodeImpurity(DecisionTreeNode<T>? node)
+        {
+            if (node == null || node.IsLeaf)
+            {
+                return NumOps.Zero;
+            }
+
+            // For regression trees, we use variance as the impurity measure
+            T variance = NumOps.Zero;
+            T mean = node.Prediction;
+            int sampleCount = node.Samples.Count;
+
+            foreach (var sample in node.Samples)
+            {
+                T diff = NumOps.Subtract(sample.Target, mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+            }
+
+            return NumOps.Divide(variance, NumOps.FromDouble(sampleCount));
+        }
     }
 }

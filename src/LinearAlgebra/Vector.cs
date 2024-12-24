@@ -146,15 +146,16 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return result;
     }
 
-    public Vector<T> GetElements(int[] indices)
+    public Vector<T> GetElements(IEnumerable<int> indices)
     {
-        var newVector = new T[indices.Length];
-        for (int i = 0; i < indices.Length; i++)
+        var indexList = indices.ToList();
+        var newVector = new T[indexList.Count];
+        for (int i = 0; i < indexList.Count; i++)
         {
-            newVector[i] = this[indices[i]];
+            newVector[i] = this[indexList[i]];
         }
 
-        return new Vector<T>(newVector);
+        return new Vector<T>(newVector, ops);
     }
 
     public Vector<T> RemoveAt(int index)

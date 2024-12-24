@@ -8,5 +8,6 @@ public enum ModelType
     WeightedRegression,
     RandomForest,
     DecisionTree,
-    GradientBoosting
+    GradientBoosting,
+    AdaBoostR2
 }

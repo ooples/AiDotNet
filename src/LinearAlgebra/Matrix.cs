@@ -271,6 +271,14 @@ public class Matrix<T> : MatrixBase<T>
         }
     }
 
+    public IEnumerable<Vector<T>> EnumerateRows()
+    {
+        for (var i = 0; i < Rows; i++)
+        {
+            yield return GetRow(i);
+        }
+    }
+
     public Matrix<T> RemoveRow(int rowIndex)
     {
         if (rowIndex < 0 || rowIndex >= Rows)
@@ -314,15 +322,16 @@ public class Matrix<T> : MatrixBase<T>
         return newMatrix;
     }
 
-    public Matrix<T> GetRows(int[] indices)
+    public Matrix<T> GetRows(IEnumerable<int> indices)
     {
-        var newRows = indices.Length;
+        var indexArray = indices.ToArray();
+        var newRows = indexArray.Length;
         var newMatrix = new T[newRows, Columns];
         for (int i = 0; i < newRows; i++)
         {
             for (int j = 0; j < Columns; j++)
             {
-                newMatrix[i, j] = this[indices[i], j];
+                newMatrix[i, j] = this[indexArray[i], j];
             }
         }
 
