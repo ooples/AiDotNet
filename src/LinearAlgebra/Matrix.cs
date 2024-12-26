@@ -111,7 +111,7 @@ public class Matrix<T> : MatrixBase<T>
 
     public static Matrix<T> CreateFromVector(Vector<T> vector)
     {
-        return new Matrix<T>(new[] { vector.AsEnumerable() });
+        return new Matrix<T>([vector.AsEnumerable()]);
     }
 
     public new Matrix<T> Ones(int rows, int cols)
@@ -227,6 +227,61 @@ public class Matrix<T> : MatrixBase<T>
         }
 
         return matrix;
+    }
+
+    public Matrix<T> Subtract(Matrix<T> other)
+    {
+        if (this.Rows != other.Rows || this.Columns != other.Columns)
+        {
+            throw new ArgumentException("Matrices must have the same dimensions for subtraction.");
+        }
+
+        var numOp = MathHelper.GetNumericOperations<T>();
+        Matrix<T> result = new(Rows, Columns);
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                result[i, j] = numOp.Subtract(this[i, j], other[i, j]);
+            }
+        }
+
+        return result;
+    }
+
+    public Vector<T> GetColumnSegment(int columnIndex, int startRow, int length)
+    {
+        return new Vector<T>(Enumerable.Range(startRow, length).Select(i => this[i, columnIndex]));
+    }
+
+    public Vector<T> GetRowSegment(int rowIndex, int startColumn, int length)
+    {
+        return new Vector<T>(Enumerable.Range(startColumn, length).Select(j => this[rowIndex, j]));
+    }
+
+    public Matrix<T> GetSubMatrix(int startRow, int startColumn, int rowCount, int columnCount)
+    {
+        Matrix<T> subMatrix = new(rowCount, columnCount);
+        for (int i = 0; i < rowCount; i++)
+        {
+            for (int j = 0; j < columnCount; j++)
+            {
+                subMatrix[i, j] = this[startRow + i, startColumn + j];
+            }
+        }
+
+        return subMatrix;
+    }
+
+    public void SetSubMatrix(int startRow, int startColumn, Matrix<T> subMatrix)
+    {
+        for (int i = 0; i < subMatrix.Rows; i++)
+        {
+            for (int j = 0; j < subMatrix.Columns; j++)
+            {
+                this[startRow + i, startColumn + j] = subMatrix[i, j];
+            }
+        }
     }
 
     public static Matrix<T> FromRows(params IEnumerable<T>[] vectors)

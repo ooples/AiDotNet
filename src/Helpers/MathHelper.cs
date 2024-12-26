@@ -42,6 +42,33 @@ public static class MathHelper
         return GetNumericOperations<T>().FromDouble(Math.Sin(Convert.ToDouble(x)));
     }
 
+    public static T Tanh<T>(T x)
+    {
+        var numOps = GetNumericOperations<T>();
+        T exp2x = numOps.Exp(numOps.Multiply(numOps.FromDouble(2), x));
+        return numOps.Divide(
+            numOps.Subtract(exp2x, numOps.One),
+            numOps.Add(exp2x, numOps.One)
+        );
+    }
+
+    public static double Log2(double x)
+    {
+        if (x <= 0)
+            throw new ArgumentOutOfRangeException(nameof(x), "Logarithm is undefined for non-positive numbers.");
+        return Math.Log(x) / Math.Log(2);
+    }
+
+    public static T Min<T>(T a, T b)
+    {
+        return GetNumericOperations<T>().LessThan(a, b) ? a : b;
+    }
+
+    public static T Max<T>(T a, T b)
+    {
+        return GetNumericOperations<T>().GreaterThan(a, b) ? a : b;
+    }
+
     public static T Erf<T>(T x)
     {
         var NumOps = GetNumericOperations<T>();

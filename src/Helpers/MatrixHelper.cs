@@ -2197,6 +2197,51 @@ public static class MatrixHelper
         return matrix.Transpose();
     }
 
+    public static T SpectralNorm<T>(Matrix<T> matrix)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        
+        // Use the power iteration method to estimate the spectral norm
+        int maxIterations = 100;
+        T tolerance = ops.FromDouble(1e-10);
+        
+        Vector<T> v = Vector<T>.CreateRandom(matrix.Columns);
+        v = v.Divide(v.Norm());
+
+        for (int i = 0; i < maxIterations; i++)
+        {
+            Vector<T> w = matrix.Transpose().Multiply(matrix.Multiply(v));
+            T lambda = v.DotProduct(w);
+            Vector<T> vNew = w.Divide(w.Norm());
+
+            if (ops.LessThan(vNew.Subtract(v).Norm(), tolerance))
+            {
+                break;
+            }
+
+            v = vNew;
+        }
+
+        return ops.Sqrt(v.DotProduct(matrix.Transpose().Multiply(matrix.Multiply(v))));
+    }
+
+    public static bool IsInvertible<T>(Matrix<T> matrix)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+
+        // Check if the matrix is square
+        if (matrix.Rows != matrix.Columns)
+        {
+            return false;
+        }
+
+        // Check if the determinant is zero (or very close to zero)
+        T determinant = Determinant(matrix);
+        T tolerance = ops.FromDouble(1e-10);
+
+        return ops.GreaterThan(ops.Abs(determinant), tolerance);
+    }
+
     public static Matrix<T> InvertUsingDecomposition<T>(IMatrixDecomposition<T> decomposition)
     {
         int n = decomposition.A.Rows;

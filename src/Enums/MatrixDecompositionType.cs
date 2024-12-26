@@ -25,5 +25,10 @@ public enum MatrixDecompositionType
     Takagi,
     Hessenberg,
     Schur,
-    Eigen
+    Eigen,
+    Polar,
+    Tridiagonal,
+    Bidiagonal,
+    Udu,
+    Ldl
 }

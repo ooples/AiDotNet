@@ -76,15 +76,93 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return new Vector<T>(0);
     }
 
-    public static Vector<T> CreateDefault(int length, T value)
+    public new Vector<T> GetSubVector(int startIndex, int length)
     {
-        var vector = new Vector<T>(length);
+        if (startIndex < 0 || startIndex >= this.Length)
+            throw new ArgumentOutOfRangeException(nameof(startIndex));
+        if (length < 0 || startIndex + length > this.Length)
+            throw new ArgumentOutOfRangeException(nameof(length));
+
+        Vector<T> subVector = new Vector<T>(length, ops);
+        for (int i = 0; i < length; i++)
+        {
+            subVector[i] = this[startIndex + i];
+        }
+
+        return subVector;
+    }
+
+    public new Vector<T> SetValue(int index, T value)
+    {
+        if (index < 0 || index >= this.Length)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        Vector<T> newVector = new([.. this], ops)
+        {
+            [index] = value
+        };
+
+        return newVector;
+    }
+
+    public T Norm()
+    {
+        return MathHelper.GetNumericOperations<T>().Sqrt(this.DotProduct(this));
+    }
+
+    public new Vector<T> Divide(T scalar)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return new Vector<T>(this.Select(x => numOps.Divide(x, scalar)));
+    }
+
+    public Matrix<T> OuterProduct(Vector<T> other)
+    {
+        int m = this.Length;
+        int n = other.Length;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        Matrix<T> result = new(m, n);
+
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                result[i, j] = numOps.Multiply(this[i], other[j]);
+            }
+        }
+
+        return result;
+    }
+
+    public Vector<T> GetSegment(int startIndex, int length)
+    {
+        return new Vector<T>(this.Skip(startIndex).Take(length));
+    }
+
+    public static new Vector<T> CreateDefault(int length, T value)
+    {
+        Vector<T> vector = new(length);
         for (int i = 0; i < length; i++)
         {
             vector[i] = value;
         }
 
         return vector;
+    }
+
+    protected override VectorBase<T> CreateInstance(int size)
+    {
+        return new Vector<T>(size, ops);
+    }
+
+    protected override VectorBase<T> CreateInstance(T[] data)
+    {
+        return new Vector<T>(data, ops);
+    }
+
+    protected override VectorBase<TResult> CreateInstance<TResult>(int size)
+    {
+        return new Vector<TResult>(size, MathHelper.GetNumericOperations<TResult>());
     }
 
     public static Vector<T> CreateRandom(int size)
@@ -146,6 +224,18 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return result;
     }
 
+    public Matrix<T> AppendAsMatrix(T value)
+    {
+        var result = new Matrix<T>(this.Length, 2);
+        for (int i = 0; i < this.Length; i++)
+        {
+            result[i, 0] = this[i];
+            result[i, 1] = value;
+        }
+
+        return result;
+    }
+
     public Vector<T> GetElements(IEnumerable<int> indices)
     {
         var indexList = indices.ToList();
@@ -193,21 +283,6 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return result;
     }
 
-    protected override VectorBase<T> CreateInstance(int size)
-    {
-        return new Vector<T>(size, ops);
-    }
-
-    protected override VectorBase<T> CreateInstance(T[] data)
-    {
-        return new Vector<T>(data, ops);
-    }
-
-    protected override VectorBase<TResult> CreateInstance<TResult>(int size)
-    {
-        return new Vector<TResult>(size, MathHelper.GetNumericOperations<TResult>());
-    }
-
     public new Vector<T> Add(VectorBase<T> other)
     {
         return new Vector<T>(base.Add(other).ToArray(), ops);
@@ -221,11 +296,6 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public new Vector<T> Multiply(T scalar)
     {
         return new Vector<T>(base.Multiply(scalar).ToArray(), ops);
-    }
-
-    public new Vector<T> Divide(T scalar)
-    {
-        return new Vector<T>(base.Divide(scalar).ToArray(), ops);
     }
 
     public static Vector<T> operator +(Vector<T> left, Vector<T> right)

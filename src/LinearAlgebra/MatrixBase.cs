@@ -198,6 +198,25 @@ public abstract class MatrixBase<T>
         return subMatrix;
     }
 
+    public virtual T ElementWiseMultiplyAndSum(MatrixBase<T> other)
+    {
+        if (Rows != other.Rows || Columns != other.Columns)
+        {
+            throw new ArgumentException("Matrices must have the same dimensions for element-wise multiplication.");
+        }
+
+        T sum = ops.Zero;
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                sum = ops.Add(sum, ops.Multiply(this[i, j], other[i, j]));
+            }
+        }
+
+        return sum;
+    }
+
     public virtual MatrixBase<T> Add(MatrixBase<T> other)
     {
         if (rows != other.Rows || cols != other.Columns)

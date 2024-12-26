@@ -4,7 +4,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
 {
     public Matrix<T> U { get; private set; }
     public Vector<T> S { get; private set; }
-    public Matrix<T> VT { get; private set; }
+    public Matrix<T> Vt { get; private set; }
     public Matrix<T> A { get; private set; }
 
     private readonly INumericOperations<T> NumOps;
@@ -13,7 +13,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
-        (U, S, VT) = Decompose(matrix, svdAlgorithm);
+        (U, S, Vt) = Decompose(matrix, svdAlgorithm);
     }
 
     private (Matrix<T> U, Vector<T> S, Matrix<T> VT) Decompose(Matrix<T> matrix, SvdAlgorithm algorithm)
@@ -32,7 +32,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
 
     public Vector<T> Solve(Vector<T> b)
     {
-        var x = new Vector<T>(VT.Rows, NumOps);
+        var x = new Vector<T>(Vt.Rows, NumOps);
         for (int i = 0; i < S.Length; i++)
         {
             if (!NumOps.Equals(S[i], NumOps.Zero))
@@ -43,9 +43,9 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
                     r = NumOps.Add(r, NumOps.Multiply(U[j, i], b[j]));
                 }
                 r = NumOps.Divide(r, S[i]);
-                for (int j = 0; j < VT.Columns; j++)
+                for (int j = 0; j < Vt.Columns; j++)
                 {
-                    x[j] = NumOps.Add(x[j], NumOps.Multiply(VT[i, j], r));
+                    x[j] = NumOps.Add(x[j], NumOps.Multiply(Vt[i, j], r));
                 }
             }
         }
@@ -372,7 +372,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         // Step 5: Compute U = Q * U_B
         Matrix<T> U = Q.Multiply(svd.U);
 
-        return (U, svd.S, svd.VT);
+        return (U, svd.S, svd.Vt);
     }
 
     private Matrix<T> GenerateRandomMatrix(int rows, int cols)
@@ -612,7 +612,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
 
         Matrix<T> U = Q.Multiply(svd.U);
         Vector<T> S = svd.S;
-        Matrix<T> VT = svd.VT;
+        Matrix<T> VT = svd.Vt;
 
         return (U, S, VT);
     }

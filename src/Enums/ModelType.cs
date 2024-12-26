@@ -13,5 +13,9 @@ public enum ModelType
     ExtremelyRandomizedTrees,
     QuantileRegressionForests,
     ConditionalInferenceTree,
-    M5ModelTree
+    M5ModelTree,
+    NonLinearRegression,
+    SupportVectorRegression,
+    KernelRidgeRegression,
+    GaussianProcessRegression
 }

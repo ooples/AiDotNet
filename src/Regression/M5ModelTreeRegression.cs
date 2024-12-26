@@ -128,8 +128,9 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
 
     private SimpleRegression<T> FitLinearModel(Matrix<T> x, Vector<T> y)
     {
-        var regression = new SimpleRegression<T>();
+        var regression = new SimpleRegression<T>(regularization: Regularization);
         regression.Train(x, y);
+
         return regression;
     }
 
@@ -233,7 +234,8 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
                 { "UseLinearRegressionAtLeaves", _options.UseLinearRegressionAtLeaves },
                 { "UsePruning", _options.UsePruning },
                 { "SmoothingConstant", _options.SmoothingConstant },
-                { "FeatureImportances", FeatureImportances }
+                { "FeatureImportances", FeatureImportances },
+                { "Regularization", Regularization.GetType().Name }
             }
         };
     }
@@ -264,12 +266,22 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         var meanPrediction = CalculateAveragePrediction(node);
-        return node.Samples.Select(sample => 
+        var error = node.Samples.Select(sample => 
             NumOps.Multiply(
                 NumOps.Subtract(sample.Target, meanPrediction),
                 NumOps.Subtract(sample.Target, meanPrediction)
             )
         ).Aggregate(NumOps.Zero, NumOps.Add);
+
+        // Apply regularization if a linear model exists
+        if (node.LinearModel != null && node.LinearModel.Coefficients != null)
+        {
+            var regularizedCoefficients = Regularization.RegularizeCoefficients(node.LinearModel.Coefficients);
+            var regularizationTerm = regularizedCoefficients.Subtract(node.LinearModel.Coefficients).L2Norm();
+            error = NumOps.Add(error, regularizationTerm);
+        }
+
+        return error;
     }
 
     private T CalculateAveragePrediction(DecisionTreeNode<T> node)

@@ -16,7 +16,7 @@ public abstract class VectorBase<T>
 
     protected VectorBase(IEnumerable<T> values, INumericOperations<T> operations)
     {
-        data = values.ToArray();
+        data = [.. values];
         ops = operations;
     }
 
@@ -66,6 +66,44 @@ public abstract class VectorBase<T>
         }
 
         return result;
+    }
+
+    public VectorBase<T> GetSubVector(int startIndex, int length)
+    {
+        if (startIndex < 0 || startIndex >= this.Length)
+            throw new ArgumentOutOfRangeException(nameof(startIndex));
+        if (length < 0 || startIndex + length > this.Length)
+            throw new ArgumentOutOfRangeException(nameof(length));
+
+        VectorBase<T> subVector = CreateInstance(length);
+        for (int i = 0; i < length; i++)
+        {
+            subVector[i] = this[startIndex + i];
+        }
+
+        return subVector;
+    }
+
+    public VectorBase<T> SetValue(int index, T value)
+    {
+        if (index < 0 || index >= this.Length)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        VectorBase<T> newVector = this.Copy();
+        newVector[index] = value;
+
+        return newVector;
+    }
+
+    public static VectorBase<T> CreateDefault(int length, T value)
+    {
+        Vector<T> vector = new(length);
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = value;
+        }
+
+        return vector;
     }
 
     public virtual T Mean()
