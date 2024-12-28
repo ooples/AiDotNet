@@ -1,4 +1,3 @@
-using AiDotNet.Models.Options;
 
 namespace AiDotNet.Regression;
 
@@ -32,5 +31,10 @@ public class SimpleRegression<T> : RegressionBase<T>
         {
             Coefficients = new Vector<T>([solution[0]], NumOps);
         }
+    }
+
+    protected override ModelType GetModelType()
+    {
+        return ModelType.SimpleRegression;
     }
 }

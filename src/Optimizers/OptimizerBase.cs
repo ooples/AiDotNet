@@ -27,7 +27,7 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         Vector<T> yVal,
         Matrix<T> XTest,
         Vector<T> yTest,
-        IRegression<T> regressionMethod,
+        IFullModel<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
         NormalizationInfo<T> normInfo,
@@ -118,21 +118,18 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
     protected (T CurrentFitnessScore, FitDetectorResult<T> FitDetectionResult, Vector<T> TrainingPredictions, Vector<T> ValidationPredictions, 
         Vector<T> TestPredictions, ModelEvaluationData<T> evaluationData)
     EvaluateSolution(
-        Matrix<T> XTrainSubset, Matrix<T> XValSubset, Matrix<T> XTestSubset,
+        ISymbolicModel<T> model,
+        Matrix<T> XTrain, Matrix<T> XVal, Matrix<T> XTest,
         Vector<T> yTrain, Vector<T> yVal, Vector<T> yTest,
-        IRegression<T> regressionMethod, INormalizer<T> normalizer, NormalizationInfo<T> normInfo,
-        IFitnessCalculator<T> fitnessCalculator, IFitDetector<T> fitDetector, int featureCount)
+        INormalizer<T> normalizer, NormalizationInfo<T> normInfo,
+        IFitnessCalculator<T> fitnessCalculator, IFitDetector<T> fitDetector)
     {
-        // Fit the model
-        regressionMethod.Train(XTrainSubset, yTrain);
-
-        // Denormalize coefficients and intercept
-        var denormalizedCoefficients = normalizer.DenormalizeCoefficients(regressionMethod.Coefficients, normInfo.XParams, normInfo.YParams);
-        var denormalizedIntercept = normalizer.DenormalizeYIntercept(XTrainSubset, yTrain, regressionMethod.Coefficients, normInfo.XParams, normInfo.YParams);
-
         // Calculate predictions for all sets
-        var (trainingPredictions, validationPredictions, testPredictions) = CalculatePredictions(
-            XTrainSubset, XValSubset, XTestSubset, denormalizedCoefficients, denormalizedIntercept);
+        var trainingPredictions = PredictWithSymbolicModel(model, XTrain);
+        var validationPredictions = PredictWithSymbolicModel(model, XVal);
+        var testPredictions = PredictWithSymbolicModel(model, XTest);
+
+        int featureCount = XTrain.Columns;
 
         // Calculate error stats, basic stats, and prediction stats for all sets
         var (trainingErrorStats, validationErrorStats, testErrorStats) = CalculateErrorStats(
@@ -146,9 +143,9 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         var (trainingPredictionStats, validationPredictionStats, testPredictionStats) = CalculatePredictionStats(
             yTrain, yVal, yTest, trainingPredictions, validationPredictions, testPredictions, featureCount);
 
-        var predictionModelResult = new PredictionModelResult<T>(regressionMethod, new OptimizationResult<T>(), normInfo);
+        var predictionModelResult = new PredictionModelResult<T>((IFullModel<T>)model, new OptimizationResult<T>(), normInfo);
 
-        var modelStats = CalculateModelStats(XTrainSubset, featureCount, predictionModelResult);
+        var modelStats = CalculateModelStats(XTrain, featureCount, predictionModelResult);
         var evaluationData = new ModelEvaluationData<T>()
         {
             TrainingErrorStats = trainingErrorStats,
@@ -172,54 +169,44 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         // Calculate fitness score
         T currentFitnessScore = fitnessCalculator.CalculateFitnessScore(
             evaluationData.ValidationErrorStats, validationActualBasicStats, validationPredictedBasicStats,
-            yVal, validationPredictions, XValSubset, evaluationData.ValidationPredictionStats);
+            yVal, validationPredictions, XVal, evaluationData.ValidationPredictionStats);
 
         return (currentFitnessScore, fitDetectionResult, 
             trainingPredictions, validationPredictions, testPredictions, evaluationData);
     }
 
-    protected void UpdateBestSolution(
-        T currentFitnessScore,
-        Vector<T> denormalizedCoefficients,
-        T denormalizedIntercept,
-        FitDetectorResult<T> fitDetectionResult,
-        Vector<T> trainingPredictions,
-        Vector<T> validationPredictions,
-        Vector<T> testPredictions,
-        ModelEvaluationData<T> evaluationData,
-        List<int> selectedFeatures,
-        Matrix<T> XTrain,
-        Matrix<T> XTestSubset,
-        Matrix<T> XTrainSubset,
-        Matrix<T> XValSubset,
-        IFitnessCalculator<T> fitnessCalculator,
-        ref T bestFitness,
-        ref Vector<T> bestSolution,
-        ref T bestIntercept,
-        ref FitDetectorResult<T> bestFitDetectionResult,
-        ref Vector<T> bestTrainingPredictions,
-        ref Vector<T> bestValidationPredictions,
-        ref Vector<T> bestTestPredictions,
-        ref ModelEvaluationData<T> bestEvaluationData,
-        ref List<Vector<T>> bestSelectedFeatures,
-        ref Matrix<T> bestTestFeatures,
-        ref Matrix<T> bestTrainingFeatures,
-        ref Matrix<T> bestValidationFeatures)
+    private Vector<T> PredictWithSymbolicModel(ISymbolicModel<T> model, Matrix<T> X)
     {
-        if (fitnessCalculator.IsBetterFitness(currentFitnessScore, bestFitness))
+        var predictions = new Vector<T>(X.Rows);
+        for (int i = 0; i < X.Rows; i++)
         {
-            bestFitness = currentFitnessScore;
-            bestSolution = denormalizedCoefficients;
-            bestIntercept = denormalizedIntercept;
-            bestFitDetectionResult = fitDetectionResult;
-            bestTrainingPredictions = trainingPredictions;
-            bestValidationPredictions = validationPredictions;
-            bestTestPredictions = testPredictions;
-            bestEvaluationData = evaluationData;
-            bestSelectedFeatures = [.. selectedFeatures.Select(XTrain.GetColumn)];
-            bestTestFeatures = XTestSubset;
-            bestTrainingFeatures = XTrainSubset;
-            bestValidationFeatures = XValSubset;
+            predictions[i] = model.Evaluate(X.GetRow(i));
+        }
+
+        return predictions;
+    }
+
+    protected void UpdateBestSolution(
+        ModelResult<T> currentResult,
+        ModelResult<T> bestResult,
+        Matrix<T> XTrain,
+        Matrix<T> XTest,
+        Matrix<T> XVal,
+        IFitnessCalculator<T> fitnessCalculator)
+    {
+        if (fitnessCalculator.IsBetterFitness(currentResult.Fitness, bestResult.Fitness))
+        {
+            bestResult.Solution = currentResult.Solution;
+            bestResult.Fitness = currentResult.Fitness;
+            bestResult.TrainingPredictions = currentResult.TrainingPredictions;
+            bestResult.ValidationPredictions = currentResult.ValidationPredictions;
+            bestResult.TestPredictions = currentResult.TestPredictions;
+            bestResult.EvaluationData = currentResult.EvaluationData;
+            bestResult.SelectedFeatures = currentResult.SelectedFeatures;
+            bestResult.FitDetectionResult = currentResult.FitDetectionResult;
+            bestResult.TrainingFeatures = OptimizerHelper.SelectFeatures(XTrain, currentResult.SelectedFeatures);
+            bestResult.ValidationFeatures = OptimizerHelper.SelectFeatures(XVal, currentResult.SelectedFeatures);
+            bestResult.TestFeatures = OptimizerHelper.SelectFeatures(XTest, currentResult.SelectedFeatures);
         }
     }
 

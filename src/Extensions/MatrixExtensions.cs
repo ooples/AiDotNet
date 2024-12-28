@@ -56,4 +56,25 @@ public static class MatrixExtensions
 
         return logDet;
     }
+
+    public static Matrix<T> PointwiseMultiply<T>(this Matrix<T> matrix, Matrix<T> other)
+    {
+        if (matrix.Rows != other.Rows || matrix.Columns != other.Columns)
+        {
+            throw new ArgumentException("Matrices must have the same dimensions for pointwise multiplication.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Matrix<T>(matrix.Rows, matrix.Columns);
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = numOps.Multiply(matrix[i, j], other[i, j]);
+            }
+        }
+
+        return result;
+    }
 }

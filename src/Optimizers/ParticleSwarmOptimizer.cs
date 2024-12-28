@@ -1,6 +1,3 @@
-using AiDotNet.Models.Options;
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.Optimizers;
 
 public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
@@ -16,23 +13,23 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
     }
 
     public override OptimizationResult<T> Optimize(
-        Matrix<T> XTrain,
-        Vector<T> yTrain,
-        Matrix<T> XVal,
-        Vector<T> yVal,
-        Matrix<T> XTest,
-        Vector<T> yTest,
-        IRegression<T> regressionMethod,
-        IRegularization<T> regularization,
-        INormalizer<T> normalizer,
-        NormalizationInfo<T> normInfo,
-        IFitnessCalculator<T> fitnessCalculator,
-        IFitDetector<T> fitDetector)
+    Matrix<T> XTrain,
+    Vector<T> yTrain,
+    Matrix<T> XVal,
+    Vector<T> yVal,
+    Matrix<T> XTest,
+    Vector<T> yTest,
+    IFullModel<T> regressionMethod,
+    IRegularization<T> regularization,
+    INormalizer<T> normalizer,
+    NormalizationInfo<T> normInfo,
+    IFitnessCalculator<T> fitnessCalculator,
+    IFitDetector<T> fitDetector)
     {
         var swarm = InitializeSwarm(XTrain.Columns, _psoOptions.SwarmSize);
         var velocities = InitializeVelocities(XTrain.Columns, _psoOptions.SwarmSize);
         T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
-        Vector<T> bestSolution = new(XTrain.Columns, _numOps);
+        var bestSolution = SymbolicModelFactory<T>.CreateEmptyModel(_options.UseExpressionTrees, XTrain.Columns, _numOps);
         T bestIntercept = _numOps.Zero;
         FitDetectorResult<T> bestFitDetectionResult = new();
         Vector<T> bestTrainingPredictions = new(yTrain.Length, _numOps);
@@ -58,21 +55,53 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
                 var XTestSubset = OptimizerHelper.SelectFeatures(XTest, selectedFeatures);
 
                 var (currentFitnessScore, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions, evaluationData) = EvaluateSolution(
-                        XTrainSubset, XValSubset, XTestSubset,
-                        yTrain, yVal, yTest,
-                        regressionMethod, normalizer, normInfo,
-                        fitnessCalculator, fitDetector, selectedFeatures.Count);
+                    particle, XTrainSubset, XValSubset, XTestSubset,
+                    yTrain, yVal, yTest,
+                    normalizer, normInfo,
+                    fitnessCalculator, fitDetector);
 
-                UpdateBestSolution(
-                    currentFitnessScore, particle, _numOps.Zero, fitDetectionResult,
-                    trainingPredictions, validationPredictions, testPredictions, evaluationData,
-                    selectedFeatures, XTrain, XTestSubset, XTrainSubset, XValSubset, fitnessCalculator,
-                    ref bestFitness, ref bestSolution, ref bestIntercept, ref bestFitDetectionResult,
-                    ref bestTrainingPredictions, ref bestValidationPredictions, ref bestTestPredictions, ref bestEvaluationData,
-                    ref bestSelectedFeatures, ref bestTestFeatures, ref bestTrainingFeatures, ref bestValidationFeatures);
+                var currentResult = new ModelResult<T>
+                {
+                    Solution = particle,
+                    Fitness = currentFitnessScore,
+                    FitDetectionResult = fitDetectionResult,
+                    TrainingPredictions = trainingPredictions,
+                    ValidationPredictions = validationPredictions,
+                    TestPredictions = testPredictions,
+                    EvaluationData = evaluationData,
+                    SelectedFeatures = selectedFeatures.ToVectorList<T>()
+                };
+
+                var bestResult = new ModelResult<T>
+                {
+                    Solution = bestSolution,
+                    Fitness = bestFitness,
+                    FitDetectionResult = bestFitDetectionResult,
+                    TrainingPredictions = bestTrainingPredictions,
+                    ValidationPredictions = bestValidationPredictions,
+                    TestPredictions = bestTestPredictions,
+                    EvaluationData = bestEvaluationData,
+                    SelectedFeatures = bestSelectedFeatures
+                };
+
+                OptimizerHelper.UpdateAndApplyBestSolution(
+                    currentResult,
+                    ref bestResult,
+                    XTrainSubset,
+                    XTestSubset,
+                    XValSubset,
+                    fitnessCalculator
+                );
 
                 // Update velocity and position
-                UpdateParticle(swarm[i], velocities[i], particle, bestSolution);
+                if (_options.UseExpressionTrees)
+                {
+                    UpdateParticle((ExpressionTree<T>)swarm[i], (ExpressionTreeVelocity<T>)velocities[i], (ExpressionTree<T>)particle, (ExpressionTree<T>)bestSolution);
+                }
+                else
+                {
+                    UpdateParticle((Vector<T>)swarm[i], (Vector<T>)velocities[i], (Vector<T>)particle, (Vector<T>)bestSolution);
+                }
             }
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(fitnessHistory, iterationHistory, iteration, bestFitness, bestFitDetectionResult, fitnessCalculator))
@@ -83,7 +112,6 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
 
         return OptimizerHelper.CreateOptimizationResult(
             bestSolution,
-            bestIntercept,
             bestFitness,
             fitnessHistory,
             bestSelectedFeatures,
@@ -118,37 +146,52 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
                 PredictionStats = bestEvaluationData.TestPredictionStats
             },
             bestFitDetectionResult,
-            fitnessHistory.Count,
-            _numOps);
+            iterationHistory.Count,
+            _numOps
+        );
     }
 
-    private List<Vector<T>> InitializeSwarm(int dimensions, int swarmSize)
+    private List<ISymbolicModel<T>> InitializeSwarm(int dimensions, int swarmSize)
     {
-        var swarm = new List<Vector<T>>();
+        var swarm = new List<ISymbolicModel<T>>();
         for (int i = 0; i < swarmSize; i++)
         {
-            var particle = new Vector<T>(dimensions, _numOps);
-            for (int j = 0; j < dimensions; j++)
+            var particle = SymbolicModelFactory<T>.CreateRandomModel(_options.UseExpressionTrees, dimensions, _numOps);
+        
+            // If using VectorModel, we need to initialize it with random values
+            if (particle is VectorModel<T> vectorModel)
             {
-                particle[j] = _numOps.FromDouble(_random.NextDouble() * 2 - 1); // Random values between -1 and 1
+                for (int j = 0; j < dimensions; j++)
+                {
+                    vectorModel.Coefficients[j] = _numOps.FromDouble(_random.NextDouble() * 2 - 1); // Random values between -1 and 1
+                }
             }
+            // If using ExpressionTree, it's already randomly initialized by the factory
+
             swarm.Add(particle);
         }
 
         return swarm;
     }
 
-    private List<Vector<T>> InitializeVelocities(int dimensions, int swarmSize)
+    private List<object> InitializeVelocities(int dimensions, int swarmSize)
     {
-        var velocities = new List<Vector<T>>();
+        var velocities = new List<object>();
         for (int i = 0; i < swarmSize; i++)
         {
-            var velocity = new Vector<T>(dimensions, _numOps);
-            for (int j = 0; j < dimensions; j++)
+            if (_options.UseExpressionTrees)
             {
-                velocity[j] = _numOps.FromDouble(_random.NextDouble() * 0.1 - 0.05); // Small random values
+                velocities.Add(new ExpressionTreeVelocity<T>());
             }
-            velocities.Add(velocity);
+            else
+            {
+                var vectorVelocity = new Vector<T>(dimensions, _numOps);
+                for (int j = 0; j < dimensions; j++)
+                {
+                    vectorVelocity[j] = _numOps.FromDouble(_random.NextDouble() * 0.1 - 0.05); // Small random values
+                }
+                velocities.Add(vectorVelocity);
+            }
         }
 
         return velocities;
@@ -171,5 +214,111 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
 
             position[j] = _numOps.Add(position[j], velocity[j]);
         }
+    }
+
+    private void UpdateParticle(ExpressionTree<T> position, ExpressionTreeVelocity<T> velocity, ExpressionTree<T> personalBest, ExpressionTree<T> globalBest)
+    {
+        // Update node values
+        foreach (var nodeChange in velocity.NodeValueChanges)
+        {
+            var node = position.FindNodeById(nodeChange.Key);
+            if (node != null && node.Type == NodeType.Constant)
+            {
+                node.SetValue(_numOps.Add(node.Value, nodeChange.Value));
+            }
+        }
+
+        // Apply structure changes
+        foreach (var change in velocity.StructureChanges)
+        {
+            ApplyStructureChange(position, change);
+        }
+
+        // Calculate new velocity
+        var newVelocity = new ExpressionTreeVelocity<T>();
+
+        // Update node values
+        var allNodes = position.GetAllNodes();
+        foreach (var node in allNodes)
+        {
+            if (node.Type == NodeType.Constant)
+            {
+                T r1 = _numOps.FromDouble(_random.NextDouble());
+                T r2 = _numOps.FromDouble(_random.NextDouble());
+
+                T inertia = _numOps.Multiply(
+                    _numOps.FromDouble(_psoOptions.InertiaWeight), 
+                    velocity.NodeValueChanges.TryGetValue(node.Id, out var existingVelocity) ? existingVelocity : _numOps.Zero
+                );
+
+                T cognitive = _numOps.Multiply(
+                    _numOps.FromDouble(_psoOptions.CognitiveParameter), 
+                    _numOps.Multiply(r1, _numOps.Subtract(GetNodeValueOrDefault(personalBest, node.Id), node.Value))
+                );
+
+                T social = _numOps.Multiply(
+                    _numOps.FromDouble(_psoOptions.SocialParameter), 
+                    _numOps.Multiply(r2, _numOps.Subtract(GetNodeValueOrDefault(globalBest, node.Id), node.Value))
+                );
+
+                newVelocity.NodeValueChanges[node.Id] = _numOps.Add(_numOps.Add(inertia, cognitive), social);
+            }
+        }
+
+        // Update structure changes
+        if (_random.NextDouble() < 0.1) // 10% chance of structure change
+        {
+            newVelocity.StructureChanges.Add(GenerateRandomStructureChange());
+        }
+
+        // Apply new velocity
+        velocity.NodeValueChanges = newVelocity.NodeValueChanges;
+        velocity.StructureChanges = newVelocity.StructureChanges;
+    }
+
+    private T GetNodeValueOrDefault(ExpressionTree<T> tree, int nodeId)
+    {
+        var node = tree.FindNodeById(nodeId);
+        return node != null ? node.Value : _numOps.Zero;
+    }
+
+    private void ApplyStructureChange(ExpressionTree<T> tree, NodeModification change)
+    {
+        var node = tree.FindNodeById(change.NodeId);
+        if (node == null) return;
+
+        switch (change.Type)
+        {
+            case ModificationType.AddNode:
+                var newNode = new ExpressionTree<T>((NodeType)_random.Next(0, 6), _numOps.FromDouble(_random.NextDouble()));
+                if (_random.NextDouble() < 0.5)
+                    node.SetLeft(newNode);
+                else
+                    node.SetRight(newNode);
+                break;
+            case ModificationType.RemoveNode:
+                if (node.Parent != null)
+                {
+                    if (node.Parent.Left == node)
+                        node.Parent.SetLeft(null);
+                    else
+                        node.Parent.SetRight(null);
+                }
+                break;
+            case ModificationType.ChangeNodeType:
+                if (change.NewNodeType.HasValue)
+                    node.SetType(change.NewNodeType.Value);
+                break;
+        }
+    }
+
+    private NodeModification GenerateRandomStructureChange()
+    {
+        return new NodeModification
+        {
+            NodeId = _random.Next(0, 1000), // Assume max 1000 nodes
+            Type = (ModificationType)_random.Next(0, 3),
+            NewNodeType = _random.NextDouble() < 0.5 ? null : (NodeType)_random.Next(0, 6)
+        };
     }
 }

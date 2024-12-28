@@ -1,8 +1,8 @@
 namespace AiDotNet.FitnessCalculators;
 
-public class MSEFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class MeanSquaredErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
 {
-    public MSEFitnessCalculator() : base(isHigherScoreBetter: false)
+    public MeanSquaredErrorFitnessCalculator() : base(isHigherScoreBetter: false)
     {
     }
 

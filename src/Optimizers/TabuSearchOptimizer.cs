@@ -1,5 +1,3 @@
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.Optimizers;
 
 public class TabuSearchOptimizer<T> : OptimizerBase<T>
@@ -20,7 +18,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         Vector<T> yVal,
         Matrix<T> XTest,
         Vector<T> yTest,
-        IRegression<T> regressionMethod,
+        IFullModel<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
         NormalizationInfo<T> normInfo,
@@ -28,8 +26,8 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         IFitDetector<T> fitDetector)
     {
         var currentSolution = InitializeRandomSolution(XTrain.Columns);
-        var bestSolution = currentSolution.Copy();
-        var tabuList = new Queue<Vector<T>>(_tabuOptions.TabuListSize);
+        var bestSolution = SymbolicModelFactory<T>.CreateEmptyModel(_options.UseExpressionTrees, XTrain.Columns, _numOps);
+        var tabuList = new Queue<ISymbolicModel<T>>(_tabuOptions.TabuListSize);
         T bestIntercept = _numOps.Zero;
         T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
         FitDetectorResult<T> bestFitDetectionResult = new();
@@ -61,18 +59,43 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
             var XTestSubset = OptimizerHelper.SelectFeatures(XTest, selectedFeatures);
 
             var (currentFitnessScore, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions, evaluationData) = EvaluateSolution(
-                        XTrainSubset, XValSubset, XTestSubset,
+                        currentSolution, XTrainSubset, XValSubset, XTestSubset,
                         yTrain, yVal, yTest,
-                        regressionMethod, normalizer, normInfo,
-                        fitnessCalculator, fitDetector, selectedFeatures.Count);
+                        normalizer, normInfo,
+                        fitnessCalculator, fitDetector);
 
-            UpdateBestSolution(
-                    currentFitnessScore, currentSolution, _numOps.Zero, fitDetectionResult,
-                    trainingPredictions, validationPredictions, testPredictions, evaluationData,
-                    selectedFeatures, XTrain, XTestSubset, XTrainSubset, XValSubset, fitnessCalculator,
-                    ref bestFitness, ref bestSolution, ref bestIntercept, ref bestFitDetectionResult,
-                    ref bestTrainingPredictions, ref bestValidationPredictions, ref bestTestPredictions, ref bestEvaluationData,
-                    ref bestSelectedFeatures, ref bestTestFeatures, ref bestTrainingFeatures, ref bestValidationFeatures);
+            var currentResult = new ModelResult<T>
+            {
+                Solution = currentSolution,
+                Fitness = currentFitnessScore,
+                FitDetectionResult = fitDetectionResult,
+                TrainingPredictions = trainingPredictions,
+                ValidationPredictions = validationPredictions,
+                TestPredictions = testPredictions,
+                EvaluationData = evaluationData,
+                SelectedFeatures = selectedFeatures.ToVectorList<T>()
+            };
+
+            var bestResult = new ModelResult<T>
+            {
+                Solution = bestSolution,
+                Fitness = bestFitness,
+                FitDetectionResult = bestFitDetectionResult,
+                TrainingPredictions = bestTrainingPredictions,
+                ValidationPredictions = bestValidationPredictions,
+                TestPredictions = bestTestPredictions,
+                EvaluationData = bestEvaluationData,
+                SelectedFeatures = bestSelectedFeatures
+            };
+
+            OptimizerHelper.UpdateAndApplyBestSolution(
+                currentResult,
+                ref bestResult,
+                XTrainSubset,
+                XTestSubset,
+                XValSubset,
+                fitnessCalculator
+            );
 
             UpdateTabuList(tabuList, currentSolution);
 
@@ -84,7 +107,6 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
 
         return OptimizerHelper.CreateOptimizationResult(
             bestSolution,
-            bestIntercept,
             bestFitness,
             fitnessHistory,
             bestSelectedFeatures,
@@ -123,45 +145,90 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
             _numOps);
     }
 
-    private Vector<T> InitializeRandomSolution(int dimensions)
+    private ISymbolicModel<T> InitializeRandomSolution(int dimensions)
     {
-        var solution = new Vector<T>(dimensions);
-        for (int i = 0; i < dimensions; i++)
+        if (_options.UseExpressionTrees)
         {
-            solution[i] = _numOps.FromDouble(_random.NextDouble());
+            return GenerateRandomExpressionTree(dimensions, 3); // 3 is the max depth, adjust as needed
         }
-        return solution;
+        else
+        {
+            var solution = new Vector<T>(dimensions);
+            for (int i = 0; i < dimensions; i++)
+            {
+                solution[i] = _numOps.FromDouble(_random.NextDouble());
+            }
+            return new VectorModel<T>(solution, _numOps);
+        }
     }
 
-    private List<Vector<T>> GenerateNeighbors(Vector<T> currentSolution)
+    private List<ISymbolicModel<T>> GenerateNeighbors(ISymbolicModel<T> currentSolution)
     {
-        var neighbors = new List<Vector<T>>();
+        var neighbors = new List<ISymbolicModel<T>>();
         for (int i = 0; i < _tabuOptions.NeighborhoodSize; i++)
         {
-            var neighbor = currentSolution.Copy();
-            int index = _random.Next(neighbor.Length);
-            neighbor[index] = _numOps.Add(neighbor[index], _numOps.FromDouble(_random.NextDouble() * _tabuOptions.PerturbationFactor - _tabuOptions.PerturbationFactor / 2));
-            neighbors.Add(neighbor);
+            if (currentSolution is ExpressionTree<T> expressionTree)
+            {
+                neighbors.Add((ExpressionTree<T>)expressionTree.Mutate(_tabuOptions.MutationRate, _numOps));
+            }
+            else if (currentSolution is VectorModel<T> vectorModel)
+            {
+                var neighbor = vectorModel.Coefficients.Copy();
+                int index = _random.Next(neighbor.Length);
+                neighbor[index] = _numOps.Add(neighbor[index], _numOps.FromDouble(_random.NextDouble() * _tabuOptions.PerturbationFactor - _tabuOptions.PerturbationFactor / 2));
+                neighbors.Add(new VectorModel<T>(neighbor, _numOps));
+            }
         }
         return neighbors;
     }
 
-    private bool IsTabu(Vector<T> solution, Queue<Vector<T>> tabuList)
+    private ExpressionTree<T> GenerateRandomExpressionTree(int maxVariables, int maxDepth)
+    {
+        return GenerateRandomExpressionTreeRecursive(maxVariables, maxDepth, 0);
+    }
+
+    private ExpressionTree<T> GenerateRandomExpressionTreeRecursive(int maxVariables, int maxDepth, int currentDepth)
+    {
+        if (currentDepth == maxDepth || _random.NextDouble() < 0.3) // 30% chance to stop early
+        {
+            if (_random.NextDouble() < 0.5)
+            {
+                // Generate a constant
+                return new ExpressionTree<T>(NodeType.Constant, _numOps.FromDouble(_random.NextDouble() * 10 - 5));
+            }
+            else
+            {
+                // Generate a variable
+                return new ExpressionTree<T>(NodeType.Variable, _numOps.FromDouble(_random.Next(maxVariables)));
+            }
+        }
+        else
+        {
+            // Generate an operation node
+            NodeType nodeType = (NodeType)_random.Next(2, 6); // Add, Subtract, Multiply, or Divide
+            var left = GenerateRandomExpressionTreeRecursive(maxVariables, maxDepth, currentDepth + 1);
+            var right = GenerateRandomExpressionTreeRecursive(maxVariables, maxDepth, currentDepth + 1);
+            return new ExpressionTree<T>(nodeType, default, left, right);
+        }
+    }
+
+    private bool IsTabu(ISymbolicModel<T> solution, Queue<ISymbolicModel<T>> tabuList)
     {
         return tabuList.Any(tabuSolution => tabuSolution.Equals(solution));
     }
 
-    private void UpdateTabuList(Queue<Vector<T>> tabuList, Vector<T> solution)
+    private void UpdateTabuList(Queue<ISymbolicModel<T>> tabuList, ISymbolicModel<T> solution)
     {
         if (tabuList.Count >= _tabuOptions.TabuListSize)
         {
             tabuList.Dequeue();
         }
+
         tabuList.Enqueue(solution);
     }
 
-    private T EvaluateSolutionFitness(Vector<T> solution, Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XVal, Vector<T> yVal, Matrix<T> XTest, Vector<T> yTest,
-        IRegression<T> regressionMethod, IRegularization<T> regularization, INormalizer<T> normalizer, NormalizationInfo<T> normInfo,
+    private T EvaluateSolutionFitness(ISymbolicModel<T> solution, Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XVal, Vector<T> yVal, Matrix<T> XTest, Vector<T> yTest,
+        IFullModel<T> regressionMethod, IRegularization<T> regularization, INormalizer<T> normalizer, NormalizationInfo<T> normInfo,
         IFitnessCalculator<T> fitnessCalculator, IFitDetector<T> fitDetector)
     {
         var selectedFeatures = OptimizerHelper.GetSelectedFeatures(solution);
@@ -170,10 +237,10 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         var XTestSubset = OptimizerHelper.SelectFeatures(XTest, selectedFeatures);
 
         var (currentFitnessScore, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions, evaluationData) = EvaluateSolution(
-                        XTrainSubset, XValSubset, XTestSubset,
+                        solution, XTrainSubset, XValSubset, XTestSubset,
                         yTrain, yVal, yTest,
-                        regressionMethod, normalizer, normInfo,
-                        fitnessCalculator, fitDetector, selectedFeatures.Count);
+                        normalizer, normInfo,
+                        fitnessCalculator, fitDetector);
 
         return currentFitnessScore;
     }

@@ -7,7 +7,7 @@ public static class FitnessCalculatorFactory
         switch (type)
         {
             case FitnessCalculatorType.MeanSquaredError:
-                return new MSEFitnessCalculator<T>();
+                return new MeanSquaredErrorFitnessCalculator<T>();
             case FitnessCalculatorType.MeanAbsoluteError:
                 return new MAEFitnessCalculator<T>();
             case FitnessCalculatorType.RSquared:

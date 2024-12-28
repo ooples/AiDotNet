@@ -2,9 +2,9 @@
 
 public class OptimizationResult<T>
 {
-    public Vector<T> BestCoefficients { get; set; }
+    public ISymbolicModel<T> BestSolution { get; set; }
     public T BestIntercept { get; set; }
-    public T FitnessScore { get; set; }
+    public T BestFitnessScore { get; set; }
     public int Iterations { get; set; }
     public Vector<T> FitnessHistory { get; set; }
     public List<Vector<T>> SelectedFeatures { get; set; }
@@ -23,7 +23,7 @@ public class OptimizationResult<T>
     public OptimizationResult()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        BestCoefficients = Vector<T>.Empty();
+        BestSolution = SymbolicModelFactory<T>.CreateRandomModel(false, 1, _numOps); // Default to vector model
         FitnessHistory = Vector<T>.Empty();
         SelectedFeatures = [];
         TrainingResult = new DatasetResult();
@@ -33,7 +33,7 @@ public class OptimizationResult<T>
         CoefficientLowerBounds = Vector<T>.Empty();
         CoefficientUpperBounds = Vector<T>.Empty();
         BestIntercept = _numOps.Zero;
-        FitnessScore = _numOps.Zero;
+        BestFitnessScore = _numOps.Zero;
     }
 
     public class DatasetResult
@@ -48,7 +48,8 @@ public class OptimizationResult<T>
 
         public DatasetResult()
         {
-            X = Matrix<T>.Empty();
+            var numOps = MathHelper.GetNumericOperations<T>();
+            X = new Matrix<T>(0, 0, numOps);
             Y = Vector<T>.Empty();
             Predictions = Vector<T>.Empty();
             ErrorStats = ErrorStats<T>.Empty();

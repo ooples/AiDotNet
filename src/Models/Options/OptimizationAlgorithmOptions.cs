@@ -8,5 +8,5 @@ public class OptimizationAlgorithmOptions
     public int BadFitPatience { get; set; } = 5;
     public int MinimumFeatures { get; set; }
     public int MaximumFeatures { get; set; }
-    public bool NormalizeBeforeFeatureSelection { get; set; } = true;
+    public bool UseExpressionTrees { get; set; } = false;
 }

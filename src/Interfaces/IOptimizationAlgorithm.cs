@@ -1,6 +1,4 @@
-﻿using AiDotNet.Models.Results;
-
-namespace AiDotNet.Interfaces;
+﻿namespace AiDotNet.Interfaces;
 
 public interface IOptimizationAlgorithm<T>
 {
@@ -11,7 +9,7 @@ public interface IOptimizationAlgorithm<T>
         Vector<T> yVal,
         Matrix<T> XTest,
         Vector<T> yTest,
-        IRegression<T> regressionMethod,
+        IFullModel<T> regressionMethod,
         IRegularization<T> regularization,
         INormalizer<T> normalizer,
         NormalizationInfo<T> normInfo,

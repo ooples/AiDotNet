@@ -1,6 +1,4 @@
-﻿using AiDotNet.Models.Options;
-
-namespace AiDotNet.Regression;
+﻿namespace AiDotNet.Regression;
 
 public class PolynomialRegression<T> : RegressionBase<T>
 {
@@ -60,5 +58,10 @@ public class PolynomialRegression<T> : RegressionBase<T>
     {
         var polyInput = CreatePolynomialFeatures(input);
         return base.Predict(polyInput);
+    }
+
+    protected override ModelType GetModelType()
+    {
+        return ModelType.PolynomialRegression;
     }
 }

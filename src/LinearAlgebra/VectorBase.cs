@@ -84,6 +84,20 @@ public abstract class VectorBase<T>
         return subVector;
     }
 
+    public virtual int IndexOf(T item)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < Length; i++)
+        {
+            if (numOps.Equals(this[i], item))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     public VectorBase<T> SetValue(int index, T value)
     {
         if (index < 0 || index >= this.Length)

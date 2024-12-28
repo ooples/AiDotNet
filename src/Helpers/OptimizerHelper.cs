@@ -1,12 +1,9 @@
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.Helpers;
 
 public static class OptimizerHelper
 {
     public static OptimizationResult<T> CreateOptimizationResult<T>(
-        Vector<T> bestSolution,
-        T bestIntercept,
+        ISymbolicModel<T> bestSolution,
         T bestFitness,
         List<T> fitnessHistory,
         List<Vector<T>> bestSelectedFeatures,
@@ -19,9 +16,8 @@ public static class OptimizerHelper
     {
         return new OptimizationResult<T>
         {
-            BestCoefficients = bestSolution,
-            BestIntercept = bestIntercept,
-            FitnessScore = bestFitness,
+            BestSolution = bestSolution,
+            BestFitnessScore = bestFitness,
             Iterations = iterationCount,
             FitnessHistory = new Vector<T>([.. fitnessHistory], numOps),
             SelectedFeatures = bestSelectedFeatures,
@@ -55,7 +51,7 @@ public static class OptimizerHelper
         };
     }
 
-    public static List<int> GetSelectedFeatures<T>(Vector<T> solution)
+    public static List<int> GetSelectedFeatures<T>(ISymbolicModel<T> solution)
     {
         if (solution == null)
         {
@@ -63,9 +59,15 @@ public static class OptimizerHelper
         }
 
         var selectedFeatures = new List<int>();
-        for (int i = 0; i < solution.Length; i++)
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Assuming ISymbolicModel<T> has a property or method to get the number of features
+        int featureCount = solution.FeatureCount;
+
+        for (int i = 0; i < featureCount; i++)
         {
-            if (!(solution[i] ?? default)?.Equals(default(T)) ?? true)
+            // Assuming ISymbolicModel<T> has a method to check if a feature is used
+            if (solution.IsFeatureUsed(i))
             {
                 selectedFeatures.Add(i);
             }
@@ -87,5 +89,73 @@ public static class OptimizerHelper
         }
 
         return selectedX;
+    }
+
+    public static Matrix<T> SelectFeatures<T>(Matrix<T> X, List<Vector<T>> selectedFeatures)
+    {
+        var selectedIndices = selectedFeatures.Select(v => GetFeatureIndex(v)).ToList();
+        return X.SubMatrix(0, X.Rows - 1, selectedIndices);
+    }
+
+    private static int GetFeatureIndex<T>(Vector<T> featureVector)
+    {
+        if (featureVector == null || featureVector.Length == 0)
+        {
+            throw new ArgumentException("Feature vector cannot be null or empty.", nameof(featureVector));
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Case 1: Binary feature vector (e.g., [0, 1, 0, 0])
+        if (featureVector.All(v => numOps.Equals(v, numOps.Zero) || numOps.Equals(v, numOps.One)))
+        {
+            return featureVector.IndexOf(numOps.One);
+        }
+
+        // Case 2: One-hot encoded vector (e.g., [0, 0, 1, 0])
+        if (featureVector.Count(v => !numOps.Equals(v, numOps.Zero)) == 1)
+        {
+            return featureVector.IndexOfMax();
+        }
+
+        // Case 3: Continuous values (e.g., weights or importances)
+        var threshold = numOps.FromDouble(0.5); // Adjust this threshold as needed
+        var maxValue = featureVector.Max();
+        var normalizedVector = new Vector<T>(featureVector.Select(v => numOps.Divide(v, maxValue)));
+
+        for (int i = 0; i < normalizedVector.Length; i++)
+        {
+            if (numOps.GreaterThan(normalizedVector[i], threshold))
+            {
+                return i;
+            }
+        }
+
+        // If no value is above the threshold, return the index of the maximum value
+        return featureVector.IndexOfMax();
+    }
+
+    public static void UpdateAndApplyBestSolution<T>(
+        ModelResult<T> currentResult,
+        ref ModelResult<T> bestResult,
+        Matrix<T> XTrainSubset,
+        Matrix<T> XTestSubset,
+        Matrix<T> XValSubset,
+        IFitnessCalculator<T> fitnessCalculator)
+    {
+        if (fitnessCalculator.IsBetterFitness(currentResult.Fitness, bestResult.Fitness))
+        {
+            bestResult.Solution = currentResult.Solution;
+            bestResult.Fitness = currentResult.Fitness;
+            bestResult.FitDetectionResult = currentResult.FitDetectionResult;
+            bestResult.TrainingPredictions = currentResult.TrainingPredictions;
+            bestResult.ValidationPredictions = currentResult.ValidationPredictions;
+            bestResult.TestPredictions = currentResult.TestPredictions;
+            bestResult.EvaluationData = currentResult.EvaluationData;
+            bestResult.SelectedFeatures = currentResult.SelectedFeatures;
+            bestResult.TrainingFeatures = XTrainSubset;
+            bestResult.ValidationFeatures = XValSubset;
+            bestResult.TestFeatures = XTestSubset;
+        }
     }
 }

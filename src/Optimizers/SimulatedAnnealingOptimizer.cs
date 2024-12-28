@@ -1,5 +1,3 @@
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.Optimizers;
 
 public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
@@ -21,7 +19,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
             Vector<T> yVal,
             Matrix<T> XTest,
             Vector<T> yTest,
-            IRegression<T> regressionMethod,
+            IFullModel<T> regressionMethod,
             IRegularization<T> regularization,
             INormalizer<T> normalizer,
             NormalizationInfo<T> normInfo,
@@ -30,7 +28,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
         {
             int dimensions = XTrain.Columns;
             var currentSolution = InitializeRandomSolution(dimensions);
-            var bestSolution = currentSolution.Copy();
+            var bestSolution = SymbolicModelFactory<T>.CreateEmptyModel(_options.UseExpressionTrees, XTrain.Columns, _numOps);
             T temperature = _numOps.FromDouble(_saOptions.InitialTemperature);
             T bestIntercept = _numOps.Zero;
             T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
@@ -58,40 +56,57 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
 
                 var (currentFitnessScore, fitDetectionResult, 
                      trainingPredictions, validationPredictions, testPredictions, evaluationData) = EvaluateSolution(
-                        XTrainSubset, XValSubset, XTestSubset,
-                        yTrain, yVal, yTest,
-                        regressionMethod, normalizer, normInfo,
-                        fitnessCalculator, fitDetector, selectedFeatures.Count);
+                        newSolution, XTrainSubset, XValSubset, XTestSubset,
+                        yTrain, yVal, yTest, normalizer, normInfo,
+                        fitnessCalculator, fitDetector);
 
                 if (AcceptSolution(currentFitnessScore, bestFitness, temperature))
                 {
-                    UpdateBestSolution(
-                        currentFitnessScore,
-                        newSolution,
-                        regressionMethod.Intercept,
-                        fitDetectionResult,
-                        trainingPredictions,
-                        validationPredictions,
-                        testPredictions,
-                        evaluationData,
-                        selectedFeatures,
-                        XTrain,
-                        XTestSubset,
+                    int featureCount = selectedFeatures.Count;
+                    Vector<T>? coefficients = null;
+                    T? intercept = default;
+                    bool hasIntercept = false;
+
+                    if (regressionMethod is ILinearModel<T> linearModel)
+                    {
+                        hasIntercept = linearModel.HasIntercept;
+                        coefficients = linearModel.Coefficients;
+                        intercept = linearModel.Intercept;
+                        featureCount += hasIntercept ? 1 : 0;
+                    }
+
+                    var currentResult = new ModelResult<T>
+                    {
+                        Solution = newSolution,
+                        Fitness = currentFitnessScore,
+                        FitDetectionResult = fitDetectionResult,
+                        TrainingPredictions = trainingPredictions,
+                        ValidationPredictions = validationPredictions,
+                        TestPredictions = testPredictions,
+                        EvaluationData = evaluationData,
+                        SelectedFeatures = selectedFeatures.ToVectorList<T>()
+                    };
+
+                    var bestResult = new ModelResult<T>
+                    {
+                        Solution = bestSolution,
+                        Fitness = bestFitness,
+                        FitDetectionResult = bestFitDetectionResult,
+                        TrainingPredictions = bestTrainingPredictions,
+                        ValidationPredictions = bestValidationPredictions,
+                        TestPredictions = bestTestPredictions,
+                        EvaluationData = bestEvaluationData,
+                        SelectedFeatures = bestSelectedFeatures
+                    };
+
+                    OptimizerHelper.UpdateAndApplyBestSolution(
+                        currentResult,
+                        ref bestResult,
                         XTrainSubset,
+                        XTestSubset,
                         XValSubset,
-                        fitnessCalculator,
-                        ref bestFitness,
-                        ref bestSolution,
-                        ref bestIntercept,
-                        ref bestFitDetectionResult,
-                        ref bestTrainingPredictions,
-                        ref bestValidationPredictions,
-                        ref bestTestPredictions,
-                        ref bestEvaluationData,
-                        ref bestSelectedFeatures,
-                        ref bestTestFeatures,
-                        ref bestTrainingFeatures,
-                        ref bestValidationFeatures);
+                        fitnessCalculator
+                    );
                 }
 
                 temperature = _numOps.Multiply(temperature, _numOps.FromDouble(_saOptions.CoolingRate));
@@ -104,7 +119,6 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
 
             return OptimizerHelper.CreateOptimizationResult(
                 bestSolution,
-                bestIntercept,
                 bestFitness,
                 fitnessHistory,
                 bestSelectedFeatures,
@@ -144,24 +158,45 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
             );
         }
 
-        private Vector<T> InitializeRandomSolution(int dimensions)
+        private ISymbolicModel<T> InitializeRandomSolution(int dimensions)
         {
-            var solution = new Vector<T>(dimensions, _numOps);
-            for (int i = 0; i < dimensions; i++)
+            if (_options.UseExpressionTrees)
             {
-                solution[i] = _numOps.FromDouble(_random.NextDouble());
+                return SymbolicModelFactory<T>.CreateRandomModel(true, dimensions, _numOps);
             }
-
-            return solution;
+            else
+            {
+                var solution = new Vector<T>(dimensions, _numOps);
+                for (int i = 0; i < dimensions; i++)
+                {
+                    solution[i] = _numOps.FromDouble(_random.NextDouble());
+                }
+                return new VectorModel<T>(solution, _numOps);
+            }
         }
 
-        private Vector<T> PerturbSolution(Vector<T> solution)
+        private ISymbolicModel<T> PerturbSolution(ISymbolicModel<T> solution)
         {
-            var newSolution = solution.Copy();
-            int index = _random.Next(solution.Length);
-            newSolution[index] = _numOps.FromDouble(_random.NextDouble());
-
-            return newSolution;
+            if (solution is ExpressionTree<T> expressionTree)
+            {
+                return expressionTree.Mutate(_saOptions.MutationRate, _numOps);
+            }
+            else if (solution is VectorModel<T> vectorModel)
+            {
+                var newSolution = vectorModel.Coefficients.Copy();
+                for (int i = 0; i < newSolution.Length; i++)
+                {
+                    if (_random.NextDouble() < _saOptions.MutationRate)
+                    {
+                        newSolution[i] = _numOps.FromDouble(_random.NextDouble() * 2 - 1); // Random value between -1 and 1
+                    }
+                }
+                return new VectorModel<T>(newSolution, _numOps);
+            }
+            else
+            {
+                throw new ArgumentException("Unsupported model type");
+            }
         }
 
         private bool AcceptSolution(T newFitness, T currentFitness, T temperature)

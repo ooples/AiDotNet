@@ -148,15 +148,6 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     }
 
     protected abstract ModelType GetModelType();
-    //{
-    //    return this switch
-    //    {
-    //        SupportVectorRegression<T> => ModelType.SupportVectorRegression,
-    //        KernelRidgeRegression<T> => ModelType.KernelRidgeRegression,
-    //        GaussianProcessRegression<T> => ModelType.GaussianProcessRegression,
-    //        _ => ModelType.NonLinearRegression
-    //    };
-    //}
 
     public virtual byte[] Serialize()
     {

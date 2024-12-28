@@ -181,5 +181,8 @@ public class BayesianRegression<T> : RegressionBase<T>
         return result;
     }
 
-    // ... (other methods remain the same)
+    protected override ModelType GetModelType()
+    {
+        return ModelType.BayesianRegression;
+    }
 }

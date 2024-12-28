@@ -1,6 +1,4 @@
-﻿using AiDotNet.Models.Options;
-
-namespace AiDotNet.Regression;
+﻿namespace AiDotNet.Regression;
 
 public class MultivariateRegression<T> : RegressionBase<T>
 {
@@ -37,5 +35,10 @@ public class MultivariateRegression<T> : RegressionBase<T>
             input = input.AddConstantColumn(NumOps.One);
 
         return input.Multiply(Coefficients);
+    }
+
+    protected override ModelType GetModelType()
+    {
+        return ModelType.MultivariateRegression;
     }
 }

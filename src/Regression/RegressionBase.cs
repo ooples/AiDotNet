@@ -43,27 +43,19 @@ public abstract class RegressionBase<T> : IRegression<T>
         return new ModelMetadata<T>
         {
             ModelType = GetModelType(),
-            Coefficients = Coefficients,
-            Intercept = Intercept,
-            FeatureImportances = CalculateFeatureImportances(),
+            FeatureCount = Coefficients.Length,
+            Complexity = Coefficients.Length,
+            Description = $"{GetModelType()} model with {Coefficients.Length} features",
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "HasIntercept", HasIntercept }
+                { "HasIntercept", HasIntercept },
+                { "CoefficientNorm", Coefficients.Norm()! },
+                { "FeatureImportances", CalculateFeatureImportances().ToArray() }
             }
         };
     }
 
-    protected virtual ModelType GetModelType()
-    {
-        return this switch
-        {
-            SimpleRegression<T> => ModelType.SimpleRegression,
-            MultipleRegression<T> => ModelType.MultipleRegression,
-            PolynomialRegression<T> => ModelType.PolynomialRegression,
-            WeightedRegression<T> => ModelType.WeightedRegression,
-            _ => throw new InvalidOperationException($"Unknown model type: {GetType().Name}")
-        };
-    }
+    protected abstract ModelType GetModelType();
 
     protected virtual Vector<T> CalculateFeatureImportances()
     {
@@ -72,18 +64,17 @@ public abstract class RegressionBase<T> : IRegression<T>
 
     public virtual byte[] Serialize()
     {
-        var modelMetadata = new ModelMetadata<T>
+        var modelData = new Dictionary<string, object>
         {
-            Coefficients = Coefficients,
-            Intercept = Intercept,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                { "RegularizationType", (T)Convert.ChangeType((int)GetRegularizationType(Regularization), typeof(T)) }
-            }
+            { "Coefficients", Coefficients.ToArray() },
+            { "Intercept", Intercept ?? NumOps.Zero! },
+            { "RegularizationType", (int)GetRegularizationType(Regularization) }
         };
 
-        var jsonString = JsonConvert.SerializeObject(modelMetadata);
-        return Encoding.UTF8.GetBytes(jsonString);
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
     }
 
     private RegularizationType GetRegularizationType(IRegularization<T> regularization)
@@ -103,23 +94,24 @@ public abstract class RegressionBase<T> : IRegression<T>
         var jsonString = Encoding.UTF8.GetString(modelData);
         var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
 
-        if (modelMetadata == null)
+        if (modelMetadata == null || modelMetadata.ModelData == null)
         {
             throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
         }
 
-        Coefficients = modelMetadata.Coefficients ?? new Vector<T>(0, NumOps);
-        Intercept = modelMetadata.Intercept ?? NumOps.Zero;
+        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var modelDataDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(modelDataString);
 
-        if (modelMetadata.AdditionalInfo.TryGetValue("RegularizationType", out var regularizationTypeValue))
+        if (modelDataDict == null)
         {
-            var regularizationType = (RegularizationType)Convert.ToInt32(regularizationTypeValue);
-            Regularization = RegularizationFactory.CreateRegularization<T>(regularizationType);
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
         }
-        else
-        {
-            Regularization = new NoRegularization<T>();
-        }
+
+        Coefficients = new Vector<T>((T[])modelDataDict["Coefficients"], NumOps);
+        Intercept = (T)modelDataDict["Intercept"];
+
+        var regularizationType = (RegularizationType)Convert.ToInt32(modelDataDict["RegularizationType"]);
+        Regularization = RegularizationFactory.CreateRegularization<T>(regularizationType);
     }
 
     protected Vector<T> SolveSystem(Matrix<T> a, Vector<T> b)

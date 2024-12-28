@@ -62,4 +62,9 @@ public class WeightedRegression<T> : RegressionBase<T>
 
         return expandedX;
     }
+
+    protected override ModelType GetModelType()
+    {
+        return ModelType.WeightedRegression;
+    }
 }

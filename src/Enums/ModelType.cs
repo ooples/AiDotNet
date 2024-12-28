@@ -4,6 +4,7 @@ public enum ModelType
 {
     SimpleRegression,
     MultipleRegression,
+    MultivariateRegression,
     PolynomialRegression,
     WeightedRegression,
     RandomForest,
@@ -17,5 +18,15 @@ public enum ModelType
     NonLinearRegression,
     SupportVectorRegression,
     KernelRidgeRegression,
-    GaussianProcessRegression
+    GaussianProcessRegression,
+    IsotonicRegression,
+    QuantileRegression,
+    RadialBasisFunctionRegression,
+    LocallyWeightedRegression,
+    SplineRegression,
+    KNearestNeighbors,
+    SymbolicRegression,
+    BayesianRegression,
+    ExpressionTree,
+    Vector
 }

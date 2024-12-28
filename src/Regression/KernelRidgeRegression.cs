@@ -73,4 +73,74 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     {
         return ModelType.KernelRidgeRegression;
     }
+
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // Serialize KernelRidgeRegression specific data
+        writer.Write(Options.LambdaKRR);
+        writer.Write((int)Options.DecompositionType);
+
+        // Serialize _gramMatrix
+        writer.Write(_gramMatrix.Rows);
+        writer.Write(_gramMatrix.Columns);
+        for (int i = 0; i < _gramMatrix.Rows; i++)
+        {
+            for (int j = 0; j < _gramMatrix.Columns; j++)
+            {
+                writer.Write(Convert.ToDouble(_gramMatrix[i, j]));
+            }
+        }
+
+        // Serialize _dualCoefficients
+        writer.Write(_dualCoefficients.Length);
+        for (int i = 0; i < _dualCoefficients.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_dualCoefficients[i]));
+        }
+
+        return ms.ToArray();
+    }
+
+    public override void Deserialize(byte[] modelData)
+    {
+        using var ms = new MemoryStream(modelData);
+        using var reader = new BinaryReader(ms);
+
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // Deserialize KernelRidgeRegression specific data
+        Options.LambdaKRR = reader.ReadDouble();
+        Options.DecompositionType = (MatrixDecompositionType)reader.ReadInt32();
+
+        // Deserialize _gramMatrix
+        int rows = reader.ReadInt32();
+        int cols = reader.ReadInt32();
+        _gramMatrix = new Matrix<T>(rows, cols, NumOps);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                _gramMatrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+
+        // Deserialize _dualCoefficients
+        int length = reader.ReadInt32();
+        _dualCoefficients = new Vector<T>(length, NumOps);
+        for (int i = 0; i < length; i++)
+        {
+            _dualCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+    }
 }

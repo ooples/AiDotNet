@@ -88,16 +88,23 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ExtremelyRandomizedTrees,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _trees.Count },
                 { "MaxDepth", _options.MaxDepth }
-            },
-            FeatureImportances = FeatureImportances
+            }
         };
+
+        // Add feature importances to AdditionalInfo if available
+        if (FeatureImportances != null && FeatureImportances.Length > 0)
+        {
+            metadata.AdditionalInfo["FeatureImportances"] = FeatureImportances.ToList();
+        }
+
+        return metadata;
     }
 
     public override byte[] Serialize()

@@ -116,6 +116,27 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return new Vector<T>(this.Select(x => numOps.Divide(x, scalar)));
     }
 
+    public int IndexOfMax()
+    {
+        if (this.Length == 0)
+            throw new InvalidOperationException("Vector is empty");
+
+        int maxIndex = 0;
+        T maxValue = this[0];
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        for (int i = 1; i < this.Length; i++)
+        {
+            if (numOps.GreaterThan(this[i], maxValue))
+            {
+                maxValue = this[i];
+                maxIndex = i;
+            }
+        }
+
+        return maxIndex;
+    }
+
     public Matrix<T> OuterProduct(Vector<T> other)
     {
         int m = this.Length;

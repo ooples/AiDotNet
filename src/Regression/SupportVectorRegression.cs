@@ -162,4 +162,36 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     {
         return ModelType.SupportVectorRegression;
     }
+
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // Serialize SVR specific data
+        writer.Write(_options.Epsilon);
+        writer.Write(_options.C);
+
+        return ms.ToArray();
+    }
+
+    public override void Deserialize(byte[] modelData)
+    {
+        using var ms = new MemoryStream(modelData);
+        using var reader = new BinaryReader(ms);
+
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // Deserialize SVR specific data
+        _options.Epsilon = reader.ReadDouble();
+        _options.C = reader.ReadDouble();
+    }
 }

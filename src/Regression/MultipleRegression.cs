@@ -1,6 +1,4 @@
-﻿using AiDotNet.Models.Options;
-
-namespace AiDotNet.Regression;
+﻿namespace AiDotNet.Regression;
 
 public class MultipleRegression<T> : RegressionBase<T>
 {
@@ -29,5 +27,10 @@ public class MultipleRegression<T> : RegressionBase<T>
         {
             Coefficients = new Vector<T>(solution, NumOps);
         }
+    }
+
+    protected override ModelType GetModelType()
+    {
+        return ModelType.MultipleRegression;
     }
 }

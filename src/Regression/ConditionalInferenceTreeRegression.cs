@@ -189,7 +189,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ConditionalInferenceTree,
             AdditionalInfo = new Dictionary<string, object>
@@ -197,9 +197,16 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
                 { "MaxDepth", _options.MaxDepth },
                 { "MinSamplesSplit", _options.MinSamplesSplit },
                 { "SignificanceLevel", _options.SignificanceLevel }
-            },
-            FeatureImportances = FeatureImportances
+            }
         };
+
+        // Add feature importances to AdditionalInfo if available
+        if (FeatureImportances != null && FeatureImportances.Any())
+        {
+            metadata.AdditionalInfo["FeatureImportances"] = FeatureImportances.ToList();
+        }
+
+        return metadata;
     }
 
     public override byte[] Serialize()

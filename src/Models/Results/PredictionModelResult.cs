@@ -6,12 +6,12 @@ namespace AiDotNet.Models.Results;
 [Serializable]
 internal class PredictionModelResult<T> : IPredictiveModel<T>
 {
-    public IRegression<T>? Model { get; private set; }
+    public IFullModel<T>? Model { get; private set; }
     public OptimizationResult<T> OptimizationResult { get; private set; } = new();
     public NormalizationInfo<T> NormalizationInfo { get; private set; } = new();
     public ModelMetadata<T> ModelMetadata { get; private set; } = new();
 
-    public PredictionModelResult(IRegression<T> model, OptimizationResult<T> optimizationResult, NormalizationInfo<T> normalizationInfo)
+    public PredictionModelResult(IFullModel<T> model, OptimizationResult<T> optimizationResult, NormalizationInfo<T> normalizationInfo)
     {
         Model = model;
         OptimizationResult = optimizationResult;
