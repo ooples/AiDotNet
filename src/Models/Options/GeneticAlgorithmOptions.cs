@@ -1,6 +1,6 @@
 namespace AiDotNet.Models.Options;
 
-public class GeneticAlgorithmOptions : OptimizationAlgorithmOptions
+public class GeneticAlgorithmOptimizerOptions : OptimizationAlgorithmOptions
 {
     public int MaxGenerations { get; set; } = 50;
     public int PopulationSize { get; set; } = 100;

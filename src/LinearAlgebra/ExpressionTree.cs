@@ -388,5 +388,64 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     }
 
     public int Id { get; } = Interlocked.Increment(ref _nextId);
+
     private static int _nextId;
+
+    public ISymbolicModel<T> UpdateCoefficients(Vector<T> newCoefficients)
+    {
+        if (newCoefficients.Length != this.Coefficients.Length)
+        {
+            throw new ArgumentException($"The number of new coefficients ({newCoefficients.Length}) must match the current number of coefficients ({this.Coefficients.Length}).");
+        }
+
+        ExpressionTree<T> updatedTree = (ExpressionTree<T>)this.Clone();
+        int coefficientIndex = 0;
+
+        void UpdateConstantNodes(ExpressionTree<T> node)
+        {
+            if (node.Type == NodeType.Constant)
+            {
+                node.Value = newCoefficients[coefficientIndex++];
+            }
+            if (node.Left != null)
+            {
+                UpdateConstantNodes(node.Left);
+            }
+            if (node.Right != null)
+            {
+                UpdateConstantNodes(node.Right);
+            }
+        }
+
+        UpdateConstantNodes(updatedTree);
+
+        return updatedTree;
+    }
+
+    public Vector<T> Coefficients
+    {
+        get
+        {
+            List<T> coefficients = new List<T>();
+
+            void CollectCoefficients(ExpressionTree<T> node)
+            {
+                if (node.Type == NodeType.Constant)
+                {
+                    coefficients.Add(node.Value);
+                }
+                if (node.Left != null)
+                {
+                    CollectCoefficients(node.Left);
+                }
+                if (node.Right != null)
+                {
+                    CollectCoefficients(node.Right);
+                }
+            }
+
+            CollectCoefficients(this);
+            return new Vector<T>(coefficients.ToArray(), NumOps);
+        }
+    }
 }

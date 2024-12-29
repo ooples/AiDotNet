@@ -10,4 +10,6 @@ public interface ISymbolicModel<T> : IFullModel<T>
     ISymbolicModel<T> Clone();
     int FeatureCount { get; }
     bool IsFeatureUsed(int featureIndex);
+    Vector<T> Coefficients { get; }
+    ISymbolicModel<T> UpdateCoefficients(Vector<T> newCoefficients);
 }

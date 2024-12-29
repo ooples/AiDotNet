@@ -23,4 +23,26 @@ public static class MatrixDecompositionFactory
             _ => throw new ArgumentException($"Unsupported decomposition type: {decompositionType}")
         };
     }
+
+    public static MatrixDecompositionType GetDecompositionType<T>(IMatrixDecomposition<T>? decomposition)
+    {
+        return decomposition switch
+        {
+            LuDecomposition<T> => MatrixDecompositionType.Lu,
+            QrDecomposition<T> => MatrixDecompositionType.Qr,
+            CholeskyDecomposition<T> => MatrixDecompositionType.Cholesky,
+            SvdDecomposition<T> => MatrixDecompositionType.Svd,
+            CramerDecomposition<T> => MatrixDecompositionType.Cramer,
+            EigenDecomposition<T> => MatrixDecompositionType.Eigen,
+            SchurDecomposition<T> => MatrixDecompositionType.Schur,
+            TakagiDecomposition<T> => MatrixDecompositionType.Takagi,
+            PolarDecomposition<T> => MatrixDecompositionType.Polar,
+            HessenbergDecomposition<T> => MatrixDecompositionType.Hessenberg,
+            TridiagonalDecomposition<T> => MatrixDecompositionType.Tridiagonal,
+            BidiagonalDecomposition<T> => MatrixDecompositionType.Bidiagonal,
+            LdlDecomposition<T> => MatrixDecompositionType.Ldl,
+            UduDecomposition<T> => MatrixDecompositionType.Udu,
+            _ => throw new ArgumentException($"Unsupported decomposition type: {decomposition?.GetType().Name}")
+        };
+    }
 }

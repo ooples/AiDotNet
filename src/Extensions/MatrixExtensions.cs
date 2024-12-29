@@ -77,4 +77,46 @@ public static class MatrixExtensions
 
         return result;
     }
+
+    public static Matrix<T> PointwiseMultiply<T>(this Matrix<T> matrix, Vector<T> vector)
+    {
+        if (matrix.Rows != vector.Length)
+        {
+            throw new ArgumentException("The number of rows in the matrix must match the length of the vector.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        Matrix<T> result = new(matrix.Rows, matrix.Columns);
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = numOps.Multiply(matrix[i, j], vector[i]);
+            }
+        }
+
+        return result;
+    }
+
+    public static Matrix<T> AddColumn<T>(this Matrix<T> matrix, Vector<T> column)
+    {
+        if (matrix.Rows != column.Length)
+        {
+            throw new ArgumentException("Column length must match matrix row count.");
+        }
+
+        Matrix<T> newMatrix = new Matrix<T>(matrix.Rows, matrix.Columns + 1);
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                newMatrix[i, j] = matrix[i, j];
+            }
+            newMatrix[i, matrix.Columns] = column[i];
+        }
+
+        return newMatrix;
+    }
 }

@@ -213,4 +213,15 @@ public class VectorModel<T> : ISymbolicModel<T>
             Coefficients[i] = newCoefficients[i];
         }
     }
+
+    public ISymbolicModel<T> UpdateCoefficients(Vector<T> newCoefficients)
+    {
+        if (newCoefficients.Length != this.FeatureCount)
+        {
+            throw new ArgumentException($"The number of new coefficients ({newCoefficients.Length}) must match the current feature count ({this.FeatureCount}).");
+        }
+
+        // Create a new VectorModel with the updated coefficients
+        return new VectorModel<T>(newCoefficients, this._numOps);
+    }
 }

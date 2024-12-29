@@ -25,7 +25,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new SymbolicRegressionOptions();
-        _optimizer = new GeneticAlgorithmOptimizer<T>(new GeneticAlgorithmOptions
+        _optimizer = new GeneticAlgorithmOptimizer<T>(new GeneticAlgorithmOptimizerOptions
         {
             PopulationSize = _options.PopulationSize,
             MaxGenerations = _options.MaxGenerations,

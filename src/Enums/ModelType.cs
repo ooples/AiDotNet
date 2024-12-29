@@ -28,5 +28,9 @@ public enum ModelType
     SymbolicRegression,
     BayesianRegression,
     ExpressionTree,
-    Vector
+    Vector,
+    GeneticAlgorithmRegression,
+    OrthogonalRegression,
+    RobustRegression,
+    TimeSeriesRegression
 }

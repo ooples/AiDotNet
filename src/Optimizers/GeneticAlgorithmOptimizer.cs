@@ -2,12 +2,12 @@ namespace AiDotNet.Optimizers;
 
 public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
 {
-    private readonly GeneticAlgorithmOptions _geneticOptions;
+    private readonly GeneticAlgorithmOptimizerOptions _geneticOptions;
     private readonly Random _random;
 
-    public GeneticAlgorithmOptimizer(GeneticAlgorithmOptions? options = null) : base(options)
+    public GeneticAlgorithmOptimizer(GeneticAlgorithmOptimizerOptions? options = null) : base(options)
     {
-        _geneticOptions = options ?? new GeneticAlgorithmOptions();
+        _geneticOptions = options ?? new GeneticAlgorithmOptimizerOptions();
         _random = new Random();
     }
 

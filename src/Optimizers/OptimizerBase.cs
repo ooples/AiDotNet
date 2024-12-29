@@ -1,4 +1,3 @@
-global using AiDotNet.Models.Results;
 global using AiDotNet.Models.Inputs;
 
 namespace AiDotNet.Optimizers;

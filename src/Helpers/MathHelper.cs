@@ -32,6 +32,16 @@ public static class MathHelper
             throw new NotSupportedException($"Numeric operations for type {typeof(T)} are not supported.");
     }
 
+    public static bool AlmostEqual<T>(T a, T b, T tolerance, INumericOperations<T> numOps)
+    {
+        return numOps.LessThan(numOps.Abs(numOps.Subtract(a, b)), tolerance);
+    }
+
+    public static bool AlmostEqual<T>(T a, T b, INumericOperations<T> numOps)
+    {
+        return AlmostEqual(a, b, numOps.FromDouble(1e-8), numOps);
+    }
+
     public static T Pi<T>()
     {
         return GetNumericOperations<T>().FromDouble(Math.PI);
