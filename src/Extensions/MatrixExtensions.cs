@@ -119,4 +119,167 @@ public static class MatrixExtensions
 
         return newMatrix;
     }
+
+    public static Matrix<T> Submatrix<T>(this Matrix<T> matrix, int startRow, int startCol, int numRows, int numCols)
+    {
+        if (startRow < 0 || startCol < 0 || startRow + numRows > matrix.Rows || startCol + numCols > matrix.Columns)
+        {
+            throw new ArgumentOutOfRangeException("Invalid submatrix dimensions");
+        }
+
+        Matrix<T> submatrix = new Matrix<T>(numRows, numCols);
+
+        for (int i = 0; i < numRows; i++)
+        {
+            for (int j = 0; j < numCols; j++)
+            {
+                submatrix[i, j] = matrix[startRow + i, startCol + j];
+            }
+        }
+
+        return submatrix;
+    }
+
+    public static Matrix<T> GetColumns<T>(this Matrix<T> matrix, IEnumerable<int> columnIndices)
+    {
+        return new Matrix<T>(GetColumnVectors(matrix, columnIndices));
+    }
+
+    public static List<Vector<T>> GetColumnVectors<T>(this Matrix<T> matrix, IEnumerable<int> columnIndices)
+    {
+        var selectedColumns = new List<Vector<T>>();
+        foreach (int index in columnIndices)
+        {
+            if (index < 0 || index >= matrix.Columns)
+            {
+                throw new ArgumentOutOfRangeException(nameof(columnIndices), $"Column index {index} is out of range.");
+            }
+            selectedColumns.Add(matrix.GetColumn(index));
+        }
+
+        return selectedColumns;
+    }
+
+    public static T Max<T>(this Matrix<T> matrix, Func<T, T> selector)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T max = selector(matrix[0, 0]);
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                T value = selector(matrix[i, j]);
+                if (numOps.GreaterThan(value, max))
+                {
+                    max = value;
+                }
+            }
+        }
+
+        return max;
+    }
+
+    public static Matrix<T> GetRowRange<T>(this Matrix<T> matrix, int startRow, int rowCount)
+    {
+        Matrix<T> result = new(rowCount, matrix.Columns);
+        for (int i = 0; i < rowCount; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = matrix[startRow + i, j];
+            }
+        }
+
+        return result;
+    }
+
+    public static Vector<T> RowWiseArgmax<T>(this Matrix<T> matrix)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        Vector<T> result = new(matrix.Rows);
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            T max = matrix[i, 0];
+            int maxIndex = 0;
+            for (int j = 1; j < matrix.Columns; j++)
+            {
+                if (numOps.GreaterThan(matrix[i, j], max))
+                {
+                    max = matrix[i, j];
+                    maxIndex = j;
+                }
+            }
+            result[i] = numOps.FromDouble(maxIndex);
+        }
+
+        return result;
+    }
+
+    public static Matrix<T> KroneckerProduct<T>(this Matrix<T> a, Matrix<T> b)
+    {
+        int m = a.Rows;
+        int n = a.Columns;
+        int p = b.Rows;
+        int q = b.Columns;
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        Matrix<T> result = new(m * p, n * q);
+
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                for (int k = 0; k < p; k++)
+                {
+                    for (int l = 0; l < q; l++)
+                    {
+                        result[i * p + k, j * q + l] = numOps.Multiply(a[i, j], b[k, l]);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public static Vector<T> Flatten<T>(this Matrix<T> matrix)
+    {
+        var vector = new Vector<T>(matrix.Rows * matrix.Columns);
+        int index = 0;
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                vector[index++] = matrix[i, j];
+            }
+        }
+
+        return vector;
+    }
+
+    public static Matrix<T> Reshape<T>(this Matrix<T> matrix, int newRows, int newColumns)
+    {
+        if (matrix.Rows * matrix.Columns != newRows * newColumns)
+        {
+            throw new ArgumentException("The total number of elements must remain the same after reshaping.");
+        }
+
+        var reshaped = new Matrix<T>(newRows, newColumns);
+        int index = 0;
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                int newRow = index / newColumns;
+                int newCol = index % newColumns;
+                reshaped[newRow, newCol] = matrix[i, j];
+                index++;
+            }
+        }
+
+        return reshaped;
+    }
 }

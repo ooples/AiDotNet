@@ -2,163 +2,54 @@ namespace AiDotNet.Optimizers;
 
 public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
 {
-    private readonly GeneticAlgorithmOptimizerOptions _geneticOptions;
+    private GeneticAlgorithmOptimizerOptions _geneticOptions;
     private readonly Random _random;
 
-    public GeneticAlgorithmOptimizer(GeneticAlgorithmOptimizerOptions? options = null) : base(options)
+    public GeneticAlgorithmOptimizer(
+        GeneticAlgorithmOptimizerOptions? options = null,
+        PredictionStatsOptions? predictionOptions = null,
+        ModelStatsOptions? modelOptions = null,
+        IModelEvaluator<T>? modelEvaluator = null,
+        IFitDetector<T>? fitDetector = null,
+        IFitnessCalculator<T>? fitnessCalculator = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator)
     {
         _geneticOptions = options ?? new GeneticAlgorithmOptimizerOptions();
         _random = new Random();
     }
 
-    public override OptimizationResult<T> Optimize(
-        Matrix<T> XTrain, Vector<T> yTrain,
-        Matrix<T> XVal, Vector<T> yVal,
-        Matrix<T> XTest, Vector<T> yTest,
-        IFullModel<T> regressionMethod,
-        IRegularization<T> regularization,
-        INormalizer<T> normalizer,
-        NormalizationInfo<T> normInfo,
-        IFitnessCalculator<T> fitnessCalculator,
-        IFitDetector<T> fitDetector)
+    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
-        int populationSize = _geneticOptions.PopulationSize;
-        double mutationRate = _geneticOptions.MutationRate;
-        double crossoverRate = _geneticOptions.CrossoverRate;
-        var population = InitializePopulation(XTrain.Columns, populationSize);
-        var bestSolution = SymbolicModelFactory<T>.CreateEmptyModel(_options.UseExpressionTrees, XTrain.Columns, _numOps);
-        T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
-        var bestIntercept = _numOps.Zero;
-        var fitnessHistory = new List<T>();
-        var iterationHistory = new List<OptimizationIterationInfo<T>>();
+        int dimensions = inputData.XTrain.Columns;
+        var population = InitializePopulation(dimensions, _geneticOptions.PopulationSize);
+        var bestStepData = new OptimizationStepData<T>();
 
-        var bestFitDetectionResult = new FitDetectorResult<T>();
-        var bestTrainingPredictions = Vector<T>.Empty();
-        var bestValidationPredictions = Vector<T>.Empty();
-        var bestTestPredictions = Vector<T>.Empty();
-        var bestEvaluationData = new ModelEvaluationData<T>();
-        var bestSelectedFeatures = new List<Vector<T>>();
-        var bestTestFeatures = Matrix<T>.Empty();
-        var bestTrainingFeatures = Matrix<T>.Empty();
-        var bestValidationFeatures = Matrix<T>.Empty();
-
-        for (int generation = 0; generation < _options.MaxIterations; generation++)
+        for (int generation = 0; generation < Options.MaxIterations; generation++)
         {
-            for (int i = 0; i < populationSize; i++)
+            var populationStepData = new List<OptimizationStepData<T>>();
+
+            // Evaluate all individuals in the population
+            foreach (var individual in population)
             {
-                var currentSolution = population[i];
-                var selectedFeatures = OptimizerHelper.GetSelectedFeatures(currentSolution);
-                var XTrainSubset = OptimizerHelper.SelectFeatures(XTrain, selectedFeatures);
-                var XValSubset = OptimizerHelper.SelectFeatures(XVal, selectedFeatures);
-                var XTestSubset = OptimizerHelper.SelectFeatures(XTest, selectedFeatures);
+                var stepData = PrepareAndEvaluateSolution(individual, inputData);
+                populationStepData.Add(stepData);
 
-                var (currentFitness, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions, evaluationData) = 
-                EvaluateSolution(currentSolution,
-                    XTrainSubset, XValSubset, XTestSubset,
-                    yTrain, yVal, yTest,
-                    normalizer, normInfo,
-                    fitnessCalculator, fitDetector
-                );
-
-                int featureCount = selectedFeatures.Count;
-                Vector<T>? coefficients = null;
-                T? intercept = default;
-                bool hasIntercept = false;
-
-                if (regressionMethod is ILinearModel<T> linearModel)
-                {
-                    hasIntercept = linearModel.HasIntercept;
-                    coefficients = linearModel.Coefficients;
-                    intercept = linearModel.Intercept;
-                    featureCount += hasIntercept ? 1 : 0;
-                }
-
-                var currentResult = new ModelResult<T>
-                {
-                    Solution = currentSolution,
-                    Fitness = currentFitness,
-                    FitDetectionResult = fitDetectionResult,
-                    TrainingPredictions = trainingPredictions,
-                    ValidationPredictions = validationPredictions,
-                    TestPredictions = testPredictions,
-                    EvaluationData = evaluationData,
-                    SelectedFeatures = selectedFeatures.ToVectorList<T>()
-                };
-
-                var bestResult = new ModelResult<T>
-                {
-                    Solution = bestSolution,
-                    Fitness = bestFitness,
-                    FitDetectionResult = bestFitDetectionResult,
-                    TrainingPredictions = bestTrainingPredictions,
-                    ValidationPredictions = bestValidationPredictions,
-                    TestPredictions = bestTestPredictions,
-                    EvaluationData = bestEvaluationData,
-                    SelectedFeatures = bestSelectedFeatures
-                };
-
-                OptimizerHelper.UpdateAndApplyBestSolution(
-                    currentResult,
-                    ref bestResult,
-                    XTrainSubset,
-                    XTestSubset,
-                    XValSubset,
-                    fitnessCalculator
-                );
+                UpdateBestSolution(stepData, ref bestStepData);
             }
 
-            fitnessHistory.Add(bestFitness);
-            iterationHistory.Add(new OptimizationIterationInfo<T> { Iteration = generation, Fitness = bestFitness, FitDetectionResult = bestFitDetectionResult });
-
-            if (ShouldEarlyStop(iterationHistory, fitnessCalculator))
+            // Update iteration history and check for early stopping
+            if (UpdateIterationHistoryAndCheckEarlyStopping(generation, bestStepData))
             {
                 break;
             }
 
-            population = PerformSelection(population, fitnessCalculator, XTrain, yTrain, XVal, yVal, XTest, yTest, regressionMethod, regularization, fitDetector, normalizer, normInfo);
-            population = PerformCrossover(population, crossoverRate);
-            population = PerformMutation(population, mutationRate);
+            // Perform genetic operations
+            population = PerformSelection(populationStepData);
+            population = PerformCrossover(population);
+            population = PerformMutation(population);
         }
 
-        return OptimizerHelper.CreateOptimizationResult(
-            bestSolution,
-            bestFitness,
-            fitnessHistory,
-            bestSelectedFeatures,
-            new OptimizationResult<T>.DatasetResult
-            {
-                X = bestTrainingFeatures,
-                Y = yTrain,
-                Predictions = bestTrainingPredictions,
-                ErrorStats = bestEvaluationData.TrainingErrorStats,
-                ActualBasicStats = bestEvaluationData.TrainingActualBasicStats,
-                PredictedBasicStats = bestEvaluationData.TrainingPredictedBasicStats,
-                PredictionStats = bestEvaluationData.TrainingPredictionStats
-            },
-            new OptimizationResult<T>.DatasetResult
-            {
-                X = bestValidationFeatures,
-                Y = yVal,
-                Predictions = bestValidationPredictions,
-                ErrorStats = bestEvaluationData.ValidationErrorStats,
-                ActualBasicStats = bestEvaluationData.ValidationActualBasicStats,
-                PredictedBasicStats = bestEvaluationData.ValidationPredictedBasicStats,
-                PredictionStats = bestEvaluationData.ValidationPredictionStats
-            },
-            new OptimizationResult<T>.DatasetResult
-            {
-                X = bestTestFeatures,
-                Y = yTest,
-                Predictions = bestTestPredictions,
-                ErrorStats = bestEvaluationData.TestErrorStats,
-                ActualBasicStats = bestEvaluationData.TestActualBasicStats,
-                PredictedBasicStats = bestEvaluationData.TestPredictedBasicStats,
-                PredictionStats = bestEvaluationData.TestPredictionStats
-            },
-            bestFitDetectionResult,
-            iterationHistory.Count,
-            _numOps
-        );
+        return CreateOptimizationResult(bestStepData, inputData);
     }
 
     private List<ISymbolicModel<T>> InitializePopulation(int dimensions, int populationSize)
@@ -166,85 +57,31 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         var population = new List<ISymbolicModel<T>>();
         for (int i = 0; i < populationSize; i++)
         {
-            population.Add(SymbolicModelFactory<T>.CreateRandomModel(_options.UseExpressionTrees, dimensions, _numOps));
+            population.Add(SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions, NumOps));
         }
-
         return population;
     }
 
-    private List<ISymbolicModel<T>> PerformSelection(List<ISymbolicModel<T>> population, IFitnessCalculator<T> fitnessCalculator, 
-    Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XVal, Vector<T> yVal, Matrix<T> XTest, Vector<T> yTest, 
-    IFullModel<T> regressionMethod, IRegularization<T> regularization, IFitDetector<T> fitDetector,
-    INormalizer<T> normalizer, NormalizationInfo<T> normInfo)
+    private List<ISymbolicModel<T>> PerformSelection(List<OptimizationStepData<T>> populationStepData)
     {
-        var fitnesses = new List<T>();
-
-        foreach (var individual in population)
-        {
-            individual.Fit(XTrain, yTrain);
-            var trainingPredictions = new Vector<T>(XTrain.Rows, _numOps);
-            var validationPredictions = new Vector<T>(XVal.Rows, _numOps);
-            var testingPredictions = new Vector<T>(XTest.Rows, _numOps);
-
-            // Evaluate each row individually
-            for (int i = 0; i < XTrain.Rows; i++)
-            {
-                trainingPredictions[i] = individual.Evaluate(XTrain.GetRow(i));
-            }
-            for (int i = 0; i < XVal.Rows; i++)
-            {
-                validationPredictions[i] = individual.Evaluate(XVal.GetRow(i));
-            }
-            for (int i = 0; i < XTest.Rows; i++)
-            {
-                testingPredictions[i] = individual.Evaluate(XTest.GetRow(i));
-            }
-
-            var (trainingErrorStats, validationErrorStats, _) = CalculateErrorStats(
-                yTrain, yVal, yTest, 
-                trainingPredictions, validationPredictions, testingPredictions, 
-                XTrain.Columns);
-
-            var (trainingActualStats, trainingPredictedStats, 
-                 validationActualStats, validationPredictedStats, _, _) = CalculateBasicStats(
-                yTrain, yVal, yTest,
-                trainingPredictions, validationPredictions, testingPredictions);
-
-            var (trainingPredictionStats, validationPredictionStats, _) = CalculatePredictionStats(
-                yTrain, yVal, yTest, 
-                trainingPredictions, validationPredictions, testingPredictions, 
-                XTrain.Columns);
-
-            var currentFitness = fitnessCalculator.CalculateFitnessScore(
-                trainingErrorStats,
-                trainingActualStats,
-                trainingPredictedStats,
-                yTrain,
-                trainingPredictions,
-                XTrain,
-                trainingPredictionStats
-            );
-
-            fitnesses.Add(currentFitness);
-        }
-
-        return TournamentSelection(population, fitnesses, population.Count);
+        return TournamentSelection(populationStepData, _geneticOptions.PopulationSize);
     }
 
-    private List<ISymbolicModel<T>> TournamentSelection(List<ISymbolicModel<T>> population, List<T> fitnesses, int selectionSize)
+    private List<ISymbolicModel<T>> TournamentSelection(List<OptimizationStepData<T>> populationStepData, int selectionSize)
     {
         var selected = new List<ISymbolicModel<T>>();
         for (int i = 0; i < selectionSize; i++)
         {
-            int index1 = _random.Next(population.Count);
-            int index2 = _random.Next(population.Count);
-            selected.Add(_numOps.LessThan(fitnesses[index1], fitnesses[index2]) ? population[index1] : population[index2]);
+            int index1 = _random.Next(populationStepData.Count);
+            int index2 = _random.Next(populationStepData.Count);
+            selected.Add(_fitnessCalculator.IsBetterFitness(populationStepData[index1].FitnessScore, populationStepData[index2].FitnessScore)
+                ? populationStepData[index1].Solution
+                : populationStepData[index2].Solution);
         }
-
         return selected;
     }
 
-    private List<ISymbolicModel<T>> PerformCrossover(List<ISymbolicModel<T>> population, double crossoverRate)
+    private List<ISymbolicModel<T>> PerformCrossover(List<ISymbolicModel<T>> population)
     {
         var newPopulation = new List<ISymbolicModel<T>>();
         for (int i = 0; i < population.Count; i += 2)
@@ -252,7 +89,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
             var parent1 = population[i];
             var parent2 = i + 1 < population.Count ? population[i + 1] : population[0];
 
-            var (child1, child2) = Crossover(parent1, parent2, crossoverRate);
+            var (child1, child2) = Crossover(parent1, parent2);
             newPopulation.Add(child1);
             newPopulation.Add(child2);
         }
@@ -260,11 +97,11 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         return newPopulation;
     }
 
-    private (ISymbolicModel<T>, ISymbolicModel<T>) Crossover(ISymbolicModel<T> parent1, ISymbolicModel<T> parent2, double crossoverRate)
+    private (ISymbolicModel<T>, ISymbolicModel<T>) Crossover(ISymbolicModel<T> parent1, ISymbolicModel<T> parent2)
     {
-        if (_random.NextDouble() < crossoverRate)
+        if (_random.NextDouble() < _geneticOptions.CrossoverRate)
         {
-            return SymbolicModelFactory<T>.Crossover(parent1, parent2, crossoverRate, _numOps);
+            return SymbolicModelFactory<T>.Crossover(parent1, parent2, _geneticOptions.CrossoverRate, NumOps);
         }
         else
         {
@@ -272,18 +109,70 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         }
     }
 
-    private List<ISymbolicModel<T>> PerformMutation(List<ISymbolicModel<T>> population, double mutationRate)
+    private List<ISymbolicModel<T>> PerformMutation(List<ISymbolicModel<T>> population)
     {
-        return [.. population.Select(individual => Mutate(individual, mutationRate))];
+        return [.. population.Select(individual => Mutate(individual))];
     }
 
-    private ISymbolicModel<T> Mutate(ISymbolicModel<T> individual, double mutationRate)
+    private ISymbolicModel<T> Mutate(ISymbolicModel<T> individual)
     {
-        if (_random.NextDouble() < mutationRate)
+        if (_random.NextDouble() < _geneticOptions.MutationRate)
         {
-            return SymbolicModelFactory<T>.Mutate(individual, mutationRate, _numOps);
+            return SymbolicModelFactory<T>.Mutate(individual, _geneticOptions.MutationRate, NumOps);
         }
 
         return individual;
+    }
+
+    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    {
+        if (options is GeneticAlgorithmOptimizerOptions geneticOptions)
+        {
+            _geneticOptions = geneticOptions;
+        }
+        else
+        {
+            throw new ArgumentException("Invalid options type. Expected GeneticAlgorithmOptimizerOptions.");
+        }
+    }
+
+    public override OptimizationAlgorithmOptions GetOptions()
+    {
+        return _geneticOptions;
+    }
+
+    public override byte[] Serialize()
+    {
+        using (MemoryStream ms = new MemoryStream())
+        using (BinaryWriter writer = new BinaryWriter(ms))
+        {
+            // Serialize base class data
+            byte[] baseData = base.Serialize();
+            writer.Write(baseData.Length);
+            writer.Write(baseData);
+
+            // Serialize GeneticAlgorithmOptimizerOptions
+            string optionsJson = JsonConvert.SerializeObject(_geneticOptions);
+            writer.Write(optionsJson);
+
+            return ms.ToArray();
+        }
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        using (MemoryStream ms = new MemoryStream(data))
+        using (BinaryReader reader = new BinaryReader(ms))
+        {
+            // Deserialize base class data
+            int baseDataLength = reader.ReadInt32();
+            byte[] baseData = reader.ReadBytes(baseDataLength);
+            base.Deserialize(baseData);
+
+            // Deserialize GeneticAlgorithmOptimizerOptions
+            string optionsJson = reader.ReadString();
+            _geneticOptions = JsonConvert.DeserializeObject<GeneticAlgorithmOptimizerOptions>(optionsJson)
+                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+        }
     }
 }

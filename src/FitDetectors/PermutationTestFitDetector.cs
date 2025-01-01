@@ -32,9 +32,9 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
 
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var trainingPValue = PerformPermutationTest(evaluationData.TrainingPredictionStats);
-        var validationPValue = PerformPermutationTest(evaluationData.ValidationPredictionStats);
-        var testPValue = PerformPermutationTest(evaluationData.TestPredictionStats);
+        var trainingPValue = PerformPermutationTest(evaluationData.TrainingSet.PredictionStats);
+        var validationPValue = PerformPermutationTest(evaluationData.ValidationSet.PredictionStats);
+        var testPValue = PerformPermutationTest(evaluationData.TestSet.PredictionStats);
 
         if (trainingPValue < _options.SignificanceLevel && 
             validationPValue < _options.SignificanceLevel && 
@@ -66,9 +66,9 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var trainingPValue = PerformPermutationTest(evaluationData.TrainingPredictionStats);
-        var validationPValue = PerformPermutationTest(evaluationData.ValidationPredictionStats);
-        var testPValue = PerformPermutationTest(evaluationData.TestPredictionStats);
+        var trainingPValue = PerformPermutationTest(evaluationData.TrainingSet.PredictionStats);
+        var validationPValue = PerformPermutationTest(evaluationData.ValidationSet.PredictionStats);
+        var testPValue = PerformPermutationTest(evaluationData.TestSet.PredictionStats);
 
         var averagePValue = (trainingPValue + validationPValue + testPValue) / 3;
         var confidenceLevel = 1 - averagePValue;

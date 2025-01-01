@@ -30,13 +30,13 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
 
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var trainingAic = evaluationData.TrainingErrorStats.AIC;
-        var validationAic = evaluationData.ValidationErrorStats.AIC;
-        var testAic = evaluationData.TestErrorStats.AIC;
+        var trainingAic = evaluationData.TrainingSet.ErrorStats.AIC;
+        var validationAic = evaluationData.ValidationSet.ErrorStats.AIC;
+        var testAic = evaluationData.TestSet.ErrorStats.AIC;
 
-        var trainingBic = evaluationData.TrainingErrorStats.BIC;
-        var validationBic = evaluationData.ValidationErrorStats.BIC;
-        var testBic = evaluationData.TestErrorStats.BIC;
+        var trainingBic = evaluationData.TrainingSet.ErrorStats.BIC;
+        var validationBic = evaluationData.ValidationSet.ErrorStats.BIC;
+        var testBic = evaluationData.TestSet.ErrorStats.BIC;
 
         var aicDiff = Convert.ToDouble(_numOps.Subtract(_numOps.GreaterThan(validationAic, testAic) ? validationAic : testAic, trainingAic));
         var bicDiff = Convert.ToDouble(_numOps.Subtract(_numOps.GreaterThan(validationBic, testBic) ? validationBic : testBic, trainingBic));
@@ -66,13 +66,13 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var trainingAic = evaluationData.TrainingErrorStats.AIC;
-        var validationAic = evaluationData.ValidationErrorStats.AIC;
-        var testAic = evaluationData.TestErrorStats.AIC;
+        var trainingAic = evaluationData.TrainingSet.ErrorStats.AIC;
+        var validationAic = evaluationData.ValidationSet.ErrorStats.AIC;
+        var testAic = evaluationData.TestSet.ErrorStats.AIC;
 
-        var trainingBic = evaluationData.TrainingErrorStats.BIC;
-        var validationBic = evaluationData.ValidationErrorStats.BIC;
-        var testBic = evaluationData.TestErrorStats.BIC;
+        var trainingBic = evaluationData.TrainingSet.ErrorStats.BIC;
+        var validationBic = evaluationData.ValidationSet.ErrorStats.BIC;
+        var testBic = evaluationData.TestSet.ErrorStats.BIC;
 
         var aicConfidence = Math.Exp(-(Convert.ToDouble(_numOps.Subtract(validationAic, trainingAic)) / 2)) * 
             Math.Exp(-(Convert.ToDouble(_numOps.Subtract(testAic, trainingAic))) / 2);

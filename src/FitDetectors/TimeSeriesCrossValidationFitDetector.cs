@@ -29,9 +29,9 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
 
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var trainingRMSE = evaluationData.TrainingErrorStats.RMSE;
-        var validationRMSE = evaluationData.ValidationErrorStats.RMSE;
-        var testRMSE = evaluationData.TestErrorStats.RMSE;
+        var trainingRMSE = evaluationData.TrainingSet.ErrorStats.RMSE;
+        var validationRMSE = evaluationData.ValidationSet.ErrorStats.RMSE;
+        var testRMSE = evaluationData.TestSet.ErrorStats.RMSE;
 
         var rmseRatio = _numOps.Divide(validationRMSE, trainingRMSE);
         var testTrainingRatio = _numOps.Divide(testRMSE, trainingRMSE);
@@ -50,9 +50,9 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
         {
             return FitType.HighVariance;
         }
-        else if (_numOps.GreaterThan(evaluationData.TrainingPredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-                 _numOps.GreaterThan(evaluationData.ValidationPredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-                 _numOps.GreaterThan(evaluationData.TestPredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)))
+        else if (_numOps.GreaterThan(evaluationData.TrainingSet.PredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
+                 _numOps.GreaterThan(evaluationData.ValidationSet.PredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
+                 _numOps.GreaterThan(evaluationData.TestSet.PredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)))
         {
             return FitType.GoodFit;
         }
@@ -65,13 +65,13 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
         var rmseStability = _numOps.Divide(
-            _numOps.Abs(_numOps.Subtract(evaluationData.TestErrorStats.RMSE, evaluationData.ValidationErrorStats.RMSE)),
-            evaluationData.ValidationErrorStats.RMSE
+            _numOps.Abs(_numOps.Subtract(evaluationData.TestSet.ErrorStats.RMSE, evaluationData.ValidationSet.ErrorStats.RMSE)),
+            evaluationData.ValidationSet.ErrorStats.RMSE
         );
 
         var r2Stability = _numOps.Divide(
-            _numOps.Abs(_numOps.Subtract(evaluationData.TestPredictionStats.R2, evaluationData.ValidationPredictionStats.R2)),
-            evaluationData.ValidationPredictionStats.R2
+            _numOps.Abs(_numOps.Subtract(evaluationData.TestSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2)),
+            evaluationData.ValidationSet.PredictionStats.R2
         );
 
         var stabilityScore = _numOps.Subtract(_numOps.One, _numOps.Add(rmseStability, r2Stability));
@@ -121,12 +121,12 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
                 break;
         }
 
-        recommendations.Add($"Training RMSE: {evaluationData.TrainingErrorStats.RMSE:F4}");
-        recommendations.Add($"Validation RMSE: {evaluationData.ValidationErrorStats.RMSE:F4}");
-        recommendations.Add($"Test RMSE: {evaluationData.TestErrorStats.RMSE:F4}");
-        recommendations.Add($"Training R2: {evaluationData.TrainingPredictionStats.R2:F4}");
-        recommendations.Add($"Validation R2: {evaluationData.ValidationPredictionStats.R2:F4}");
-        recommendations.Add($"Test R2: {evaluationData.TestPredictionStats.R2:F4}");
+        recommendations.Add($"Training RMSE: {evaluationData.TrainingSet.ErrorStats.RMSE:F4}");
+        recommendations.Add($"Validation RMSE: {evaluationData.ValidationSet.ErrorStats.RMSE:F4}");
+        recommendations.Add($"Test RMSE: {evaluationData.TestSet.ErrorStats.RMSE:F4}");
+        recommendations.Add($"Training R2: {evaluationData.TrainingSet.PredictionStats.R2:F4}");
+        recommendations.Add($"Validation R2: {evaluationData.ValidationSet.PredictionStats.R2:F4}");
+        recommendations.Add($"Test R2: {evaluationData.TestSet.PredictionStats.R2:F4}");
 
         return recommendations;
     }

@@ -32,7 +32,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
 
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var bootstrapResults = PerformBootstrap(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
+        var bootstrapResults = PerformBootstrap(evaluationData);
 
         var meanTrainingR2 = new Vector<T>(bootstrapResults.Select(r => r.TrainingR2)).Average();
         var meanValidationR2 = new Vector<T>(bootstrapResults.Select(r => r.ValidationR2)).Average();
@@ -69,7 +69,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var bootstrapResults = PerformBootstrap(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
+        var bootstrapResults = PerformBootstrap(evaluationData);
 
         var r2Differences = bootstrapResults.Select(r => _numOps.Abs(_numOps.Subtract(r.TrainingR2, r.ValidationR2))).ToList();
         r2Differences.Sort();
@@ -125,18 +125,15 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
         return recommendations;
     }
 
-    private List<BootstrapResult<T>> PerformBootstrap(
-        PredictionStats<T> trainingPredictionStats,
-        PredictionStats<T> validationPredictionStats,
-        PredictionStats<T> testPredictionStats)
+    private List<BootstrapResult<T>> PerformBootstrap(ModelEvaluationData<T> evaluationData)
     {
         var results = new List<BootstrapResult<T>>();
 
         for (int i = 0; i < _options.NumberOfBootstraps; i++)
         {
-            var bootstrapTrainingR2 = ResampleR2(trainingPredictionStats.R2);
-            var bootstrapValidationR2 = ResampleR2(validationPredictionStats.R2);
-            var bootstrapTestR2 = ResampleR2(testPredictionStats.R2);
+            var bootstrapTrainingR2 = ResampleR2(evaluationData.TrainingSet.PredictionStats.R2);
+            var bootstrapValidationR2 = ResampleR2(evaluationData.ValidationSet.PredictionStats.R2);
+            var bootstrapTestR2 = ResampleR2(evaluationData.TestSet.PredictionStats.R2);
 
             results.Add(new BootstrapResult<T>
             {

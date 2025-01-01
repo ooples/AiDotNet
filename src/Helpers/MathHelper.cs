@@ -32,6 +32,23 @@ public static class MathHelper
             throw new NotSupportedException($"Numeric operations for type {typeof(T)} are not supported.");
     }
 
+    public static T Clamp<T>(T value, T min, T max)
+    {
+        var numOps = GetNumericOperations<T>();
+        if (numOps.LessThan(value, min))
+            return min;
+        if (numOps.GreaterThan(value, max))
+            return max;
+
+        return value;
+    }
+
+    public static bool IsInteger<T>(T value, INumericOperations<T> numOps)
+    {
+        // If the value is equal to its rounded value, it's an integer
+        return numOps.Equals(value, numOps.Round(value));
+    }
+
     public static bool AlmostEqual<T>(T a, T b, T tolerance, INumericOperations<T> numOps)
     {
         return numOps.LessThan(numOps.Abs(numOps.Subtract(a, b)), tolerance);

@@ -47,6 +47,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <Folder Include="Evaluation\" />
 	  <Folder Include="TimeSeries\" />
 	</ItemGroup>
 

@@ -2,19 +2,12 @@
 
 public class AdjustedRSquaredFitnessCalculator<T> : FitnessCalculatorBase<T>
 {
-    public AdjustedRSquaredFitnessCalculator() : base(isHigherScoreBetter: true)
+    public AdjustedRSquaredFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) : base(isHigherScoreBetter: false, dataSetType)
     {
     }
 
-    public override T CalculateFitnessScore(
-        ErrorStats<T> errorStats,
-        BasicStats<T> basicStats,
-        BasicStats<T> targetStats,
-        Vector<T> actualValues,
-        Vector<T> predictedValues,
-        Matrix<T> features,
-        PredictionStats<T> predictionStats)
+    protected override T GetFitnessScore(DataSetStats<T> dataSet)
     {
-        return predictionStats.AdjustedR2;
+        return dataSet.PredictionStats.AdjustedR2;
     }
 }

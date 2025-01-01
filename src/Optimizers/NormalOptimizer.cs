@@ -1,141 +1,118 @@
-﻿using AiDotNet.Models.Options;
-using AiDotNet.Models.Results;
-
-namespace AiDotNet.Optimizers;
+﻿namespace AiDotNet.Optimizers;
 
 public class NormalOptimizer<T> : OptimizerBase<T>
 {
     private readonly Random _random = new();
-    private readonly OptimizationAlgorithmOptions _optimizationOptions;
+    private OptimizationAlgorithmOptions _normalOptions;
 
-    public NormalOptimizer(OptimizationAlgorithmOptions? optimizationOptions = null) : base(optimizationOptions)
+    public NormalOptimizer(OptimizationAlgorithmOptions? options = null, PredictionStatsOptions? predictionOptions = null,
+        ModelStatsOptions? modelOptions = null,
+        IModelEvaluator<T>? modelEvaluator = null,
+        IFitDetector<T>? fitDetector = null,
+        IFitnessCalculator<T>? fitnessCalculator = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator)
     {
-        _optimizationOptions = optimizationOptions ?? new OptimizationAlgorithmOptions();
+        _normalOptions = options ?? new();
     }
 
-    public override OptimizationResult<T> Optimize(
-    Matrix<T> XTrain,
-    Vector<T> yTrain,
-    Matrix<T> XVal,
-    Vector<T> yVal,
-    Matrix<T> XTest,
-    Vector<T> yTest,
-    IFullModel<T> regressionMethod,
-    IRegularization<T> regularization,
-    INormalizer<T> normalizer,
-    NormalizationInfo<T> normInfo,
-    IFitnessCalculator<T> fitnessCalculator,
-    IFitDetector<T> fitDetector)
-{
-    var bestSolution = SymbolicModelFactory<T>.CreateEmptyModel(_options.UseExpressionTrees, XTrain.Columns, _numOps);
-    var bestIntercept = _numOps.Zero;
-    T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
-    var fitnessHistory = new List<T>();
-    var iterationHistory = new List<OptimizationIterationInfo<T>>();
-    var bestSelectedFeatures = new List<Vector<T>>();
-    var bestFitDetectionResult = new FitDetectorResult<T>();
-    var bestTrainingPredictions = new Vector<T>(yTrain.Length, _numOps);
-    var bestValidationPredictions = new Vector<T>(yVal.Length, _numOps);
-    var bestTestPredictions = new Vector<T>(yTest.Length, _numOps);
-    var bestTrainingFeatures = new Matrix<T>(XTrain.Rows, 0, _numOps);
-    var bestValidationFeatures = new Matrix<T>(XVal.Rows, 0, _numOps);
-    var bestTestFeatures = new Matrix<T>(XTest.Rows, 0, _numOps);
-    var bestEvaluationData = new ModelEvaluationData<T>();
-
-    for (int iteration = 0; iteration < _optimizationOptions.MaxIterations; iteration++)
+    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
-        var selectedFeatures = RandomlySelectFeatures(XTrain.Columns, _options.MinimumFeatures, _options.MaximumFeatures);
-        var XTrainSubset = XTrain.SubMatrix(0, XTrain.Rows - 1, selectedFeatures);
-        var XValSubset = XVal.SubMatrix(0, XVal.Rows - 1, selectedFeatures);
-        var XTestSubset = XTest.SubMatrix(0, XTest.Rows - 1, selectedFeatures);
+        ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = SymbolicModelFactory<T>.CreateRandomModel(_options.UseExpressionTrees, selectedFeatures.Count, _numOps);
-
-        var (currentFitnessScore, fitDetectionResult, 
-            trainingPredictions, validationPredictions, testPredictions,
-            evaluationData) = EvaluateSolution(currentSolution,
-                XTrainSubset, XValSubset, XTestSubset, yTrain, yVal, yTest,
-                normalizer, normInfo, 
-                fitnessCalculator, fitDetector);
-
-        var currentResult = new ModelResult<T>
+        var bestStepData = new OptimizationStepData<T>
         {
-            Solution = currentSolution,
-            Fitness = currentFitnessScore,
-            FitDetectionResult = fitDetectionResult,
-            TrainingPredictions = trainingPredictions,
-            ValidationPredictions = validationPredictions,
-            TestPredictions = testPredictions,
-            EvaluationData = evaluationData,
-            SelectedFeatures = selectedFeatures.ToVectorList<T>()
+            Solution = SymbolicModelFactory<T>.CreateEmptyModel(Options.UseExpressionTrees, inputData.XTrain.Columns, NumOps),
+            FitnessScore = _fitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
         };
 
-        var bestResult = new ModelResult<T>
+        for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
-            Solution = bestSolution,
-            Fitness = bestFitness,
-            FitDetectionResult = bestFitDetectionResult,
-            TrainingPredictions = bestTrainingPredictions,
-            ValidationPredictions = bestValidationPredictions,
-            TestPredictions = bestTestPredictions,
-            EvaluationData = bestEvaluationData,
-            SelectedFeatures = bestSelectedFeatures
-        };
+            var currentSolution = CreateRandomSolution(inputData.XTrain.Columns);
+            var currentStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
-        OptimizerHelper.UpdateAndApplyBestSolution(
-            currentResult,
-            ref bestResult,
-            XTrainSubset,
-            XTestSubset,
-            XValSubset,
-            fitnessCalculator
-        );
+            UpdateBestSolution(currentStepData, ref bestStepData);
 
-        bestSolution = bestResult.Solution;
-        bestFitness = bestResult.Fitness;
-        bestFitDetectionResult = bestResult.FitDetectionResult;
-        bestTrainingPredictions = bestResult.TrainingPredictions;
-        bestValidationPredictions = bestResult.ValidationPredictions;
-        bestTestPredictions = bestResult.TestPredictions;
-        bestEvaluationData = bestResult.EvaluationData;
-        bestSelectedFeatures = bestResult.SelectedFeatures;
+            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            {
+                break;
+            }
+        }
 
-        if (UpdateIterationHistoryAndCheckEarlyStopping(fitnessHistory, iterationHistory, iteration, bestFitness, bestFitDetectionResult, fitnessCalculator))
+        return CreateOptimizationResult(bestStepData, inputData);
+    }
+
+    private ISymbolicModel<T> CreateRandomSolution(int totalFeatures)
+    {
+        var selectedFeatures = RandomlySelectFeatures(totalFeatures);
+        return SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, selectedFeatures.Count, NumOps);
+    }
+
+    private List<int> RandomlySelectFeatures(int totalFeatures)
+    {
+        var selectedFeatures = new List<int>();
+        int numFeatures = _random.Next(Options.MinimumFeatures, Math.Min(Options.MaximumFeatures, totalFeatures) + 1);
+
+        while (selectedFeatures.Count < numFeatures)
         {
-            break;
+            int feature = _random.Next(totalFeatures);
+            if (!selectedFeatures.Contains(feature))
+            {
+                selectedFeatures.Add(feature);
+            }
+        }
+
+        return selectedFeatures;
+    }
+
+    public override OptimizationAlgorithmOptions GetOptions()
+    {
+        return _normalOptions;
+    }
+
+    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    {
+        if (options is OptimizationAlgorithmOptions normalOptions)
+        {
+            _normalOptions = normalOptions;
+        }
+        else
+        {
+            throw new ArgumentException("Invalid options type. Expected NormalOptimizerOptions.");
         }
     }
 
-    var trainingResult = OptimizerHelper.CreateDatasetResult(
-        bestTrainingPredictions, bestEvaluationData.TrainingErrorStats, bestEvaluationData.TrainingActualBasicStats,
-        bestEvaluationData.TrainingPredictedBasicStats, bestEvaluationData.TrainingPredictionStats, bestTrainingFeatures, yTrain);
-
-    var validationResult = OptimizerHelper.CreateDatasetResult(
-        bestValidationPredictions, bestEvaluationData.ValidationErrorStats, bestEvaluationData.ValidationActualBasicStats,
-        bestEvaluationData.ValidationPredictedBasicStats, bestEvaluationData.ValidationPredictionStats, bestValidationFeatures, yVal);
-
-    var testResult = OptimizerHelper.CreateDatasetResult(
-        bestTestPredictions, bestEvaluationData.TestErrorStats, bestEvaluationData.TestActualBasicStats,
-        bestEvaluationData.TestPredictedBasicStats, bestEvaluationData.TestPredictionStats, bestTestFeatures, yTest);
-
-    return new OptimizationResult<T>
+    public override byte[] Serialize()
     {
-        BestSolution = bestSolution,
-        BestIntercept = bestIntercept,
-        BestFitnessScore = bestFitness,
-        FitnessHistory = new Vector<T>(fitnessHistory),
-        SelectedFeatures = bestSelectedFeatures,
-        TrainingResult = trainingResult,
-        ValidationResult = validationResult,
-        TestResult = testResult,
-        FitDetectionResult = bestFitDetectionResult,
-        Iterations = iterationHistory.Count
-    };
-}
+        using (MemoryStream ms = new MemoryStream())
+        using (BinaryWriter writer = new BinaryWriter(ms))
+        {
+            // Serialize base class data
+            byte[] baseData = base.Serialize();
+            writer.Write(baseData.Length);
+            writer.Write(baseData);
 
-    private List<int> RandomlySelectFeatures(int totalFeatures, int minFeatures, int maxFeatures)
+            // Serialize NormalOptimizerOptions
+            string optionsJson = JsonConvert.SerializeObject(_normalOptions);
+            writer.Write(optionsJson);
+
+            return ms.ToArray();
+        }
+    }
+
+    public override void Deserialize(byte[] data)
     {
-        int numFeatures = _random.Next(minFeatures, Math.Min(maxFeatures, totalFeatures) + 1);
-        return [.. Enumerable.Range(0, totalFeatures).OrderBy(x => _random.Next()).Take(numFeatures)];
+        using (MemoryStream ms = new MemoryStream(data))
+        using (BinaryReader reader = new BinaryReader(ms))
+        {
+            // Deserialize base class data
+            int baseDataLength = reader.ReadInt32();
+            byte[] baseData = reader.ReadBytes(baseDataLength);
+            base.Deserialize(baseData);
+
+            // Deserialize NormalOptimizerOptions
+            string optionsJson = reader.ReadString();
+            _normalOptions = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions>(optionsJson)
+                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+        }
     }
 }

@@ -62,21 +62,6 @@ public abstract class RegressionBase<T> : IRegression<T>
         return Coefficients.Transform(NumOps.Abs);
     }
 
-    public virtual byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "Coefficients", Coefficients.ToArray() },
-            { "Intercept", Intercept ?? NumOps.Zero! },
-            { "RegularizationType", (int)GetRegularizationType(Regularization) }
-        };
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
     private RegularizationType GetRegularizationType(IRegularization<T> regularization)
     {
         return regularization switch
@@ -87,6 +72,21 @@ public abstract class RegressionBase<T> : IRegression<T>
             ElasticNetRegularization<T> => RegularizationType.ElasticNet,
             _ => throw new ArgumentException($"Unknown regularization type: {regularization.GetType().Name}")
         };
+    }
+
+    public virtual byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "Coefficients", Coefficients.ToArray() },
+            { "Intercept", Intercept ?? NumOps.Zero! },
+            { "RegularizationOptions", Regularization.GetOptions() }
+        };
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
     }
 
     public virtual void Deserialize(byte[] modelData)
@@ -110,8 +110,11 @@ public abstract class RegressionBase<T> : IRegression<T>
         Coefficients = new Vector<T>((T[])modelDataDict["Coefficients"], NumOps);
         Intercept = (T)modelDataDict["Intercept"];
 
-        var regularizationType = (RegularizationType)Convert.ToInt32(modelDataDict["RegularizationType"]);
-        Regularization = RegularizationFactory.CreateRegularization<T>(regularizationType);
+        var regularizationOptionsJson = JsonConvert.SerializeObject(modelDataDict["RegularizationOptions"]);
+        var regularizationOptions = JsonConvert.DeserializeObject<RegularizationOptions>(regularizationOptionsJson) 
+            ?? throw new InvalidOperationException("Deserialization failed: Unable to deserialize regularization options.");
+    
+        Regularization = RegularizationFactory.CreateRegularization<T>(regularizationOptions);
     }
 
     protected Vector<T> SolveSystem(Matrix<T> a, Vector<T> b)

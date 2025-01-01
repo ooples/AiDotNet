@@ -33,7 +33,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T>(_normalizer, _featureSelector, _outlierRemoval);
         _fitDetector = fitDetector ?? new DefaultFitDetector<T>();
         
-        _bestModel = new VectorModel<T>(Vector<T>.Empty(), NumOps);
+        _bestModel = new VectorModel<T>(Vector<T>.Empty());
     }
 
     public override void Train(Matrix<T> x, Vector<T> y)
@@ -44,17 +44,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         // Split the data
         var (xTrain, yTrain, xVal, yVal, xTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
-        var result = _optimizer.Optimize(
-            xTrain, yTrain,
-            xVal, yVal,
-            xTest, yTest,
-            this,
-            Regularization,
-            _normalizer,
-            normInfo,
-            _fitnessCalculator,
-            _fitDetector
-        );
+        var result = _optimizer.Optimize(OptimizerHelper.CreateOptimizationInputData(xTrain, yTrain, xVal, yVal, xTest, yTest));
 
         _bestModel = (VectorModel<T>)result.BestSolution;
         UpdateCoefficientsAndIntercept();
@@ -125,7 +115,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         {
             coefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _bestModel = new VectorModel<T>(new Vector<T>(coefficients), NumOps);
+        _bestModel = new VectorModel<T>(new Vector<T>(coefficients));
 
         // Deserialize GeneticAlgorithmOptions
         var gaOptions = new GeneticAlgorithmOptimizerOptions

@@ -8,11 +8,11 @@ public static class SymbolicModelFactory<T>
     {
         if (useExpressionTrees)
         {
-            return GenerateRandomExpressionTree(5, numOps); // Assuming max depth of 5 for random trees
+            return CreateRandomExpressionTree(5, numOps); // Assuming max depth of 5 for random trees
         }
         else
         {
-            return new VectorModel<T>(CreateRandomVector(dimensions, numOps), numOps);
+            return new VectorModel<T>(CreateRandomVector(dimensions, numOps));
         }
     }
 
@@ -24,7 +24,7 @@ public static class SymbolicModelFactory<T>
         }
         else
         {
-            return new VectorModel<T>(new Vector<T>(dimensions, numOps), numOps);
+            return new VectorModel<T>(new Vector<T>(dimensions, numOps));
         }
     }
 
@@ -41,7 +41,7 @@ public static class SymbolicModelFactory<T>
         return (child1, child2);
     }
 
-    private static ExpressionTree<T> GenerateRandomExpressionTree(int maxDepth, INumericOperations<T> numOps)
+    private static ExpressionTree<T> CreateRandomExpressionTree(int maxDepth, INumericOperations<T> numOps)
     {
         if (maxDepth == 0 || _random.NextDouble() < 0.3) // 30% chance of generating a leaf node
         {
@@ -49,8 +49,8 @@ public static class SymbolicModelFactory<T>
         }
 
         NodeType nodeType = (NodeType)_random.Next(0, 4); // Randomly choose between Add, Subtract, Multiply, Divide
-        var left = GenerateRandomExpressionTree(maxDepth - 1, numOps);
-        var right = GenerateRandomExpressionTree(maxDepth - 1, numOps);
+        var left = CreateRandomExpressionTree(maxDepth - 1, numOps);
+        var right = CreateRandomExpressionTree(maxDepth - 1, numOps);
 
         return new ExpressionTree<T>(nodeType, default, left, right);
     }

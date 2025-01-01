@@ -116,6 +116,16 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return new Vector<T>(this.Select(x => numOps.Divide(x, scalar)));
     }
 
+    public byte[] Serialize()
+    {
+        return SerializationHelper<T>.SerializeVector(this);
+    }
+
+    public static Vector<T> Deserialize(byte[] data)
+    {
+        return SerializationHelper<T>.DeserializeVector(data);
+    }
+
     public int IndexOfMax()
     {
         if (this.Length == 0)

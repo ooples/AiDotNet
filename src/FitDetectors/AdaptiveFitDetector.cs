@@ -36,8 +36,8 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
 
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var dataComplexity = AssessDataComplexity(evaluationData.TrainingPredictedBasicStats, evaluationData.ValidationPredictedBasicStats, evaluationData.TestPredictedBasicStats);
-        var modelPerformance = AssessModelPerformance(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
+        var dataComplexity = AssessDataComplexity(evaluationData);
+        var modelPerformance = AssessModelPerformance(evaluationData);
 
         FitDetectorResult<T> result;
 
@@ -59,8 +59,8 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var dataComplexity = AssessDataComplexity(evaluationData.TrainingPredictedBasicStats, evaluationData.ValidationPredictedBasicStats, evaluationData.TestPredictedBasicStats);
-        var modelPerformance = AssessModelPerformance(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
+        var dataComplexity = AssessDataComplexity(evaluationData);
+        var modelPerformance = AssessModelPerformance(evaluationData);
 
         FitDetectorResult<T> result;
 
@@ -83,17 +83,18 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
     {
         var recommendations = new List<string>();
-        var dataComplexity = AssessDataComplexity(evaluationData.TrainingPredictedBasicStats, evaluationData.ValidationPredictedBasicStats, evaluationData.TestPredictedBasicStats);
-        var modelPerformance = AssessModelPerformance(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
+        var dataComplexity = AssessDataComplexity(evaluationData);
+        var modelPerformance = AssessModelPerformance(evaluationData);
 
         recommendations.Add(GetAdaptiveRecommendation(dataComplexity, modelPerformance));
 
         return recommendations;
     }
 
-    private DataComplexity AssessDataComplexity(BasicStats<T> trainingStats, BasicStats<T> validationStats, BasicStats<T> testStats)
+    private DataComplexity AssessDataComplexity(ModelEvaluationData<T> evaluationData)
     {
-        var overallVariance = _numOps.Add(_numOps.Add(trainingStats.Variance, validationStats.Variance), testStats.Variance);
+        var overallVariance = _numOps.Add(_numOps.Add(evaluationData.TrainingSet.ActualBasicStats.Variance, evaluationData.ValidationSet.ActualBasicStats.Variance), 
+            evaluationData.TestSet.ActualBasicStats.Variance);
         var threshold = _numOps.FromDouble(_options.ComplexityThreshold);
 
         if (_numOps.LessThan(overallVariance, threshold))
@@ -104,10 +105,10 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
             return DataComplexity.Complex;
     }
 
-    private ModelPerformance AssessModelPerformance(PredictionStats<T> trainingStats, PredictionStats<T> validationStats, PredictionStats<T> testStats)
+    private ModelPerformance AssessModelPerformance(ModelEvaluationData<T> evaluationData)
     {
         var averageR2 = _numOps.Divide(
-            _numOps.Add(_numOps.Add(trainingStats.R2, validationStats.R2), testStats.R2),
+            _numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), evaluationData.TestSet.PredictionStats.R2),
             _numOps.FromDouble(3)
         );
 

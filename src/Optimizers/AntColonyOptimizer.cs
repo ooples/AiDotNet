@@ -1,190 +1,69 @@
-using AiDotNet.Models.Options;
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.Optimizers;
 
 public class AntColonyOptimizer<T> : OptimizerBase<T>
 {
     private readonly Random _random;
-    private readonly AntColonyOptimizationOptions _antColonyOptions;
+    private AntColonyOptimizationOptions _antColonyOptions;
 
-    public AntColonyOptimizer(AntColonyOptimizationOptions? options = null)
-        : base(options)
+    public AntColonyOptimizer(AntColonyOptimizationOptions? options = null,
+        PredictionStatsOptions? predictionOptions = null,
+        ModelStatsOptions? modelOptions = null,
+        IModelEvaluator<T>? modelEvaluator = null,
+        IFitDetector<T>? fitDetector = null,
+        IFitnessCalculator<T>? fitnessCalculator = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator)
     {
         _random = new Random();
         _antColonyOptions = options ?? new AntColonyOptimizationOptions();
     }
 
-    public override OptimizationResult<T> Optimize(
-        Matrix<T> XTrain,
-        Vector<T> yTrain,
-        Matrix<T> XVal,
-        Vector<T> yVal,
-        Matrix<T> XTest,
-        Vector<T> yTest,
-        IFullModel<T> regressionMethod,
-        IRegularization<T> regularization,
-        INormalizer<T> normalizer,
-        NormalizationInfo<T> normInfo,
-        IFitnessCalculator<T> fitnessCalculator,
-        IFitDetector<T> fitDetector)
+    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
-        int dimensions = XTrain.Columns;
+        int dimensions = inputData.XTrain.Columns;
         var pheromones = InitializePheromones(dimensions);
-        var bestSolution = SymbolicModelFactory<T>.CreateEmptyModel(_options.UseExpressionTrees, XTrain.Columns, _numOps);
-        T bestIntercept = _numOps.Zero;
-        T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
-        FitDetectorResult<T> bestFitDetectionResult = new();
-        Vector<T> bestTrainingPredictions = new(yTrain.Length, _numOps);
-        Vector<T> bestValidationPredictions = new(yVal.Length, _numOps);
-        Vector<T> bestTestPredictions = new(yTest.Length, _numOps);
-        ModelEvaluationData<T> bestEvaluationData = new();
-        List<Vector<T>> bestSelectedFeatures = [];
-        Matrix<T> bestTestFeatures = new(XTest.Rows, XTest.Columns, _numOps);
-        Matrix<T> bestTrainingFeatures = new(XTrain.Rows, XTrain.Columns, _numOps);
-        Matrix<T> bestValidationFeatures = new(XVal.Rows, XVal.Columns, _numOps);
-        List<int> bestSelectedFeatureIndices = [];
+        var bestStepData = new OptimizationStepData<T>();
 
-        var fitnessHistory = new List<T>();
-        var iterationHistory = new List<OptimizationIterationInfo<T>>();
-
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             var solutions = new List<ISymbolicModel<T>>();
-            var fitnesses = new List<T>();
 
             for (int ant = 0; ant < _antColonyOptions.AntCount; ant++)
             {
-                var solution = ConstructSolution(pheromones, XTrain);
+                var solution = ConstructSolution(pheromones, inputData.XTrain);
                 solutions.Add(solution);
 
-                var selectedFeatures = OptimizerHelper.GetSelectedFeatures(solution);
-                var XTrainSubset = OptimizerHelper.SelectFeatures(XTrain, selectedFeatures);
-                var XValSubset = OptimizerHelper.SelectFeatures(XVal, selectedFeatures);
-                var XTestSubset = OptimizerHelper.SelectFeatures(XTest, selectedFeatures);
-
-                var (currentFitnessScore, fitDetectionResult, 
-                 trainingPredictions, validationPredictions, testPredictions, evaluationData) = 
-                EvaluateSolution(
-                    solution, XTrainSubset, XValSubset, XTestSubset,
-                    yTrain, yVal, yTest,
-                    normalizer, normInfo,
-                    fitnessCalculator, fitDetector);
-
-                fitnesses.Add(currentFitnessScore);
-
-                int featureCount = selectedFeatures.Count;
-                Vector<T>? coefficients = null;
-                T? intercept = default;
-                bool hasIntercept = false;
-
-                if (regressionMethod is ILinearModel<T> linearModel)
-                {
-                    hasIntercept = linearModel.HasIntercept;
-                    coefficients = linearModel.Coefficients;
-                    intercept = linearModel.Intercept;
-                    featureCount += hasIntercept ? 1 : 0;
-                }
-
-                var currentResult = new ModelResult<T>
-                {
-                    Solution = solution,
-                    Fitness = currentFitnessScore,
-                    FitDetectionResult = fitDetectionResult,
-                    TrainingPredictions = trainingPredictions,
-                    ValidationPredictions = validationPredictions,
-                    TestPredictions = testPredictions,
-                    EvaluationData = evaluationData,
-                    SelectedFeatures = selectedFeatures.ToVectorList<T>()
-                };
-
-                var bestResult = new ModelResult<T>
-                {
-                    Solution = bestSolution,
-                    Fitness = bestFitness,
-                    FitDetectionResult = bestFitDetectionResult,
-                    TrainingPredictions = bestTrainingPredictions,
-                    ValidationPredictions = bestValidationPredictions,
-                    TestPredictions = bestTestPredictions,
-                    EvaluationData = bestEvaluationData,
-                    SelectedFeatures = bestSelectedFeatures
-                };
-
-                OptimizerHelper.UpdateAndApplyBestSolution(
-                    currentResult,
-                    ref bestResult,
-                    XTrainSubset,
-                    XTestSubset,
-                    XValSubset,
-                    fitnessCalculator
-                );
+                var currentStepData = PrepareAndEvaluateSolution(solution, inputData);
+                UpdateBestSolution(currentStepData, ref bestStepData);
             }
 
-            UpdatePheromones(pheromones, solutions, fitnesses);
-            if (UpdateIterationHistoryAndCheckEarlyStopping(fitnessHistory, iterationHistory, iteration, bestFitness, bestFitDetectionResult, fitnessCalculator))
+            UpdatePheromones(pheromones, solutions);
+            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
                 break; // Early stopping criteria met, exit the loop
             }
         }
 
-        return OptimizerHelper.CreateOptimizationResult(
-            bestSolution,
-            bestFitness,
-            fitnessHistory,
-            bestSelectedFeatures,
-            new OptimizationResult<T>.DatasetResult
-            {
-                X = bestTrainingFeatures,
-                Y = yTrain,
-                Predictions = bestTrainingPredictions,
-                ErrorStats = bestEvaluationData.TrainingErrorStats,
-                ActualBasicStats = bestEvaluationData.TrainingActualBasicStats,
-                PredictedBasicStats = bestEvaluationData.TrainingPredictedBasicStats,
-                PredictionStats = bestEvaluationData.TrainingPredictionStats
-            },
-            new OptimizationResult<T>.DatasetResult
-            {
-                X = bestValidationFeatures,
-                Y = yVal,
-                Predictions = bestValidationPredictions,
-                ErrorStats = bestEvaluationData.ValidationErrorStats,
-                ActualBasicStats = bestEvaluationData.ValidationActualBasicStats,
-                PredictedBasicStats = bestEvaluationData.ValidationPredictedBasicStats,
-                PredictionStats = bestEvaluationData.ValidationPredictionStats
-            },
-            new OptimizationResult<T>.DatasetResult
-            {
-                X = bestTestFeatures,
-                Y = yTest,
-                Predictions = bestTestPredictions,
-                ErrorStats = bestEvaluationData.TestErrorStats,
-                ActualBasicStats = bestEvaluationData.TestActualBasicStats,
-                PredictedBasicStats = bestEvaluationData.TestPredictedBasicStats,
-                PredictionStats = bestEvaluationData.TestPredictionStats
-            },
-            bestFitDetectionResult,
-            iterationHistory.Count,
-            _numOps
-        );
+        return CreateOptimizationResult(bestStepData, inputData);
     }
 
     private Matrix<T> InitializePheromones(int dimensions)
     {
-        var pheromones = new Matrix<T>(dimensions, dimensions, _numOps);
+        var pheromones = new Matrix<T>(dimensions, dimensions, NumOps);
         for (int i = 0; i < dimensions; i++)
         {
             for (int j = 0; j < dimensions; j++)
             {
-                pheromones[i, j] = _numOps.One;
+                pheromones[i, j] = NumOps.One;
             }
         }
+
         return pheromones;
     }
 
 private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTrain)
 {
     var dimensions = XTrain.Columns;
-    var model = SymbolicModelFactory<T>.CreateEmptyModel(_options.UseExpressionTrees, dimensions, _numOps);
+    var model = SymbolicModelFactory<T>.CreateEmptyModel(Options.UseExpressionTrees, dimensions, NumOps);
     var visited = new bool[dimensions];
     int current = _random.Next(dimensions);
     visited[current] = true;
@@ -194,7 +73,7 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
         int next = SelectNextFeature(current, pheromones, XTrain, visited);
         if (next == -1) break; // No more unvisited features
 
-        T coefficient = _numOps.FromDouble(_random.NextDouble() * 2 - 1); // Random value between -1 and 1
+        T coefficient = NumOps.FromDouble(_random.NextDouble() * 2 - 1); // Random value between -1 and 1
 
         if (model is VectorModel<T> vectorModel)
         {
@@ -202,7 +81,7 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
         }
         else if (model is ExpressionTree<T> expressionTree)
         {
-            var featureNode = new ExpressionTree<T>(NodeType.Variable, _numOps.FromDouble(next));
+            var featureNode = new ExpressionTree<T>(NodeType.Variable, NumOps.FromDouble(next));
             var coefficientNode = new ExpressionTree<T>(NodeType.Constant, coefficient);
             var termNode = new ExpressionTree<T>(NodeType.Multiply, default, coefficientNode, featureNode);
 
@@ -228,32 +107,32 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
 
     private int SelectNextFeature(int current, Matrix<T> pheromones, Matrix<T> XTrain, bool[] visited)
     {
-        var probabilities = new Vector<T>(XTrain.Columns, _numOps);
-        T total = _numOps.Zero;
+        var probabilities = new Vector<T>(XTrain.Columns, NumOps);
+        T total = NumOps.Zero;
 
         for (int i = 0; i < XTrain.Columns; i++)
         {
             if (!visited[i])
             {
                 T pheromone = pheromones[current, i];
-                T heuristic = _numOps.Divide(_numOps.One, _numOps.Add(_numOps.One, _numOps.Abs(XTrain[current, i])));
-                T probability = _numOps.Multiply(
-                    _numOps.Power(pheromone, _numOps.FromDouble(_antColonyOptions.Alpha)),
-                    _numOps.Power(heuristic, _numOps.FromDouble(_antColonyOptions.Beta))
+                T heuristic = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Abs(XTrain[current, i])));
+                T probability = NumOps.Multiply(
+                    NumOps.Power(pheromone, NumOps.FromDouble(_antColonyOptions.Alpha)),
+                    NumOps.Power(heuristic, NumOps.FromDouble(_antColonyOptions.Beta))
                 );
                 probabilities[i] = probability;
-                total = _numOps.Add(total, probability);
+                total = NumOps.Add(total, probability);
             }
         }
 
-        T random = _numOps.Multiply(_numOps.FromDouble(_random.NextDouble()), total);
-        T sum = _numOps.Zero;
+        T random = NumOps.Multiply(NumOps.FromDouble(_random.NextDouble()), total);
+        T sum = NumOps.Zero;
         for (int i = 0; i < XTrain.Columns; i++)
         {
             if (!visited[i])
             {
-                sum = _numOps.Add(sum, probabilities[i]);
-                if (_numOps.GreaterThanOrEquals(sum, random))
+                sum = NumOps.Add(sum, probabilities[i]);
+                if (NumOps.GreaterThanOrEquals(sum, random))
                 {
                     return i;
                 }
@@ -263,21 +142,21 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
         return -1; // This should never happen
     }
 
-    private void UpdatePheromones(Matrix<T> pheromones, List<ISymbolicModel<T>> solutions, List<T> fitnesses)
+    private void UpdatePheromones(Matrix<T> pheromones, List<ISymbolicModel<T>> solutions)
     {
         // Evaporation
         for (int i = 0; i < pheromones.Rows; i++)
         {
             for (int j = 0; j < pheromones.Columns; j++)
             {
-                pheromones[i, j] = _numOps.Multiply(pheromones[i, j], _numOps.FromDouble(1 - _antColonyOptions.EvaporationRate));
+                pheromones[i, j] = NumOps.Multiply(pheromones[i, j], NumOps.FromDouble(1 - _antColonyOptions.EvaporationRate));
             }
         }
 
         // Deposit
         for (int k = 0; k < solutions.Count; k++)
         {
-            T deposit = _numOps.Divide(_numOps.One, fitnesses[k]);
+            T deposit = NumOps.Divide(NumOps.One, _fitnessList[k]);
             var model = solutions[k];
 
             if (model is VectorModel<T> vectorModel)
@@ -288,7 +167,7 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
                     {
                         if (i != j)
                         {
-                            pheromones[i, j] = _numOps.Add(pheromones[i, j], _numOps.Multiply(deposit, _numOps.Abs(vectorModel.Coefficients[i])));
+                            pheromones[i, j] = NumOps.Add(pheromones[i, j], NumOps.Multiply(deposit, NumOps.Abs(vectorModel.Coefficients[i])));
                         }
                     }
                 }
@@ -306,17 +185,69 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
 
         if (tree.Type == NodeType.Variable)
         {
-            int variableIndex = _numOps.ToInt32(tree.Value);
+            int variableIndex = NumOps.ToInt32(tree.Value);
             for (int j = 0; j < pheromones.Columns; j++)
             {
                 if (variableIndex != j)
                 {
-                    pheromones[variableIndex, j] = _numOps.Add(pheromones[variableIndex, j], deposit);
+                    pheromones[variableIndex, j] = NumOps.Add(pheromones[variableIndex, j], deposit);
                 }
             }
         }
 
         UpdatePheromonesForExpressionTree(pheromones, tree.Left, deposit);
         UpdatePheromonesForExpressionTree(pheromones, tree.Right, deposit);
+    }
+
+    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    {
+        if (options is AntColonyOptimizationOptions antColonyOptions)
+        {
+            _antColonyOptions = antColonyOptions;
+        }
+        else
+        {
+            throw new ArgumentException("Invalid options type. Expected AntColonyOptimizerOptions.");
+        }
+    }
+
+    public override OptimizationAlgorithmOptions GetOptions()
+    {
+        return _antColonyOptions;
+    }
+
+    public override byte[] Serialize()
+    {
+        using (MemoryStream ms = new MemoryStream())
+        using (BinaryWriter writer = new BinaryWriter(ms))
+        {
+            // Serialize base class data
+            byte[] baseData = base.Serialize();
+            writer.Write(baseData.Length);
+            writer.Write(baseData);
+
+            // Serialize AntColonyOptimizerOptions
+            string optionsJson = JsonConvert.SerializeObject(_antColonyOptions);
+            writer.Write(optionsJson);
+
+            return ms.ToArray();
+        }
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        using (MemoryStream ms = new MemoryStream(data))
+        using (BinaryReader reader = new BinaryReader(ms))
+        {
+            // Deserialize base class data
+            int baseDataLength = reader.ReadInt32();
+            byte[] baseData = reader.ReadBytes(baseDataLength);
+            base.Deserialize(baseData);
+
+            // Deserialize AntColonyOptimizerOptions
+            string optionsJson = reader.ReadString();
+            _antColonyOptions = JsonConvert.DeserializeObject<AntColonyOptimizationOptions>(optionsJson)
+                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+        }
     }
 }

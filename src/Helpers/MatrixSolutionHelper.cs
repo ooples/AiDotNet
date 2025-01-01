@@ -22,6 +22,11 @@ public static class MatrixSolutionHelper
         };
     }
 
+    public static Vector<T> SolveLinearSystem<T>(Vector<T> b, IMatrixDecomposition<T> decompositionMethod)
+    {
+        return decompositionMethod.Solve(b);
+    }
+
     private static Vector<T> SolveCramer<T>(Matrix<T> A, Vector<T> b)
     {
         var det = A.Determinant();

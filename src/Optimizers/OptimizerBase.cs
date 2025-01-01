@@ -1,232 +1,174 @@
 global using AiDotNet.Models.Inputs;
+global using AiDotNet.Evaluation;
 
 namespace AiDotNet.Optimizers;
 
-public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
+public abstract class OptimizerBase<T> : IOptimizer<T>
 {
-    protected readonly INumericOperations<T> _numOps;
-    protected readonly OptimizationAlgorithmOptions _options;
+    protected readonly INumericOperations<T> NumOps;
+    protected readonly OptimizationAlgorithmOptions Options;
     protected readonly PredictionStatsOptions _predictionOptions;
     protected readonly ModelStatsOptions _modelStatsOptions;
+    protected readonly IModelEvaluator<T> _modelEvaluator;
+    protected readonly IFitDetector<T> _fitDetector;
+    protected readonly IFitnessCalculator<T> _fitnessCalculator;
+    protected readonly List<T> _fitnessList;
+    protected readonly List<OptimizationIterationInfo<T>> _iterationHistoryList;
 
-    protected OptimizerBase(OptimizationAlgorithmOptions? options = null, 
-                        PredictionStatsOptions? predictionOptions = null,
-                        ModelStatsOptions? modelOptions = null)
+    protected OptimizerBase(
+        OptimizationAlgorithmOptions? options = null,
+        PredictionStatsOptions? predictionOptions = null,
+        ModelStatsOptions? modelOptions = null,
+        IModelEvaluator<T>? modelEvaluator = null,
+        IFitDetector<T>? fitDetector = null,
+        IFitnessCalculator<T>? fitnessCalculator = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _options = options ?? new OptimizationAlgorithmOptions();
+        NumOps = MathHelper.GetNumericOperations<T>();
+        Options = options ?? new OptimizationAlgorithmOptions();
         _predictionOptions = predictionOptions ?? new PredictionStatsOptions();
         _modelStatsOptions = modelOptions ?? new ModelStatsOptions();
+        _modelEvaluator = modelEvaluator ?? new ModelEvaluator<T>(_predictionOptions);
+        _fitDetector = fitDetector ?? new DefaultFitDetector<T>();
+        _fitnessCalculator = fitnessCalculator ?? new MeanSquaredErrorFitnessCalculator<T>();
+        _fitnessList = [];
+        _iterationHistoryList = [];
     }
 
-    public abstract OptimizationResult<T> Optimize(
-        Matrix<T> XTrain,
-        Vector<T> yTrain,
-        Matrix<T> XVal,
-        Vector<T> yVal,
-        Matrix<T> XTest,
-        Vector<T> yTest,
-        IFullModel<T> regressionMethod,
-        IRegularization<T> regularization,
-        INormalizer<T> normalizer,
-        NormalizationInfo<T> normInfo,
-        IFitnessCalculator<T> fitnessCalculator,
-        IFitDetector<T> fitDetector);
+    public abstract OptimizationResult<T> Optimize(OptimizationInputData<T> inputData);
 
-    protected (Vector<T> TrainingPredictions, Vector<T> ValidationPredictions, Vector<T> TestPredictions)
-    CalculatePredictions(Matrix<T> XTrainSubset, Matrix<T> XValSubset, Matrix<T> XTestSubset, 
-                         Vector<T> denormalizedCoefficients, T denormalizedIntercept)
+    protected OptimizationStepData<T> PrepareAndEvaluateSolution(ISymbolicModel<T> solution, OptimizationInputData<T> inputData)
     {
-        var trainingPredictions = XTrainSubset.Multiply(denormalizedCoefficients).Add(denormalizedIntercept);
-        var validationPredictions = XValSubset.Multiply(denormalizedCoefficients).Add(denormalizedIntercept);
-        var testPredictions = XTestSubset.Multiply(denormalizedCoefficients).Add(denormalizedIntercept);
-        return (trainingPredictions, validationPredictions, testPredictions);
-    }
+        var selectedFeatures = inputData.XTrain.GetColumnVectors(OptimizerHelper.GetSelectedFeatures(solution));
+        var XTrainSubset = OptimizerHelper.SelectFeatures(inputData.XTrain, selectedFeatures);
+        var XValSubset = OptimizerHelper.SelectFeatures(inputData.XVal, selectedFeatures);
+        var XTestSubset = OptimizerHelper.SelectFeatures(inputData.XTest, selectedFeatures);
 
-    protected (BasicStats<T> TrainingActual, BasicStats<T> TrainingPredicted, 
-            BasicStats<T> ValidationActual, BasicStats<T> ValidationPredicted, 
-            BasicStats<T> TestActual, BasicStats<T> TestPredicted)
-    CalculateBasicStats(Vector<T> yTrain, Vector<T> yVal, Vector<T> yTest,
-                        Vector<T> trainingPredictions, Vector<T> validationPredictions, Vector<T> testPredictions)
-    {
-        return (
-            new BasicStats<T>(new BasicStatsInputs<T> { Values = yTrain }),
-            new BasicStats<T>(new BasicStatsInputs<T> { Values = trainingPredictions }),
-            new BasicStats<T>(new BasicStatsInputs<T> { Values = yVal }),
-            new BasicStats<T>(new BasicStatsInputs<T> { Values = validationPredictions }),
-            new BasicStats<T>(new BasicStatsInputs<T> { Values = yTest }),
-            new BasicStats<T>(new BasicStatsInputs<T> { Values = testPredictions })
-        );
-    }
-
-    protected (ErrorStats<T> Training, ErrorStats<T> Validation, ErrorStats<T> Test)
-    CalculateErrorStats(Vector<T> yTrain, Vector<T> yVal, Vector<T> yTest, 
-                        Vector<T> trainingPredictions, Vector<T> validationPredictions, Vector<T> testPredictions, 
-                        int featureCount)
-    {
-        return (
-            new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = yTrain, Predicted = trainingPredictions, FeatureCount = featureCount }),
-            new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = yVal, Predicted = validationPredictions, FeatureCount = featureCount }),
-            new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = yTest, Predicted = testPredictions, FeatureCount = featureCount })
-        );
-    }
-
-    protected (PredictionStats<T> Training, PredictionStats<T> Validation, PredictionStats<T> Test)
-    CalculatePredictionStats(Vector<T> yTrain, Vector<T> yVal, Vector<T> yTest, 
-                             Vector<T> trainingPredictions, Vector<T> validationPredictions, Vector<T> testPredictions, 
-                             int featureCount)
-    {
-        return (
-            new PredictionStats<T>(new PredictionStatsInputs<T> 
-            { 
-                Actual = yTrain, 
-                Predicted = trainingPredictions, 
-                NumberOfParameters = featureCount, 
-                ConfidenceLevel = _predictionOptions.ConfidenceLevel, 
-                LearningCurveSteps = _predictionOptions.LearningCurveSteps 
-            }),
-            new PredictionStats<T>(new PredictionStatsInputs<T> 
-            { 
-                Actual = yVal, 
-                Predicted = validationPredictions, 
-                NumberOfParameters = featureCount, 
-                ConfidenceLevel = _predictionOptions.ConfidenceLevel, 
-                LearningCurveSteps = _predictionOptions.LearningCurveSteps 
-            }),
-            new PredictionStats<T>(new PredictionStatsInputs<T> 
-            { 
-                Actual = yTest, 
-                Predicted = testPredictions, 
-                NumberOfParameters = featureCount, 
-                ConfidenceLevel = _predictionOptions.ConfidenceLevel, 
-                LearningCurveSteps = _predictionOptions.LearningCurveSteps 
-            })
-        );
-    }
-
-    protected ModelStats<T> CalculateModelStats(Matrix<T> X, int featureCount, IPredictiveModel<T> model)
-    {
-        return new ModelStats<T>(new ModelStatsInputs<T>
+        var input = new ModelEvaluationInput<T>
         {
-            XMatrix = X,
-            FeatureCount = featureCount,
-            Model = model
-        });
-    }
-
-    protected (T CurrentFitnessScore, FitDetectorResult<T> FitDetectionResult, Vector<T> TrainingPredictions, Vector<T> ValidationPredictions, 
-        Vector<T> TestPredictions, ModelEvaluationData<T> evaluationData)
-    EvaluateSolution(
-        ISymbolicModel<T> model,
-        Matrix<T> XTrain, Matrix<T> XVal, Matrix<T> XTest,
-        Vector<T> yTrain, Vector<T> yVal, Vector<T> yTest,
-        INormalizer<T> normalizer, NormalizationInfo<T> normInfo,
-        IFitnessCalculator<T> fitnessCalculator, IFitDetector<T> fitDetector)
-    {
-        // Calculate predictions for all sets
-        var trainingPredictions = PredictWithSymbolicModel(model, XTrain);
-        var validationPredictions = PredictWithSymbolicModel(model, XVal);
-        var testPredictions = PredictWithSymbolicModel(model, XTest);
-
-        int featureCount = XTrain.Columns;
-
-        // Calculate error stats, basic stats, and prediction stats for all sets
-        var (trainingErrorStats, validationErrorStats, testErrorStats) = CalculateErrorStats(
-            yTrain, yVal, yTest, trainingPredictions, validationPredictions, testPredictions, featureCount);
-
-        var (trainingActualBasicStats, trainingPredictedBasicStats,
-             validationActualBasicStats, validationPredictedBasicStats,
-             testActualBasicStats, testPredictedBasicStats) = CalculateBasicStats(
-            yTrain, yVal, yTest, trainingPredictions, validationPredictions, testPredictions);
-
-        var (trainingPredictionStats, validationPredictionStats, testPredictionStats) = CalculatePredictionStats(
-            yTrain, yVal, yTest, trainingPredictions, validationPredictions, testPredictions, featureCount);
-
-        var predictionModelResult = new PredictionModelResult<T>((IFullModel<T>)model, new OptimizationResult<T>(), normInfo);
-
-        var modelStats = CalculateModelStats(XTrain, featureCount, predictionModelResult);
-        var evaluationData = new ModelEvaluationData<T>()
-        {
-            TrainingErrorStats = trainingErrorStats,
-            ValidationErrorStats = validationErrorStats,
-            TestErrorStats = testErrorStats,
-            TrainingPredictedBasicStats = trainingPredictedBasicStats,
-            ValidationPredictedBasicStats = validationPredictedBasicStats,
-            TestPredictedBasicStats = testPredictedBasicStats,
-            TrainingActualBasicStats = trainingActualBasicStats,
-            ValidationActualBasicStats = validationActualBasicStats,
-            TestActualBasicStats = testActualBasicStats,
-            TrainingPredictionStats = trainingPredictionStats,
-            ValidationPredictionStats = validationPredictionStats,
-            TestPredictionStats = testPredictionStats,
-            ModelStats = modelStats
+            InputData = inputData
         };
 
-        // Detect fit type
-        var fitDetectionResult = fitDetector.DetectFit(evaluationData);
+        var (currentFitnessScore, fitDetectionResult, evaluationData) = EvaluateSolution(input);
+        _fitnessList.Add(currentFitnessScore);
 
-        // Calculate fitness score
-        T currentFitnessScore = fitnessCalculator.CalculateFitnessScore(
-            evaluationData.ValidationErrorStats, validationActualBasicStats, validationPredictedBasicStats,
-            yVal, validationPredictions, XVal, evaluationData.ValidationPredictionStats);
-
-        return (currentFitnessScore, fitDetectionResult, 
-            trainingPredictions, validationPredictions, testPredictions, evaluationData);
-    }
-
-    private Vector<T> PredictWithSymbolicModel(ISymbolicModel<T> model, Matrix<T> X)
-    {
-        var predictions = new Vector<T>(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
+        return new OptimizationStepData<T>
         {
-            predictions[i] = model.Evaluate(X.GetRow(i));
-        }
-
-        return predictions;
+            Solution = solution,
+            SelectedFeatures = selectedFeatures,
+            XTrainSubset = XTrainSubset,
+            XValSubset = XValSubset,
+            XTestSubset = XTestSubset,
+            FitnessScore = currentFitnessScore,
+            FitDetectionResult = fitDetectionResult,
+            EvaluationData = evaluationData
+        };
     }
 
-    protected void UpdateBestSolution(
-        ModelResult<T> currentResult,
-        ModelResult<T> bestResult,
-        Matrix<T> XTrain,
-        Matrix<T> XTest,
-        Matrix<T> XVal,
-        IFitnessCalculator<T> fitnessCalculator)
+    private (T CurrentFitnessScore, FitDetectorResult<T> FitDetectionResult, ModelEvaluationData<T> EvaluationData)
+    EvaluateSolution(ModelEvaluationInput<T> input)
     {
-        if (fitnessCalculator.IsBetterFitness(currentResult.Fitness, bestResult.Fitness))
+        var evaluationData = _modelEvaluator.EvaluateModel(input);
+        var fitDetectionResult = _fitDetector.DetectFit(evaluationData);
+        var currentFitnessScore = _fitnessCalculator.CalculateFitnessScore(evaluationData);
+
+        return (currentFitnessScore, fitDetectionResult, evaluationData);
+    }
+
+    protected OptimizationResult<T> CreateOptimizationResult(OptimizationStepData<T> bestStepData, OptimizationInputData<T> input)
+    {
+        return OptimizerHelper.CreateOptimizationResult(
+            bestStepData.Solution,
+            bestStepData.FitnessScore,
+            _fitnessList,
+            bestStepData.SelectedFeatures,
+            new OptimizationResult<T>.DatasetResult
+            {
+                X = bestStepData.XTrainSubset,
+                Y = input.YTrain,
+                Predictions = bestStepData.EvaluationData.TrainingSet.Predictions,
+                ErrorStats = bestStepData.EvaluationData.TrainingSet.ErrorStats,
+                ActualBasicStats = bestStepData.EvaluationData.TrainingSet.ActualBasicStats,
+                PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
+                PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
+            },
+            new OptimizationResult<T>.DatasetResult
+            {
+                X = bestStepData.XValSubset,
+                Y = input.YVal,
+                Predictions = bestStepData.EvaluationData.ValidationSet.Predictions,
+                ErrorStats = bestStepData.EvaluationData.ValidationSet.ErrorStats,
+                ActualBasicStats = bestStepData.EvaluationData.ValidationSet.ActualBasicStats,
+                PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
+                PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
+            },
+            new OptimizationResult<T>.DatasetResult
+            {
+                X = bestStepData.XTestSubset,
+                Y = input.YTest,
+                Predictions = bestStepData.EvaluationData.TestSet.Predictions,
+                ErrorStats = bestStepData.EvaluationData.TestSet.ErrorStats,
+                ActualBasicStats = bestStepData.EvaluationData.TestSet.ActualBasicStats,
+                PredictedBasicStats = bestStepData.EvaluationData.TestSet.PredictedBasicStats,
+                PredictionStats = bestStepData.EvaluationData.TestSet.PredictionStats
+            },
+            bestStepData.FitDetectionResult,
+            _iterationHistoryList.Count
+        );
+    }
+
+    private void UpdateAndApplyBestSolution(ModelResult<T> currentResult, ref ModelResult<T> bestResult)
+    {
+        if (_fitnessCalculator.IsBetterFitness(currentResult.Fitness, bestResult.Fitness))
         {
             bestResult.Solution = currentResult.Solution;
             bestResult.Fitness = currentResult.Fitness;
-            bestResult.TrainingPredictions = currentResult.TrainingPredictions;
-            bestResult.ValidationPredictions = currentResult.ValidationPredictions;
-            bestResult.TestPredictions = currentResult.TestPredictions;
+            bestResult.FitDetectionResult = currentResult.FitDetectionResult;
             bestResult.EvaluationData = currentResult.EvaluationData;
             bestResult.SelectedFeatures = currentResult.SelectedFeatures;
-            bestResult.FitDetectionResult = currentResult.FitDetectionResult;
-            bestResult.TrainingFeatures = OptimizerHelper.SelectFeatures(XTrain, currentResult.SelectedFeatures);
-            bestResult.ValidationFeatures = OptimizerHelper.SelectFeatures(XVal, currentResult.SelectedFeatures);
-            bestResult.TestFeatures = OptimizerHelper.SelectFeatures(XTest, currentResult.SelectedFeatures);
         }
     }
 
-    protected bool UpdateIterationHistoryAndCheckEarlyStopping(
-    List<T> fitnessHistory,
-    List<OptimizationIterationInfo<T>> iterationHistory,
-    int iteration,
-    T currentFitnessScore,
-    FitDetectorResult<T> fitDetectionResult,
-    IFitnessCalculator<T> fitnessCalculator)
+    protected void UpdateBestSolution(OptimizationStepData<T> currentStepData, ref OptimizationStepData<T> bestStepData)
     {
-        fitnessHistory.Add(currentFitnessScore);
-        iterationHistory.Add(new OptimizationIterationInfo<T>
+        var currentResult = new ModelResult<T>
+        {
+            Solution = currentStepData.Solution ?? new VectorModel<T>(Vector<T>.Empty()),
+            Fitness = currentStepData.FitnessScore,
+            FitDetectionResult = currentStepData.FitDetectionResult,
+            EvaluationData = currentStepData.EvaluationData,
+            SelectedFeatures = currentStepData.SelectedFeatures
+        };
+
+        var bestResult = new ModelResult<T>
+        {
+            Solution = bestStepData.Solution ?? new VectorModel<T>(Vector<T>.Empty()),
+            Fitness = bestStepData.FitnessScore,
+            FitDetectionResult = bestStepData.FitDetectionResult,
+            EvaluationData = bestStepData.EvaluationData,
+            SelectedFeatures = bestStepData.SelectedFeatures
+        };
+
+        UpdateAndApplyBestSolution(currentResult, ref bestResult);
+
+        // Update the bestStepData with the new best values
+        bestStepData.Solution = bestResult.Solution;
+        bestStepData.FitnessScore = bestResult.Fitness;
+        bestStepData.FitDetectionResult = bestResult.FitDetectionResult;
+        bestStepData.EvaluationData = bestResult.EvaluationData;
+        bestStepData.SelectedFeatures = bestResult.SelectedFeatures;
+    }
+
+    protected bool UpdateIterationHistoryAndCheckEarlyStopping(int iteration, OptimizationStepData<T> stepData)
+    {
+        _iterationHistoryList.Add(new OptimizationIterationInfo<T>
         {
             Iteration = iteration,
-            Fitness = currentFitnessScore,
-            FitDetectionResult = fitDetectionResult
+            Fitness = stepData.FitnessScore,
+            FitDetectionResult = stepData.FitDetectionResult
         });
 
         // Check for early stopping
-        if (_options.UseEarlyStopping && ShouldEarlyStop(iterationHistory, fitnessCalculator))
+        if (Options.UseEarlyStopping && ShouldEarlyStop())
         {
             return true; // Signal to stop the optimization
         }
@@ -234,20 +176,20 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         return false; // Continue optimization
     }
 
-    public virtual bool ShouldEarlyStop(List<OptimizationIterationInfo<T>> iterationHistory, IFitnessCalculator<T> fitnessCalculator)
+    public virtual bool ShouldEarlyStop()
     {
-        if (iterationHistory.Count < _options.EarlyStoppingPatience)
+        if (_iterationHistoryList.Count < Options.EarlyStoppingPatience)
         {
             return false;
         }
 
-        var recentIterations = iterationHistory.Skip(Math.Max(0, iterationHistory.Count - _options.EarlyStoppingPatience)).ToList();
+        var recentIterations = _iterationHistoryList.Skip(Math.Max(0, _iterationHistoryList.Count - Options.EarlyStoppingPatience)).ToList();
 
         // Find the best fitness score
-        T bestFitness = iterationHistory[0].Fitness;
-        foreach (var iteration in iterationHistory)
+        T bestFitness = _iterationHistoryList[0].Fitness;
+        foreach (var iteration in _iterationHistoryList)
         {
-            if (fitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
+            if (_fitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
             {
                 bestFitness = iteration.Fitness;
             }
@@ -257,7 +199,7 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
         bool noImprovement = true;
         foreach (var iteration in recentIterations)
         {
-            if (fitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
+            if (_fitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
             {
                 noImprovement = false;
                 break;
@@ -278,6 +220,76 @@ public abstract class OptimizerBase<T> : IOptimizationAlgorithm<T>
             }
         }
 
-        return noImprovement || consecutiveBadFits >= _options.BadFitPatience;
+        return noImprovement || consecutiveBadFits >= Options.BadFitPatience;
     }
+
+    protected ISymbolicModel<T> InitializeRandomSolution(int numberOfFeatures)
+    {
+        return SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, numberOfFeatures + 1, NumOps);
+    }
+
+    protected Vector<T> CalculateGradient(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    {
+        var predictions = model.Predict(X);
+        var errors = predictions.Subtract(y);
+        var gradient = X.Transpose().Multiply(errors);
+
+        return gradient.Divide(NumOps.FromDouble(X.Rows));
+    }
+
+    public virtual byte[] Serialize()
+    {
+        using MemoryStream ms = new MemoryStream();
+        using (BinaryWriter writer = new BinaryWriter(ms))
+        {
+            // Write the type of the optimizer
+            writer.Write(this.GetType()?.AssemblyQualifiedName ?? string.Empty);
+
+            // Serialize options
+           string optionsJson = JsonConvert.SerializeObject(Options);
+            writer.Write(optionsJson);
+
+            // Allow derived classes to serialize additional data
+            SerializeAdditionalData(writer);
+        }
+
+        return ms.ToArray();
+    }
+
+    public virtual void Deserialize(byte[] data)
+    {
+        using MemoryStream ms = new MemoryStream(data);
+        using BinaryReader reader = new BinaryReader(ms);
+
+        // Read and verify the type
+        string typeName = reader.ReadString();
+        if (typeName != this.GetType().AssemblyQualifiedName)
+        {
+            throw new InvalidOperationException("Mismatched optimizer type during deserialization.");
+        }
+
+        // Deserialize options
+        string optionsJson = reader.ReadString();
+        var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions>(optionsJson);
+
+        // Update the options
+        UpdateOptions(options ?? new());
+
+        // Allow derived classes to deserialize additional data
+        DeserializeAdditionalData(reader);
+    }
+
+    protected virtual void SerializeAdditionalData(BinaryWriter writer)
+    {
+        // Base implementation does nothing
+    }
+
+    protected virtual void DeserializeAdditionalData(BinaryReader reader)
+    {
+        // Base implementation does nothing
+    }
+
+    protected abstract void UpdateOptions(OptimizationAlgorithmOptions options);
+
+    public abstract OptimizationAlgorithmOptions GetOptions();
 }

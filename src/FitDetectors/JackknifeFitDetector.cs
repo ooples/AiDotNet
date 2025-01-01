@@ -29,7 +29,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         var jackknifeMSE = PerformJackknifeResampling(evaluationData);
-        var originalMSE = evaluationData.TestErrorStats.MSE;
+        var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
 
         var relativeDifference = _numOps.Divide(_numOps.Subtract(jackknifeMSE, originalMSE), originalMSE);
 
@@ -50,7 +50,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
         var jackknifeMSE = PerformJackknifeResampling(evaluationData);
-        var originalMSE = evaluationData.TestErrorStats.MSE;
+        var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
 
         var relativeDifference = _numOps.Abs(_numOps.Divide(_numOps.Subtract(jackknifeMSE, originalMSE), originalMSE));
         

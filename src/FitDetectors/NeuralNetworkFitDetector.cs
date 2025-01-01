@@ -21,9 +21,9 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
 
-        TrainingLoss = Convert.ToDouble(evaluationData.TrainingErrorStats.MSE);
-        ValidationLoss = Convert.ToDouble(evaluationData.ValidationErrorStats.MSE);
-        TestLoss = Convert.ToDouble(evaluationData.TestErrorStats.MSE);
+        TrainingLoss = Convert.ToDouble(evaluationData.TrainingSet.ErrorStats.MSE);
+        ValidationLoss = Convert.ToDouble(evaluationData.ValidationSet.ErrorStats.MSE);
+        TestLoss = Convert.ToDouble(evaluationData.TestSet.ErrorStats.MSE);
         OverfittingScore = CalculateOverfittingScore(evaluationData);
 
         var fitType = DetermineFitType(evaluationData);

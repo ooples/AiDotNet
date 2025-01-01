@@ -17,7 +17,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     private IFitnessCalculator<T>? _fitnessCalculator;
     private IFitDetector<T>? _fitDetector;
     private IRegression<T>? _regression;
-    private IOptimizationAlgorithm<T>? _optimizer;
+    private IOptimizer<T>? _optimizer;
     private IDataPreprocessor<T>? _dataPreprocessor;
     private IOutlierRemoval<T>? _outlierRemoval;
 
@@ -62,7 +62,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         return this;
     }
 
-    public IPredictionModelBuilder<T> ConfigureOptimizer(IOptimizationAlgorithm<T> optimizationAlgorithm)
+    public IPredictionModelBuilder<T> ConfigureOptimizer(IOptimizer<T> optimizationAlgorithm)
     {
         _optimizer = optimizationAlgorithm;
         return this;
@@ -109,8 +109,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         // Optimize the model
-        var optimizationResult = optimizer.Optimize(XTrain, yTrain, XVal, yVal, XTest, yTest, _regression, regularization, normalizer, 
-            normInfo, fitnessCalculator, fitDetector);
+        var optimizationResult = optimizer.Optimize(OptimizerHelper.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
         return new PredictionModelResult<T>(_regression, optimizationResult, normInfo);
     }

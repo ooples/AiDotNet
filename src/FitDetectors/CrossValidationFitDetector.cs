@@ -37,9 +37,9 @@ public class CrossValidationFitDetector<T> : FitDetectorBase<T>
 
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var trainingR2 = evaluationData.TrainingPredictionStats.R2;
-        var validationR2 = evaluationData.ValidationPredictionStats.R2;
-        var testR2 = evaluationData.TestPredictionStats.R2;
+        var trainingR2 = evaluationData.TrainingSet.PredictionStats.R2;
+        var validationR2 = evaluationData.ValidationSet.PredictionStats.R2;
+        var testR2 = evaluationData.TestSet.PredictionStats.R2;
 
         var r2Difference = _numOps.Abs(_numOps.Subtract(trainingR2, validationR2));
 
@@ -73,11 +73,11 @@ public class CrossValidationFitDetector<T> : FitDetectorBase<T>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
         var r2Consistency = _numOps.Divide(
-            _numOps.Add(_numOps.Add(evaluationData.TrainingPredictionStats.R2, evaluationData.ValidationPredictionStats.R2), evaluationData.TestPredictionStats.R2),
+            _numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), evaluationData.TestSet.PredictionStats.R2),
             _numOps.FromDouble(3));
 
         var mseConsistency = _numOps.Divide(
-            _numOps.Add(_numOps.Add(evaluationData.TrainingErrorStats.MSE, evaluationData.ValidationErrorStats.MSE), evaluationData.TestErrorStats.MSE),
+            _numOps.Add(_numOps.Add(evaluationData.TrainingSet.ErrorStats.MSE, evaluationData.ValidationSet.ErrorStats.MSE), evaluationData.TestSet.ErrorStats.MSE),
             _numOps.FromDouble(3));
 
         var confidenceLevel = _numOps.Multiply(r2Consistency, _numOps.Subtract(_numOps.One, mseConsistency));
@@ -120,19 +120,19 @@ public class CrossValidationFitDetector<T> : FitDetectorBase<T>
                 break;
         }
 
-        if (_numOps.LessThan(evaluationData.TrainingPredictionStats.R2, _goodFitThreshold))
+        if (_numOps.LessThan(evaluationData.TrainingSet.PredictionStats.R2, _goodFitThreshold))
         {
-            recommendations.Add($"Training R2 ({evaluationData.TrainingPredictionStats.R2}) is below the good fit threshold. Consider improving model performance on training data.");
+            recommendations.Add($"Training R2 ({evaluationData.TrainingSet.PredictionStats.R2}) is below the good fit threshold. Consider improving model performance on training data.");
         }
 
-        if (_numOps.LessThan(evaluationData.ValidationPredictionStats.R2, _goodFitThreshold))
+        if (_numOps.LessThan(evaluationData.ValidationSet.PredictionStats.R2, _goodFitThreshold))
         {
-            recommendations.Add($"Validation R2 ({evaluationData.ValidationPredictionStats.R2}) is below the good fit threshold. Focus on improving model generalization.");
+            recommendations.Add($"Validation R2 ({evaluationData.ValidationSet.PredictionStats.R2}) is below the good fit threshold. Focus on improving model generalization.");
         }
 
-        if (_numOps.LessThan(evaluationData.TestPredictionStats.R2, _goodFitThreshold))
+        if (_numOps.LessThan(evaluationData.TestSet.PredictionStats.R2, _goodFitThreshold))
         {
-            recommendations.Add($"Test R2 ({evaluationData.TestPredictionStats.R2}) is below the good fit threshold. Evaluate model performance on unseen data.");
+            recommendations.Add($"Test R2 ({evaluationData.TestSet.PredictionStats.R2}) is below the good fit threshold. Evaluate model performance on unseen data.");
         }
 
         return recommendations;

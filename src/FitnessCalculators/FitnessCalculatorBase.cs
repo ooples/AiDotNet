@@ -4,21 +4,36 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
 {
     protected bool _isHigherScoreBetter;
     protected readonly INumericOperations<T> _numOps;
+    protected readonly DataSetType _dataSetType;
 
-    protected FitnessCalculatorBase(bool isHigherScoreBetter)
+    protected FitnessCalculatorBase(bool isHigherScoreBetter, DataSetType dataSetType = DataSetType.Validation)
     {
         _isHigherScoreBetter = isHigherScoreBetter;
         _numOps = MathHelper.GetNumericOperations<T>();
+        _dataSetType = dataSetType;
     }
 
-    public abstract T CalculateFitnessScore(
-        ErrorStats<T> errorStats,
-        BasicStats<T> basicStats,
-        BasicStats<T> predictedStats,
-        Vector<T> actualValues,
-        Vector<T> predictedValues,
-        Matrix<T> features,
-        PredictionStats<T> predictionStats);
+
+    public T CalculateFitnessScore(ModelEvaluationData<T> evaluationData)
+    {
+        if (evaluationData == null)
+            throw new ArgumentNullException(nameof(evaluationData));
+
+        DataSetStats<T> dataSet = _dataSetType switch
+        {
+            DataSetType.Training => evaluationData.TrainingSet,
+            DataSetType.Validation => evaluationData.ValidationSet,
+            DataSetType.Testing => evaluationData.TestSet,
+            _ => throw new ArgumentException($"Unsupported DataSetType: {_dataSetType}")
+        };
+
+        if (dataSet == null)
+            throw new InvalidOperationException($"The {_dataSetType} dataset is not available in the provided ModelEvaluationData.");
+
+        return GetFitnessScore(dataSet);
+    }
+
+    protected abstract T GetFitnessScore(DataSetStats<T> dataSet);
 
     public bool IsHigherScoreBetter => _isHigherScoreBetter;
 

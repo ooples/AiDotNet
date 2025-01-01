@@ -45,7 +45,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
         }
         else
         {
-            var primaryMetric = evaluationData.ValidationPredictionStats.GetMetric(_options.PrimaryMetric);
+            var primaryMetric = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
             if (_numOps.GreaterThan(primaryMetric, _numOps.FromDouble(_options.GoodFitThreshold)))
             {
                 return FitType.GoodFit;
@@ -64,7 +64,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
         var avgVIF = _numOps.Divide(vifValues.Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(vifValues.Count));
 
         var vifConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(avgVIF, maxVIF));
-        var metricConfidence = evaluationData.ValidationPredictionStats.GetMetric(_options.PrimaryMetric);
+        var metricConfidence = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
 
         return _numOps.Multiply(vifConfidence, metricConfidence);
     }
@@ -101,7 +101,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
         }
 
         var primaryMetric = _options.PrimaryMetric;
-        recommendations.Add($"Validation {primaryMetric}: {evaluationData.ValidationPredictionStats.GetMetric(primaryMetric):F4}, Test {primaryMetric}: {evaluationData.TestPredictionStats.GetMetric(primaryMetric):F4}");
+        recommendations.Add($"Validation {primaryMetric}: {evaluationData.ValidationSet.PredictionStats.GetMetric(primaryMetric):F4}, Test {primaryMetric}: {evaluationData.TestSet.PredictionStats.GetMetric(primaryMetric):F4}");
 
         return recommendations;
     }

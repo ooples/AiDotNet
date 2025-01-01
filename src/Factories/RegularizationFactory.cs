@@ -1,17 +1,16 @@
-
 namespace AiDotNet.Factories;
 
 public static class RegularizationFactory
 {
-    public static IRegularization<T> CreateRegularization<T>(RegularizationType regularizationType)
+    public static IRegularization<T> CreateRegularization<T>(RegularizationOptions options)
     {
-        return regularizationType switch
+        return options.Type switch
         {
             RegularizationType.None => new NoRegularization<T>(),
-            RegularizationType.L1 => new L1Regularization<T>(),
-            RegularizationType.L2 => new L2Regularization<T>(),
-            RegularizationType.ElasticNet => new ElasticNetRegularization<T>(),
-            _ => throw new ArgumentException($"Unknown regularization type: {regularizationType}", nameof(regularizationType))
+            RegularizationType.L1 => new L1Regularization<T>(options),
+            RegularizationType.L2 => new L2Regularization<T>(options),
+            RegularizationType.ElasticNet => new ElasticNetRegularization<T>(options),
+            _ => throw new ArgumentException($"Unknown regularization type: {options.Type}", nameof(options.Type))
         };
     }
 

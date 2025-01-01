@@ -30,9 +30,9 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
 
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var avgTrainingR2 = evaluationData.TrainingPredictionStats.R2;
-        var avgValidationR2 = evaluationData.ValidationPredictionStats.R2;
-        var testR2 = evaluationData.TestPredictionStats.R2;
+        var avgTrainingR2 = evaluationData.TrainingSet.PredictionStats.R2;
+        var avgValidationR2 = evaluationData.ValidationSet.PredictionStats.R2;
+        var testR2 = evaluationData.TestSet.PredictionStats.R2;
 
         var r2Difference = _numOps.Subtract(avgTrainingR2, avgValidationR2);
         var testDifference = _numOps.Subtract(avgValidationR2, testR2);
@@ -62,8 +62,8 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var avgValidationR2 = evaluationData.ValidationPredictionStats.R2;
-        var testR2 = evaluationData.TestPredictionStats.R2;
+        var avgValidationR2 = evaluationData.ValidationSet.PredictionStats.R2;
+        var testR2 = evaluationData.TestSet.PredictionStats.R2;
 
         var r2Difference = _numOps.Abs(_numOps.Subtract(avgValidationR2, testR2));
         var maxR2 = _numOps.GreaterThan(avgValidationR2, testR2) ? avgValidationR2 : testR2;
@@ -108,7 +108,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
                 break;
         }
 
-        recommendations.Add($"Average Validation R2: {evaluationData.ValidationPredictionStats.R2:F4}, Test R2: {evaluationData.TestPredictionStats.R2:F4}");
+        recommendations.Add($"Average Validation R2: {evaluationData.ValidationSet.PredictionStats.R2:F4}, Test R2: {evaluationData.TestSet.PredictionStats.R2:F4}");
 
         return recommendations;
     }

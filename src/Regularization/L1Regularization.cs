@@ -1,31 +1,41 @@
 ﻿namespace AiDotNet.Regularization;
 
-public class L1Regularization<T> : IRegularization<T>
+public class L1Regularization<T> : RegularizationBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
-    private readonly RegularizationOptions _options;
-
     public L1Regularization(RegularizationOptions? options = null)
+        : base(options ?? new RegularizationOptions
+        {
+            Type = RegularizationType.L1,
+            Strength = 0.1, // Default L1 regularization strength
+            L1Ratio = 1.0  // For L1, this should always be 1.0
+        })
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _options = options ?? new RegularizationOptions();
     }
 
-    public Matrix<T> RegularizeMatrix(Matrix<T> matrix)
+    public override Matrix<T> RegularizeMatrix(Matrix<T> matrix)
     {
+        // L1 regularization typically doesn't modify the input matrix
         return matrix;
     }
 
-    public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
+    public override Vector<T> RegularizeCoefficients(Vector<T> coefficients)
     {
-        var regularizationStrength = _numOps.FromDouble(_options.Strength);
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
         return coefficients.Transform(c =>
         {
-            var sub = _numOps.Subtract(_numOps.Abs(c), regularizationStrength);
-            return _numOps.Multiply(
-                _numOps.SignOrZero(c),
-                _numOps.GreaterThan(sub, _numOps.Zero) ? sub : _numOps.Zero
+            var sub = NumOps.Subtract(NumOps.Abs(c), regularizationStrength);
+            return NumOps.Multiply(
+                NumOps.SignOrZero(c),
+                NumOps.GreaterThan(sub, NumOps.Zero) ? sub : NumOps.Zero
             );
         });
+    }
+
+    public override Vector<T> RegularizeGradient(Vector<T> gradient, Vector<T> coefficients)
+    {
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
+        return gradient.Add(coefficients.Transform(c => 
+            NumOps.Multiply(regularizationStrength, NumOps.SignOrZero(c))
+        ));
     }
 }

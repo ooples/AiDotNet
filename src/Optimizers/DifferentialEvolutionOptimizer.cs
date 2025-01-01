@@ -1,147 +1,46 @@
-using AiDotNet.Models.Options;
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.Optimizers;
 
 public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
 {
-    private readonly DifferentialEvolutionOptions _deOptions;
-    private readonly Random _random;
+    private DifferentialEvolutionOptions _deOptions;
+    private Random _random;
 
-    public DifferentialEvolutionOptimizer(DifferentialEvolutionOptions? options = null)
-        : base(options)
+    public DifferentialEvolutionOptimizer(
+        DifferentialEvolutionOptions? options = null,
+        PredictionStatsOptions? predictionOptions = null,
+        ModelStatsOptions? modelOptions = null,
+        IModelEvaluator<T>? modelEvaluator = null,
+        IFitDetector<T>? fitDetector = null,
+        IFitnessCalculator<T>? fitnessCalculator = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator)
     {
         _deOptions = options ?? new DifferentialEvolutionOptions();
         _random = new Random();
     }
 
-    public override OptimizationResult<T> Optimize(
-            Matrix<T> XTrain,
-            Vector<T> yTrain,
-            Matrix<T> XVal,
-            Vector<T> yVal,
-            Matrix<T> XTest,
-            Vector<T> yTest,
-            IFullModel<T> regressionMethod,
-            IRegularization<T> regularization,
-            INormalizer<T> normalizer,
-            NormalizationInfo<T> normInfo,
-            IFitnessCalculator<T> fitnessCalculator,
-            IFitDetector<T> fitDetector)
+    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
-        int dimensions = XTrain.Columns;
+        int dimensions = inputData.XTrain.Columns;
         var population = InitializePopulation(dimensions, _deOptions.PopulationSize);
-        var bestSolution = SymbolicModelFactory<T>.CreateEmptyModel(_options.UseExpressionTrees, XTrain.Columns, _numOps);
-        T bestFitness = fitnessCalculator.IsHigherScoreBetter ? _numOps.MinValue : _numOps.MaxValue;
-        FitDetectorResult<T> bestFitDetectionResult = new();
-        Vector<T> bestTrainingPredictions = new(yTrain.Length, _numOps);
-        Vector<T> bestValidationPredictions = new(yVal.Length, _numOps);
-        Vector<T> bestTestPredictions = new(yTest.Length, _numOps);
-        ModelEvaluationData<T> bestEvaluationData = new();
-        List<Vector<T>> bestSelectedFeatures = [];
-        Matrix<T> bestTestFeatures = new(XTest.Rows, XTest.Columns, _numOps);
-        Matrix<T> bestTrainingFeatures = new(XTrain.Rows, XTrain.Columns, _numOps);
-        Matrix<T> bestValidationFeatures = new(XVal.Rows, XVal.Columns, _numOps);
+        var bestStepData = new OptimizationStepData<T>();
 
-        var fitnessHistory = new List<T>();
-        var iterationHistory = new List<OptimizationIterationInfo<T>>();
-
-        for (int generation = 0; generation < _options.MaxIterations; generation++)
+        for (int generation = 0; generation < Options.MaxIterations; generation++)
         {
             for (int i = 0; i < _deOptions.PopulationSize; i++)
             {
                 var trial = GenerateTrialModel(population, i, dimensions);
-                var selectedFeatures = OptimizerHelper.GetSelectedFeatures<T>(trial);
-                var XTrainSubset = OptimizerHelper.SelectFeatures(XTrain, selectedFeatures);
-                var XValSubset = OptimizerHelper.SelectFeatures(XVal, selectedFeatures);
-                var XTestSubset = OptimizerHelper.SelectFeatures(XTest, selectedFeatures);
-
-                var (currentFitnessScore, fitDetectionResult, trainingPredictions, validationPredictions, testPredictions, evaluationData) = EvaluateSolution(
-                    trial, XTrainSubset, XValSubset, XTestSubset,
-                    yTrain, yVal, yTest,
-                    normalizer, normInfo,
-                    fitnessCalculator, fitDetector);
-
-                var currentResult = new ModelResult<T>
-                {
-                    Solution = trial,
-                    Fitness = currentFitnessScore,
-                    FitDetectionResult = fitDetectionResult,
-                    TrainingPredictions = trainingPredictions,
-                    ValidationPredictions = validationPredictions,
-                    TestPredictions = testPredictions,
-                    EvaluationData = evaluationData,
-                    SelectedFeatures = selectedFeatures.ToVectorList<T>()
-                };
-
-                var bestResult = new ModelResult<T>
-                {
-                    Solution = bestSolution ?? new VectorModel<T>(Vector<T>.Empty(), _numOps),
-                    Fitness = bestFitness,
-                    FitDetectionResult = bestFitDetectionResult,
-                    TrainingPredictions = bestTrainingPredictions,
-                    ValidationPredictions = bestValidationPredictions,
-                    TestPredictions = bestTestPredictions,
-                    EvaluationData = bestEvaluationData,
-                    SelectedFeatures = bestSelectedFeatures
-                };
-
-                OptimizerHelper.UpdateAndApplyBestSolution(
-                    currentResult,
-                    ref bestResult,
-                    XTrainSubset,
-                    XTestSubset,
-                    XValSubset,
-                    fitnessCalculator
-                );
-
-                population[i] = trial;
+                var currentStepData = PrepareAndEvaluateSolution(trial, inputData);
+                UpdateBestSolution(currentStepData, ref bestStepData);
+                population[i] = currentStepData.Solution;
             }
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(fitnessHistory, iterationHistory, generation, bestFitness, bestFitDetectionResult, fitnessCalculator))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(generation, bestStepData))
             {
                 break; // Early stopping criteria met, exit the loop
             }
         }
 
-        return OptimizerHelper.CreateOptimizationResult(
-            bestSolution ?? SymbolicModelFactory<T>.CreateEmptyModel(_options.UseExpressionTrees, XTrain.Columns, _numOps),
-            bestFitness,
-            fitnessHistory,
-            bestSelectedFeatures,
-            new OptimizationResult<T>.DatasetResult
-            {
-                X = bestTrainingFeatures,
-                Y = yTrain,
-                Predictions = bestTrainingPredictions,
-                ErrorStats = bestEvaluationData.TrainingErrorStats,
-                ActualBasicStats = bestEvaluationData.TrainingActualBasicStats,
-                PredictedBasicStats = bestEvaluationData.TrainingPredictedBasicStats,
-                PredictionStats = bestEvaluationData.TrainingPredictionStats
-            },
-            new OptimizationResult<T>.DatasetResult
-            {
-                X = bestValidationFeatures,
-                Y = yVal,
-                Predictions = bestValidationPredictions,
-                ErrorStats = bestEvaluationData.ValidationErrorStats,
-                ActualBasicStats = bestEvaluationData.ValidationActualBasicStats,
-                PredictedBasicStats = bestEvaluationData.ValidationPredictedBasicStats,
-                PredictionStats = bestEvaluationData.ValidationPredictionStats
-            },
-            new OptimizationResult<T>.DatasetResult
-            {
-                X = bestTestFeatures,
-                Y = yTest,
-                Predictions = bestTestPredictions,
-                ErrorStats = bestEvaluationData.TestErrorStats,
-                ActualBasicStats = bestEvaluationData.TestActualBasicStats,
-                PredictedBasicStats = bestEvaluationData.TestPredictedBasicStats,
-                PredictionStats = bestEvaluationData.TestPredictionStats
-            },
-            bestFitDetectionResult,
-            fitnessHistory.Count,
-            _numOps);
+        return CreateOptimizationResult(bestStepData, inputData);
     }
 
     private List<ISymbolicModel<T>> InitializePopulation(int dimensions, int populationSize)
@@ -149,12 +48,7 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
         var population = new List<ISymbolicModel<T>>();
         for (int i = 0; i < populationSize; i++)
         {
-            var individual = new Vector<T>(dimensions, _numOps);
-            for (int j = 0; j < dimensions; j++)
-            {
-                individual[j] = _numOps.FromDouble(_random.NextDouble() * 2 - 1); // Random values between -1 and 1
-            }
-            population.Add(new VectorModel<T>(individual, _numOps));
+            population.Add(SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions, NumOps));
         }
 
         return population;
@@ -166,40 +60,104 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
         do
         {
             a = _random.Next(population.Count);
-        } while (a == currentIndex);
-
-        do
-        {
             b = _random.Next(population.Count);
-        } while (b == currentIndex || b == a);
-
-        do
-        {
             c = _random.Next(population.Count);
-        } while (c == currentIndex || c == a || c == b);
+        } while (a == currentIndex || b == currentIndex || c == currentIndex || a == b || a == c || b == c);
 
         var currentModel = population[currentIndex];
-        var trialVector = new Vector<T>(dimensions, _numOps);
-        int R = _random.Next(dimensions);
+        ISymbolicModel<T> trialModel;
 
-        for (int i = 0; i < dimensions; i++)
+        if (Options.UseExpressionTrees)
         {
-            if (_random.NextDouble() < _deOptions.CrossoverRate || i == R)
-            {
-                var aValue = ((VectorModel<T>)population[a]).Coefficients[i];
-                var bValue = ((VectorModel<T>)population[b]).Coefficients[i];
-                var cValue = ((VectorModel<T>)population[c]).Coefficients[i];
+            // For expression trees, we'll use crossover and mutation
+            trialModel = SymbolicModelFactory<T>.Crossover(population[a], population[b], _deOptions.CrossoverRate, NumOps).Item1;
+            trialModel = SymbolicModelFactory<T>.Mutate(trialModel, _deOptions.MutationFactor, NumOps);
+        }
+        else
+        {
+            var aVector = ((VectorModel<T>)population[a]).Coefficients;
+            var bVector = ((VectorModel<T>)population[b]).Coefficients;
+            var cVector = ((VectorModel<T>)population[c]).Coefficients;
+            var currentVector = ((VectorModel<T>)currentModel).Coefficients;
 
-                trialVector[i] = _numOps.Add(aValue,
-                    _numOps.Multiply(_numOps.FromDouble(_deOptions.MutationFactor),
-                        _numOps.Subtract(bValue, cValue)));
-            }
-            else
+            var trialVector = new Vector<T>(dimensions, NumOps);
+            int R = _random.Next(dimensions);
+
+            for (int i = 0; i < dimensions; i++)
             {
-                trialVector[i] = ((VectorModel<T>)currentModel).Coefficients[i];
+                if (_random.NextDouble() < _deOptions.CrossoverRate || i == R)
+                {
+                    trialVector[i] = NumOps.Add(aVector[i],
+                        NumOps.Multiply(NumOps.FromDouble(_deOptions.MutationFactor),
+                            NumOps.Subtract(bVector[i], cVector[i])));
+                }
+                else
+                {
+                    trialVector[i] = currentVector[i];
+                }
             }
+            trialModel = new VectorModel<T>(trialVector);
         }
 
-        return new VectorModel<T>(trialVector, _numOps);
+        return trialModel;
+    }
+
+    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    {
+        if (options is DifferentialEvolutionOptions deOptions)
+        {
+            _deOptions = deOptions;
+        }
+        else
+        {
+            throw new ArgumentException("Options must be of type DifferentialEvolutionOptions", nameof(options));
+        }
+    }
+
+    public override OptimizationAlgorithmOptions GetOptions()
+    {
+        return _deOptions;
+    }
+
+    public override byte[] Serialize()
+    {
+        using (MemoryStream ms = new MemoryStream())
+        using (BinaryWriter writer = new BinaryWriter(ms))
+        {
+            // Serialize base class data
+            byte[] baseData = base.Serialize();
+            writer.Write(baseData.Length);
+            writer.Write(baseData);
+
+            // Serialize DifferentialEvolutionOptions
+            string optionsJson = JsonConvert.SerializeObject(_deOptions);
+            writer.Write(optionsJson);
+
+            // Serialize Random state
+            writer.Write(_random.Next());
+
+            return ms.ToArray();
+        }
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        using (MemoryStream ms = new MemoryStream(data))
+        using (BinaryReader reader = new BinaryReader(ms))
+        {
+            // Deserialize base class data
+            int baseDataLength = reader.ReadInt32();
+            byte[] baseData = reader.ReadBytes(baseDataLength);
+            base.Deserialize(baseData);
+
+            // Deserialize DifferentialEvolutionOptions
+            string optionsJson = reader.ReadString();
+            _deOptions = JsonConvert.DeserializeObject<DifferentialEvolutionOptions>(optionsJson)
+                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+
+            // Deserialize Random state
+            int randomSeed = reader.ReadInt32();
+            _random = new Random(randomSeed);
+        }
     }
 }

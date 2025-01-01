@@ -29,9 +29,9 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
 
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var avgTrainingMetric = evaluationData.TrainingPredictionStats.GetMetric(_options.PrimaryMetric);
-        var avgValidationMetric = evaluationData.ValidationPredictionStats.GetMetric(_options.PrimaryMetric);
-        var testMetric = evaluationData.TestPredictionStats.GetMetric(_options.PrimaryMetric);
+        var avgTrainingMetric = evaluationData.TrainingSet.PredictionStats.GetMetric(_options.PrimaryMetric);
+        var avgValidationMetric = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
+        var testMetric = evaluationData.TestSet.PredictionStats.GetMetric(_options.PrimaryMetric);
 
         var metricDifference = _numOps.Subtract(avgTrainingMetric, avgValidationMetric);
         var testDifference = _numOps.Subtract(avgValidationMetric, testMetric);
@@ -61,8 +61,8 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var avgValidationMetric = evaluationData.ValidationPredictionStats.GetMetric(_options.PrimaryMetric);
-        var testMetric = evaluationData.TestPredictionStats.GetMetric(_options.PrimaryMetric);
+        var avgValidationMetric = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
+        var testMetric = evaluationData.TestSet.PredictionStats.GetMetric(_options.PrimaryMetric);
 
         var metricDifference = _numOps.Abs(_numOps.Subtract(avgValidationMetric, testMetric));
         var maxMetric = _numOps.GreaterThan(avgValidationMetric, testMetric) ? avgValidationMetric : testMetric;
@@ -108,7 +108,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
         }
 
         var primaryMetric = _options.PrimaryMetric;
-        recommendations.Add($"Average Validation {primaryMetric}: {evaluationData.ValidationPredictionStats.GetMetric(primaryMetric):F4}, Test {primaryMetric}: {evaluationData.TestPredictionStats.GetMetric(primaryMetric):F4}");
+        recommendations.Add($"Average Validation {primaryMetric}: {evaluationData.ValidationSet.PredictionStats.GetMetric(primaryMetric):F4}, Test {primaryMetric}: {evaluationData.TestSet.PredictionStats.GetMetric(primaryMetric):F4}");
 
         return recommendations;
     }

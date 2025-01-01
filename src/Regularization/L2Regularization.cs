@@ -1,26 +1,31 @@
 ﻿namespace AiDotNet.Regularization;
 
-public class L2Regularization<T> : IRegularization<T>
+public class L2Regularization<T> : RegularizationBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
-    private readonly RegularizationOptions _options;
-
-    public L2Regularization(RegularizationOptions? options = null)
+    public L2Regularization(RegularizationOptions? options = null) : base(options ?? new RegularizationOptions
+        {
+            Type = RegularizationType.L2,
+            Strength = 0.01, // Default L2 regularization strength
+            L1Ratio = 0.0  // For L2, this should always be 0.0
+        })
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _options = options ?? new RegularizationOptions();
     }
 
-    public Matrix<T> RegularizeMatrix(Matrix<T> matrix)
+    public override Matrix<T> RegularizeMatrix(Matrix<T> matrix)
     {
-        var identity = Matrix<T>.CreateIdentity(matrix.Rows, _numOps);
-        var regularizationStrength = _numOps.FromDouble(_options.Strength);
-        return matrix.Add(identity.Multiply(regularizationStrength));
+        // L2 regularization typically doesn't modify the input matrix
+        return matrix;
     }
 
-    public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
+    public override Vector<T> RegularizeCoefficients(Vector<T> coefficients)
     {
-        var regularizationStrength = _numOps.FromDouble(_options.Strength);
-        return coefficients.Multiply(_numOps.Subtract(_numOps.FromDouble(1), regularizationStrength));
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
+        return coefficients.Multiply(NumOps.Subtract(NumOps.One, regularizationStrength));
+    }
+
+    public override Vector<T> RegularizeGradient(Vector<T> gradient, Vector<T> coefficients)
+    {
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
+        return gradient.Add(coefficients.Multiply(regularizationStrength));
     }
 }

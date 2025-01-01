@@ -360,7 +360,7 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
             Right = BuildTree(new Matrix<T>(rightX), new Vector<T>(rightY), depth + 1),
             LeftSampleCount = leftX.Count,
             RightSampleCount = rightX.Count,
-            Samples = [.. x.EnumerateRows().Select((_, i) => new Sample<T>(x.GetRow(i), y[i]))]
+            Samples = [.. x.GetRows().Select((_, i) => new Sample<T>(x.GetRow(i), y[i]))]
         };
 
         return node;

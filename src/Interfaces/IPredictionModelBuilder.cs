@@ -8,7 +8,7 @@ public interface IPredictionModelBuilder<T>
     IPredictionModelBuilder<T> ConfigureFitnessCalculator(IFitnessCalculator<T> calculator);
     IPredictionModelBuilder<T> ConfigureFitDetector(IFitDetector<T> detector);
     IPredictionModelBuilder<T> ConfigureRegression(IRegression<T> regression);
-    IPredictionModelBuilder<T> ConfigureOptimizer(IOptimizationAlgorithm<T> optimizationAlgorithm);
+    IPredictionModelBuilder<T> ConfigureOptimizer(IOptimizer<T> optimizationAlgorithm);
     IPredictionModelBuilder<T> ConfigureDataPreprocessor(IDataPreprocessor<T> dataPreprocessor);
     IPredictionModelBuilder<T> ConfigureOutlierRemoval(IOutlierRemoval<T> outlierRemoval);
     IPredictiveModel<T> Build(Matrix<T> x, Vector<T> y);

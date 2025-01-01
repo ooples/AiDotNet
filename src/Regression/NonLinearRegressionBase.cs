@@ -179,8 +179,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         // Serialize B
         writer.Write(Convert.ToDouble(B));
 
-        // Serialize regularization type
-        writer.Write((int)RegularizationFactory.GetRegularizationType(Regularization));
+        // Serialize regularization options
+        var regularizationOptionsJson = JsonConvert.SerializeObject(Regularization.GetOptions());
+        writer.Write(regularizationOptionsJson);
 
         return ms.ToArray();
     }
@@ -217,9 +218,13 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         // Deserialize B
         B = NumOps.FromDouble(reader.ReadDouble());
 
-        // Deserialize regularization type
-        var regularizationType = (RegularizationType)reader.ReadInt32();
-        Regularization = RegularizationFactory.CreateRegularization<T>(regularizationType);
+        // Deserialize regularization options
+        var regularizationOptionsJson = reader.ReadString();
+        var regularizationOptions = JsonConvert.DeserializeObject<RegularizationOptions>(regularizationOptionsJson) 
+            ?? new RegularizationOptions();
+
+        // Create regularization based on deserialized options
+        Regularization = RegularizationFactory.CreateRegularization<T>(regularizationOptions);
 
         NumOps = MathHelper.GetNumericOperations<T>();
     }

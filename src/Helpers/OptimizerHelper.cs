@@ -11,15 +11,14 @@ public static class OptimizerHelper
         OptimizationResult<T>.DatasetResult validationResult,
         OptimizationResult<T>.DatasetResult testResult,
         FitDetectorResult<T> bestFitDetectionResult,
-        int iterationCount,
-        INumericOperations<T> numOps)
+        int iterationCount)
     {
         return new OptimizationResult<T>
         {
             BestSolution = bestSolution,
             BestFitnessScore = bestFitness,
             Iterations = iterationCount,
-            FitnessHistory = new Vector<T>([.. fitnessHistory], numOps),
+            FitnessHistory = new Vector<T>([.. fitnessHistory]),
             SelectedFeatures = bestSelectedFeatures,
             TrainingResult = trainingResult,
             ValidationResult = validationResult,
@@ -59,14 +58,10 @@ public static class OptimizerHelper
         }
 
         var selectedFeatures = new List<int>();
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        // Assuming ISymbolicModel<T> has a property or method to get the number of features
         int featureCount = solution.FeatureCount;
 
         for (int i = 0; i < featureCount; i++)
         {
-            // Assuming ISymbolicModel<T> has a method to check if a feature is used
             if (solution.IsFeatureUsed(i))
             {
                 selectedFeatures.Add(i);
@@ -135,27 +130,19 @@ public static class OptimizerHelper
         return featureVector.IndexOfMax();
     }
 
-    public static void UpdateAndApplyBestSolution<T>(
-        ModelResult<T> currentResult,
-        ref ModelResult<T> bestResult,
-        Matrix<T> XTrainSubset,
-        Matrix<T> XTestSubset,
-        Matrix<T> XValSubset,
-        IFitnessCalculator<T> fitnessCalculator)
+    public static OptimizationInputData<T> CreateOptimizationInputData<T>(
+        Matrix<T> xTrain, Vector<T> yTrain,
+        Matrix<T> xVal, Vector<T> yVal,
+        Matrix<T> xTest, Vector<T> yTest)
     {
-        if (fitnessCalculator.IsBetterFitness(currentResult.Fitness, bestResult.Fitness))
+        return new OptimizationInputData<T>
         {
-            bestResult.Solution = currentResult.Solution;
-            bestResult.Fitness = currentResult.Fitness;
-            bestResult.FitDetectionResult = currentResult.FitDetectionResult;
-            bestResult.TrainingPredictions = currentResult.TrainingPredictions;
-            bestResult.ValidationPredictions = currentResult.ValidationPredictions;
-            bestResult.TestPredictions = currentResult.TestPredictions;
-            bestResult.EvaluationData = currentResult.EvaluationData;
-            bestResult.SelectedFeatures = currentResult.SelectedFeatures;
-            bestResult.TrainingFeatures = XTrainSubset;
-            bestResult.ValidationFeatures = XValSubset;
-            bestResult.TestFeatures = XTestSubset;
-        }
+            XTrain = xTrain,
+            YTrain = yTrain,
+            XVal = xVal,
+            YVal = yVal,
+            XTest = xTest,
+            YTest = yTest
+        };
     }
 }

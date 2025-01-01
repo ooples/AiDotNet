@@ -1,43 +1,54 @@
 ﻿namespace AiDotNet.Regularization;
 
-public class ElasticNetRegularization<T> : IRegularization<T>
+public class ElasticNetRegularization<T> : RegularizationBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
-    private readonly RegularizationOptions _options;
-
-    public ElasticNetRegularization(RegularizationOptions? options = null)
+    public ElasticNetRegularization(RegularizationOptions? options = null) : base(options ?? new RegularizationOptions
+        {
+            Type = RegularizationType.ElasticNet,
+            Strength = 0.1, // Default Elastic Net regularization strength
+            L1Ratio = 0.5  // Default balance between L1 and L2
+        })
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _options = options ?? new RegularizationOptions();
     }
 
-    public Matrix<T> RegularizeMatrix(Matrix<T> matrix)
+    public override Matrix<T> RegularizeMatrix(Matrix<T> matrix)
     {
-        var identity = Matrix<T>.CreateIdentity(matrix.Columns, _numOps);
-        var regularizationStrength = _numOps.FromDouble(_options.Strength);
-        var l2Ratio = _numOps.FromDouble(1 - _options.L1Ratio);
-
-        return matrix.Add(identity.Multiply(_numOps.Multiply(regularizationStrength, l2Ratio)));
+        // Elastic Net regularization typically doesn't modify the input matrix
+        return matrix;
     }
 
-    public Vector<T> RegularizeCoefficients(Vector<T> coefficients)
+    public override Vector<T> RegularizeCoefficients(Vector<T> coefficients)
     {
-        var regularizationStrength = _numOps.FromDouble(_options.Strength);
-        var l1Ratio = _numOps.FromDouble(_options.L1Ratio);
-        var l2Ratio = _numOps.FromDouble(1 - _options.L1Ratio);
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
+        var l1Ratio = NumOps.FromDouble(Options.L1Ratio);
+        var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
 
         return coefficients.Transform(c =>
         {
-            var subPart = _numOps.Subtract(_numOps.Abs(c), _numOps.Multiply(regularizationStrength, l1Ratio));
-            var l1Part = _numOps.Multiply(
-                _numOps.SignOrZero(c),
-                _numOps.GreaterThan(subPart, _numOps.Zero) ? subPart : _numOps.Zero
+            var subPart = NumOps.Subtract(NumOps.Abs(c), NumOps.Multiply(regularizationStrength, l1Ratio));
+            var l1Part = NumOps.Multiply(
+                NumOps.SignOrZero(c),
+                NumOps.GreaterThan(subPart, NumOps.Zero) ? subPart : NumOps.Zero
             );
-            var l2Part = _numOps.Multiply(
+            var l2Part = NumOps.Multiply(
                 c,
-                _numOps.Subtract(_numOps.One, _numOps.Multiply(regularizationStrength, l2Ratio))
+                NumOps.Subtract(NumOps.One, NumOps.Multiply(regularizationStrength, l2Ratio))
             );
-            return _numOps.Add(l1Part, l2Part);
+            return NumOps.Add(l1Part, l2Part);
         });
+    }
+
+    public override Vector<T> RegularizeGradient(Vector<T> gradient, Vector<T> coefficients)
+    {
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
+        var l1Ratio = NumOps.FromDouble(Options.L1Ratio);
+        var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
+
+        return gradient.Add(coefficients.Transform(c =>
+        {
+            var l1Part = NumOps.Multiply(regularizationStrength, NumOps.Multiply(l1Ratio, NumOps.SignOrZero(c)));
+            var l2Part = NumOps.Multiply(regularizationStrength, NumOps.Multiply(l2Ratio, c));
+            return NumOps.Add(l1Part, l2Part);
+        }));
     }
 }

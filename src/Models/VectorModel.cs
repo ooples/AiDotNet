@@ -5,10 +5,10 @@ public class VectorModel<T> : ISymbolicModel<T>
     public Vector<T> Coefficients { get; }
     private readonly INumericOperations<T> _numOps;
 
-    public VectorModel(Vector<T> coefficients, INumericOperations<T> numOps)
+    public VectorModel(Vector<T> coefficients)
     {
         Coefficients = coefficients;
-        _numOps = numOps;
+        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     public int FeatureCount => Coefficients.Length;
@@ -54,7 +54,7 @@ public class VectorModel<T> : ISymbolicModel<T>
             }
         }
 
-        return new VectorModel<T>(mutatedCoefficients, numOps);
+        return new VectorModel<T>(mutatedCoefficients);
     }
 
     public ISymbolicModel<T> Crossover(ISymbolicModel<T> other, double crossoverRate, INumericOperations<T> numOps)
@@ -89,7 +89,7 @@ public class VectorModel<T> : ISymbolicModel<T>
             }
         }
 
-        return new VectorModel<T>(childCoefficients, numOps);
+        return new VectorModel<T>(childCoefficients);
     }
 
     public ISymbolicModel<T> Clone()
@@ -99,7 +99,7 @@ public class VectorModel<T> : ISymbolicModel<T>
         {
             clonedCoefficients[i] = Coefficients[i];
         }
-        return new VectorModel<T>(clonedCoefficients, _numOps);
+        return new VectorModel<T>(clonedCoefficients);
     }
 
     public void Fit(Matrix<T> X, Vector<T> y)
@@ -222,6 +222,6 @@ public class VectorModel<T> : ISymbolicModel<T>
         }
 
         // Create a new VectorModel with the updated coefficients
-        return new VectorModel<T>(newCoefficients, this._numOps);
+        return new VectorModel<T>(newCoefficients);
     }
 }

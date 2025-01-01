@@ -32,5 +32,15 @@ public enum ModelType
     GeneticAlgorithmRegression,
     OrthogonalRegression,
     RobustRegression,
-    TimeSeriesRegression
+    TimeSeriesRegression,
+    GeneralizedAdditiveModelRegression,
+    PartialLeastSquaresRegression,
+    PrincipalComponentRegression,
+    StepwiseRegression,
+    PoissonRegression,
+    MultinomialLogisticRegression,
+    LogisticRegression,
+    NegativeBinomialRegression,
+    NeuralNetworkRegression,
+    MultilayerPerceptronRegression
 }

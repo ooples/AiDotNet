@@ -31,13 +31,13 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         var minDataPoints = _options.MinDataPoints;
-        if (evaluationData.TrainingPredictionStats.LearningCurve.Count < minDataPoints || evaluationData.ValidationPredictionStats.LearningCurve.Count < minDataPoints)
+        if (evaluationData.TrainingSet.PredictionStats.LearningCurve.Count < minDataPoints || evaluationData.ValidationSet.PredictionStats.LearningCurve.Count < minDataPoints)
         {
             return FitType.Unstable;
         }
 
-        var trainingSlope = CalculateSlope(evaluationData.TrainingPredictionStats.LearningCurve);
-        var validationSlope = CalculateSlope(evaluationData.ValidationPredictionStats.LearningCurve);
+        var trainingSlope = CalculateSlope(evaluationData.TrainingSet.PredictionStats.LearningCurve);
+        var validationSlope = CalculateSlope(evaluationData.ValidationSet.PredictionStats.LearningCurve);
         var convergenceThreshold = _numOps.FromDouble(_options.ConvergenceThreshold);
 
         if (_numOps.LessThan(_numOps.Abs(trainingSlope), convergenceThreshold) &&
@@ -61,8 +61,8 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var trainingVariance = CalculateVariance(evaluationData.TrainingPredictionStats.LearningCurve);
-        var validationVariance = CalculateVariance(evaluationData.ValidationPredictionStats.LearningCurve);
+        var trainingVariance = CalculateVariance(evaluationData.TrainingSet.PredictionStats.LearningCurve);
+        var validationVariance = CalculateVariance(evaluationData.ValidationSet.PredictionStats.LearningCurve);
 
         var totalVariance = _numOps.Add(trainingVariance, validationVariance);
         return _numOps.Subtract(_numOps.One, _numOps.Divide(totalVariance, _numOps.FromDouble(2)));

@@ -81,7 +81,7 @@ public class LogNormalizer<T> : INormalizer<T>
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         var denormalizedCoefficients = DenormalizeCoefficients(coefficients, xParams, yParams);
-        var meanX = Vector<T>.FromEnumerable(xMatrix.EnumerateColumns().Select(col => col.Mean()));
+        var meanX = Vector<T>.FromEnumerable(xMatrix.GetColumns().Select(col => col.Mean()));
         var meanY = y.Mean();
 
         T intercept = meanY;

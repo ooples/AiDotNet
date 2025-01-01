@@ -30,7 +30,7 @@ public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
 
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var durbinWatsonStat = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestErrorStats.ErrorList);
+        var durbinWatsonStat = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestSet.ErrorStats.ErrorList);
 
         if (_numOps.LessThan(durbinWatsonStat, _numOps.FromDouble(_options.StrongPositiveAutocorrelationThreshold)))
         {
@@ -53,7 +53,7 @@ public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var durbinWatsonStat = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestErrorStats.ErrorList);
+        var durbinWatsonStat = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestSet.ErrorStats.ErrorList);
         var idealDW = _numOps.FromDouble(2.0);
         var maxDeviation = _numOps.FromDouble(2.0); // Maximum possible deviation from ideal (0 or 4)
 
@@ -93,7 +93,7 @@ public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
                 break;
         }
 
-        recommendations.Add($"Durbin-Watson statistic: {StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestErrorStats.ErrorList):F4}");
+        recommendations.Add($"Durbin-Watson statistic: {StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestSet.ErrorStats.ErrorList):F4}");
 
         return recommendations;
     }

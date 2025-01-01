@@ -3,17 +3,17 @@
 public class Matrix<T> : MatrixBase<T>
 {
     public Matrix(int rows, int columns, INumericOperations<T>? numericOperations = null) 
-        : base(rows, columns, numericOperations ?? MathHelper.GetNumericOperations<T>())
+        : base(rows, columns, numericOperations)
     {
     }
 
     public Matrix(IEnumerable<IEnumerable<T>> values, INumericOperations<T>? numericOperations = null)
-        : base(values, numericOperations ?? MathHelper.GetNumericOperations<T>())
+        : base(values, numericOperations)
     {
     }
 
     public Matrix(T[,] data, INumericOperations<T>? numericOperations = null)
-        : base(data, numericOperations ?? MathHelper.GetNumericOperations<T>())
+        : base(data, numericOperations)
     {
     }
 
@@ -329,7 +329,87 @@ public class Matrix<T> : MatrixBase<T>
         return matrix;
     }
 
-    public IEnumerable<Vector<T>> EnumerateColumns()
+    public Vector<T> RowWiseMax()
+    {
+        Vector<T> result = new(Rows);
+        for (int i = 0; i < Rows; i++)
+        {
+            T max = this[i, 0];
+            for (int j = 1; j < Columns; j++)
+            {
+                if (ops.GreaterThan(this[i, j], max))
+                    max = this[i, j];
+            }
+
+            result[i] = max;
+        }
+
+        return result;
+    }
+
+    public Matrix<T> Transform(Func<T, int, int, T> transformer)
+    {
+        Matrix<T> result = new(Rows, Columns);
+
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                result[i, j] = transformer(this[i, j], i, j);
+            }
+        }
+
+        return result;
+    }
+
+    public Vector<T> RowWiseSum()
+    {
+        Vector<T> result = new(Rows);
+
+        for (int i = 0; i < Rows; i++)
+        {
+            T sum = ops.Zero;
+
+            for (int j = 0; j < Columns; j++)
+            {
+                sum = ops.Add(sum, this[i, j]);
+            }
+
+            result[i] = sum;
+        }
+
+        return result;
+    }
+
+    public Matrix<T> PointwiseDivide(Matrix<T> other)
+    {
+        if (Rows != other.Rows || Columns != other.Columns)
+            throw new ArgumentException("Matrices must have the same dimensions for pointwise division.");
+
+        Matrix<T> result = new(Rows, Columns);
+
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                result[i, j] = ops.Divide(this[i, j], other[i, j]);
+            }
+        }
+
+        return result;
+    }
+
+    public byte[] Serialize()
+    {
+        return SerializationHelper<T>.SerializeMatrix(this);
+    }
+
+    public static Matrix<T> Deserialize(byte[] data)
+    {
+        return SerializationHelper<T>.DeserializeMatrix(data);
+    }
+
+    public IEnumerable<Vector<T>> GetColumns()
     {
         for (var i = 0; i < Columns; i++)
         {
@@ -337,7 +417,7 @@ public class Matrix<T> : MatrixBase<T>
         }
     }
 
-    public IEnumerable<Vector<T>> EnumerateRows()
+    public IEnumerable<Vector<T>> GetRows()
     {
         for (var i = 0; i < Rows; i++)
         {

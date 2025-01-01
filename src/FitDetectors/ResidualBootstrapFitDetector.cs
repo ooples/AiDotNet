@@ -30,7 +30,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         var bootstrapMSEs = PerformResidualBootstrap(evaluationData);
-        var originalMSE = evaluationData.TestErrorStats.MSE;
+        var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
 
         var meanBootstrapMSE = StatisticsHelper<T>.CalculateMean(bootstrapMSEs);
         var stdDevBootstrapMSE = StatisticsHelper<T>.CalculateStandardDeviation(bootstrapMSEs);
@@ -54,7 +54,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
         var bootstrapMSEs = PerformResidualBootstrap(evaluationData);
-        var originalMSE = evaluationData.TestErrorStats.MSE;
+        var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
 
         var meanBootstrapMSE = StatisticsHelper<T>.CalculateMean(bootstrapMSEs);
         var stdDevBootstrapMSE = StatisticsHelper<T>.CalculateStandardDeviation(bootstrapMSEs);

@@ -11,8 +11,8 @@ public class DefaultFitDetector<T> : IFitDetector<T>
 
     public FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
     {
-        var fitType = DetermineFitType(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
-        var confidenceLevel = CalculateConfidenceLevel(evaluationData.TrainingPredictionStats, evaluationData.ValidationPredictionStats, evaluationData.TestPredictionStats);
+        var fitType = DetermineFitType(evaluationData);
+        var confidenceLevel = CalculateConfidenceLevel(evaluationData);
         var recommendations = GenerateRecommendations(fitType);
 
         return new FitDetectorResult<T>
@@ -23,12 +23,15 @@ public class DefaultFitDetector<T> : IFitDetector<T>
         };
     }
 
-    private FitType DetermineFitType(PredictionStats<T> training, PredictionStats<T> validation, PredictionStats<T> test)
+    private FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         T threshold09 = _numOps.FromDouble(0.9);
         T threshold07 = _numOps.FromDouble(0.7);
         T threshold05 = _numOps.FromDouble(0.5);
         T threshold02 = _numOps.FromDouble(0.2);
+        var training = evaluationData.TrainingSet.PredictionStats;
+        var validation = evaluationData.ValidationSet.PredictionStats;
+        var test = evaluationData.TestSet.PredictionStats;
 
         if (_numOps.GreaterThan(training.R2, threshold09) && _numOps.GreaterThan(validation.R2, threshold09) && _numOps.GreaterThan(test.R2, threshold09))
             return FitType.GoodFit;
@@ -44,9 +47,10 @@ public class DefaultFitDetector<T> : IFitDetector<T>
         return FitType.Unstable;
     }
 
-    private T CalculateConfidenceLevel(PredictionStats<T> training, PredictionStats<T> validation, PredictionStats<T> test)
+    private T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        return _numOps.Divide(_numOps.Add(_numOps.Add(training.R2, validation.R2), test.R2), _numOps.FromDouble(3));
+        return _numOps.Divide(_numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), 
+            evaluationData.TestSet.PredictionStats.R2), _numOps.FromDouble(3));
     }
 
     private List<string> GenerateRecommendations(FitType fitType)

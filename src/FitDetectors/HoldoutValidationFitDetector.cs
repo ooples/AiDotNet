@@ -30,13 +30,13 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
 
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
-        var trainingMSE = evaluationData.TrainingErrorStats.MSE;
-        var validationMSE = evaluationData.ValidationErrorStats.MSE;
-        var testMSE = evaluationData.TestErrorStats.MSE;
+        var trainingMSE = evaluationData.TrainingSet.ErrorStats.MSE;
+        var validationMSE = evaluationData.ValidationSet.ErrorStats.MSE;
+        var testMSE = evaluationData.TestSet.ErrorStats.MSE;
 
-        var trainingR2 = evaluationData.TrainingPredictionStats.R2;
-        var validationR2 = evaluationData.ValidationPredictionStats.R2;
-        var testR2 = evaluationData.TestPredictionStats.R2;
+        var trainingR2 = evaluationData.TrainingSet.PredictionStats.R2;
+        var validationR2 = evaluationData.ValidationSet.PredictionStats.R2;
+        var testR2 = evaluationData.TestSet.PredictionStats.R2;
 
         if (_numOps.GreaterThan(_numOps.Subtract(trainingR2, validationR2), _numOps.FromDouble(_options.OverfitThreshold)))
         {
@@ -63,8 +63,8 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var validationR2 = evaluationData.ValidationPredictionStats.R2;
-        var testR2 = evaluationData.TestPredictionStats.R2;
+        var validationR2 = evaluationData.ValidationSet.PredictionStats.R2;
+        var testR2 = evaluationData.TestSet.PredictionStats.R2;
 
         var r2Difference = _numOps.Abs(_numOps.Subtract(validationR2, testR2));
         var maxR2 = _numOps.GreaterThan(validationR2, testR2) ? validationR2 : testR2;
@@ -109,7 +109,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
                 break;
         }
 
-        recommendations.Add($"Validation R2: {evaluationData.ValidationPredictionStats.R2:F4}, Test R2: {evaluationData.TestPredictionStats.R2:F4}");
+        recommendations.Add($"Validation R2: {evaluationData.ValidationSet.PredictionStats.R2:F4}, Test R2: {evaluationData.TestSet.PredictionStats.R2:F4}");
 
         return recommendations;
     }

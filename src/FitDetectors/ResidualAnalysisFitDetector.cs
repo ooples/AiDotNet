@@ -30,14 +30,14 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         // Check for autocorrelation using Durbin-Watson statistic
-        if (_numOps.LessThan(evaluationData.TestErrorStats.DurbinWatsonStatistic, _numOps.FromDouble(1.5)) || 
-            _numOps.GreaterThan(evaluationData.TestErrorStats.DurbinWatsonStatistic, _numOps.FromDouble(2.5)))
+        if (_numOps.LessThan(evaluationData.TestSet.ErrorStats.DurbinWatsonStatistic, _numOps.FromDouble(1.5)) || 
+            _numOps.GreaterThan(evaluationData.TestSet.ErrorStats.DurbinWatsonStatistic, _numOps.FromDouble(2.5)))
         {
             return FitType.Unstable;
         }
 
         // Check MAPE for overall fit
-        if (_numOps.GreaterThan(evaluationData.TestErrorStats.MAPE, _numOps.FromDouble(_options.MapeThreshold)))
+        if (_numOps.GreaterThan(evaluationData.TestSet.ErrorStats.MAPE, _numOps.FromDouble(_options.MapeThreshold)))
         {
             return FitType.Underfit;
         }
@@ -46,13 +46,13 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
         var meanThreshold = _numOps.FromDouble(_options.MeanThreshold);
         var stdThreshold = _numOps.FromDouble(_options.StdThreshold);
 
-        var trainingResidualMean = evaluationData.TrainingErrorStats.MeanBiasError;
-        var validationResidualMean = evaluationData.ValidationErrorStats.MeanBiasError;
-        var testResidualMean = evaluationData.TestErrorStats.MeanBiasError;
+        var trainingResidualMean = evaluationData.TrainingSet.ErrorStats.MeanBiasError;
+        var validationResidualMean = evaluationData.ValidationSet.ErrorStats.MeanBiasError;
+        var testResidualMean = evaluationData.TestSet.ErrorStats.MeanBiasError;
 
-        var trainingResidualStd = evaluationData.TrainingErrorStats.PopulationStandardError;
-        var validationResidualStd = evaluationData.ValidationErrorStats.PopulationStandardError;
-        var testResidualStd = evaluationData.TestErrorStats.PopulationStandardError;
+        var trainingResidualStd = evaluationData.TrainingSet.ErrorStats.PopulationStandardError;
+        var validationResidualStd = evaluationData.ValidationSet.ErrorStats.PopulationStandardError;
+        var testResidualStd = evaluationData.TestSet.ErrorStats.PopulationStandardError;
 
         if (_numOps.LessThan(_numOps.Abs(trainingResidualMean), meanThreshold) &&
             _numOps.LessThan(_numOps.Abs(validationResidualMean), meanThreshold) &&
@@ -83,8 +83,8 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
 
         // Check for significant differences in R-squared values
         var r2Threshold = _numOps.FromDouble(_options.R2Threshold);
-        if (_numOps.GreaterThan(_numOps.Abs(_numOps.Subtract(evaluationData.TrainingPredictionStats.R2, evaluationData.ValidationPredictionStats.R2)), r2Threshold) ||
-            _numOps.GreaterThan(_numOps.Abs(_numOps.Subtract(evaluationData.TrainingPredictionStats.R2, evaluationData.TestPredictionStats.R2)), r2Threshold))
+        if (_numOps.GreaterThan(_numOps.Abs(_numOps.Subtract(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2)), r2Threshold) ||
+            _numOps.GreaterThan(_numOps.Abs(_numOps.Subtract(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.TestSet.PredictionStats.R2)), r2Threshold))
         {
             return FitType.Unstable;
         }
@@ -94,14 +94,14 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        var trainingConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(evaluationData.TrainingErrorStats.PopulationStandardError, evaluationData.TrainingErrorStats.MeanBiasError));
-        var validationConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(evaluationData.ValidationErrorStats.PopulationStandardError, evaluationData.ValidationErrorStats.MeanBiasError));
-        var testConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(evaluationData.TestErrorStats.PopulationStandardError, evaluationData.TestErrorStats.MeanBiasError));
+        var trainingConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(evaluationData.TrainingSet.ErrorStats.PopulationStandardError, evaluationData.TrainingSet.ErrorStats.MeanBiasError));
+        var validationConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(evaluationData.ValidationSet.ErrorStats.PopulationStandardError, evaluationData.ValidationSet.ErrorStats.MeanBiasError));
+        var testConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(evaluationData.TestSet.ErrorStats.PopulationStandardError, evaluationData.TestSet.ErrorStats.MeanBiasError));
 
         var averageConfidence = _numOps.Divide(_numOps.Add(_numOps.Add(trainingConfidence, validationConfidence), testConfidence), _numOps.FromDouble(3));
 
         // Adjust confidence based on R-squared values
-        var r2Adjustment = _numOps.Divide(_numOps.Add(_numOps.Add(evaluationData.TrainingPredictionStats.R2, evaluationData.ValidationPredictionStats.R2), evaluationData.TestPredictionStats.R2), _numOps.FromDouble(3));
+        var r2Adjustment = _numOps.Divide(_numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), evaluationData.TestSet.PredictionStats.R2), _numOps.FromDouble(3));
         
         return _numOps.Multiply(averageConfidence, r2Adjustment);
     }
