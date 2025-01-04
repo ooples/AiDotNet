@@ -48,6 +48,7 @@
 
 	<ItemGroup>
 	  <Folder Include="Evaluation\" />
+	  <Folder Include="Caching\" />
 	  <Folder Include="TimeSeries\" />
 	</ItemGroup>
 

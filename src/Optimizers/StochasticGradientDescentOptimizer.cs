@@ -1,26 +1,41 @@
 namespace AiDotNet.Optimizers;
 
-public class StochasticGradientDescentOptimizer<T> : OptimizerBase<T>, IGradientBasedOptimizer<T>
+public class StochasticGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
 {
     private StochasticGradientDescentOptimizerOptions _options;
 
-    public StochasticGradientDescentOptimizer(StochasticGradientDescentOptimizerOptions? options = null)
+    public StochasticGradientDescentOptimizer(
+        StochasticGradientDescentOptimizerOptions? options = null,
+        PredictionStatsOptions? predictionOptions = null,
+        ModelStatsOptions? modelOptions = null,
+        IModelEvaluator<T>? modelEvaluator = null,
+        IFitDetector<T>? fitDetector = null,
+        IFitnessCalculator<T>? fitnessCalculator = null,
+        IModelCache<T>? modelCache = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, 
+               fitDetector, fitnessCalculator, modelCache)
     {
-        _options = options ?? new StochasticGradientDescentOptimizerOptions();
+        _options = options ?? new();
     }
 
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
         var bestStepData = new OptimizationStepData<T>();
+        var previousStepData = new OptimizationStepData<T>();
+
+        InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
+            gradient = ApplyMomentum(gradient);
             var newSolution = UpdateSolution(currentSolution, gradient);
 
             var currentStepData = PrepareAndEvaluateSolution(newSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
+
+            UpdateAdaptiveParameters(currentStepData, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
@@ -33,6 +48,7 @@ public class StochasticGradientDescentOptimizer<T> : OptimizerBase<T>, IGradient
             }
 
             currentSolution = newSolution;
+            previousStepData = currentStepData;
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
@@ -40,23 +56,8 @@ public class StochasticGradientDescentOptimizer<T> : OptimizerBase<T>, IGradient
 
     private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
     {
-        Vector<T> updatedCoefficients = currentSolution.Coefficients.Subtract(gradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
+        Vector<T> updatedCoefficients = currentSolution.Coefficients.Subtract(gradient.Multiply(CurrentLearningRate));
         return currentSolution.UpdateCoefficients(updatedCoefficients);
-    }
-
-    public Vector<T> UpdateVector(Vector<T> parameters, Vector<T> gradient)
-    {
-        return parameters.Subtract(gradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
-    }
-
-    public Matrix<T> UpdateMatrix(Matrix<T> parameters, Matrix<T> gradient)
-    {
-        return parameters.Subtract(gradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
-    }
-
-    public void Reset()
-    {
-        // SGD doesn't need to reset any state
     }
 
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
@@ -109,5 +110,11 @@ public class StochasticGradientDescentOptimizer<T> : OptimizerBase<T>, IGradient
             _options = JsonConvert.DeserializeObject<StochasticGradientDescentOptimizerOptions>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
         }
+    }
+
+    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    {
+        var baseKey = base.GenerateGradientCacheKey(model, X, y);
+        return $"{baseKey}_SGD_{CurrentLearningRate}_{_options.MaxIterations}";
     }
 }

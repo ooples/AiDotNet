@@ -1,5 +1,6 @@
 global using AiDotNet.Models.Inputs;
 global using AiDotNet.Evaluation;
+global using AiDotNet.Caching;
 
 namespace AiDotNet.Optimizers;
 
@@ -14,6 +15,11 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
     protected readonly IFitnessCalculator<T> _fitnessCalculator;
     protected readonly List<T> _fitnessList;
     protected readonly List<OptimizationIterationInfo<T>> _iterationHistoryList;
+    protected readonly IModelCache<T> ModelCache;
+    protected T CurrentLearningRate;
+    protected T CurrentMomentum;
+    protected int IterationsWithoutImprovement;
+    protected int IterationsWithImprovement;
 
     protected OptimizerBase(
         OptimizationAlgorithmOptions? options = null,
@@ -21,7 +27,8 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
         ModelStatsOptions? modelOptions = null,
         IModelEvaluator<T>? modelEvaluator = null,
         IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null)
+        IFitnessCalculator<T>? fitnessCalculator = null,
+        IModelCache<T>? modelCache = null)
     {
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new OptimizationAlgorithmOptions();
@@ -32,9 +39,27 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
         _fitnessCalculator = fitnessCalculator ?? new MeanSquaredErrorFitnessCalculator<T>();
         _fitnessList = [];
         _iterationHistoryList = [];
+        ModelCache = modelCache ?? new DefaultModelCache<T>();
+        CurrentLearningRate = NumOps.Zero;
+        CurrentMomentum = NumOps.Zero;
+    }
+
+    protected ISymbolicModel<T> GetCachedSolution(string key)
+    {
+        return ModelCache.GetCachedModel(key);
+    }
+
+    protected void CacheSolution(string key, ISymbolicModel<T> solution)
+    {
+        ModelCache.CacheModel(key, solution);
     }
 
     public abstract OptimizationResult<T> Optimize(OptimizationInputData<T> inputData);
+
+    public virtual Task<OptimizationResult<T>> OptimizeAsync(OptimizationInputData<T> inputData)
+    {
+        return Task.Run(() => Optimize(inputData));
+    }
 
     protected OptimizationStepData<T> PrepareAndEvaluateSolution(ISymbolicModel<T> solution, OptimizationInputData<T> inputData)
     {
@@ -158,6 +183,56 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
         bestStepData.SelectedFeatures = bestResult.SelectedFeatures;
     }
 
+    protected virtual void InitializeAdaptiveParameters()
+    {
+        CurrentLearningRate = NumOps.FromDouble(Options.InitialLearningRate);
+        CurrentMomentum = NumOps.FromDouble(Options.InitialMomentum);
+        IterationsWithoutImprovement = 0;
+        IterationsWithImprovement = 0;
+    }
+
+    protected virtual void ResetAdaptiveParameters()
+    {
+        InitializeAdaptiveParameters();
+    }
+
+    protected virtual void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    {
+        if (Options.UseAdaptiveLearningRate)
+        {
+            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            {
+                CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(Options.LearningRateDecay));
+                IterationsWithoutImprovement++;
+                IterationsWithImprovement = 0;
+            }
+            else
+            {
+                CurrentLearningRate = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(Options.LearningRateDecay));
+                IterationsWithImprovement++;
+                IterationsWithoutImprovement = 0;
+            }
+
+            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(Options.MinLearningRate), 
+                MathHelper.Min(NumOps.FromDouble(Options.MaxLearningRate), CurrentLearningRate));
+        }
+
+        if (Options.UseAdaptiveMomentum)
+        {
+            if (IterationsWithImprovement > 2)
+            {
+                CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(Options.MomentumIncreaseFactor));
+            }
+            else if (IterationsWithoutImprovement > 2)
+            {
+                CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(Options.MomentumDecreaseFactor));
+            }
+
+            CurrentMomentum = MathHelper.Max(NumOps.FromDouble(Options.MinMomentum), 
+                MathHelper.Min(NumOps.FromDouble(Options.MaxMomentum), CurrentMomentum));
+        }
+    }
+
     protected bool UpdateIterationHistoryAndCheckEarlyStopping(int iteration, OptimizationStepData<T> stepData)
     {
         _iterationHistoryList.Add(new OptimizationIterationInfo<T>
@@ -226,15 +301,6 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
     protected ISymbolicModel<T> InitializeRandomSolution(int numberOfFeatures)
     {
         return SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, numberOfFeatures + 1, NumOps);
-    }
-
-    protected Vector<T> CalculateGradient(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
-    {
-        var predictions = model.Predict(X);
-        var errors = predictions.Subtract(y);
-        var gradient = X.Transpose().Multiply(errors);
-
-        return gradient.Divide(NumOps.FromDouble(X.Rows));
     }
 
     public virtual byte[] Serialize()

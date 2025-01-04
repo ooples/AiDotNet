@@ -1,6 +1,6 @@
 namespace AiDotNet.Optimizers;
 
-public class GradientDescentOptimizer<T> : OptimizerBase<T>
+public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
 {
     private GradientDescentOptimizerOptions _gdOptions;
     private readonly IRegularization<T> _regularization;
@@ -24,15 +24,24 @@ public class GradientDescentOptimizer<T> : OptimizerBase<T>
 
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
+        ValidationHelper<T>.ValidateInputData(inputData);
+
         var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
+        var bestStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
+        var previousStepData = bestStepData;
+        InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _gdOptions.MaxIterations; iteration++)
         {
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            gradient = ApplyMomentum(gradient);
 
-            var currentStepData = PrepareAndEvaluateSolution(newSolution, inputData);
+            currentSolution = UpdateSolution(currentSolution, gradient);
+
+            var currentStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
+
+            UpdateAdaptiveParameters(currentStepData, previousStepData);
+
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
@@ -40,15 +49,16 @@ public class GradientDescentOptimizer<T> : OptimizerBase<T>
                 break;
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_gdOptions.Tolerance)))
-            {
-                break;
-            }
-
-            currentSolution = newSolution;
+            previousStepData = currentStepData;
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
+    }
+
+    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    {
+        Vector<T> updatedCoefficients = currentSolution.Coefficients.Subtract(gradient.Multiply(CurrentLearningRate));
+        return currentSolution.UpdateCoefficients(updatedCoefficients);
     }
 
     private new Vector<T> CalculateGradient(ISymbolicModel<T> solution, Matrix<T> X, Vector<T> y)
@@ -88,12 +98,6 @@ public class GradientDescentOptimizer<T> : OptimizerBase<T>
         return NumOps.Add(mse, regularizationTerm);
     }
 
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
-    {
-        Vector<T> updatedCoefficients = currentSolution.Coefficients.Subtract(gradient.Multiply(NumOps.FromDouble(_gdOptions.LearningRate)));
-        return currentSolution.UpdateCoefficients(updatedCoefficients);
-    }
-
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is GradientDescentOptimizerOptions gdOptions)
@@ -113,36 +117,40 @@ public class GradientDescentOptimizer<T> : OptimizerBase<T>
 
     public override byte[] Serialize()
     {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            // Serialize base class data
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
+        using MemoryStream ms = new MemoryStream();
+        using BinaryWriter writer = new BinaryWriter(ms);
 
-            // Serialize GradientDescentOptions
-            string optionsJson = JsonConvert.SerializeObject(_gdOptions);
-            writer.Write(optionsJson);
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
 
-            return ms.ToArray();
-        }
+        // Serialize GradientDescentOptions
+        string optionsJson = JsonConvert.SerializeObject(_gdOptions);
+        writer.Write(optionsJson);
+
+        return ms.ToArray();
     }
 
     public override void Deserialize(byte[] data)
     {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            // Deserialize base class data
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
+        using MemoryStream ms = new MemoryStream(data);
+        using BinaryReader reader = new BinaryReader(ms);
 
-            // Deserialize GradientDescentOptions
-            string optionsJson = reader.ReadString();
-            _gdOptions = JsonConvert.DeserializeObject<GradientDescentOptimizerOptions>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-        }
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // Deserialize GradientDescentOptions
+        string optionsJson = reader.ReadString();
+        _gdOptions = JsonConvert.DeserializeObject<GradientDescentOptimizerOptions>(optionsJson)
+            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+    }
+
+    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    {
+        var baseKey = base.GenerateGradientCacheKey(model, X, y);
+        return $"{baseKey}_GD_{CurrentLearningRate}_{_gdOptions.MaxIterations}";
     }
 }

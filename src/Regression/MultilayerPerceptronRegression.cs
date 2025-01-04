@@ -168,6 +168,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         {
             activation = ApplyActivation(_weights[i].Multiply(activation).Add(_biases[i]), i == _weights.Count - 1);
         }
+
         return activation;
     }
 
@@ -258,63 +259,62 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
     public override void Deserialize(byte[] data)
     {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
+        using MemoryStream ms = new(data);
+        using BinaryReader reader = new(ms);
+
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // Deserialize MultilayerPerceptronRegression specific data
+        int layerCount = reader.ReadInt32();
+        _options.LayerSizes = [];
+        for (int i = 0; i < layerCount; i++)
         {
-            // Deserialize base class data
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            // Deserialize MultilayerPerceptronRegression specific data
-            int layerCount = reader.ReadInt32();
-            _options.LayerSizes = new List<int>();
-            for (int i = 0; i < layerCount; i++)
-            {
-                _options.LayerSizes.Add(reader.ReadInt32());
-            }
-            _options.MaxEpochs = reader.ReadInt32();
-            _options.BatchSize = reader.ReadInt32();
-            _options.LearningRate = reader.ReadDouble();
-            _options.Tolerance = reader.ReadDouble();
-            _options.Verbose = reader.ReadBoolean();
-
-            // Deserialize weights and biases
-            int weightCount = reader.ReadInt32();
-            _weights.Clear();
-            for (int i = 0; i < weightCount; i++)
-            {
-                int weightDataLength = reader.ReadInt32();
-                byte[] weightData = reader.ReadBytes(weightDataLength);
-                _weights.Add(Matrix<T>.Deserialize(weightData));
-            }
-
-            int biasCount = reader.ReadInt32();
-            _biases.Clear();
-            for (int i = 0; i < biasCount; i++)
-            {
-                int biasDataLength = reader.ReadInt32();
-                byte[] biasData = reader.ReadBytes(biasDataLength);
-                _biases.Add(Vector<T>.Deserialize(biasData));
-            }
-
-            // Deserialize optimizer
-            OptimizerType optimizerType = (OptimizerType)reader.ReadInt32();
-            int optimizerDataLength = reader.ReadInt32();
-            byte[] optimizerData = reader.ReadBytes(optimizerDataLength);
-
-            // Deserialize optimizer options
-            string optionsJson = reader.ReadString();
-            var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions>(optionsJson);
-
-            if (options == null)
-            {
-                throw new InvalidOperationException("Failed to deserialize optimizer options.");
-            }
-
-            // Create optimizer using factory
-            _optimizer = OptimizerFactory.CreateOptimizer<T>(optimizerType, options);
-            _optimizer.Deserialize(optimizerData);
+            _options.LayerSizes.Add(reader.ReadInt32());
         }
+        _options.MaxEpochs = reader.ReadInt32();
+        _options.BatchSize = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.Tolerance = reader.ReadDouble();
+        _options.Verbose = reader.ReadBoolean();
+
+        // Deserialize weights and biases
+        int weightCount = reader.ReadInt32();
+        _weights.Clear();
+        for (int i = 0; i < weightCount; i++)
+        {
+            int weightDataLength = reader.ReadInt32();
+            byte[] weightData = reader.ReadBytes(weightDataLength);
+            _weights.Add(Matrix<T>.Deserialize(weightData));
+        }
+
+        int biasCount = reader.ReadInt32();
+        _biases.Clear();
+        for (int i = 0; i < biasCount; i++)
+        {
+            int biasDataLength = reader.ReadInt32();
+            byte[] biasData = reader.ReadBytes(biasDataLength);
+            _biases.Add(Vector<T>.Deserialize(biasData));
+        }
+
+        // Deserialize optimizer
+        OptimizerType optimizerType = (OptimizerType)reader.ReadInt32();
+        int optimizerDataLength = reader.ReadInt32();
+        byte[] optimizerData = reader.ReadBytes(optimizerDataLength);
+
+        // Deserialize optimizer options
+        string optionsJson = reader.ReadString();
+        var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions>(optionsJson);
+
+        if (options == null)
+        {
+            throw new InvalidOperationException("Failed to deserialize optimizer options.");
+        }
+
+        // Create optimizer using factory
+        _optimizer = OptimizerFactory.CreateOptimizer<T>(optimizerType, options);
+        _optimizer.Deserialize(optimizerData);
     }
 }

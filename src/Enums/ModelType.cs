@@ -2,6 +2,7 @@ namespace AiDotNet.Enums;
 
 public enum ModelType
 {
+    None,
     SimpleRegression,
     MultipleRegression,
     MultivariateRegression,

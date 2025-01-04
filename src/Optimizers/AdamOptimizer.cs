@@ -1,17 +1,40 @@
 namespace AiDotNet.Optimizers;
 
-public class AdamOptimizer<T> : OptimizerBase<T>, IGradientBasedOptimizer<T>
+public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
 {
     private AdamOptimizerOptions _options;
     private Vector<T> _m;
     private Vector<T> _v;
     private int _t;
+    private T _currentLearningRate;
+    private T _currentBeta1;
+    private T _currentBeta2;
 
-    public AdamOptimizer(AdamOptimizerOptions? options = null)
+    public AdamOptimizer(
+        AdamOptimizerOptions? options = null,
+        PredictionStatsOptions? predictionOptions = null,
+        ModelStatsOptions? modelOptions = null,
+        IModelEvaluator<T>? modelEvaluator = null,
+        IFitDetector<T>? fitDetector = null,
+        IFitnessCalculator<T>? fitnessCalculator = null,
+        IModelCache<T>? modelCache = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
     {
-        _options = options ?? new AdamOptimizerOptions();
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
+        _t = 0;
+        _options = options ?? new();
+        _currentLearningRate = NumOps.Zero;
+        _currentBeta1 = NumOps.Zero;
+        _currentBeta2 = NumOps.Zero;
+        InitializeAdaptiveParameters();
+    }
+
+    protected override void InitializeAdaptiveParameters()
+    {
+        _currentLearningRate = NumOps.FromDouble(_options.LearningRate);
+        _currentBeta1 = NumOps.FromDouble(_options.Beta1);
+        _currentBeta2 = NumOps.FromDouble(_options.Beta2);
     }
 
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
@@ -23,6 +46,10 @@ public class AdamOptimizer<T> : OptimizerBase<T>, IGradientBasedOptimizer<T>
         _v = new Vector<T>(currentSolution.Coefficients.Length);
         _t = 0;
 
+        InitializeAdaptiveParameters();
+
+        var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
+
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             _t++;
@@ -31,6 +58,7 @@ public class AdamOptimizer<T> : OptimizerBase<T>, IGradientBasedOptimizer<T>
 
             var currentStepData = PrepareAndEvaluateSolution(newSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
+            UpdateAdaptiveParameters(currentStepData, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
@@ -43,54 +71,51 @@ public class AdamOptimizer<T> : OptimizerBase<T>, IGradientBasedOptimizer<T>
             }
 
             currentSolution = newSolution;
+            previousStepData = currentStepData;
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
-        if (_m == null || _v == null || _m.Length != gradient.Length)
+        base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Adam-specific adaptive parameter updates
+        if (_options.UseAdaptiveLearningRate)
         {
-            _m = new Vector<T>(gradient.Length);
-            _v = new Vector<T>(gradient.Length);
-            _t = 0;
+            _currentLearningRate = MathHelper.Max(NumOps.FromDouble(_options.MinLearningRate),
+                MathHelper.Min(NumOps.FromDouble(_options.MaxLearningRate), _currentLearningRate));
         }
 
-        _t++;
-
-        var updatedCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
-
-        for (int i = 0; i < gradient.Length; i++)
+        if (_options.UseAdaptiveBetas)
         {
-            _m[i] = NumOps.Add(
-                NumOps.Multiply(_m[i], NumOps.FromDouble(_options.Beta1)),
-                NumOps.Multiply(gradient[i], NumOps.FromDouble(1 - _options.Beta1))
-            );
-
-            _v[i] = NumOps.Add(
-                NumOps.Multiply(_v[i], NumOps.FromDouble(_options.Beta2)),
-                NumOps.Multiply(NumOps.Multiply(gradient[i], gradient[i]), NumOps.FromDouble(1 - _options.Beta2))
-            );
-
-            T mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-            T vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
-
-            T update = NumOps.Divide(
-                mHat,
-                NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon))
-            );
-
-            updatedCoefficients[i] = NumOps.Subtract(
-                currentSolution.Coefficients[i],
-                NumOps.Multiply(update, NumOps.FromDouble(_options.LearningRate))
-            );
+            _currentBeta1 = MathHelper.Max(NumOps.FromDouble(_options.MinBeta1),
+                MathHelper.Min(NumOps.FromDouble(_options.MaxBeta1), _currentBeta1));
+            _currentBeta2 = MathHelper.Max(NumOps.FromDouble(_options.MinBeta2),
+                MathHelper.Min(NumOps.FromDouble(_options.MaxBeta2), _currentBeta2));
         }
-
-        return currentSolution.UpdateCoefficients(updatedCoefficients);
     }
 
-    public Vector<T> UpdateVector(Vector<T> parameters, Vector<T> gradient)
+    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    {
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            _m[i] = NumOps.Add(NumOps.Multiply(_currentBeta1, _m[i]), NumOps.Multiply(NumOps.Subtract(NumOps.One, _currentBeta1), gradient[i]));
+            _v[i] = NumOps.Add(NumOps.Multiply(_currentBeta2, _v[i]), NumOps.Multiply(NumOps.Subtract(NumOps.One, _currentBeta2), NumOps.Multiply(gradient[i], gradient[i])));
+
+            var mHat = NumOps.Divide(_m[i], NumOps.Subtract(NumOps.One, NumOps.Power(_currentBeta1, NumOps.FromDouble(_t))));
+            var vHat = NumOps.Divide(_v[i], NumOps.Subtract(NumOps.One, NumOps.Power(_currentBeta2, NumOps.FromDouble(_t))));
+
+            var update = NumOps.Divide(NumOps.Multiply(_currentLearningRate, mHat), NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon)));
+
+            currentSolution.Coefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], update);
+        }
+
+        return currentSolution;
+    }
+
+    public override Vector<T> UpdateVector(Vector<T> parameters, Vector<T> gradient)
     {
         if (_m == null || _v == null || _m.Length != parameters.Length)
         {
@@ -130,7 +155,7 @@ public class AdamOptimizer<T> : OptimizerBase<T>, IGradientBasedOptimizer<T>
         return parameters;
     }
 
-    public Matrix<T> UpdateMatrix(Matrix<T> parameters, Matrix<T> gradient)
+    public override Matrix<T> UpdateMatrix(Matrix<T> parameters, Matrix<T> gradient)
     {
         if (_m == null || _v == null || _m.Length != parameters.Rows * parameters.Columns)
         {
@@ -180,7 +205,7 @@ public class AdamOptimizer<T> : OptimizerBase<T>, IGradientBasedOptimizer<T>
         return updatedMatrix;
     }
 
-    public void Reset()
+    public override void Reset()
     {
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
@@ -265,5 +290,11 @@ public class AdamOptimizer<T> : OptimizerBase<T>, IGradientBasedOptimizer<T>
                 _v[i] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
+    }
+
+    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    {
+        var baseKey = base.GenerateGradientCacheKey(model, X, y);
+        return $"{baseKey}_Adam_{_options.LearningRate}_{_options.MaxIterations}";
     }
 }
