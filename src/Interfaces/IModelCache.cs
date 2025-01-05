@@ -2,7 +2,7 @@ namespace AiDotNet.Interfaces;
 
 public interface IModelCache<T>
 {
-    ISymbolicModel<T> GetCachedModel(string key);
-    void CacheModel(string key, ISymbolicModel<T> model);
+    OptimizationStepData<T>? GetCachedStepData(string key);
+    void CacheStepData(string key, OptimizationStepData<T> stepData);
     void ClearCache();
 }

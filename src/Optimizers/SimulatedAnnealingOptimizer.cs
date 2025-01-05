@@ -28,7 +28,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             var newSolution = PerturbSolution(currentSolution);
-            var currentStepData = PrepareAndEvaluateSolution(newSolution, inputData);
+            var currentStepData = EvaluateSolution(newSolution, inputData);
 
             if (AcceptSolution(currentStepData.FitnessScore, bestStepData.FitnessScore, temperature))
             {

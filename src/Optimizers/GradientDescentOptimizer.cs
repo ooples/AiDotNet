@@ -10,8 +10,10 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         ModelStatsOptions? modelOptions = null,
         IModelEvaluator<T>? modelEvaluator = null,
         IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator)
+        IFitnessCalculator<T>? fitnessCalculator = null,
+        IModelCache<T>? modelCache = null,
+        IGradientCache<T>? gradientCache = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
     {
         _gdOptions = options ?? new GradientDescentOptimizerOptions();
         _regularization = CreateRegularization(_gdOptions);
@@ -27,7 +29,7 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         ValidationHelper<T>.ValidateInputData(inputData);
 
         var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
+        var bestStepData = EvaluateSolution(currentSolution, inputData);
         var previousStepData = bestStepData;
         InitializeAdaptiveParameters();
 
@@ -38,7 +40,7 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
 
             currentSolution = UpdateSolution(currentSolution, gradient);
 
-            var currentStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -61,8 +63,15 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         return currentSolution.UpdateCoefficients(updatedCoefficients);
     }
 
-    private new Vector<T> CalculateGradient(ISymbolicModel<T> solution, Matrix<T> X, Vector<T> y)
+    protected new Vector<T> CalculateGradient(ISymbolicModel<T> solution, Matrix<T> X, Vector<T> y)
     {
+        string cacheKey = GenerateGradientCacheKey(solution, X, y);
+        var cachedGradient = GradientCache.GetCachedGradient(cacheKey);
+        if (cachedGradient != null)
+        {
+            return cachedGradient.Coefficients;
+        }
+
         Vector<T> gradient = new(solution.Coefficients.Length, NumOps);
         T epsilon = NumOps.FromDouble(1e-8);
 
@@ -79,6 +88,9 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
 
             gradient[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), NumOps.Multiply(NumOps.FromDouble(2.0), epsilon));
         }
+
+        var gradientModel = gradient.ToSymbolicModel();
+        GradientCache.CacheGradient(cacheKey, gradientModel);
 
         return gradient;
     }

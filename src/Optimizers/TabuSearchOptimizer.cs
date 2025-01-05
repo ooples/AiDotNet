@@ -6,7 +6,6 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
 {
     private readonly Random _random;
     private TabuSearchOptions _tabuOptions;
-    private readonly ConcurrentDictionary<ISymbolicModel<T>, OptimizationStepData<T>> _solutionCache;
 
     public TabuSearchOptimizer(
         TabuSearchOptions? options = null,
@@ -14,12 +13,12 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         ModelStatsOptions? modelOptions = null,
         IModelEvaluator<T>? modelEvaluator = null,
         IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator)
+        IFitnessCalculator<T>? fitnessCalculator = null,
+        IModelCache<T>? modelCache = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
     {
         _random = new Random();
         _tabuOptions = options ?? new TabuSearchOptions();
-        _solutionCache = new ConcurrentDictionary<ISymbolicModel<T>, OptimizationStepData<T>>();
     }
 
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
@@ -33,7 +32,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
             var neighbors = GenerateNeighbors(currentSolution);
             var bestNeighbor = neighbors
                 .Where(n => !IsTabu(n, tabuList))
-                .OrderByDescending(n => EvaluateSolutionFitness(n, inputData))
+                .OrderByDescending(n => EvaluateSolution(n, inputData).FitnessScore)
                 .FirstOrDefault() ?? neighbors.First();
 
             currentSolution = bestNeighbor;
@@ -98,32 +97,6 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         tabuList.Enqueue(solution);
     }
 
-    private T EvaluateSolutionFitness(ISymbolicModel<T> solution, OptimizationInputData<T> inputData)
-    {
-        if (_solutionCache.TryGetValue(solution, out var cachedStepData))
-        {
-            return cachedStepData.FitnessScore;
-        }
-
-        var stepData = EvaluateSolution(solution, inputData);
-        _solutionCache[solution] = stepData;
-
-        return stepData.FitnessScore;
-    }
-
-    private OptimizationStepData<T> EvaluateSolution(ISymbolicModel<T> solution, OptimizationInputData<T> inputData)
-    {
-        if (_solutionCache.TryGetValue(solution, out var cachedStepData))
-        {
-            return cachedStepData;
-        }
-
-        var stepData = PrepareAndEvaluateSolution(solution, inputData);
-        _solutionCache[solution] = stepData;
-
-        return stepData;
-    }
-
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is TabuSearchOptions tabuOptions)
@@ -155,14 +128,6 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
             string optionsJson = JsonConvert.SerializeObject(_tabuOptions);
             writer.Write(optionsJson);
 
-            // Serialize solution cache (optional, depending on your needs)
-            writer.Write(_solutionCache.Count);
-            foreach (var kvp in _solutionCache)
-            {
-                writer.Write(JsonConvert.SerializeObject(kvp.Key));
-                writer.Write(JsonConvert.SerializeObject(kvp.Value));
-            }
-
             return ms.ToArray();
         }
     }
@@ -181,21 +146,6 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
             string optionsJson = reader.ReadString();
             _tabuOptions = JsonConvert.DeserializeObject<TabuSearchOptions>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            // Deserialize solution cache (optional, depending on your needs)
-            int cacheCount = reader.ReadInt32();
-            _solutionCache.Clear();
-            for (int i = 0; i < cacheCount; i++)
-            {
-                string keyJson = reader.ReadString();
-                string valueJson = reader.ReadString();
-                var key = JsonConvert.DeserializeObject<ISymbolicModel<T>>(keyJson);
-                var value = JsonConvert.DeserializeObject<OptimizationStepData<T>>(valueJson);
-                if (key != null && value != null)
-                {
-                    _solutionCache[key] = value;
-                }
-            }
         }
     }
 }

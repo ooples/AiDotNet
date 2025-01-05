@@ -31,7 +31,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
             // Evaluate all individuals in the population
             foreach (var individual in population)
             {
-                var stepData = PrepareAndEvaluateSolution(individual, inputData);
+                var stepData = EvaluateSolution(individual, inputData);
                 populationStepData.Add(stepData);
 
                 UpdateBestSolution(stepData, ref bestStepData);

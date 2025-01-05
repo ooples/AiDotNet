@@ -32,7 +32,7 @@ public class AntColonyOptimizer<T> : OptimizerBase<T>
                 var solution = ConstructSolution(pheromones, inputData.XTrain);
                 solutions.Add(solution);
 
-                var currentStepData = PrepareAndEvaluateSolution(solution, inputData);
+                var currentStepData = EvaluateSolution(solution, inputData);
                 UpdateBestSolution(currentStepData, ref bestStepData);
             }
 

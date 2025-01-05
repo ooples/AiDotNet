@@ -29,7 +29,7 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
             for (int i = 0; i < _deOptions.PopulationSize; i++)
             {
                 var trial = GenerateTrialModel(population, i, dimensions);
-                var currentStepData = PrepareAndEvaluateSolution(trial, inputData);
+                var currentStepData = EvaluateSolution(trial, inputData);
                 UpdateBestSolution(currentStepData, ref bestStepData);
                 population[i] = currentStepData.Solution;
             }

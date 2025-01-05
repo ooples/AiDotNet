@@ -4,6 +4,9 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
 {
     private readonly Random _random;
     private ParticleSwarmOptimizationOptions _psoOptions;
+    private double _currentInertia;
+    private double _currentCognitiveWeight;
+    private double _currentSocialWeight;
 
     public ParticleSwarmOptimizer(
         ParticleSwarmOptimizationOptions? options = null,
@@ -11,11 +14,20 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
         ModelStatsOptions? modelOptions = null,
         IModelEvaluator<T>? modelEvaluator = null,
         IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator)
+        IFitnessCalculator<T>? fitnessCalculator = null,
+        IModelCache<T>? modelCache = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
     {
         _random = new Random();
         _psoOptions = options ?? new ParticleSwarmOptimizationOptions();
+        InitializeAdaptiveParameters();
+    }
+
+    protected override void InitializeAdaptiveParameters()
+    {
+        _currentInertia = _psoOptions.InitialInertia;
+        _currentCognitiveWeight = _psoOptions.InitialCognitiveWeight;
+        _currentSocialWeight = _psoOptions.InitialSocialWeight;
     }
 
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
@@ -25,68 +37,62 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
         var velocities = InitializeVelocities(dimensions, _psoOptions.SwarmSize);
         var personalBests = new List<OptimizationStepData<T>>();
         var globalBest = new OptimizationStepData<T>();
-        var evaluatedSolutions = new Dictionary<ISymbolicModel<T>, OptimizationStepData<T>>();
 
-        // Initialize personal bests
+        // Initialize personal bests and global best
         for (int i = 0; i < _psoOptions.SwarmSize; i++)
         {
-            var stepData = EvaluateParticle(swarm[i], inputData, evaluatedSolutions);
-            personalBests.Add(stepData);
-            UpdateGlobalBest(stepData, ref globalBest);
+            var particle = swarm[i];
+            var velocity = velocities[i].ToVector();
+            var position = particle.ToVector();
+            var personalBest = personalBests[i].Solution.ToVector();
+            var globalBestVector = globalBest.Solution.ToVector();
+
+            // Update velocity
+            UpdateVelocity(velocity, position, personalBest, globalBestVector);
+
+            // Update particle position
+            for (int j = 0; j < velocity.Length; j++)
+            {
+                position[j] = NumOps.Add(position[j], velocity[j]);
+            }
+
+            // Update particle model
+            particle.UpdateFromVelocity(velocity);
+
+            // Evaluate new position
+            var newStepData = EvaluateSolution(particle, inputData);
+
+            // Update personal best
+            if (_fitnessCalculator.IsBetterFitness(newStepData.FitnessScore, personalBests[i].FitnessScore))
+            {
+                personalBests[i] = newStepData;
+            }
+
+            // Update global best
+            UpdateGlobalBest(newStepData, ref globalBest);
         }
+
+        var previousStepData = new OptimizationStepData<T>();
 
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             for (int i = 0; i < _psoOptions.SwarmSize; i++)
             {
-                var particle = swarm[i];
-
-                // Update velocity and position
-                if (Options.UseExpressionTrees)
-                {
-                    UpdateParticle((ExpressionTree<T>)particle, (ExpressionTreeVelocity<T>)velocities[i], 
-                                   (ExpressionTree<T>)personalBests[i].Solution, (ExpressionTree<T>)globalBest.Solution);
-                }
-                else
-                {
-                    UpdateParticle((Vector<T>)particle, (Vector<T>)velocities[i], 
-                                   (Vector<T>)personalBests[i].Solution, (Vector<T>)globalBest.Solution);
-                }
-
-                // Evaluate the updated particle
-                var stepData = EvaluateParticle(particle, inputData, evaluatedSolutions);
-
-                // Update personal best if necessary
-                if (_fitnessCalculator.IsBetterFitness(stepData.FitnessScore, personalBests[i].FitnessScore))
-                {
-                    personalBests[i] = stepData;
-                }
-
-                // Update global best if necessary
-                UpdateGlobalBest(stepData, ref globalBest);
+                var personalBest = personalBests[i];
+                UpdateParticle(swarm[i], ref personalBest, globalBest, inputData);
             }
+
+            UpdateAdaptiveParameters(globalBest, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, globalBest))
             {
                 break;
             }
+
+            previousStepData = globalBest;
         }
 
         return CreateOptimizationResult(globalBest, inputData);
-    }
-
-    private OptimizationStepData<T> EvaluateParticle(ISymbolicModel<T> particle, OptimizationInputData<T> inputData, 
-        Dictionary<ISymbolicModel<T>, OptimizationStepData<T>> evaluatedSolutions)
-    {
-        if (evaluatedSolutions.TryGetValue(particle, out var cachedStepData))
-        {
-            return cachedStepData;
-        }
-
-        var stepData = PrepareAndEvaluateSolution(particle, inputData);
-        evaluatedSolutions[particle] = stepData;
-
-        return stepData;
     }
 
     private void UpdateGlobalBest(OptimizationStepData<T> stepData, ref OptimizationStepData<T> globalBest)
@@ -118,152 +124,94 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
         return swarm;
     }
 
-    private List<object> InitializeVelocities(int dimensions, int swarmSize)
+    private void UpdateVelocity(Vector<T> velocity, Vector<T> position, Vector<T> personalBest, Vector<T> globalBest)
     {
-        var velocities = new List<object>();
+        var inertia = NumOps.FromDouble(_currentInertia);
+        var cognitiveWeight = NumOps.FromDouble(_currentCognitiveWeight);
+        var socialWeight = NumOps.FromDouble(_currentSocialWeight);
+
+        for (int i = 0; i < velocity.Length; i++)
+        {
+            var cognitive = NumOps.Multiply(cognitiveWeight, NumOps.FromDouble(_random.NextDouble()));
+            var social = NumOps.Multiply(socialWeight, NumOps.FromDouble(_random.NextDouble()));
+
+            velocity[i] = NumOps.Add(
+                NumOps.Multiply(inertia, velocity[i]),
+                NumOps.Add(
+                    NumOps.Multiply(cognitive, NumOps.Subtract(personalBest[i], position[i])),
+                    NumOps.Multiply(social, NumOps.Subtract(globalBest[i], position[i]))
+                )
+            );
+        }
+    }
+
+    private List<ISymbolicModel<T>> InitializeVelocities(int dimensions, int swarmSize)
+    {
+        var velocities = new List<ISymbolicModel<T>>();
         for (int i = 0; i < swarmSize; i++)
         {
-            if (Options.UseExpressionTrees)
+            var velocity = SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions, NumOps);
+
+            // Initialize velocity with small random values
+            var randomVector = new Vector<T>(dimensions);
+            for (int j = 0; j < dimensions; j++)
             {
-                velocities.Add(new ExpressionTreeVelocity<T>());
+                randomVector[j] = NumOps.FromDouble(_random.NextDouble() * 0.1 - 0.05);
             }
-            else
-            {
-                var vectorVelocity = new Vector<T>(dimensions, NumOps);
-                for (int j = 0; j < dimensions; j++)
-                {
-                    vectorVelocity[j] = NumOps.FromDouble(_random.NextDouble() * 0.1 - 0.05);
-                }
-                velocities.Add(vectorVelocity);
-            }
+
+            velocity.UpdateFromVelocity(randomVector);
+
+            velocities.Add(velocity);
         }
 
         return velocities;
     }
 
-    private void UpdateParticle(Vector<T> position, Vector<T> velocity, Vector<T> personalBest, Vector<T> globalBest)
+    private Vector<T> CalculateVelocity(ISymbolicModel<T> particle, ISymbolicModel<T> personalBest, ISymbolicModel<T> globalBest)
     {
-        for (int j = 0; j < position.Length; j++)
+        var particleVector = particle.ToVector();
+        var personalBestVector = personalBest.ToVector();
+        var globalBestVector = globalBest.ToVector();
+        var velocity = new Vector<T>(particleVector.Length);
+
+        for (int i = 0; i < particleVector.Length; i++)
         {
-            T r1 = NumOps.FromDouble(_random.NextDouble());
-            T r2 = NumOps.FromDouble(_random.NextDouble());
+            T cognitive = NumOps.Multiply(NumOps.FromDouble(_psoOptions.CognitiveParameter), 
+                NumOps.Multiply(NumOps.FromDouble(_random.NextDouble()), 
+                    NumOps.Subtract(personalBestVector[i], particleVector[i])));
 
-            velocity[j] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(_psoOptions.InertiaWeight), velocity[j]),
-                NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(_psoOptions.CognitiveParameter), NumOps.Multiply(r1, NumOps.Subtract(personalBest[j], position[j]))),
-                    NumOps.Multiply(NumOps.FromDouble(_psoOptions.SocialParameter), NumOps.Multiply(r2, NumOps.Subtract(globalBest[j], position[j])))
-                )
-            );
+            T social = NumOps.Multiply(NumOps.FromDouble(_psoOptions.SocialParameter), 
+                NumOps.Multiply(NumOps.FromDouble(_random.NextDouble()), 
+                    NumOps.Subtract(globalBestVector[i], particleVector[i])));
 
-            position[j] = NumOps.Add(position[j], velocity[j]);
+            velocity[i] = NumOps.Add(cognitive, social);
+        }
+
+        return velocity;
+    }
+
+    private void UpdateParticle(ISymbolicModel<T> particle, ref OptimizationStepData<T> personalBest, 
+        OptimizationStepData<T> globalBest, OptimizationInputData<T> inputData)
+    {
+        var velocity = CalculateVelocity(particle, personalBest.Solution, globalBest.Solution);
+        particle.UpdateFromVelocity(velocity);
+
+        var currentStepData = EvaluateSolution(particle, inputData);
+
+        if (NumOps.GreaterThan(currentStepData.FitnessScore, personalBest.FitnessScore))
+        {
+            personalBest = currentStepData;
         }
     }
 
-    private void UpdateParticle(ExpressionTree<T> position, ExpressionTreeVelocity<T> velocity, ExpressionTree<T> personalBest, ExpressionTree<T> globalBest)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
-        // Update node values
-        foreach (var nodeChange in velocity.NodeValueChanges)
-        {
-            var node = position.FindNodeById(nodeChange.Key);
-            if (node != null && node.Type == NodeType.Constant)
-            {
-                node.SetValue(NumOps.Add(node.Value, nodeChange.Value));
-            }
-        }
+        base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-        // Apply structure changes
-        foreach (var change in velocity.StructureChanges)
-        {
-            ApplyStructureChange(position, change);
-        }
-
-        // Calculate new velocity
-        var newVelocity = new ExpressionTreeVelocity<T>();
-
-        // Update node values
-        var allNodes = position.GetAllNodes();
-        foreach (var node in allNodes)
-        {
-            if (node.Type == NodeType.Constant)
-            {
-                T r1 = NumOps.FromDouble(_random.NextDouble());
-                T r2 = NumOps.FromDouble(_random.NextDouble());
-
-                T inertia = NumOps.Multiply(
-                    NumOps.FromDouble(_psoOptions.InertiaWeight), 
-                    velocity.NodeValueChanges.TryGetValue(node.Id, out var existingVelocity) ? existingVelocity : NumOps.Zero
-                );
-
-                T cognitive = NumOps.Multiply(
-                    NumOps.FromDouble(_psoOptions.CognitiveParameter), 
-                    NumOps.Multiply(r1, NumOps.Subtract(GetNodeValueOrDefault(personalBest, node.Id), node.Value))
-                );
-
-                T social = NumOps.Multiply(
-                    NumOps.FromDouble(_psoOptions.SocialParameter), 
-                    NumOps.Multiply(r2, NumOps.Subtract(GetNodeValueOrDefault(globalBest, node.Id), node.Value))
-                );
-
-                newVelocity.NodeValueChanges[node.Id] = NumOps.Add(NumOps.Add(inertia, cognitive), social);
-            }
-        }
-
-        // Update structure changes
-        if (_random.NextDouble() < 0.1) // 10% chance of structure change
-        {
-            newVelocity.StructureChanges.Add(GenerateRandomStructureChange());
-        }
-
-        // Apply new velocity
-        velocity.NodeValueChanges = newVelocity.NodeValueChanges;
-        velocity.StructureChanges = newVelocity.StructureChanges;
-    }
-
-    private T GetNodeValueOrDefault(ExpressionTree<T> tree, int nodeId)
-    {
-        var node = tree.FindNodeById(nodeId);
-        return node != null ? node.Value : NumOps.Zero;
-    }
-
-    private void ApplyStructureChange(ExpressionTree<T> tree, NodeModification change)
-    {
-        var node = tree.FindNodeById(change.NodeId);
-        if (node == null) return;
-
-        switch (change.Type)
-        {
-            case ModificationType.AddNode:
-                var newNode = new ExpressionTree<T>((NodeType)_random.Next(0, 6), NumOps.FromDouble(_random.NextDouble()));
-                if (_random.NextDouble() < 0.5)
-                    node.SetLeft(newNode);
-                else
-                    node.SetRight(newNode);
-                break;
-            case ModificationType.RemoveNode:
-                if (node.Parent != null)
-                {
-                    if (node.Parent.Left == node)
-                        node.Parent.SetLeft(null);
-                    else
-                        node.Parent.SetRight(null);
-                }
-                break;
-            case ModificationType.ChangeNodeType:
-                if (change.NewNodeType.HasValue)
-                    node.SetType(change.NewNodeType.Value);
-                break;
-        }
-    }
-
-    private NodeModification GenerateRandomStructureChange()
-    {
-        return new NodeModification
-        {
-            NodeId = _random.Next(0, 1000), // Assume max 1000 nodes
-            Type = (ModificationType)_random.Next(0, 3),
-            NewNodeType = _random.NextDouble() < 0.5 ? null : (NodeType)_random.Next(0, 6)
-        };
+        // Update PSO-specific parameters
+        _currentInertia = Math.Max(_psoOptions.MinInertia, Math.Min(_psoOptions.MaxInertia, _currentInertia * _psoOptions.InertiaDecayRate));
+        _currentCognitiveWeight = Math.Max(_psoOptions.MinCognitiveWeight, Math.Min(_psoOptions.MaxCognitiveWeight, _currentCognitiveWeight * _psoOptions.CognitiveWeightAdaptationRate));
+        _currentSocialWeight = Math.Max(_psoOptions.MinSocialWeight, Math.Min(_psoOptions.MaxSocialWeight, _currentSocialWeight * _psoOptions.SocialWeightAdaptationRate));
     }
 
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)

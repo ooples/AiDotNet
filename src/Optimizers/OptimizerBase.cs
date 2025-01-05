@@ -44,25 +44,49 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
         CurrentMomentum = NumOps.Zero;
     }
 
-    protected ISymbolicModel<T> GetCachedSolution(string key)
-    {
-        return ModelCache.GetCachedModel(key);
-    }
-
-    protected void CacheSolution(string key, ISymbolicModel<T> solution)
-    {
-        ModelCache.CacheModel(key, solution);
-    }
-
     public abstract OptimizationResult<T> Optimize(OptimizationInputData<T> inputData);
 
-    public virtual Task<OptimizationResult<T>> OptimizeAsync(OptimizationInputData<T> inputData)
+    protected OptimizationStepData<T>? GetCachedStepData(string key)
     {
-        return Task.Run(() => Optimize(inputData));
+        return ModelCache.GetCachedStepData(key);
+    }
+
+    protected void CacheStepData(string key, OptimizationStepData<T> stepData)
+    {
+        ModelCache.CacheStepData(key, stepData);
+    }
+
+    public virtual void Reset()
+    {
+        ModelCache.ClearCache();
+    }
+
+    protected virtual OptimizationStepData<T> EvaluateSolution(ISymbolicModel<T> solution, OptimizationInputData<T> inputData)
+    {
+        string cacheKey = solution.GetHashCode().ToString();
+        var cachedStepData = GetCachedStepData(cacheKey);
+    
+        if (cachedStepData != null)
+        {
+            return cachedStepData;
+        }
+
+        var stepData = PrepareAndEvaluateSolution(solution, inputData);
+        CacheStepData(cacheKey, stepData);
+
+        return stepData;
     }
 
     protected OptimizationStepData<T> PrepareAndEvaluateSolution(ISymbolicModel<T> solution, OptimizationInputData<T> inputData)
     {
+        string cacheKey = solution.GetHashCode().ToString();
+        var cachedStepData = GetCachedStepData(cacheKey);
+    
+        if (cachedStepData != null)
+        {
+            return cachedStepData;
+        }
+
         var selectedFeatures = inputData.XTrain.GetColumnVectors(OptimizerHelper.GetSelectedFeatures(solution));
         var XTrainSubset = OptimizerHelper.SelectFeatures(inputData.XTrain, selectedFeatures);
         var XValSubset = OptimizerHelper.SelectFeatures(inputData.XVal, selectedFeatures);
@@ -76,7 +100,7 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
         var (currentFitnessScore, fitDetectionResult, evaluationData) = EvaluateSolution(input);
         _fitnessList.Add(currentFitnessScore);
 
-        return new OptimizationStepData<T>
+        var stepData = new OptimizationStepData<T>
         {
             Solution = solution,
             SelectedFeatures = selectedFeatures,
@@ -87,6 +111,10 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
             FitDetectionResult = fitDetectionResult,
             EvaluationData = evaluationData
         };
+
+        CacheStepData(cacheKey, stepData);
+
+        return stepData;
     }
 
     private (T CurrentFitnessScore, FitDetectorResult<T> FitDetectionResult, ModelEvaluationData<T> EvaluationData)

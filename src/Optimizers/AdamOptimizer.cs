@@ -56,7 +56,7 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
             var newSolution = UpdateSolution(currentSolution, gradient);
 
-            var currentStepData = PrepareAndEvaluateSolution(newSolution, inputData);
+            var currentStepData = EvaluateSolution(newSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 

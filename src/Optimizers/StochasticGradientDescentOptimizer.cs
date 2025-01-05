@@ -32,7 +32,7 @@ public class StochasticGradientDescentOptimizer<T> : GradientBasedOptimizerBase<
             gradient = ApplyMomentum(gradient);
             var newSolution = UpdateSolution(currentSolution, gradient);
 
-            var currentStepData = PrepareAndEvaluateSolution(newSolution, inputData);
+            var currentStepData = EvaluateSolution(newSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);

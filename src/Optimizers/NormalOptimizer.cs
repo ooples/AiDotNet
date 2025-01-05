@@ -28,7 +28,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             var currentSolution = CreateRandomSolution(inputData.XTrain.Columns);
-            var currentStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);
 
