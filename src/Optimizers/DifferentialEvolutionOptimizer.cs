@@ -4,6 +4,8 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
 {
     private DifferentialEvolutionOptions _deOptions;
     private Random _random;
+    private T _currentCrossoverRate;
+    private T _currentMutationRate;
 
     public DifferentialEvolutionOptimizer(
         DifferentialEvolutionOptions? options = null,
@@ -11,11 +13,27 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
         ModelStatsOptions? modelOptions = null,
         IModelEvaluator<T>? modelEvaluator = null,
         IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator)
+        IFitnessCalculator<T>? fitnessCalculator = null,
+        IModelCache<T>? modelCache = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
     {
         _deOptions = options ?? new DifferentialEvolutionOptions();
         _random = new Random();
+        _currentCrossoverRate = NumOps.Zero;
+        _currentMutationRate = NumOps.Zero;
+        InitializeAdaptiveParameters();
+    }
+
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    {
+        base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+        AdaptiveParametersHelper<T>.UpdateAdaptiveGeneticParameters(ref _currentCrossoverRate, ref _currentMutationRate, currentStepData, previousStepData, _deOptions);
+    }
+
+    private new void InitializeAdaptiveParameters()
+    {
+        _currentCrossoverRate = NumOps.FromDouble(_deOptions.CrossoverRate);
+        _currentMutationRate = NumOps.FromDouble(_deOptions.MutationRate);
     }
 
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
@@ -23,21 +41,28 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
         int dimensions = inputData.XTrain.Columns;
         var population = InitializePopulation(dimensions, _deOptions.PopulationSize);
         var bestStepData = new OptimizationStepData<T>();
+        var prevStepData = new OptimizationStepData<T>();
+        var currentStepData = new OptimizationStepData<T>();
 
         for (int generation = 0; generation < Options.MaxIterations; generation++)
         {
             for (int i = 0; i < _deOptions.PopulationSize; i++)
             {
                 var trial = GenerateTrialModel(population, i, dimensions);
-                var currentStepData = EvaluateSolution(trial, inputData);
+                currentStepData = EvaluateSolution(trial, inputData);
                 UpdateBestSolution(currentStepData, ref bestStepData);
                 population[i] = currentStepData.Solution;
             }
+
+            // Update adaptive parameters
+            UpdateAdaptiveParameters(currentStepData, prevStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(generation, bestStepData))
             {
                 break; // Early stopping criteria met, exit the loop
             }
+
+            prevStepData = currentStepData;
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
@@ -66,12 +91,14 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
 
         var currentModel = population[currentIndex];
         ISymbolicModel<T> trialModel;
+        var currentCrossOverRate = Convert.ToDouble(_currentCrossoverRate);
+        var currentMutationRate = Convert.ToDouble(_currentMutationRate);
 
         if (Options.UseExpressionTrees)
         {
             // For expression trees, we'll use crossover and mutation
-            trialModel = SymbolicModelFactory<T>.Crossover(population[a], population[b], _deOptions.CrossoverRate, NumOps).Item1;
-            trialModel = SymbolicModelFactory<T>.Mutate(trialModel, _deOptions.MutationFactor, NumOps);
+            trialModel = SymbolicModelFactory<T>.Crossover(population[a], population[b], currentCrossOverRate, NumOps).Item1;
+            trialModel = SymbolicModelFactory<T>.Mutate(trialModel, currentMutationRate, NumOps);
         }
         else
         {
@@ -85,10 +112,10 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
 
             for (int i = 0; i < dimensions; i++)
             {
-                if (_random.NextDouble() < _deOptions.CrossoverRate || i == R)
+                if (_random.NextDouble() < currentCrossOverRate || i == R)
                 {
                     trialVector[i] = NumOps.Add(aVector[i],
-                        NumOps.Multiply(NumOps.FromDouble(_deOptions.MutationFactor),
+                        NumOps.Multiply(NumOps.FromDouble(currentMutationRate),
                             NumOps.Subtract(bVector[i], cVector[i])));
                 }
                 else
@@ -121,43 +148,43 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
 
     public override byte[] Serialize()
     {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            // Serialize base class data
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
+        using MemoryStream ms = new MemoryStream();
+        using BinaryWriter writer = new BinaryWriter(ms);
 
-            // Serialize DifferentialEvolutionOptions
-            string optionsJson = JsonConvert.SerializeObject(_deOptions);
-            writer.Write(optionsJson);
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
 
-            // Serialize Random state
-            writer.Write(_random.Next());
+        // Serialize DifferentialEvolutionOptions
+        string optionsJson = JsonConvert.SerializeObject(_deOptions);
+        writer.Write(optionsJson);
 
-            return ms.ToArray();
-        }
+        // Serialize Random state
+        writer.Write(_random.Next());
+
+        return ms.ToArray();
     }
 
     public override void Deserialize(byte[] data)
     {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            // Deserialize base class data
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
+        using MemoryStream ms = new MemoryStream(data);
+        using BinaryReader reader = new BinaryReader(ms);
 
-            // Deserialize DifferentialEvolutionOptions
-            string optionsJson = reader.ReadString();
-            _deOptions = JsonConvert.DeserializeObject<DifferentialEvolutionOptions>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
 
-            // Deserialize Random state
-            int randomSeed = reader.ReadInt32();
-            _random = new Random(randomSeed);
-        }
+        // Deserialize DifferentialEvolutionOptions
+        string optionsJson = reader.ReadString();
+        _deOptions = JsonConvert.DeserializeObject<DifferentialEvolutionOptions>(optionsJson)
+            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+
+        // Deserialize Random state
+        int randomSeed = reader.ReadInt32();
+        _random = new Random(randomSeed);
+
+        InitializeAdaptiveParameters();
     }
 }

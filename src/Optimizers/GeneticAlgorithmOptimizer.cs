@@ -4,6 +4,8 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
 {
     private GeneticAlgorithmOptimizerOptions _geneticOptions;
     private readonly Random _random;
+    private T _currentCrossoverRate;
+    private T _currentMutationRate;
 
     public GeneticAlgorithmOptimizer(
         GeneticAlgorithmOptimizerOptions? options = null,
@@ -11,11 +13,27 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         ModelStatsOptions? modelOptions = null,
         IModelEvaluator<T>? modelEvaluator = null,
         IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator)
+        IFitnessCalculator<T>? fitnessCalculator = null,
+        IModelCache<T>? modelCache = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
     {
         _geneticOptions = options ?? new GeneticAlgorithmOptimizerOptions();
         _random = new Random();
+        _currentCrossoverRate = NumOps.Zero;
+        _currentMutationRate = NumOps.Zero;
+        InitializeAdaptiveParameters();
+    }
+
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    {
+        base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+        AdaptiveParametersHelper<T>.UpdateAdaptiveGeneticParameters(ref _currentCrossoverRate, ref _currentMutationRate, currentStepData, previousStepData, _geneticOptions);
+    }
+
+    private new void InitializeAdaptiveParameters()
+    {
+        _currentCrossoverRate = NumOps.FromDouble(_geneticOptions.CrossoverRate);
+        _currentMutationRate = NumOps.FromDouble(_geneticOptions.MutationRate);
     }
 
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
@@ -23,6 +41,8 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         int dimensions = inputData.XTrain.Columns;
         var population = InitializePopulation(dimensions, _geneticOptions.PopulationSize);
         var bestStepData = new OptimizationStepData<T>();
+        var prevStepData = new OptimizationStepData<T>();
+        var currentStepData = new OptimizationStepData<T>();
 
         for (int generation = 0; generation < Options.MaxIterations; generation++)
         {
@@ -31,11 +51,14 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
             // Evaluate all individuals in the population
             foreach (var individual in population)
             {
-                var stepData = EvaluateSolution(individual, inputData);
-                populationStepData.Add(stepData);
+                currentStepData = EvaluateSolution(individual, inputData);
+                populationStepData.Add(currentStepData);
 
-                UpdateBestSolution(stepData, ref bestStepData);
+                UpdateBestSolution(currentStepData, ref bestStepData);
             }
+
+            // Update adaptive parameters
+            UpdateAdaptiveParameters(currentStepData, prevStepData);
 
             // Update iteration history and check for early stopping
             if (UpdateIterationHistoryAndCheckEarlyStopping(generation, bestStepData))
@@ -47,6 +70,8 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
             population = PerformSelection(populationStepData);
             population = PerformCrossover(population);
             population = PerformMutation(population);
+
+            prevStepData = currentStepData;
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
@@ -59,6 +84,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         {
             population.Add(SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions, NumOps));
         }
+
         return population;
     }
 
@@ -78,6 +104,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
                 ? populationStepData[index1].Solution
                 : populationStepData[index2].Solution);
         }
+
         return selected;
     }
 
@@ -99,9 +126,9 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
 
     private (ISymbolicModel<T>, ISymbolicModel<T>) Crossover(ISymbolicModel<T> parent1, ISymbolicModel<T> parent2)
     {
-        if (_random.NextDouble() < _geneticOptions.CrossoverRate)
+        if (NumOps.LessThan(NumOps.FromDouble(_random.NextDouble()), _currentCrossoverRate))
         {
-            return SymbolicModelFactory<T>.Crossover(parent1, parent2, _geneticOptions.CrossoverRate, NumOps);
+            return SymbolicModelFactory<T>.Crossover(parent1, parent2, Convert.ToDouble(_currentCrossoverRate), NumOps);
         }
         else
         {
@@ -111,14 +138,14 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
 
     private List<ISymbolicModel<T>> PerformMutation(List<ISymbolicModel<T>> population)
     {
-        return [.. population.Select(individual => Mutate(individual))];
+        return [.. population.Select(Mutate)];
     }
 
     private ISymbolicModel<T> Mutate(ISymbolicModel<T> individual)
     {
-        if (_random.NextDouble() < _geneticOptions.MutationRate)
+        if (NumOps.LessThan(NumOps.FromDouble(_random.NextDouble()), _currentMutationRate))
         {
-            return SymbolicModelFactory<T>.Mutate(individual, _geneticOptions.MutationRate, NumOps);
+            return SymbolicModelFactory<T>.Mutate(individual, Convert.ToDouble(_currentMutationRate), NumOps);
         }
 
         return individual;
@@ -143,36 +170,36 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
 
     public override byte[] Serialize()
     {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            // Serialize base class data
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
+        using MemoryStream ms = new MemoryStream();
+        using BinaryWriter writer = new BinaryWriter(ms);
 
-            // Serialize GeneticAlgorithmOptimizerOptions
-            string optionsJson = JsonConvert.SerializeObject(_geneticOptions);
-            writer.Write(optionsJson);
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
 
-            return ms.ToArray();
-        }
+        // Serialize GeneticAlgorithmOptimizerOptions
+        string optionsJson = JsonConvert.SerializeObject(_geneticOptions);
+        writer.Write(optionsJson);
+
+        return ms.ToArray();
     }
 
     public override void Deserialize(byte[] data)
     {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            // Deserialize base class data
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
+        using MemoryStream ms = new MemoryStream(data);
+        using BinaryReader reader = new BinaryReader(ms);
 
-            // Deserialize GeneticAlgorithmOptimizerOptions
-            string optionsJson = reader.ReadString();
-            _geneticOptions = JsonConvert.DeserializeObject<GeneticAlgorithmOptimizerOptions>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-        }
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // Deserialize GeneticAlgorithmOptimizerOptions
+        string optionsJson = reader.ReadString();
+        _geneticOptions = JsonConvert.DeserializeObject<GeneticAlgorithmOptimizerOptions>(optionsJson)
+            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+
+        InitializeAdaptiveParameters();
     }
 }
