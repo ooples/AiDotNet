@@ -4,17 +4,70 @@ public class AntColonyOptimizer<T> : OptimizerBase<T>
 {
     private readonly Random _random;
     private AntColonyOptimizationOptions _antColonyOptions;
+    private T _currentPheromoneEvaporationRate;
+    private T _currentPheromoneIntensity;
 
     public AntColonyOptimizer(AntColonyOptimizationOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
         ModelStatsOptions? modelOptions = null,
         IModelEvaluator<T>? modelEvaluator = null,
         IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator)
+        IFitnessCalculator<T>? fitnessCalculator = null,
+        IModelCache<T>? modelCache = null)
+        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
     {
         _random = new Random();
         _antColonyOptions = options ?? new AntColonyOptimizationOptions();
+        _currentPheromoneEvaporationRate = NumOps.Zero;
+        _currentPheromoneIntensity = NumOps.Zero;
+    }
+
+    protected override void InitializeAdaptiveParameters()
+    {
+        _currentPheromoneEvaporationRate = NumOps.FromDouble(_antColonyOptions.InitialPheromoneEvaporationRate);
+        _currentPheromoneIntensity = NumOps.FromDouble(_antColonyOptions.InitialPheromoneIntensity);
+    }
+
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    {
+        base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        UpdatePheromoneEvaporationRate(currentStepData, previousStepData);
+        UpdatePheromoneIntensity(currentStepData, previousStepData);
+    }
+
+    private void UpdatePheromoneEvaporationRate(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    {
+        double currentRate = Convert.ToDouble(_currentPheromoneEvaporationRate);
+        
+        if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+        {
+            currentRate *= _antColonyOptions.PheromoneEvaporationRateIncrease;
+        }
+        else
+        {
+            currentRate *= _antColonyOptions.PheromoneEvaporationRateDecay;
+        }
+
+        currentRate = Math.Max(_antColonyOptions.MinPheromoneEvaporationRate, Math.Min(_antColonyOptions.MaxPheromoneEvaporationRate, currentRate));
+        _currentPheromoneEvaporationRate = NumOps.FromDouble(currentRate);
+    }
+
+    private void UpdatePheromoneIntensity(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    {
+        double currentIntensity = Convert.ToDouble(_currentPheromoneIntensity);
+        
+        if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+        {
+            currentIntensity *= _antColonyOptions.PheromoneIntensityIncrease;
+        }
+        else
+        {
+            currentIntensity *= _antColonyOptions.PheromoneIntensityDecay;
+        }
+
+        currentIntensity = Math.Max(_antColonyOptions.MinPheromoneIntensity, Math.Min(_antColonyOptions.MaxPheromoneIntensity, currentIntensity));
+        _currentPheromoneIntensity = NumOps.FromDouble(currentIntensity);
     }
 
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
@@ -22,6 +75,8 @@ public class AntColonyOptimizer<T> : OptimizerBase<T>
         int dimensions = inputData.XTrain.Columns;
         var pheromones = InitializePheromones(dimensions);
         var bestStepData = new OptimizationStepData<T>();
+        var prevStepData = new OptimizationStepData<T>();
+        var currentStepData = new OptimizationStepData<T>();
 
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
@@ -32,15 +87,22 @@ public class AntColonyOptimizer<T> : OptimizerBase<T>
                 var solution = ConstructSolution(pheromones, inputData.XTrain);
                 solutions.Add(solution);
 
-                var currentStepData = EvaluateSolution(solution, inputData);
+                currentStepData = EvaluateSolution(solution, inputData);
                 UpdateBestSolution(currentStepData, ref bestStepData);
             }
 
+            // Update pheromones
             UpdatePheromones(pheromones, solutions);
+
+            // Update adaptive parameters
+            UpdateAdaptiveParameters(currentStepData, prevStepData);
+
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
                 break; // Early stopping criteria met, exit the loop
             }
+
+            prevStepData = currentStepData;
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
@@ -73,7 +135,7 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
         int next = SelectNextFeature(current, pheromones, XTrain, visited);
         if (next == -1) break; // No more unvisited features
 
-        T coefficient = NumOps.FromDouble(_random.NextDouble() * 2 - 1); // Random value between -1 and 1
+        var coefficient = NumOps.Multiply(_currentPheromoneIntensity, XTrain[current, next]);
 
         if (model is VectorModel<T> vectorModel)
         {
@@ -117,7 +179,7 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
                 T pheromone = pheromones[current, i];
                 T heuristic = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Abs(XTrain[current, i])));
                 T probability = NumOps.Multiply(
-                    NumOps.Power(pheromone, NumOps.FromDouble(_antColonyOptions.Alpha)),
+                    NumOps.Power(pheromone, NumOps.FromDouble(1 - Convert.ToDouble(_currentPheromoneEvaporationRate))),
                     NumOps.Power(heuristic, NumOps.FromDouble(_antColonyOptions.Beta))
                 );
                 probabilities[i] = probability;
@@ -149,14 +211,14 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
         {
             for (int j = 0; j < pheromones.Columns; j++)
             {
-                pheromones[i, j] = NumOps.Multiply(pheromones[i, j], NumOps.FromDouble(1 - _antColonyOptions.EvaporationRate));
+                pheromones[i, j] = NumOps.Multiply(pheromones[i, j], NumOps.Subtract(NumOps.FromDouble(1), _currentPheromoneEvaporationRate));
             }
         }
 
         // Deposit
         for (int k = 0; k < solutions.Count; k++)
         {
-            T deposit = NumOps.Divide(NumOps.One, _fitnessList[k]);
+            var deposit = NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, _fitnessList[k]));
             var model = solutions[k];
 
             if (model is VectorModel<T> vectorModel)
@@ -218,36 +280,34 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
 
     public override byte[] Serialize()
     {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            // Serialize base class data
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
+        using MemoryStream ms = new MemoryStream();
+        using BinaryWriter writer = new BinaryWriter(ms);
 
-            // Serialize AntColonyOptimizerOptions
-            string optionsJson = JsonConvert.SerializeObject(_antColonyOptions);
-            writer.Write(optionsJson);
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
 
-            return ms.ToArray();
-        }
+        // Serialize AntColonyOptimizerOptions
+        string optionsJson = JsonConvert.SerializeObject(_antColonyOptions);
+        writer.Write(optionsJson);
+
+        return ms.ToArray();
     }
 
     public override void Deserialize(byte[] data)
     {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            // Deserialize base class data
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
+        using MemoryStream ms = new MemoryStream(data);
+        using BinaryReader reader = new BinaryReader(ms);
 
-            // Deserialize AntColonyOptimizerOptions
-            string optionsJson = reader.ReadString();
-            _antColonyOptions = JsonConvert.DeserializeObject<AntColonyOptimizationOptions>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-        }
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // Deserialize AntColonyOptimizerOptions
+        string optionsJson = reader.ReadString();
+        _antColonyOptions = JsonConvert.DeserializeObject<AntColonyOptimizationOptions>(optionsJson)
+            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
     }
 }

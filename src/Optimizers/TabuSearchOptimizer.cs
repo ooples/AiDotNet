@@ -6,6 +6,9 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
 {
     private readonly Random _random;
     private TabuSearchOptions _tabuOptions;
+    private double _currentMutationRate;
+    private int _currentTabuListSize;
+    private int _currentNeighborhoodSize;
 
     public TabuSearchOptimizer(
         TabuSearchOptions? options = null,
@@ -19,6 +22,14 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     {
         _random = new Random();
         _tabuOptions = options ?? new TabuSearchOptions();
+        InitializeAdaptiveParameters();
+    }
+
+    private new void InitializeAdaptiveParameters()
+    {
+        _currentMutationRate = _tabuOptions.InitialMutationRate;
+        _currentTabuListSize = _tabuOptions.InitialTabuListSize;
+        _currentNeighborhoodSize = _tabuOptions.InitialNeighborhoodSize;
     }
 
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
@@ -41,6 +52,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             UpdateTabuList(tabuList, currentSolution);
+            UpdateAdaptiveParameters(iteration);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
@@ -51,32 +63,27 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
-    private List<int> RandomlySelectFeatures(int totalFeatures)
+    private void UpdateAdaptiveParameters(int iteration)
     {
-        var selectedFeatures = new List<int>();
-        var minFeatures = Math.Max(1, (int)(totalFeatures * _tabuOptions.MinFeatureRatio));
-        var maxFeatures = Math.Min(totalFeatures, (int)(totalFeatures * _tabuOptions.MaxFeatureRatio));
-    
-        int featureCount = _random.Next(minFeatures, maxFeatures + 1);
-    
-        while (selectedFeatures.Count < featureCount)
-        {
-            int feature = _random.Next(0, totalFeatures);
-            if (!selectedFeatures.Contains(feature))
-            {
-                selectedFeatures.Add(feature);
-            }
-        }
-    
-        return selectedFeatures;
+        // Update mutation rate
+        _currentMutationRate *= (iteration % 2 == 0) ? _tabuOptions.MutationRateDecay : _tabuOptions.MutationRateIncrease;
+        _currentMutationRate = MathHelper.Clamp(_currentMutationRate, _tabuOptions.MinMutationRate, _tabuOptions.MaxMutationRate);
+
+        // Update tabu list size
+        _currentTabuListSize = (int)(_currentTabuListSize * ((iteration % 2 == 0) ? _tabuOptions.TabuListSizeDecay : _tabuOptions.TabuListSizeIncrease));
+        _currentTabuListSize = MathHelper.Clamp(_currentTabuListSize, _tabuOptions.MinTabuListSize, _tabuOptions.MaxTabuListSize);
+
+        // Update neighborhood size
+        _currentNeighborhoodSize = (int)(_currentNeighborhoodSize * ((iteration % 2 == 0) ? _tabuOptions.NeighborhoodSizeDecay : _tabuOptions.NeighborhoodSizeIncrease));
+        _currentNeighborhoodSize = MathHelper.Clamp(_currentNeighborhoodSize, _tabuOptions.MinNeighborhoodSize, _tabuOptions.MaxNeighborhoodSize);
     }
 
     private List<ISymbolicModel<T>> GenerateNeighbors(ISymbolicModel<T> currentSolution)
     {
         var neighbors = new List<ISymbolicModel<T>>();
-        for (int i = 0; i < _tabuOptions.NeighborhoodSize; i++)
+        for (int i = 0; i < _currentNeighborhoodSize; i++)
         {
-            neighbors.Add(currentSolution.Mutate(_tabuOptions.MutationRate, NumOps));
+            neighbors.Add(currentSolution.Mutate(_currentMutationRate, NumOps));
         }
 
         return neighbors;
@@ -89,7 +96,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
 
     private void UpdateTabuList(Queue<ISymbolicModel<T>> tabuList, ISymbolicModel<T> solution)
     {
-        if (tabuList.Count >= _tabuOptions.TabuListSize)
+        if (tabuList.Count >= _currentTabuListSize)
         {
             tabuList.Dequeue();
         }
@@ -116,36 +123,37 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
 
     public override byte[] Serialize()
     {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            // Serialize base class data
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
+        using MemoryStream ms = new MemoryStream();
+        using BinaryWriter writer = new BinaryWriter(ms);
 
-            // Serialize Tabu Search-specific options
-            string optionsJson = JsonConvert.SerializeObject(_tabuOptions);
-            writer.Write(optionsJson);
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
 
-            return ms.ToArray();
-        }
+        // Serialize Tabu Search-specific options
+        string optionsJson = JsonConvert.SerializeObject(_tabuOptions);
+        writer.Write(optionsJson);
+
+        return ms.ToArray();
     }
 
     public override void Deserialize(byte[] data)
     {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            // Deserialize base class data
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
+        using MemoryStream ms = new MemoryStream(data);
+        using BinaryReader reader = new BinaryReader(ms);
 
-            // Deserialize Tabu Search-specific options
-            string optionsJson = reader.ReadString();
-            _tabuOptions = JsonConvert.DeserializeObject<TabuSearchOptions>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-        }
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // Deserialize Tabu Search-specific options
+        string optionsJson = reader.ReadString();
+        _tabuOptions = JsonConvert.DeserializeObject<TabuSearchOptions>(optionsJson)
+            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+
+        // Initialize adaptive parameters after deserialization
+        InitializeAdaptiveParameters();
     }
 }

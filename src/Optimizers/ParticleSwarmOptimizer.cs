@@ -73,23 +73,36 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
         }
 
         var previousStepData = new OptimizationStepData<T>();
+        var currentIterationBest = new OptimizationStepData<T>();
 
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
+            currentIterationBest = new OptimizationStepData<T>();
+
             for (int i = 0; i < _psoOptions.SwarmSize; i++)
             {
                 var personalBest = personalBests[i];
                 UpdateParticle(swarm[i], ref personalBest, globalBest, inputData);
+        
+                // Update current iteration's best solution
+                if (currentIterationBest.Solution == null || 
+                    _fitnessCalculator.IsBetterFitness(personalBest.FitnessScore, currentIterationBest.FitnessScore))
+                {
+                    currentIterationBest = personalBest;
+                }
+
+                // Update global best
+                UpdateGlobalBest(personalBest, ref globalBest);
             }
 
-            UpdateAdaptiveParameters(globalBest, previousStepData);
+            UpdateAdaptiveParameters(currentIterationBest, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, globalBest))
             {
                 break;
             }
 
-            previousStepData = globalBest;
+            previousStepData = currentIterationBest;
         }
 
         return CreateOptimizationResult(globalBest, inputData);
