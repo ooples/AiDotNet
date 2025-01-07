@@ -62,6 +62,8 @@ public abstract class MatrixBase<T>
     public int Rows => rows;
     public int Columns => cols;
 
+    public bool IsEmpty => Rows == 0 || Columns == 0;
+
     public virtual T this[int row, int col]
     {
         get

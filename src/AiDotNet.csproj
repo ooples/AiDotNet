@@ -49,6 +49,7 @@
 	<ItemGroup>
 	  <Folder Include="Evaluation\" />
 	  <Folder Include="Caching\" />
+	  <Folder Include="GaussianProcesses\" />
 	  <Folder Include="TimeSeries\" />
 	</ItemGroup>
 

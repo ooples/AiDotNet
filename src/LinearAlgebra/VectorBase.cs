@@ -22,6 +22,8 @@ public abstract class VectorBase<T>
 
     public int Length => data.Length;
 
+    public bool IsEmpty => Length == 0;
+
     public virtual T this[int index]
     {
         get

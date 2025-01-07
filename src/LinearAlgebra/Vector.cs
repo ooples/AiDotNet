@@ -116,6 +116,11 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return new Vector<T>(this.Select(x => numOps.Divide(x, scalar)));
     }
 
+    protected override VectorBase<T> CreateInstance(int size)
+    {
+        return new Vector<T>(size);
+    }
+
     public byte[] Serialize()
     {
         return SerializationHelper<T>.SerializeVector(this);
@@ -179,11 +184,6 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         }
 
         return vector;
-    }
-
-    protected override VectorBase<T> CreateInstance(int size)
-    {
-        return new Vector<T>(size, ops);
     }
 
     protected override VectorBase<T> CreateInstance(T[] data)

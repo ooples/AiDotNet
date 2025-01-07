@@ -109,7 +109,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         // Optimize the model
-        var optimizationResult = optimizer.Optimize(OptimizerHelper.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+        var optimizationResult = optimizer.Optimize(OptimizerHelper<T>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
         return new PredictionModelResult<T>(_regression, optimizationResult, normInfo);
     }

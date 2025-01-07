@@ -152,7 +152,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
 
     public ISymbolicModel<T> Mutate(double mutationRate, INumericOperations<T> numOps)
     {
-        ExpressionTree<T> mutatedTree = (ExpressionTree<T>)Clone();
+        ExpressionTree<T> mutatedTree = (ExpressionTree<T>)Copy();
         Random random = new Random();
 
         if (random.NextDouble() < mutationRate)
@@ -199,7 +199,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
             throw new ArgumentException("Crossover can only be performed with another ExpressionTree.");
         }
 
-        ExpressionTree<T> offspring = (ExpressionTree<T>)Clone();
+        ExpressionTree<T> offspring = (ExpressionTree<T>)Copy();
         Random random = new Random();
 
         if (random.NextDouble() < crossoverRate)
@@ -214,13 +214,13 @@ public class ExpressionTree<T> : ISymbolicModel<T>
         return offspring;
     }
 
-    public ISymbolicModel<T> Clone()
+    public ISymbolicModel<T> Copy()
     {
         return new ExpressionTree<T>(
             Type,
             Value,
-            Left?.Clone() as ExpressionTree<T>,
-            Right?.Clone() as ExpressionTree<T>
+            Left?.Copy() as ExpressionTree<T>,
+            Right?.Copy() as ExpressionTree<T>
         );
     }
 
@@ -281,8 +281,8 @@ public class ExpressionTree<T> : ISymbolicModel<T>
         {
             tree.Type = replacement.Type;
             tree.Value = replacement.Value;
-            tree.Left = replacement.Left?.Clone() as ExpressionTree<T>;
-            tree.Right = replacement.Right?.Clone() as ExpressionTree<T>;
+            tree.Left = replacement.Left?.Copy() as ExpressionTree<T>;
+            tree.Right = replacement.Right?.Copy() as ExpressionTree<T>;
         }
         else
         {
@@ -398,7 +398,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
             throw new ArgumentException($"The number of new coefficients ({newCoefficients.Length}) must match the current number of coefficients ({this.Coefficients.Length}).");
         }
 
-        ExpressionTree<T> updatedTree = (ExpressionTree<T>)this.Clone();
+        ExpressionTree<T> updatedTree = (ExpressionTree<T>)this.Copy();
         int coefficientIndex = 0;
 
         void UpdateConstantNodes(ExpressionTree<T> node)

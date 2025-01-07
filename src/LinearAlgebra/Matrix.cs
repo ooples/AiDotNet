@@ -109,6 +109,16 @@ public class Matrix<T> : MatrixBase<T>
         return matrix.Multiply(scalar);
     }
 
+    public static Matrix<T> operator /(Matrix<T> matrix, T scalar)
+    {
+        return matrix.Divide(scalar);
+    }
+
+     public static Matrix<T> operator /(Matrix<T> left, Matrix<T> right)
+    {
+        return left.Divide(right);
+    }
+
     public static Matrix<T> CreateFromVector(Vector<T> vector)
     {
         return new Matrix<T>([vector.AsEnumerable()]);
@@ -393,6 +403,64 @@ public class Matrix<T> : MatrixBase<T>
             for (int j = 0; j < Columns; j++)
             {
                 result[i, j] = ops.Divide(this[i, j], other[i, j]);
+            }
+        }
+
+        return result;
+    }
+
+    public Matrix<T> Divide(T scalar)
+    {
+        var numOp = MathHelper.GetNumericOperations<T>();
+        Matrix<T> result = new(Rows, Columns);
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                result[i, j] = numOp.Divide(this[i, j], scalar);
+            }
+        }
+
+        return result;
+    }
+
+    public Matrix<T> Divide(Matrix<T> other)
+    {
+        if (this.Rows != other.Rows || this.Columns != other.Columns)
+        {
+            throw new ArgumentException("Matrices must have the same dimensions for division.");
+        }
+
+        var numOp = MathHelper.GetNumericOperations<T>();
+        Matrix<T> result = new(Rows, Columns);
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                result[i, j] = numOp.Divide(this[i, j], other[i, j]);
+            }
+        }
+
+        return result;
+    }
+
+    public static Matrix<T> OuterProduct(Vector<T> a, Vector<T> b)
+    {
+        if (a == null || b == null)
+        {
+            throw new ArgumentNullException(a == null ? nameof(a) : nameof(b), "Vectors cannot be null.");
+        }
+
+        int rows = a.Length;
+        int cols = b.Length;
+        var result = new Matrix<T>(rows, cols);
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                result[i, j] = numOps.Multiply(a[i], b[j]);
             }
         }
 

@@ -44,7 +44,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         // Split the data
         var (xTrain, yTrain, xVal, yVal, xTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
-        var result = _optimizer.Optimize(OptimizerHelper.CreateOptimizationInputData(xTrain, yTrain, xVal, yVal, xTest, yTest));
+        var result = _optimizer.Optimize(OptimizerHelper<T>.CreateOptimizationInputData(xTrain, yTrain, xVal, yVal, xTest, yTest));
 
         _bestModel = (VectorModel<T>)result.BestSolution;
         UpdateCoefficientsAndIntercept();

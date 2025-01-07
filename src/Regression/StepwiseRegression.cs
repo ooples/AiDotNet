@@ -119,7 +119,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
 
             var input = new ModelEvaluationInput<T>
             {
-                InputData = OptimizerHelper.CreateOptimizationInputData(currentX, y, currentX, y, currentX, y)
+                InputData = OptimizerHelper<T>.CreateOptimizationInputData(currentX, y, currentX, y, currentX, y)
             };
             var evaluationData = _modelEvaluator.EvaluateModel(input);
             var score = _fitnessCalculator.CalculateFitnessScore(evaluationData);

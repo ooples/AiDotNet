@@ -92,7 +92,7 @@ public class VectorModel<T> : ISymbolicModel<T>
         return new VectorModel<T>(childCoefficients);
     }
 
-    public ISymbolicModel<T> Clone()
+    public ISymbolicModel<T> Copy()
     {
         Vector<T> clonedCoefficients = new(Coefficients.Length, _numOps);
         for (int i = 0; i < Coefficients.Length; i++)

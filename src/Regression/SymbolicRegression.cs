@@ -51,7 +51,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         // Optimize the model
-        var optimizationResult = _optimizer.Optimize(OptimizerHelper.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+        var optimizationResult = _optimizer.Optimize(OptimizerHelper<T>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
         _bestFitness = optimizationResult.BestFitnessScore;
         _bestModel = optimizationResult.BestSolution ?? throw new InvalidOperationException("Optimization result does not contain a valid symbolic model.");

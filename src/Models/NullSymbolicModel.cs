@@ -12,7 +12,7 @@ public class NullSymbolicModel<T> : ISymbolicModel<T>
 
     public T Intercept => NumOps.Zero;
 
-    public ISymbolicModel<T> Clone()
+    public ISymbolicModel<T> Copy()
     {
         return new NullSymbolicModel<T>();
     }

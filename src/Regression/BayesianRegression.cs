@@ -107,17 +107,53 @@ public class BayesianRegression<T> : RegressionBase<T>
 
     private Matrix<T> ApplyKernel(Matrix<T> input)
     {
-        switch (_bayesOptions.KernelType)
+        return _bayesOptions.KernelType switch
         {
-            case KernelType.RBF:
-                return ApplyRBFKernel(input);
-            case KernelType.Polynomial:
-                return ApplyPolynomialKernel(input);
-            case KernelType.Sigmoid:
-                return ApplySigmoidKernel(input);
-            default:
-                return input; // Linear kernel (no change)
+            KernelType.RBF => ApplyRBFKernel(input),
+            KernelType.Polynomial => ApplyPolynomialKernel(input),
+            KernelType.Sigmoid => ApplySigmoidKernel(input),
+            KernelType.Linear => input,// Linear kernel (no change)
+            KernelType.Laplacian => ApplyLaplacianKernel(input),
+            _ => throw new ArgumentException($"Unsupported kernel type: {_bayesOptions.KernelType}"),
+        };
+    }
+
+    private Matrix<T> ApplyLaplacianKernel(Matrix<T> input)
+    {
+        int n = input.Rows;
+        var output = new Matrix<T>(n, n);
+        var gamma = NumOps.FromDouble(_bayesOptions.LaplacianGamma); // Kernel width parameter
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = i; j < n; j++) // We only need to compute half of the matrix due to symmetry
+            {
+                if (i == j)
+                {
+                    output[i, j] = NumOps.One; // The kernel of a point with itself is always 1
+                }
+                else
+                {
+                    var distance = CalculateManhattanDistance(input.GetRow(i), input.GetRow(j));
+                    var kernelValue = NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, distance)));
+                    output[i, j] = kernelValue;
+                    output[j, i] = kernelValue; // The kernel matrix is symmetric
+                }
+            }
         }
+
+        return output;
+    }
+
+    private T CalculateManhattanDistance(Vector<T> x, Vector<T> y)
+    {
+        T distance = NumOps.Zero;
+        for (int i = 0; i < x.Length; i++)
+        {
+            distance = NumOps.Add(distance, NumOps.Abs(NumOps.Subtract(x[i], y[i])));
+        }
+
+        return distance;
     }
 
     private Matrix<T> ApplyRBFKernel(Matrix<T> input)

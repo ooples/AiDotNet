@@ -87,10 +87,10 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
             return cachedStepData;
         }
 
-        var selectedFeatures = inputData.XTrain.GetColumnVectors(OptimizerHelper.GetSelectedFeatures(solution));
-        var XTrainSubset = OptimizerHelper.SelectFeatures(inputData.XTrain, selectedFeatures);
-        var XValSubset = OptimizerHelper.SelectFeatures(inputData.XVal, selectedFeatures);
-        var XTestSubset = OptimizerHelper.SelectFeatures(inputData.XTest, selectedFeatures);
+        var selectedFeatures = inputData.XTrain.GetColumnVectors(OptimizerHelper<T>.GetSelectedFeatures(solution));
+        var XTrainSubset = OptimizerHelper<T>.SelectFeatures(inputData.XTrain, selectedFeatures);
+        var XValSubset = OptimizerHelper<T>.SelectFeatures(inputData.XVal, selectedFeatures);
+        var XTestSubset = OptimizerHelper<T>.SelectFeatures(inputData.XTest, selectedFeatures);
 
         var input = new ModelEvaluationInput<T>
         {
@@ -127,9 +127,15 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
         return (currentFitnessScore, fitDetectionResult, evaluationData);
     }
 
+    protected virtual T CalculateLoss(ISymbolicModel<T> solution, OptimizationInputData<T> inputData)
+    {
+        var stepData = EvaluateSolution(solution, inputData);
+        return _fitnessCalculator!.CalculateFitnessScore(stepData.EvaluationData);
+    }
+
     protected OptimizationResult<T> CreateOptimizationResult(OptimizationStepData<T> bestStepData, OptimizationInputData<T> input)
     {
-        return OptimizerHelper.CreateOptimizationResult(
+        return OptimizerHelper<T>.CreateOptimizationResult(
             bestStepData.Solution,
             bestStepData.FitnessScore,
             _fitnessList,
