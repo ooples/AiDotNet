@@ -144,7 +144,7 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
             {
                 X = bestStepData.XTrainSubset,
                 Y = input.YTrain,
-                Predictions = bestStepData.EvaluationData.TrainingSet.Predictions,
+                Predictions = bestStepData.EvaluationData.TrainingSet.Predicted,
                 ErrorStats = bestStepData.EvaluationData.TrainingSet.ErrorStats,
                 ActualBasicStats = bestStepData.EvaluationData.TrainingSet.ActualBasicStats,
                 PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
@@ -154,7 +154,7 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
             {
                 X = bestStepData.XValSubset,
                 Y = input.YVal,
-                Predictions = bestStepData.EvaluationData.ValidationSet.Predictions,
+                Predictions = bestStepData.EvaluationData.ValidationSet.Predicted,
                 ErrorStats = bestStepData.EvaluationData.ValidationSet.ErrorStats,
                 ActualBasicStats = bestStepData.EvaluationData.ValidationSet.ActualBasicStats,
                 PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
@@ -164,7 +164,7 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
             {
                 X = bestStepData.XTestSubset,
                 Y = input.YTest,
-                Predictions = bestStepData.EvaluationData.TestSet.Predictions,
+                Predictions = bestStepData.EvaluationData.TestSet.Predicted,
                 ErrorStats = bestStepData.EvaluationData.TestSet.ErrorStats,
                 ActualBasicStats = bestStepData.EvaluationData.TestSet.ActualBasicStats,
                 PredictedBasicStats = bestStepData.EvaluationData.TestSet.PredictedBasicStats,

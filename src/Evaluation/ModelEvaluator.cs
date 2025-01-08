@@ -47,7 +47,9 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
             ActualBasicStats = CalculateBasicStats(y),
             PredictedBasicStats = CalculateBasicStats(predictions),
             PredictionStats = CalculatePredictionStats(y, predictions, X.Columns),
-            Predictions = predictions
+            Predicted = predictions,
+            Features = X,
+            Actual = y
         };
     }
 

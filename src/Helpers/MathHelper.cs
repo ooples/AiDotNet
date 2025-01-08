@@ -59,6 +59,22 @@ public static class MathHelper
         return AlmostEqual(a, b, numOps.FromDouble(1e-8), numOps);
     }
 
+    public static T Factorial<T>(int n)
+    {
+        var ops = GetNumericOperations<T>();
+    
+        if (n == 0 || n == 1)
+            return ops.One;
+
+        T result = ops.One;
+        for (int i = 2; i <= n; i++)
+        {
+            result = ops.Multiply(result, ops.FromDouble(i));
+        }
+
+        return result;
+    }
+
     public static T Pi<T>()
     {
         return GetNumericOperations<T>().FromDouble(Math.PI);
@@ -67,6 +83,11 @@ public static class MathHelper
     public static T Sin<T>(T x)
     {
         return GetNumericOperations<T>().FromDouble(Math.Sin(Convert.ToDouble(x)));
+    }
+
+    public static T Cos<T>(T x)
+    {
+        return GetNumericOperations<T>().FromDouble(Math.Cos(Convert.ToDouble(x)));
     }
 
     public static T Tanh<T>(T x)
@@ -94,6 +115,56 @@ public static class MathHelper
     public static T Max<T>(T a, T b)
     {
         return GetNumericOperations<T>().GreaterThan(a, b) ? a : b;
+    }
+
+    public static T ArcCos<T>(T x)
+    {
+        var numOps = GetNumericOperations<T>();
+    
+        // ArcCos(x) = π/2 - ArcSin(x)
+        var arcSin = MathHelper.ArcSin(x);
+        var halfPi = numOps.Divide(Pi<T>(), numOps.FromDouble(2.0));
+    
+        return numOps.Subtract(halfPi, arcSin);
+    }
+
+    public static T ArcSin<T>(T x)
+    {
+        var numOps = GetNumericOperations<T>();
+    
+        // Check if x is within the valid range [-1, 1]
+        if (numOps.LessThan(x, numOps.FromDouble(-1)) || numOps.GreaterThan(x, numOps.One))
+        {
+            throw new ArgumentOutOfRangeException(nameof(x), "ArcSin is only defined for values between -1 and 1.");
+        }
+    
+        // ArcSin(x) = ArcTan(x / sqrt(1 - x^2))
+        var oneMinusXSquared = numOps.Subtract(numOps.One, numOps.Multiply(x, x));
+        var denominator = numOps.Sqrt(oneMinusXSquared);
+        var fraction = numOps.Divide(x, denominator);
+    
+        return ArcTan(fraction);
+    }
+
+    public static T ArcTan<T>(T x)
+    {
+        var numOps = GetNumericOperations<T>();
+    
+        // Use Taylor series approximation for ArcTan
+        T result = x;
+        T xPower = x;
+        T term = x;
+        int sign = 1;
+    
+        for (int n = 3; n <= 15; n += 2)
+        {
+            sign = -sign;
+            xPower = numOps.Multiply(xPower, numOps.Multiply(x, x));
+            term = numOps.Divide(xPower, numOps.FromDouble(n));
+            result = numOps.Add(result, numOps.Multiply(numOps.FromDouble(sign), term));
+        }
+    
+        return result;
     }
 
     public static T Erf<T>(T x)

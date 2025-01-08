@@ -1091,25 +1091,42 @@ public static class MatrixHelper
         return ops.GreaterThanOrEquals(ops.Abs(determinant), ops.FromDouble(1e-10));
     }
 
-    public static bool IsPositiveDefiniteMatrix<T>(this Matrix<T> matrix)
+    public static bool IsPositiveDefiniteMatrix<T>(this Matrix<T> matrix, T? tolerance = default)
     {
         if (!matrix.IsSymmetricMatrix())
         {
             return false; // Positive definite matrices must be symmetric
         }
 
-        var eigenvalues = matrix.Eigenvalues();
         var ops = MathHelper.GetNumericOperations<T>();
-        // Check if all eigenvalues are positive
-        foreach (var eigenvalue in eigenvalues)
-        {
-            if (ops.LessThanOrEquals(eigenvalue, ops.Zero))
-            {
-                return false;
-            }
-        }
 
-        return true;
+        // Set default tolerance if not provided
+        tolerance ??= ops.FromDouble(1e-10);
+
+        try
+        {
+            // Attempt Cholesky decomposition
+            var choleskyDecomposition = new CholeskyDecomposition<T>(matrix);
+
+            // Get the lower triangular matrix L
+            var L = choleskyDecomposition.L;
+
+            // Check if all diagonal elements of L are positive
+            for (int i = 0; i < L.Rows; i++)
+            {
+                if (ops.LessThanOrEquals(L[i, i], tolerance))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception)
+        {
+            // If Cholesky decomposition fails, the matrix is not positive definite
+            return false;
+        }
     }
 
     public static bool IsIdempotentMatrix<T>(this Matrix<T> matrix)

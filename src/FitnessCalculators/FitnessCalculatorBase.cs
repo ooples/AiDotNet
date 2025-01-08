@@ -13,7 +13,6 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
         _dataSetType = dataSetType;
     }
 
-
     public T CalculateFitnessScore(ModelEvaluationData<T> evaluationData)
     {
         if (evaluationData == null)
@@ -27,10 +26,9 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
             _ => throw new ArgumentException($"Unsupported DataSetType: {_dataSetType}")
         };
 
-        if (dataSet == null)
-            throw new InvalidOperationException($"The {_dataSetType} dataset is not available in the provided ModelEvaluationData.");
-
-        return GetFitnessScore(dataSet);
+        return dataSet == null
+            ? throw new InvalidOperationException($"The {_dataSetType} dataset is not available in the provided ModelEvaluationData.")
+            : GetFitnessScore(dataSet);
     }
 
     protected abstract T GetFitnessScore(DataSetStats<T> dataSet);

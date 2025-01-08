@@ -1,6 +1,3 @@
-using AiDotNet.Models.Options;
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.FitDetectors;
 
 public class EnsembleFitDetector<T> : FitDetectorBase<T>

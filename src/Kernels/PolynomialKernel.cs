@@ -6,11 +6,11 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     private readonly T _coef0;
     private readonly INumericOperations<T> _numOps;
 
-    public PolynomialKernel(T degree, T coef0)
+    public PolynomialKernel(T? degree = default, T? coef0 = default)
     {
-        _degree = degree;
-        _coef0 = coef0;
         _numOps = MathHelper.GetNumericOperations<T>();
+        _degree = degree ?? _numOps.FromDouble(3.0);
+        _coef0 = coef0 ?? _numOps.FromDouble(1.0);
     }
 
     public T Calculate(Vector<T> x1, Vector<T> x2)

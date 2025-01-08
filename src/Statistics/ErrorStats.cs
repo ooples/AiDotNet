@@ -1,6 +1,4 @@
-﻿using AiDotNet.Models.Inputs;
-
-namespace AiDotNet.Statistics;
+﻿namespace AiDotNet.Statistics;
 
 public class ErrorStats<T>
 {

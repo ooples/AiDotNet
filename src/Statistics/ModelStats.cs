@@ -1,6 +1,3 @@
-using AiDotNet.Models.Inputs;
-using AiDotNet.Models.Options;
-
 namespace AiDotNet.Statistics;
 
 public class ModelStats<T>

@@ -6,11 +6,11 @@ public class SigmoidKernel<T> : IKernelFunction<T>
     private readonly T _c;
     private readonly INumericOperations<T> _numOps;
 
-    public SigmoidKernel(T alpha, T c)
+    public SigmoidKernel(T? alpha = default, T? c = default)
     {
-        _alpha = alpha;
-        _c = c;
         _numOps = MathHelper.GetNumericOperations<T>();
+        _alpha = alpha ?? _numOps.FromDouble(1.0);
+        _c = c ?? _numOps.FromDouble(0.0);
     }
 
     public T Calculate(Vector<T> x1, Vector<T> x2)
