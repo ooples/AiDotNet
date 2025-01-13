@@ -43,20 +43,23 @@ public static class MathHelper
         return value;
     }
 
-    public static bool IsInteger<T>(T value, INumericOperations<T> numOps)
+    public static bool IsInteger<T>(T value)
     {
         // If the value is equal to its rounded value, it's an integer
+        var numOps = GetNumericOperations<T>();
         return numOps.Equals(value, numOps.Round(value));
     }
 
-    public static bool AlmostEqual<T>(T a, T b, T tolerance, INumericOperations<T> numOps)
+    public static bool AlmostEqual<T>(T a, T b, T tolerance)
     {
+        var numOps = GetNumericOperations<T>();
         return numOps.LessThan(numOps.Abs(numOps.Subtract(a, b)), tolerance);
     }
 
-    public static bool AlmostEqual<T>(T a, T b, INumericOperations<T> numOps)
+    public static bool AlmostEqual<T>(T a, T b)
     {
-        return AlmostEqual(a, b, numOps.FromDouble(1e-8), numOps);
+        var numOps = GetNumericOperations<T>();
+        return AlmostEqual(a, b, numOps.FromDouble(1e-8));
     }
 
     public static T Factorial<T>(int n)

@@ -1,3 +1,5 @@
+using System.Runtime.Serialization.Formatters.Binary;
+
 namespace AiDotNet.Helpers;
 
 public static class SerializationHelper<T>
@@ -53,78 +55,6 @@ public static class SerializationHelper<T>
         }
 
         return node;
-    }
-
-    public static void SerializeVector(BinaryWriter writer, Vector<T> vector)
-    {
-        writer.Write(vector.Length);
-
-        foreach (var value in vector)
-        {
-            writer.Write(Convert.ToDouble(value));
-        }
-    }
-
-    public static Vector<T> DeserializeVector(BinaryReader reader)
-    {
-        int count = reader.ReadInt32();
-        T[] values = new T[count];
-        for (int i = 0; i < count; i++)
-        {
-            values[i] = (T)Convert.ChangeType(reader.ReadDouble(), typeof(T));
-        }
-
-        return new Vector<T>(values);
-    }
-
-    public static void WriteMatrix(BinaryWriter writer, Matrix<T> matrix)
-    {
-        writer.Write(matrix.Rows);
-        writer.Write(matrix.Columns);
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                writer.Write(Convert.ToDouble(matrix[i, j]));
-            }
-        }
-    }
-
-    public static Matrix<T> ReadMatrix(BinaryReader reader)
-    {
-        int rows = reader.ReadInt32();
-        int cols = reader.ReadInt32();
-        Matrix<T> matrix = new Matrix<T>(rows, cols, NumOps);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        return matrix;
-    }
-
-    public static void WriteVector(BinaryWriter writer, Vector<T> vector)
-    {
-        writer.Write(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(vector[i]));
-        }
-    }
-
-    public static Vector<T> ReadVector(BinaryReader reader)
-    {
-        int length = reader.ReadInt32();
-        Vector<T> vector = new Vector<T>(length, NumOps);
-        for (int i = 0; i < length; i++)
-        {
-            vector[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        return vector;
     }
 
     public static void WriteValue(BinaryWriter writer, T value)
@@ -247,10 +177,8 @@ public static class SerializationHelper<T>
         }
     }
 
-    public static byte[] SerializeMatrix(Matrix<T> matrix)
+    public static void SerializeMatrix(BinaryWriter writer, Matrix<T> matrix)
     {
-        using MemoryStream ms = new();
-        using BinaryWriter writer = new(ms);
         writer.Write(matrix.Rows);
         writer.Write(matrix.Columns);
         for (int i = 0; i < matrix.Rows; i++)
@@ -260,37 +188,131 @@ public static class SerializationHelper<T>
                 writer.Write(Convert.ToDouble(matrix[i, j]));
             }
         }
-
-        return ms.ToArray();
     }
 
-    public static Matrix<T> DeserializeMatrix(byte[] data)
+    public static Matrix<T> DeserializeMatrix(BinaryReader reader, int rows, int columns)
     {
-        using MemoryStream ms = new(data);
-        using BinaryReader reader = new(ms);
-        int rows = reader.ReadInt32();
-        int columns = reader.ReadInt32();
-        Matrix<T> matrix = new(rows, columns);
+        int storedRows = reader.ReadInt32();
+        int storedColumns = reader.ReadInt32();
+
+        if (storedRows != rows || storedColumns != columns)
+        {
+            throw new InvalidOperationException("Stored matrix dimensions do not match expected dimensions.");
+        }
+
+        Matrix<T> matrix = new Matrix<T>(rows, columns);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < columns; j++)
             {
-                double value = reader.ReadDouble();
-                matrix[i, j] = NumOps.FromDouble(value);
+                matrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
 
         return matrix;
     }
 
-    public static byte[] SerializeVector(Vector<T> vector)
+    public static byte[] SerializeMatrix(Matrix<T> matrix)
     {
-        using MemoryStream ms = new();
-        using BinaryWriter writer = new(ms);
+        using MemoryStream ms = new MemoryStream();
+        using BinaryWriter writer = new BinaryWriter(ms);
+
+        writer.Write(matrix.Rows);
+        writer.Write(matrix.Columns);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                WriteValue(writer, matrix[i, j]);
+            }
+        }
+
+        return ms.ToArray();
+    }
+
+    public static Matrix<T> DeserializeMatrix(BinaryReader reader)
+    {
+        int rows = reader.ReadInt32();
+        int columns = reader.ReadInt32();
+        Matrix<T> matrix = new Matrix<T>(rows, columns);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                matrix[i, j] = ReadValue(reader);
+            }
+        }
+
+        return matrix;
+    }
+
+    public static Matrix<T> DeserializeMatrix(byte[] data)
+    {
+        using MemoryStream ms = new MemoryStream(data);
+        using BinaryReader reader = new BinaryReader(ms);
+
+        int rows = reader.ReadInt32();
+        int columns = reader.ReadInt32();
+        Matrix<T> matrix = new Matrix<T>(rows, columns);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                matrix[i, j] = ReadValue(reader);
+            }
+        }
+
+        return matrix;
+    }
+
+    public static void SerializeVector(BinaryWriter writer, Vector<T> vector)
+    {
         writer.Write(vector.Length);
         for (int i = 0; i < vector.Length; i++)
         {
             writer.Write(Convert.ToDouble(vector[i]));
+        }
+    }
+
+    public static Vector<T> DeserializeVector(BinaryReader reader, int length)
+    {
+        int storedLength = reader.ReadInt32();
+
+        if (storedLength != length)
+        {
+            throw new InvalidOperationException("Stored vector length does not match expected length.");
+        }
+
+        Vector<T> vector = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        return vector;
+    }
+
+    public static Vector<T> DeserializeVector(BinaryReader reader)
+    {
+        int length = reader.ReadInt32();
+        T[] array = new T[length];
+        for (int i = 0; i < length; i++)
+        {
+            array[i] = ReadValue(reader);
+        }
+
+        return new Vector<T>(array);
+    }
+
+    public static byte[] SerializeVector(Vector<T> vector)
+    {
+        using MemoryStream ms = new MemoryStream();
+        using BinaryWriter writer = new BinaryWriter(ms);
+
+        writer.Write(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            WriteValue(writer, vector[i]);
         }
 
         return ms.ToArray();
@@ -298,16 +320,16 @@ public static class SerializationHelper<T>
 
     public static Vector<T> DeserializeVector(byte[] data)
     {
-        using MemoryStream ms = new(data);
-        using BinaryReader reader = new(ms);
+        using MemoryStream ms = new MemoryStream(data);
+        using BinaryReader reader = new BinaryReader(ms);
+
         int length = reader.ReadInt32();
-        Vector<T> vector = new(length);
+        T[] array = new T[length];
         for (int i = 0; i < length; i++)
         {
-            double value = reader.ReadDouble();
-            vector[i] = NumOps.FromDouble(value);
+            array[i] = ReadValue(reader);
         }
 
-        return vector;
+        return new Vector<T>(array);
     }
 }

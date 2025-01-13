@@ -129,6 +129,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         {
             smaCoefficients[i] = TimeSeriesHelper<T>.CalculateAutoCorrelation(residuals, (i + 1) * _m, NumOps);
         }
+
         return smaCoefficients;
     }
 

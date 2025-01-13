@@ -31,6 +31,10 @@ public class PredictionStats<T>
     public T Precision { get; private set; }
     public T Recall { get; private set; }
     public T F1Score { get; private set; }
+    public T PearsonCorrelation { get; private set; }
+    public T SpearmanCorrelation { get; private set; }
+    public T KendallTau { get; private set; }
+    public T DynamicTimeWarping { get; private set; }
 
     // Distribution Fit
     public DistributionFitResult<T> BestDistributionFit { get; private set; } = new();
@@ -55,6 +59,10 @@ public class PredictionStats<T>
         MedianPredictionError = NumOps.Zero;
         R2 = NumOps.Zero;
         AdjustedR2 = NumOps.Zero;
+        PearsonCorrelation = NumOps.Zero;
+        SpearmanCorrelation = NumOps.Zero;
+        KendallTau = NumOps.Zero;
+        DynamicTimeWarping = NumOps.Zero;
         ExplainedVarianceScore = NumOps.Zero;
         LearningCurve = [];
         Accuracy = NumOps.Zero;
@@ -82,6 +90,10 @@ public class PredictionStats<T>
         AdjustedR2 = StatisticsHelper<T>.CalculateAdjustedR2(R2, actual.Length, numberOfParameters);
         ExplainedVarianceScore = StatisticsHelper<T>.CalculateExplainedVarianceScore(actual, predicted);
         LearningCurve = StatisticsHelper<T>.CalculateLearningCurve(actual, predicted, learningCurveSteps);
+        PearsonCorrelation = StatisticsHelper<T>.CalculatePearsonCorrelationCoefficient(actual, predicted);
+        SpearmanCorrelation = StatisticsHelper<T>.CalculateSpearmanRankCorrelationCoefficient(actual, predicted);
+        KendallTau = StatisticsHelper<T>.CalculateKendallTau(actual, predicted);
+        DynamicTimeWarping = StatisticsHelper<T>.CalculateDynamicTimeWarping(actual, predicted);
 
         PredictionInterval = StatisticsHelper<T>.CalculatePredictionIntervals(actual, predicted, confidenceLevel);
         PredictionIntervalCoverage = StatisticsHelper<T>.CalculatePredictionIntervalCoverage(actual, predicted, PredictionInterval.Lower, PredictionInterval.Upper);
@@ -113,6 +125,9 @@ public class PredictionStats<T>
             MetricType.Recall => Recall,
             MetricType.F1Score => F1Score,
             MetricType.PredictionIntervalCoverage => PredictionIntervalCoverage,
+            MetricType.PearsonCorrelation => PearsonCorrelation,
+            MetricType.SpearmanCorrelation => SpearmanCorrelation,
+            MetricType.KendallTau => KendallTau,
             _ => throw new ArgumentException($"Unknown metric type: {metricType}")
         };
     }

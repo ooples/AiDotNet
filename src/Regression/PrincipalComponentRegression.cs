@@ -157,10 +157,10 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         // Write PCR-specific data
         writer.Write(_options.NumComponents);
         writer.Write(_options.ExplainedVarianceRatio);
-        SerializationHelper<T>.WriteMatrix(writer, _components);
-        SerializationHelper<T>.WriteVector(writer, _xMean);
-        SerializationHelper<T>.WriteVector(writer, _yMean);
-        SerializationHelper<T>.WriteVector(writer, _xStd);
+        SerializationHelper<T>.SerializeMatrix(writer, _components);
+        SerializationHelper<T>.SerializeVector(writer, _xMean);
+        SerializationHelper<T>.SerializeVector(writer, _yMean);
+        SerializationHelper<T>.SerializeVector(writer, _xStd);
         SerializationHelper<T>.WriteValue(writer, _yStd);
 
         return ms.ToArray();
@@ -177,10 +177,10 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         // Read PCR-specific data
         _options.NumComponents = reader.ReadInt32();
         _options.ExplainedVarianceRatio = reader.ReadDouble();
-        _components = SerializationHelper<T>.ReadMatrix(reader);
-        _xMean = SerializationHelper<T>.ReadVector(reader);
-        _yMean = SerializationHelper<T>.ReadVector(reader);
-        _xStd = SerializationHelper<T>.ReadVector(reader);
+        _components = SerializationHelper<T>.DeserializeMatrix(reader);
+        _xMean = SerializationHelper<T>.DeserializeVector(reader);
+        _yMean = SerializationHelper<T>.DeserializeVector(reader);
+        _xStd = SerializationHelper<T>.DeserializeVector(reader);
         _yStd = SerializationHelper<T>.ReadValue(reader);
     }
 }

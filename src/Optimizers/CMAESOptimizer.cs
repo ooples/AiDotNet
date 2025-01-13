@@ -271,50 +271,48 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
 
     public override byte[] Serialize()
     {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
+        using MemoryStream ms = new MemoryStream();
+        using BinaryWriter writer = new BinaryWriter(ms);
 
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
 
-            // Serialize CMA-ES specific data
-            SerializationHelper<T>.WriteMatrix(writer, _population);
-            SerializationHelper<T>.WriteVector(writer, _mean);
-            SerializationHelper<T>.WriteMatrix(writer, _C);
-            SerializationHelper<T>.WriteVector(writer, _pc);
-            SerializationHelper<T>.WriteVector(writer, _ps);
-            SerializationHelper<T>.WriteValue(writer, _sigma);
+        string optionsJson = JsonConvert.SerializeObject(_options);
+        writer.Write(optionsJson);
 
-            return ms.ToArray();
-        }
+        // Serialize CMA-ES specific data
+        SerializationHelper<T>.SerializeMatrix(writer, _population);
+        SerializationHelper<T>.SerializeVector(writer, _mean);
+        SerializationHelper<T>.SerializeMatrix(writer, _C);
+        SerializationHelper<T>.SerializeVector(writer, _pc);
+        SerializationHelper<T>.SerializeVector(writer, _ps);
+        SerializationHelper<T>.WriteValue(writer, _sigma);
+
+        return ms.ToArray();
     }
 
     public override void Deserialize(byte[] data)
     {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
+        using MemoryStream ms = new MemoryStream(data);
+        using BinaryReader reader = new BinaryReader(ms);
 
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<CMAESOptimizerOptions<T>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
 
-            // Deserialize CMA-ES specific data
-            _population = SerializationHelper<T>.ReadMatrix(reader);
-            _mean = SerializationHelper<T>.ReadVector(reader);
-            _C = SerializationHelper<T>.ReadMatrix(reader);
-            _pc = SerializationHelper<T>.ReadVector(reader);
-            _ps = SerializationHelper<T>.ReadVector(reader);
-            _sigma = SerializationHelper<T>.ReadValue(reader);
+        string optionsJson = reader.ReadString();
+        _options = JsonConvert.DeserializeObject<CMAESOptimizerOptions<T>>(optionsJson)
+            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
-            _random = new Random(_options.Seed);
-        }
+        // Deserialize CMA-ES specific data
+        _population = SerializationHelper<T>.DeserializeMatrix(reader);
+        _mean = SerializationHelper<T>.DeserializeVector(reader);
+        _C = SerializationHelper<T>.DeserializeMatrix(reader);
+        _pc = SerializationHelper<T>.DeserializeVector(reader);
+        _ps = SerializationHelper<T>.DeserializeVector(reader);
+        _sigma = SerializationHelper<T>.ReadValue(reader);
+
+        _random = new Random(_options.Seed);
     }
 }

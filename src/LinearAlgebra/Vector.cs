@@ -131,6 +131,31 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return SerializationHelper<T>.DeserializeVector(data);
     }
 
+    public static Vector<T> Range(int start, int count)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        Vector<T> result = new Vector<T>(count, numOps);
+        for (int i = 0; i < count; i++)
+        {
+            result[i] = numOps.FromDouble(start + i);
+        }
+
+        return result;
+    }
+
+    public Vector<T> GetRange(int startIndex, int count)
+    {
+        if (startIndex < 0 || startIndex >= Length)
+            throw new ArgumentOutOfRangeException(nameof(startIndex), "Start index is out of range.");
+        if (count < 0 || startIndex + count > Length)
+            throw new ArgumentOutOfRangeException(nameof(count), "Count is out of range.");
+
+        T[] newData = new T[count];
+        Array.Copy(data, startIndex, newData, 0, count);
+
+        return new Vector<T>(newData, ops);
+    }
+
     public int IndexOfMax()
     {
         if (this.Length == 0)

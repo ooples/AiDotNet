@@ -19,7 +19,11 @@ public class ErrorStats<T>
     public T BIC { get; private set; }
     public T AICAlt { get; private set; }
     public T RSS { get; private set; }
-    public List<T> ErrorList { get; private set; } = new List<T>();
+    public List<T> ErrorList { get; private set; } = [];
+    public T AUCPR { get; private set; }
+    public T AUCROC { get; private set; }
+    public T SMAPE { get; private set; }
+    public T MeanSquaredLogError { get; private set; }
 
     internal ErrorStats(ErrorStatsInputs<T> inputs)
     {
@@ -32,6 +36,7 @@ public class ErrorStats<T>
         MAPE = NumOps.Zero;
         MeanBiasError = NumOps.Zero;
         MedianAbsoluteError = NumOps.Zero;
+        MeanSquaredLogError = NumOps.Zero;
         MaxError = NumOps.Zero;
         TheilUStatistic = NumOps.Zero;
         DurbinWatsonStatistic = NumOps.Zero;
@@ -41,6 +46,9 @@ public class ErrorStats<T>
         BIC = NumOps.Zero;
         AICAlt = NumOps.Zero;
         RSS = NumOps.Zero;
+        AUCPR = NumOps.Zero;
+        AUCROC = NumOps.Zero;
+        SMAPE = NumOps.Zero;
 
         ErrorList = [];
 
@@ -64,6 +72,10 @@ public class ErrorStats<T>
         MAPE = StatisticsHelper<T>.CalculateMeanAbsolutePercentageError(actual, predicted);
         MedianAbsoluteError = StatisticsHelper<T>.CalculateMedianAbsoluteError(actual, predicted);
         MaxError = StatisticsHelper<T>.CalculateMaxError(actual, predicted);
+        AUCPR = StatisticsHelper<T>.CalculatePrecisionRecallAUC(actual, predicted);
+        AUCROC = StatisticsHelper<T>.CalculateROCAUC(actual, predicted);
+        SMAPE = StatisticsHelper<T>.CalculateSymmetricMeanAbsolutePercentageError(actual, predicted);
+        MeanSquaredLogError = StatisticsHelper<T>.CalculateMeanSquaredLogError(actual, predicted);
 
         // Calculate standard errors
         SampleStandardError = StatisticsHelper<T>.CalculateSampleStandardError(actual, predicted, numberOfParameters);
@@ -80,6 +92,6 @@ public class ErrorStats<T>
         AICAlt = StatisticsHelper<T>.CalculateAICAlternative(n, numberOfParameters, RSS);
 
         // Populate error list
-        ErrorList = [.. actual.Subtract(predicted)];
+        ErrorList = [..StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
     }
 }

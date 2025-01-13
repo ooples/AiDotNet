@@ -698,21 +698,6 @@ public static class StatisticsHelper<T>
         return NumOps.Multiply(NumOps.FromDouble(2), NumOps.LessThan(cdf, NumOps.FromDouble(0.5)) ? cdf : NumOps.Subtract(NumOps.FromDouble(1), cdf));
     }
 
-    private static List<T> CalculateRanks(List<T> values)
-    {
-        var sortedWithIndices = values.Select((value, index) => new { Value = value, Index = index })
-                                      .OrderBy(x => x.Value)
-                                      .ToList();
-
-        var ranks = new T[values.Count];
-        for (int i = 0; i < sortedWithIndices.Count; i++)
-        {
-            ranks[sortedWithIndices[i].Index] = NumOps.FromDouble(i + 1);
-        }
-
-        return [.. ranks];
-    }
-
     private static void Shuffle(List<T> list)
     {
         Random rng = new();
@@ -2363,6 +2348,20 @@ public static class StatisticsHelper<T>
         return lppd;
     }
 
+    public static T CalculateMedianAbsoluteDeviation(Vector<T> values)
+    {
+        T median = CalculateMedian(values);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        Vector<T> absoluteDeviations = new Vector<T>(values.Length);
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            absoluteDeviations[i] = numOps.Abs(numOps.Subtract(values[i], median));
+        }
+
+        return CalculateMedian(absoluteDeviations);
+    }
+
     public static T CalculateLogLikelihood(Vector<T> actualValues, Vector<T> predictedValues)
     {
         var _numOps = MathHelper.GetNumericOperations<T>();
@@ -2453,6 +2452,11 @@ public static class StatisticsHelper<T>
         return residuals.DotProduct(residuals);
     }
 
+    public static Vector<T> CalculateResiduals(Vector<T> actual, Vector<T> predicted)
+    {
+        return actual.Subtract(predicted);
+    }
+
     public static List<T> CalculatePosteriorPredictiveSamples(Vector<T> actual, Vector<T> predicted, int featureCount, int numSamples = 1000)
     {
         var _numOps = MathHelper.GetNumericOperations<T>();
@@ -2540,20 +2544,6 @@ public static class StatisticsHelper<T>
         return auc;
     }
 
-    public static T CalculateAUC(Vector<T> fpr, Vector<T> tpr)
-    {
-        var _numOps = MathHelper.GetNumericOperations<T>();
-        T auc = _numOps.Zero;
-        for (int i = 1; i < fpr.Length; i++)
-        {
-            var width = _numOps.Subtract(fpr[i], fpr[i - 1]);
-            var height = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(tpr[i], tpr[i - 1]));
-            auc = _numOps.Add(auc, _numOps.Multiply(width, height));
-        }
-
-        return auc;
-    }
-
     public static Vector<T> GenerateThresholds(Vector<T> predictedValues)
     {
         var _numOps = MathHelper.GetNumericOperations<T>();
@@ -2622,5 +2612,773 @@ public static class StatisticsHelper<T>
         }
 
         return new ConfusionMatrix<T>(truePositives, trueNegatives, falsePositives, falseNegatives);
+    }
+
+    public static T CalculatePearsonCorrelationCoefficient(Vector<T> x, Vector<T> y)
+    {
+        if (x.Length != y.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        T meanX = CalculateMean(x);
+        T meanY = CalculateMean(y);
+        T sumXY = NumOps.Zero;
+        T sumX2 = NumOps.Zero;
+        T sumY2 = NumOps.Zero;
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            T xDiff = NumOps.Subtract(x[i], meanX);
+            T yDiff = NumOps.Subtract(y[i], meanY);
+            sumXY = NumOps.Add(sumXY, NumOps.Multiply(xDiff, yDiff));
+            sumX2 = NumOps.Add(sumX2, NumOps.Multiply(xDiff, xDiff));
+            sumY2 = NumOps.Add(sumY2, NumOps.Multiply(yDiff, yDiff));
+        }
+
+        return NumOps.Divide(sumXY, NumOps.Sqrt(NumOps.Multiply(sumX2, sumY2)));
+    }
+
+    public static T CalculateSpearmanRankCorrelationCoefficient(Vector<T> x, Vector<T> y)
+    {
+        if (x.Length != y.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        var xRanks = CalculateRanks(x.ToList());
+        var yRanks = CalculateRanks(y.ToList());
+
+        return CalculatePearsonCorrelationCoefficient(new Vector<T>(xRanks), new Vector<T>(yRanks));
+    }
+
+    public static T CalculateKendallTau(Vector<T> x, Vector<T> y)
+    {
+        if (x.Length != y.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        int concordantPairs = 0;
+        int discordantPairs = 0;
+
+        for (int i = 0; i < x.Length - 1; i++)
+        {
+            for (int j = i + 1; j < x.Length; j++)
+            {
+                T xDiff = NumOps.Subtract(x[i], x[j]);
+                T yDiff = NumOps.Subtract(y[i], y[j]);
+                T product = NumOps.Multiply(xDiff, yDiff);
+
+                if (NumOps.GreaterThan(product, NumOps.Zero))
+                    concordantPairs++;
+                else if (NumOps.LessThan(product, NumOps.Zero))
+                    discordantPairs++;
+            }
+        }
+
+        int n = x.Length;
+        T numerator = NumOps.Subtract(NumOps.FromDouble(concordantPairs), NumOps.FromDouble(discordantPairs));
+        T denominator = NumOps.Sqrt(NumOps.Multiply(
+            NumOps.FromDouble(n * (n - 1) / 2),
+            NumOps.FromDouble(n * (n - 1) / 2)
+        ));
+
+        return NumOps.Divide(numerator, denominator);
+    }
+
+    private static List<T> CalculateRanks(IEnumerable<T> values)
+    {
+        var sortedValues = values.Select((value, index) => new { Value = value, Index = index })
+                                 .OrderBy(x => x.Value)
+                                 .ToList();
+
+        var ranks = new List<T>(new T[sortedValues.Count]);
+
+        for (int i = 0; i < sortedValues.Count; i++)
+        {
+            int start = i;
+            while (i < sortedValues.Count - 1 && NumOps.Equals(sortedValues[i].Value, sortedValues[i + 1].Value))
+                i++;
+
+            T rank = NumOps.Divide(NumOps.FromDouble(start + i + 1), NumOps.FromDouble(2));
+
+            for (int j = start; j <= i; j++)
+                ranks[sortedValues[j].Index] = rank;
+        }
+
+        return ranks;
+    }
+
+    public static T CalculateSymmetricMeanAbsolutePercentageError(Vector<T> actual, Vector<T> predicted)
+    {
+        if (actual.Length != predicted.Length)
+            throw new ArgumentException("Actual and predicted vectors must have the same length.");
+
+        T sum = NumOps.Zero;
+        int count = 0;
+
+        for (int i = 0; i < actual.Length; i++)
+        {
+            T denominator = NumOps.Add(NumOps.Abs(actual[i]), NumOps.Abs(predicted[i]));
+            if (!NumOps.Equals(denominator, NumOps.Zero))
+            {
+                T diff = NumOps.Abs(NumOps.Subtract(actual[i], predicted[i]));
+                sum = NumOps.Add(sum, NumOps.Divide(diff, denominator));
+                count++;
+            }
+        }
+
+        return NumOps.Multiply(NumOps.Divide(sum, NumOps.FromDouble(count)), NumOps.FromDouble(200));
+    }
+
+    public static T CalculateROCAUC(Vector<T> actual, Vector<T> predicted)
+    {
+        var (fpr, tpr) = CalculateROCCurve(actual, predicted);
+        return CalculateAUC(fpr, tpr);
+    }
+
+    public static T CalculateAUC(Vector<T> fpr, Vector<T> tpr)
+    {
+        var _numOps = MathHelper.GetNumericOperations<T>();
+        T auc = _numOps.Zero;
+        for (int i = 1; i < fpr.Length; i++)
+        {
+            var width = _numOps.Subtract(fpr[i], fpr[i - 1]);
+            var height = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(tpr[i], tpr[i - 1]));
+            auc = _numOps.Add(auc, _numOps.Multiply(width, height));
+        }
+
+        return auc;
+    }
+
+    public static T EuclideanDistance(Vector<T> v1, Vector<T> v2)
+    {
+        if (v1.Length != v2.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        T sum = NumOps.Zero;
+        for (int i = 0; i < v1.Length; i++)
+        {
+            T diff = NumOps.Subtract(v1[i], v2[i]);
+            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
+        }
+
+        return NumOps.Sqrt(sum);
+    }
+
+    public static T ManhattanDistance(Vector<T> v1, Vector<T> v2)
+    {
+        if (v1.Length != v2.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        T sum = NumOps.Zero;
+        for (int i = 0; i < v1.Length; i++)
+        {
+            sum = NumOps.Add(sum, NumOps.Abs(NumOps.Subtract(v1[i], v2[i])));
+        }
+
+        return sum;
+    }
+
+    public static T CosineSimilarity(Vector<T> v1, Vector<T> v2)
+    {
+        if (v1.Length != v2.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        T dotProduct = NumOps.Zero;
+        T norm1 = NumOps.Zero;
+        T norm2 = NumOps.Zero;
+
+        for (int i = 0; i < v1.Length; i++)
+        {
+            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(v1[i], v2[i]));
+            norm1 = NumOps.Add(norm1, NumOps.Multiply(v1[i], v1[i]));
+            norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
+        }
+
+        return NumOps.Divide(dotProduct, NumOps.Multiply(NumOps.Sqrt(norm1), NumOps.Sqrt(norm2)));
+    }
+
+    public static T JaccardSimilarity(Vector<T> v1, Vector<T> v2)
+    {
+        if (v1.Length != v2.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        T intersection = NumOps.Zero;
+        T union = NumOps.Zero;
+
+        for (int i = 0; i < v1.Length; i++)
+        {
+            intersection = NumOps.Add(intersection, MathHelper.Min(v1[i], v2[i]));
+            union = NumOps.Add(union, MathHelper.Max(v1[i], v2[i]));
+        }
+
+        return NumOps.Divide(intersection, union);
+    }
+
+    public static T HammingDistance(Vector<T> v1, Vector<T> v2)
+    {
+        if (v1.Length != v2.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        T distance = NumOps.Zero;
+        for (int i = 0; i < v1.Length; i++)
+        {
+            if (!NumOps.Equals(v1[i], v2[i]))
+            {
+                distance = NumOps.Add(distance, NumOps.One);
+            }
+        }
+
+        return distance;
+    }
+
+    public static T MahalanobisDistance(Vector<T> v1, Vector<T> v2, Matrix<T> covarianceMatrix)
+    {
+        if (v1.Length != v2.Length || v1.Length != covarianceMatrix.Rows || covarianceMatrix.Rows != covarianceMatrix.Columns)
+            throw new ArgumentException("Vectors and covariance matrix dimensions must match");
+
+        Vector<T> diff = v1.Subtract(v2);
+        Vector<T> invCovDiff = covarianceMatrix.Inverse().Multiply(diff);
+        
+        return NumOps.Sqrt(diff.DotProduct(invCovDiff));
+    }
+
+    public static T CalculateDistance(Vector<T> v1, Vector<T> v2, DistanceMetricType metric, Matrix<T>? covarianceMatrix = null)
+    {
+        return metric switch
+        {
+            DistanceMetricType.Euclidean => EuclideanDistance(v1, v2),
+            DistanceMetricType.Manhattan => ManhattanDistance(v1, v2),
+            DistanceMetricType.Cosine => CosineSimilarity(v1, v2),
+            DistanceMetricType.Jaccard => JaccardSimilarity(v1, v2),
+            DistanceMetricType.Hamming => HammingDistance(v1, v2),
+            DistanceMetricType.Mahalanobis => covarianceMatrix != null
+                ? MahalanobisDistance(v1, v2, covarianceMatrix)
+                : throw new ArgumentNullException(nameof(covarianceMatrix), "Covariance matrix is required for Mahalanobis distance"),
+            _ => throw new ArgumentException("Unsupported distance metric", nameof(metric)),
+        };
+    }
+
+    public static Matrix<T> CalculateCovarianceMatrix(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        int m = matrix.Columns;
+        var covMatrix = new Matrix<T>(m, m);
+        var means = new T[m];
+
+        // Calculate means
+        for (int j = 0; j < m; j++)
+        {
+            means[j] = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                means[j] = NumOps.Add(means[j], matrix[i, j]);
+            }
+            means[j] = NumOps.Divide(means[j], NumOps.FromDouble(n));
+        }
+
+        // Calculate covariances
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = i; j < m; j++)
+            {
+                T covariance = NumOps.Zero;
+                for (int k = 0; k < n; k++)
+                {
+                    T diff1 = NumOps.Subtract(matrix[k, i], means[i]);
+                    T diff2 = NumOps.Subtract(matrix[k, j], means[j]);
+                    covariance = NumOps.Add(covariance, NumOps.Multiply(diff1, diff2));
+                }
+                covariance = NumOps.Divide(covariance, NumOps.FromDouble(n - 1));
+                covMatrix[i, j] = covariance;
+                covMatrix[j, i] = covariance; // Covariance matrix is symmetric
+            }
+        }
+
+        return covMatrix;
+    }
+
+    public static T CalculateMutualInformation(Vector<T> x, Vector<T> y)
+    {
+        if (x.Length != y.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        int n = x.Length;
+        var jointCounts = new Dictionary<string, int>();
+        var xCounts = new Dictionary<string, int>();
+        var yCounts = new Dictionary<string, int>();
+
+        // Count occurrences
+        for (int i = 0; i < n; i++)
+        {
+            var xKey = x[i]?.ToString() ?? string.Empty;
+            var yKey = y[i]?.ToString() ?? string.Empty;
+            string jointKey = $"{xKey},{yKey}";
+
+            if (!jointCounts.ContainsKey(jointKey))
+                jointCounts[jointKey] = 0;
+            jointCounts[jointKey]++;
+
+            if (!xCounts.ContainsKey(xKey))
+                xCounts[xKey] = 0;
+            xCounts[xKey]++;
+
+            if (!yCounts.ContainsKey(yKey))
+                yCounts[yKey] = 0;
+            yCounts[yKey]++;
+        }
+
+        T mi = NumOps.Zero;
+        T nDouble = NumOps.FromDouble(n);
+
+        foreach (var jointEntry in jointCounts)
+        {
+            string[] keys = jointEntry.Key.Split(',');
+            string xKey = keys[0];
+            string yKey = keys[1];
+
+            T pxy = NumOps.Divide(NumOps.FromDouble(jointEntry.Value), nDouble);
+            T px = NumOps.Divide(NumOps.FromDouble(xCounts[xKey]), nDouble);
+            T py = NumOps.Divide(NumOps.FromDouble(yCounts[yKey]), nDouble);
+
+            if (!NumOps.Equals(pxy, NumOps.Zero) && !NumOps.Equals(px, NumOps.Zero) && !NumOps.Equals(py, NumOps.Zero))
+            {
+                T term = NumOps.Multiply(pxy, NumOps.Log(NumOps.Divide(pxy, NumOps.Multiply(px, py))));
+                mi = NumOps.Add(mi, term);
+            }
+        }
+
+        return mi;
+    }
+
+    public static T CalculateNormalizedMutualInformation(Vector<T> x, Vector<T> y)
+    {
+        var mi = CalculateMutualInformation(x, y);
+        var hx = CalculateEntropy(x);
+        var hy = CalculateEntropy(y);
+
+        return NumOps.Divide(mi, NumOps.Sqrt(NumOps.Multiply(hx, hy)));
+    }
+
+    public static T CalculateVariationOfInformation(Vector<T> x, Vector<T> y)
+    {
+        var mi = CalculateMutualInformation(x, y);
+        var hx = CalculateEntropy(x);
+        var hy = CalculateEntropy(y);
+
+        return NumOps.Subtract(NumOps.Add(hx, hy), NumOps.Multiply(NumOps.FromDouble(2), mi));
+    }
+
+    private static T CalculateEntropy(Vector<T> x)
+    {
+        var prob = new Dictionary<string, T>();
+        int n = x.Length;
+        T nInverse = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
+
+        foreach (var xi in x)
+        {
+            string key = xi?.ToString() ?? string.Empty;
+            if (prob.TryGetValue(key, out T? value))
+            {
+                prob[key] = NumOps.Add(value, nInverse);
+            }
+            else
+            {
+                prob[key] = nInverse;
+            }
+        }
+
+        var entropy = NumOps.Zero;
+        foreach (var p in prob.Values)
+        {
+            entropy = NumOps.Subtract(entropy, NumOps.Multiply(p, NumOps.Log(p)));
+        }
+
+        return entropy;
+    }
+
+    public static T CalculateSilhouetteScore(Matrix<T> data, Vector<T> labels)
+    {
+        int n = data.Rows;
+        var uniqueLabels = labels.Distinct().ToList();
+        var silhouetteScores = new List<T>();
+
+        for (int i = 0; i < n; i++)
+        {
+            T a = CalculateAverageIntraClusterDistance(data, labels, i);
+            T b = CalculateMinAverageInterClusterDistance(data, labels, i);
+            T silhouette = NumOps.Divide(NumOps.Subtract(b, a), MathHelper.Max(a, b));
+            silhouetteScores.Add(silhouette);
+        }
+
+        return NumOps.Divide(silhouetteScores.Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(n));
+    }
+
+    private static T CalculateAverageIntraClusterDistance(Matrix<T> data, Vector<T> labels, int index)
+    {
+        T sum = NumOps.Zero;
+        int count = 0;
+        T label = labels[index];
+
+        for (int i = 0; i < data.Rows; i++)
+        {
+            if (i != index && NumOps.Equals(labels[i], label))
+            {
+                sum = NumOps.Add(sum, EuclideanDistance(data.GetRow(index), data.GetRow(i)));
+                count++;
+            }
+        }
+
+        return count > 0 ? NumOps.Divide(sum, NumOps.FromDouble(count)) : NumOps.Zero;
+    }
+
+    private static T CalculateMinAverageInterClusterDistance(Matrix<T> data, Vector<T> labels, int index)
+    {
+        var uniqueLabels = labels.Distinct().ToList();
+        T minDistance = NumOps.MaxValue;
+        T label = labels[index];
+
+        foreach (T otherLabel in uniqueLabels)
+        {
+            if (!NumOps.Equals(otherLabel, label))
+            {
+                T avgDistance = CalculateAverageDistanceToCluster(data, labels, index, otherLabel);
+                minDistance = MathHelper.Min(minDistance, avgDistance);
+            }
+        }
+
+        return minDistance;
+    }
+
+    private static T CalculateAverageDistanceToCluster(Matrix<T> data, Vector<T> labels, int index, T clusterLabel)
+    {
+        T sum = NumOps.Zero;
+        int count = 0;
+
+        for (int i = 0; i < data.Rows; i++)
+        {
+            if (NumOps.Equals(labels[i], clusterLabel))
+            {
+                sum = NumOps.Add(sum, EuclideanDistance(data.GetRow(index), data.GetRow(i)));
+                count++;
+            }
+        }
+
+        return count > 0 ? NumOps.Divide(sum, NumOps.FromDouble(count)) : NumOps.MaxValue;
+    }
+
+    public static T CalculateCalinskiHarabaszIndex(Matrix<T> data, Vector<T> labels)
+    {
+        int n = data.Rows;
+        int k = labels.Distinct().Count();
+        var centroids = CalculateCentroids(data, labels);
+        Vector<T> globalCentroid = CalculateGlobalCentroid(data);
+
+        T betweenClusterVariance = CalculateBetweenClusterVariance(centroids, globalCentroid, labels);
+        T withinClusterVariance = CalculateWithinClusterVariance(data, labels, centroids);
+
+        T numerator = NumOps.Multiply(NumOps.FromDouble(n - k), betweenClusterVariance);
+        T denominator = NumOps.Multiply(NumOps.FromDouble(k - 1), withinClusterVariance);
+
+        return NumOps.Divide(numerator, denominator);
+    }
+
+    private static Dictionary<string, Vector<T>> CalculateCentroids(Matrix<T> data, Vector<T> labels)
+    {
+        var centroids = new Dictionary<string, Vector<T>>();
+        var counts = new Dictionary<string, int>();
+
+        for (int i = 0; i < data.Rows; i++)
+        {
+            string label = labels[i]?.ToString() ?? string.Empty;
+            if (!centroids.ContainsKey(label))
+            {
+                centroids[label] = new Vector<T>(data.Columns);
+                counts[label] = 0;
+            }
+
+            centroids[label] = centroids[label].Add(data.GetRow(i));
+            counts[label]++;
+        }
+
+        foreach (var label in centroids.Keys.ToList())
+        {
+            centroids[label] = centroids[label].Divide(NumOps.FromDouble(counts[label]));
+        }
+
+        return centroids;
+    }
+
+    private static Vector<T> CalculateGlobalCentroid(Matrix<T> data)
+    {
+        Vector<T> centroid = new Vector<T>(data.Columns);
+        for (int i = 0; i < data.Rows; i++)
+        {
+            centroid = centroid.Add(data.GetRow(i));
+        }
+
+        return centroid.Divide(NumOps.FromDouble(data.Rows));
+    }
+
+    private static T CalculateBetweenClusterVariance(Dictionary<string, Vector<T>> centroids, Vector<T> globalCentroid, Vector<T> labels)
+    {
+        T variance = NumOps.Zero;
+        var counts = new Dictionary<string, int>();
+
+        foreach (T label in labels)
+        {
+            string key = label?.ToString() ?? string.Empty;
+            if (!counts.ContainsKey(key))
+                counts[key] = 0;
+            counts[key]++;
+        }
+
+        foreach (var kvp in centroids)
+        {
+            T distance = EuclideanDistance(kvp.Value, globalCentroid);
+            variance = NumOps.Add(variance, NumOps.Multiply(NumOps.FromDouble(counts[kvp.Key]), NumOps.Multiply(distance, distance)));
+        }
+
+        return variance;
+    }
+
+    private static T CalculateWithinClusterVariance(Matrix<T> data, Vector<T> labels, Dictionary<string, Vector<T>> centroids)
+    {
+        T variance = NumOps.Zero;
+
+        for (int i = 0; i < data.Rows; i++)
+        {
+            string label = labels[i]?.ToString() ?? string.Empty;
+            T distance = EuclideanDistance(data.GetRow(i), centroids[label]);
+            variance = NumOps.Add(variance, NumOps.Multiply(distance, distance));
+        }
+
+        return variance;
+    }
+
+   public static T CalculateDaviesBouldinIndex(Matrix<T> data, Vector<T> labels)
+    {
+        var centroids = CalculateCentroids(data, labels);
+        var uniqueLabels = labels.Select(l => l?.ToString() ?? string.Empty).Distinct().ToList();
+        int k = uniqueLabels.Count;
+
+        T sum = NumOps.Zero;
+
+        for (int i = 0; i < k; i++)
+        {
+            T maxRatio = NumOps.Zero;
+            string labelI = uniqueLabels[i];
+
+            for (int j = 0; j < k; j++)
+            {
+                if (i != j)
+                {
+                    string labelJ = uniqueLabels[j];
+                    T si = CalculateAverageDistance(data, labels, labelI, centroids[labelI]);
+                    T sj = CalculateAverageDistance(data, labels, labelJ, centroids[labelJ]);
+                    T dij = EuclideanDistance(centroids[labelI], centroids[labelJ]);
+                    T ratio = NumOps.Divide(NumOps.Add(si, sj), dij);
+                    maxRatio = MathHelper.Max(maxRatio, ratio);
+                }
+            }
+
+            sum = NumOps.Add(sum, maxRatio);
+        }
+
+        return NumOps.Divide(sum, NumOps.FromDouble(k));
+    }
+
+    private static T CalculateAverageDistance(Matrix<T> data, Vector<T> labels, string label, Vector<T> centroid)
+    {
+        T sum = NumOps.Zero;
+        int count = 0;
+
+        for (int i = 0; i < data.Rows; i++)
+        {
+            if ((labels[i]?.ToString() ?? string.Empty) == label)
+            {
+                sum = NumOps.Add(sum, EuclideanDistance(data.GetRow(i), centroid));
+                count++;
+            }
+        }
+
+        return count > 0 ? NumOps.Divide(sum, NumOps.FromDouble(count)) : NumOps.Zero;
+    }
+
+    public static T CalculateMeanAveragePrecision(Vector<T> actual, Vector<T> predicted, int k)
+    {
+        var sortedPairs = actual.Zip(predicted, (a, p) => (Actual: a, Predicted: p))
+                                .OrderByDescending(pair => pair.Predicted)
+                                .Take(k)
+                                .ToList();
+
+        T sum = NumOps.Zero;
+        T relevantCount = NumOps.Zero;
+
+        for (int i = 0; i < sortedPairs.Count; i++)
+        {
+            if (NumOps.GreaterThan(sortedPairs[i].Actual, NumOps.Zero))
+            {
+                relevantCount = NumOps.Add(relevantCount, NumOps.One);
+                sum = NumOps.Add(sum, NumOps.Divide(relevantCount, NumOps.FromDouble(i + 1)));
+            }
+        }
+
+        return NumOps.Divide(sum, relevantCount);
+    }
+
+    public static T CalculateNDCG(Vector<T> actual, Vector<T> predicted, int k)
+    {
+        var sortedPairs = actual.Zip(predicted, (a, p) => (Actual: a, Predicted: p))
+                                .OrderByDescending(pair => pair.Predicted)
+                                .Take(k)
+                                .ToList();
+
+        T dcg = NumOps.Zero;
+        T idcg = NumOps.Zero;
+
+        for (int i = 0; i < sortedPairs.Count; i++)
+        {
+            T relevance = sortedPairs[i].Actual;
+            T position = NumOps.FromDouble(i + 1);
+            T logDenominator = NumOps.Log(NumOps.Add(position, NumOps.One));
+            dcg = NumOps.Add(dcg, NumOps.Divide(relevance, logDenominator));
+        }
+
+        var idealOrder = sortedPairs.OrderByDescending(pair => pair.Actual).ToList();
+        for (int i = 0; i < idealOrder.Count; i++)
+        {
+            T relevance = idealOrder[i].Actual;
+            T position = NumOps.FromDouble(i + 1);
+            T logDenominator = NumOps.Log(NumOps.Add(position, NumOps.One));
+            T log2Denominator = NumOps.Divide(logDenominator, NumOps.Log(NumOps.FromDouble(2)));
+            idcg = NumOps.Add(idcg, NumOps.Divide(relevance, log2Denominator));
+        }
+
+        return NumOps.Divide(dcg, idcg);
+    }
+
+    public static T CalculateMeanReciprocalRank(Vector<T> actual, Vector<T> predicted)
+    {
+        var sortedPairs = actual.Zip(predicted, (a, p) => (Actual: a, Predicted: p))
+                                .OrderByDescending(pair => pair.Predicted)
+                                .ToList();
+
+        for (int i = 0; i < sortedPairs.Count; i++)
+        {
+            if (NumOps.GreaterThan(sortedPairs[i].Actual, NumOps.Zero))
+            {
+                return NumOps.Divide(NumOps.One, NumOps.FromDouble(i + 1));
+            }
+        }
+
+        return NumOps.Zero;
+    }
+
+    public static T CalculateMeanSquaredLogError(Vector<T> actual, Vector<T> predicted)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var sum = numOps.Zero;
+        var n = actual.Length;
+
+        for (int i = 0; i < n; i++)
+        {
+            var logActual = numOps.Log(numOps.Add(actual[i], numOps.One));
+            var logPredicted = numOps.Log(numOps.Add(predicted[i], numOps.One));
+            var diff = numOps.Subtract(logActual, logPredicted);
+            sum = numOps.Add(sum, numOps.Multiply(diff, diff));
+        }
+
+        return numOps.Divide(sum, numOps.FromDouble(n));
+    }
+
+    public static T CalculateDynamicTimeWarping(Vector<T> series1, Vector<T> series2)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = series1.Length;
+        int m = series2.Length;
+        var dtw = new T[n + 1, m + 1];
+
+        for (int i = 0; i <= n; i++)
+            for (int j = 0; j <= m; j++)
+                dtw[i, j] = numOps.MaxValue;
+
+        dtw[0, 0] = numOps.Zero;
+
+        for (int i = 1; i <= n; i++)
+        {
+            for (int j = 1; j <= m; j++)
+            {
+                var cost = numOps.Abs(numOps.Subtract(series1[i - 1], series2[j - 1]));
+                dtw[i, j] = numOps.Add(cost, MathHelper.Min(dtw[i - 1, j], MathHelper.Min(dtw[i, j - 1], dtw[i - 1, j - 1])));
+            }
+        }
+
+        return dtw[n, m];
+    }
+
+    public static Vector<T> CalculateAutoCorrelationFunction(Vector<T> series, int maxLag)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var n = series.Length;
+        var acf = new T[maxLag + 1];
+        var mean = CalculateMean(series);
+        var variance = CalculateVariance(series);
+
+        for (int lag = 0; lag <= maxLag; lag++)
+        {
+            var sum = numOps.Zero;
+            for (int i = 0; i < n - lag; i++)
+            {
+                sum = numOps.Add(sum, numOps.Multiply(
+                    numOps.Subtract(series[i], mean),
+                    numOps.Subtract(series[i + lag], mean)));
+            }
+            acf[lag] = numOps.Divide(sum, numOps.Multiply(numOps.FromDouble(n - lag), variance));
+        }
+
+        return new Vector<T>(acf);
+    }
+
+    public static Vector<T> CalculatePartialAutoCorrelationFunction(Vector<T> series, int maxLag)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var pacf = new T[maxLag + 1];
+        pacf[0] = numOps.One;
+
+        var phi = new T[maxLag + 1, maxLag + 1];
+
+        for (int k = 1; k <= maxLag; k++)
+        {
+            var temp = new T[k];
+            for (int j = 0; j < k; j++)
+            {
+                temp[j] = series[j];
+            }
+
+            var acf = CalculateAutoCorrelationFunction(new Vector<T>(temp), k);
+
+            phi[k, k] = numOps.Zero;
+            if (k > 1)
+            {
+                for (int j = 1; j < k; j++)
+                {
+                    phi[k, j] = NumOps.Subtract(phi[k - 1, j], NumOps.Multiply(phi[k, k], phi[k - 1, k - j]));
+                }
+            }
+
+            var numerator = acf[k];
+            for (int j = 1; j < k; j++)
+            {
+                numerator = numOps.Subtract(numerator, numOps.Multiply(phi[k - 1, j], acf[k - j]));
+            }
+
+            var denominator = numOps.One;
+            for (int j = 1; j < k; j++)
+            {
+                denominator = numOps.Subtract(denominator, numOps.Multiply(phi[k - 1, j], acf[j]));
+            }
+
+            phi[k, k] = numOps.Divide(numerator, denominator);
+            pacf[k] = phi[k, k];
+        }
+
+        return new Vector<T>(pacf);
     }
 }

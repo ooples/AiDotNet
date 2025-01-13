@@ -7,9 +7,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     private Vector<T> _maCoefficients;
     private T _constant;
 
-    public ARIMAModel(ARIMAOptions<T> options) : base(options)
+    public ARIMAModel(ARIMAOptions<T>? options = null) : base(options ?? new())
     {
-        _arimaOptions = options;
+        _arimaOptions = options ?? new();
         _constant = NumOps.Zero;
         _arCoefficients = Vector<T>.Empty();
         _maCoefficients = Vector<T>.Empty();

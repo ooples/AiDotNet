@@ -11,5 +11,8 @@ public enum MetricType
     Precision,
     Recall,
     F1Score,
-    PredictionIntervalCoverage
+    PredictionIntervalCoverage,
+    PearsonCorrelation,
+    SpearmanCorrelation,
+    KendallTau
 }

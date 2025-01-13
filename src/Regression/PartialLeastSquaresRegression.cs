@@ -172,13 +172,13 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
 
         // Write PLS-specific data
         writer.Write(_options.NumComponents);
-        SerializationHelper<T>.WriteMatrix(writer, _loadings);
-        SerializationHelper<T>.WriteMatrix(writer, _scores);
-        SerializationHelper<T>.WriteMatrix(writer, _weights);
-        SerializationHelper<T>.WriteVector(writer, _yMean);
-        SerializationHelper<T>.WriteVector(writer, _xMean);
+        SerializationHelper<T>.SerializeMatrix(writer, _loadings);
+        SerializationHelper<T>.SerializeMatrix(writer, _scores);
+        SerializationHelper<T>.SerializeMatrix(writer, _weights);
+        SerializationHelper<T>.SerializeVector(writer, _yMean);
+        SerializationHelper<T>.SerializeVector(writer, _xMean);
         SerializationHelper<T>.WriteValue(writer, _yStd);
-        SerializationHelper<T>.WriteVector(writer, _xStd);
+        SerializationHelper<T>.SerializeVector(writer, _xStd);
 
         return ms.ToArray();
     }
@@ -193,12 +193,12 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
 
         // Read PLS-specific data
         _options.NumComponents = reader.ReadInt32();
-        _loadings = SerializationHelper<T>.ReadMatrix(reader);
-        _scores = SerializationHelper<T>.ReadMatrix(reader);
-        _weights = SerializationHelper<T>.ReadMatrix(reader);
-        _yMean = SerializationHelper<T>.ReadVector(reader);
-        _xMean = SerializationHelper<T>.ReadVector(reader);
+        _loadings = SerializationHelper<T>.DeserializeMatrix(reader);
+        _scores = SerializationHelper<T>.DeserializeMatrix(reader);
+        _weights = SerializationHelper<T>.DeserializeMatrix(reader);
+        _yMean = SerializationHelper<T>.DeserializeVector(reader);
+        _xMean = SerializationHelper<T>.DeserializeVector(reader);
         _yStd = SerializationHelper<T>.ReadValue(reader);
-        _xStd = SerializationHelper<T>.ReadVector(reader);
+        _xStd = SerializationHelper<T>.DeserializeVector(reader);
     }
 }

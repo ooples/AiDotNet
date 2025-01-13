@@ -27,7 +27,7 @@ public static class ValidationHelper<T>
     {
         for (int i = 0; i < y.Length; i++)
         {
-            if (NumOps.LessThan(y[i], NumOps.Zero) || !MathHelper.IsInteger(y[i], NumOps))
+            if (NumOps.LessThan(y[i], NumOps.Zero) || !MathHelper.IsInteger(y[i]))
             {
                 throw new ArgumentException("Poisson regression requires non-negative integer response values.");
             }

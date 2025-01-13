@@ -89,7 +89,7 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
         }
 
         // Apply final correction to the original data
-        if (!MathHelper.AlmostEqual(autocorrelation, NumOps.Zero, NumOps))
+        if (!MathHelper.AlmostEqual(autocorrelation, NumOps.Zero))
         {
             Matrix<T> finalCorrectedX = new(x.Rows, x.Columns, NumOps);
             Vector<T> finalCorrectedY = new(y.Length, NumOps);
