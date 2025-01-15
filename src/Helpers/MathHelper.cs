@@ -43,6 +43,50 @@ public static class MathHelper
         return value;
     }
 
+    public static T BesselI0<T>(T x)
+    {
+        var numOps = GetNumericOperations<T>();
+        T sum = numOps.One;
+        T y = numOps.Multiply(x, x);
+        T term = numOps.One;
+
+        for (int i = 1; i <= 50; i++)
+        {
+            term = numOps.Multiply(term, numOps.Divide(y, numOps.Multiply(numOps.FromDouble(4 * i * i), Factorial<T>(i))));
+            sum = numOps.Add(sum, term);
+
+            if (numOps.LessThan(term, numOps.FromDouble(1e-12)))
+            {
+                break;
+            }
+        }
+
+        return sum;
+    }
+
+    public static T Reciprocal<T>(T value)
+    {
+        var numOps = GetNumericOperations<T>();
+        if (numOps.Equals(value, numOps.Zero))
+        {
+            throw new DivideByZeroException("Cannot calculate reciprocal of zero.");
+        }
+
+        return numOps.Divide(numOps.One, value);
+    }
+
+    public static T Sinc<T>(T x)
+    {
+        var numOps = GetNumericOperations<T>();
+        if (numOps.Equals(x, numOps.Zero))
+        {
+            return numOps.One;
+        }
+        
+        T piX = numOps.Multiply(numOps.FromDouble(Math.PI), x);
+        return numOps.Divide(Sin(piX), piX);
+    }
+
     public static bool IsInteger<T>(T value)
     {
         // If the value is equal to its rounded value, it's an integer

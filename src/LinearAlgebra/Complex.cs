@@ -66,4 +66,13 @@ public readonly struct Complex<T>
 
     public override string ToString()
         => $"{Real} + {Imaginary}i";
+
+    public static Complex<T> FromPolarCoordinates(T magnitude, T phase)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        return new Complex<T>(
+            ops.Multiply(magnitude, MathHelper.Cos(phase)),
+            ops.Multiply(magnitude, MathHelper.Sin(phase))
+        );
+    }
 }

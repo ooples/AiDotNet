@@ -2362,6 +2362,31 @@ public static class StatisticsHelper<T>
         return CalculateMedian(absoluteDeviations);
     }
 
+    public static T CalculatePeakDifference(Vector<T> x1, Vector<T> y1, Vector<T> x2, Vector<T> y2)
+    {
+        T peak1 = FindPeakValue(x1, y1);
+        T peak2 = FindPeakValue(x2, y2);
+
+        return NumOps.Abs(NumOps.Subtract(peak1, peak2));
+    }
+
+    private static T FindPeakValue(Vector<T> x, Vector<T> y)
+    {
+        T maxValue = NumOps.MinValue;
+        int maxIndex = 0;
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            if (NumOps.GreaterThan(y[i], maxValue))
+            {
+                maxValue = y[i];
+                maxIndex = i;
+            }
+        }
+
+        return x[maxIndex];
+    }
+
     public static T CalculateLogLikelihood(Vector<T> actualValues, Vector<T> predictedValues)
     {
         var _numOps = MathHelper.GetNumericOperations<T>();
