@@ -477,6 +477,25 @@ public class Matrix<T> : MatrixBase<T>
         return SerializationHelper<T>.DeserializeMatrix(data);
     }
 
+    public new Matrix<T> Slice(int startRow, int rowCount)
+    {
+        if (startRow < 0 || startRow >= Rows)
+            throw new ArgumentOutOfRangeException(nameof(startRow));
+        if (rowCount < 1 || startRow + rowCount > Rows)
+            throw new ArgumentOutOfRangeException(nameof(rowCount));
+
+        Matrix<T> result = new Matrix<T>(rowCount, Columns);
+        for (int i = 0; i < rowCount; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                result[i, j] = this[startRow + i, j];
+            }
+        }
+
+        return result;
+    }
+
     public IEnumerable<Vector<T>> GetColumns()
     {
         for (var i = 0; i < Columns; i++)

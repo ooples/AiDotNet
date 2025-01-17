@@ -1,4 +1,4 @@
-namespace AiDotNet.DecompositionMethods;
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
 {

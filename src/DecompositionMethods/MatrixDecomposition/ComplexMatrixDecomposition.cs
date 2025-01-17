@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods;
+﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
 {
@@ -17,7 +17,7 @@ public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
         {
             var baseA = _baseDecomposition.A;
             var complexA = new Matrix<Complex<T>>(baseA.Rows, baseA.Columns);
-            
+
             for (int i = 0; i < baseA.Rows; i++)
             {
                 for (int j = 0; j < baseA.Columns; j++)
@@ -25,7 +25,7 @@ public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
                     complexA[i, j] = new Complex<T>(baseA[i, j], _ops.Zero);
                 }
             }
-            
+
             return complexA;
         }
     }
@@ -34,7 +34,7 @@ public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
     {
         var baseInverse = _baseDecomposition.Invert();
         var complexInverse = new Matrix<Complex<T>>(baseInverse.Rows, baseInverse.Columns);
-        
+
         for (int i = 0; i < baseInverse.Rows; i++)
         {
             for (int j = 0; j < baseInverse.Columns; j++)
@@ -42,7 +42,7 @@ public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
                 complexInverse[i, j] = new Complex<T>(baseInverse[i, j], _ops.Zero);
             }
         }
-        
+
         return complexInverse;
     }
 

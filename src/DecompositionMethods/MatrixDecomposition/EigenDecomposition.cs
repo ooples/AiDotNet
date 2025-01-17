@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods;
+﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class EigenDecomposition<T> : IMatrixDecomposition<T>
 {

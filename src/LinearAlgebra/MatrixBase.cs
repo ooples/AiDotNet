@@ -98,6 +98,25 @@ public abstract class MatrixBase<T>
         return result;
     }
 
+    public virtual MatrixBase<T> Slice(int startRow, int rowCount)
+    {
+        if (startRow < 0 || startRow >= rows)
+            throw new ArgumentOutOfRangeException(nameof(startRow));
+        if (rowCount < 1 || startRow + rowCount > rows)
+            throw new ArgumentOutOfRangeException(nameof(rowCount));
+
+        MatrixBase<T> result = new Matrix<T>(rowCount, cols, ops);
+        for (int i = 0; i < rowCount; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                result[i, j] = this[startRow + i, j];
+            }
+        }
+
+        return result;
+    }
+
     public virtual void SetColumn(int columnIndex, Vector<T> vector)
     {
         if (columnIndex < 0 || columnIndex >= Columns)

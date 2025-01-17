@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods;
+﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class PolarDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -61,7 +61,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
         {
             Matrix<T> XtX = X.Transpose().Multiply(X);
             Matrix<T> YtY = Y.Transpose().Multiply(Y);
-        
+
             // Check for numerical stability
             if (!MatrixHelper.IsInvertible(XtX) || !MatrixHelper.IsInvertible(YtY))
             {
@@ -71,8 +71,8 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             Matrix<T> nextX = X.Multiply(NumOps.FromDouble(0.5)).Add(Y.Transpose().Multiply(NumOps.FromDouble(0.5)));
             Matrix<T> nextY = Y.Multiply(NumOps.FromDouble(0.5)).Add(XtX.Inverse().Multiply(X.Transpose()).Multiply(NumOps.FromDouble(0.5)));
 
-            T errorX = MatrixHelper.FrobeniusNorm(nextX.Subtract(X));
-            T errorY = MatrixHelper.FrobeniusNorm(nextY.Subtract(Y));
+            T errorX = nextX.Subtract(X).FrobeniusNorm();
+            T errorY = nextY.Subtract(Y).FrobeniusNorm();
 
             if (NumOps.LessThan(errorX, tolerance) && NumOps.LessThan(errorY, tolerance))
             {
@@ -114,7 +114,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             Matrix<T> nextX = X.Multiply(NumOps.FromDouble(3)).Add(Z).Multiply(NumOps.FromDouble(0.25))
                 .Add(X.Multiply(NumOps.FromDouble(3)).Multiply(Y).Multiply(Z).Multiply(NumOps.FromDouble(0.25)));
 
-            T error = MatrixHelper.FrobeniusNorm(nextX.Subtract(X));
+            T error = nextX.Subtract(X).FrobeniusNorm();
 
             if (NumOps.LessThan(error, tolerance))
             {
@@ -151,7 +151,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
 
             Matrix<T> nextX = Q.Multiply(R.Add(R.Transpose())).Multiply(NumOps.FromDouble(0.5));
 
-            T error = MatrixHelper.FrobeniusNorm(nextX.Subtract(X));
+            T error = nextX.Subtract(X).FrobeniusNorm();
 
             if (NumOps.LessThan(error, tolerance))
             {
@@ -200,7 +200,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             Y = Y.Add(Y.Multiply(Z).Multiply(NumOps.FromDouble(0.5)));
             X = X.Subtract(Z.Multiply(X).Multiply(NumOps.FromDouble(0.5)));
 
-            T error = MatrixHelper.FrobeniusNorm(Z);
+            T error = Z.FrobeniusNorm();
 
             if (NumOps.LessThan(error, tolerance))
             {
@@ -230,14 +230,14 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     {
         // Solve Px = b
         var x = MatrixSolutionHelper.SolveLinearSystem(P, b, MatrixDecompositionType.Polar);
-    
+
         // Compute y = U^T * x (equivalent to solving Uy = x)
         return U.Transpose().Multiply(x);
     }
 
     public Matrix<T> Invert()
     {
-        var invP = MatrixHelper.Inverse(P);
+        var invP = P.Inverse();
         var invU = U.Transpose();
 
         return invP.Multiply(invU);

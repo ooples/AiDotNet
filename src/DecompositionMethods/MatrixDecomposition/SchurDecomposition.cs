@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class SchurDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -43,7 +43,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
             S = R.Multiply(Q);
             U = U.Multiply(Q);
 
-            if (MatrixHelper.IsUpperTriangularMatrix(S, tolerance))
+            if (S.IsUpperTriangularMatrix(tolerance))
                 break;
         }
 
@@ -55,7 +55,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
         int n = matrix.Rows;
         Matrix<T> H = MatrixHelper.ReduceToHessenbergFormat(matrix);
         Matrix<T> U = Matrix<T>.CreateIdentity(n, NumOps);
-    
+
         const int maxIterations = 100;
         T tolerance = NumOps.FromDouble(1e-10);
 
@@ -63,15 +63,15 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int i = 0; i < n - 1; i++)
             {
-                T s = NumOps.Add(H[n-2, n-2], H[n-1, n-1]);
-                T t = NumOps.Subtract(NumOps.Multiply(H[n-2, n-2], H[n-1, n-1]), NumOps.Multiply(H[n-2, n-1], H[n-1, n-2]));
-            
+                T s = NumOps.Add(H[n - 2, n - 2], H[n - 1, n - 1]);
+                T t = NumOps.Subtract(NumOps.Multiply(H[n - 2, n - 2], H[n - 1, n - 1]), NumOps.Multiply(H[n - 2, n - 1], H[n - 1, n - 2]));
+
                 Matrix<T> Q = ComputeFrancisQRStep(H, s, t);
                 H = Q.Transpose().Multiply(H).Multiply(Q);
                 U = U.Multiply(Q);
             }
 
-            if (MatrixHelper.IsUpperTriangularMatrix(H, tolerance))
+            if (H.IsUpperTriangularMatrix(tolerance))
                 break;
         }
 
@@ -104,7 +104,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
         int n = matrix.Rows;
         Matrix<T> H = MatrixHelper.ReduceToHessenbergFormat(matrix);
         Matrix<T> U = Matrix<T>.CreateIdentity(n, NumOps);
-    
+
         const int maxIterations = 100;
         T tolerance = NumOps.FromDouble(1e-10);
 
@@ -117,7 +117,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
                 U = U.Multiply(Q);
             }
 
-            if (MatrixHelper.IsUpperTriangularMatrix(H, tolerance))
+            if (H.IsUpperTriangularMatrix(tolerance))
                 break;
         }
 
@@ -129,7 +129,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
         int n = H.Rows;
         T x = H[start, start];
         T y = H[start + 1, start];
-        T z = (start + 2 < n) ? H[start + 2, start] : NumOps.Zero;
+        T z = start + 2 < n ? H[start + 2, start] : NumOps.Zero;
 
         for (int k = start; k < n - 1; k++)
         {
@@ -140,7 +140,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
             {
                 x = H[k + 1, k];
                 y = H[k + 2, k];
-                z = (k + 3 < n) ? H[k + 3, k] : NumOps.Zero;
+                z = k + 3 < n ? H[k + 3, k] : NumOps.Zero;
             }
         }
 
@@ -149,7 +149,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
 
     private Matrix<T> ComputeHouseholderReflection(T x, T y, T? z = default)
     {
-        int n = (NumOps.Equals(z ?? NumOps.Zero, NumOps.Zero)) ? 2 : 3;
+        int n = NumOps.Equals(z ?? NumOps.Zero, NumOps.Zero) ? 2 : 3;
         Vector<T> v = new(n, NumOps)
         {
             [0] = x,
@@ -171,14 +171,14 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
 
     public Vector<T> Solve(Vector<T> b)
     {
-        var y = MatrixHelper.ForwardSubstitution(UnitaryMatrix, b);
-        return MatrixHelper.BackwardSubstitution(SchurMatrix, y);
+        var y = UnitaryMatrix.ForwardSubstitution(b);
+        return SchurMatrix.BackwardSubstitution(y);
     }
 
     public Matrix<T> Invert()
     {
         var invU = UnitaryMatrix.Transpose();
-        var invS = MatrixHelper.InvertUpperTriangularMatrix(SchurMatrix);
+        var invS = SchurMatrix.InvertUpperTriangularMatrix();
         return invS.Multiply(invU);
     }
 }

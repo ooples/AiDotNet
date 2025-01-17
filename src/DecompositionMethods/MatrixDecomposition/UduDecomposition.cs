@@ -1,74 +1,49 @@
-namespace AiDotNet.DecompositionMethods;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
 
-public class LdlDecomposition<T> : IMatrixDecomposition<T>
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+
+public class UduDecomposition<T> : IMatrixDecomposition<T>
 {
     private readonly INumericOperations<T> NumOps;
 
     public Matrix<T> A { get; }
-    public Matrix<T> L { get; private set; }
+    public Matrix<T> U { get; private set; }
     public Vector<T> D { get; private set; }
 
-    public LdlDecomposition(Matrix<T> matrix, LdlAlgorithm algorithm = LdlAlgorithm.Cholesky)
+    public UduDecomposition(Matrix<T> matrix, UduAlgorithm algorithm = UduAlgorithm.Crout)
     {
         if (!matrix.IsSquareMatrix())
-            throw new ArgumentException("Matrix must be square for LDL decomposition.");
-
-        NumOps = MathHelper.GetNumericOperations<T>();
+            throw new ArgumentException("Matrix must be square for UDU decomposition.");
         A = matrix;
-        int n = A.Rows;
-        L = new Matrix<T>(n, n, NumOps);
-        D = new Vector<T>(n, NumOps);
+        var n = A.Rows;
+        U = new Matrix<T>(n, n);
+        D = new Vector<T>(n);
+        NumOps = MathHelper.GetNumericOperations<T>();
+
         Decompose(algorithm);
     }
 
-    public void Decompose(LdlAlgorithm algorithm = LdlAlgorithm.Cholesky)
+    public void Decompose(UduAlgorithm algorithm = UduAlgorithm.Crout)
     {
         switch (algorithm)
         {
-            case LdlAlgorithm.Cholesky:
-                DecomposeCholesky();
-                break;
-            case LdlAlgorithm.Crout:
+            case UduAlgorithm.Crout:
                 DecomposeCrout();
                 break;
+            case UduAlgorithm.Doolittle:
+                DecomposeDoolittle();
+                break;
             default:
-                throw new ArgumentException("Unsupported LDL decomposition algorithm.");
-        }
-    }
-
-    private void DecomposeCholesky()
-    {
-        int n = A.Rows;
-        L = new Matrix<T>(n, n, NumOps);
-        D = new Vector<T>(n, NumOps);
-
-        for (int j = 0; j < n; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int k = 0; k < j; k++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[j, k], L[j, k]), D[k]));
-            }
-            D[j] = NumOps.Subtract(A[j, j], sum);
-
-            L[j, j] = NumOps.One;
-
-            for (int i = j + 1; i < n; i++)
-            {
-                sum = NumOps.Zero;
-                for (int k = 0; k < j; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[i, k], L[j, k]), D[k]));
-                }
-                L[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
-            }
+                throw new ArgumentException("Unsupported UDU decomposition algorithm.");
         }
     }
 
     private void DecomposeCrout()
     {
         int n = A.Rows;
-        L = new Matrix<T>(n, n, NumOps);
+        U = new Matrix<T>(n, n, NumOps);
         D = new Vector<T>(n, NumOps);
 
         for (int j = 0; j < n; j++)
@@ -76,20 +51,49 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
             T sum = NumOps.Zero;
             for (int k = 0; k < j; k++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[j, k], L[j, k]), D[k]));
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, j], U[k, j]), D[k]));
             }
             D[j] = NumOps.Subtract(A[j, j], sum);
 
-            L[j, j] = NumOps.One;
+            U[j, j] = NumOps.One;
 
             for (int i = j + 1; i < n; i++)
             {
                 sum = NumOps.Zero;
                 for (int k = 0; k < j; k++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[i, k], L[j, k]), D[k]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
                 }
-                L[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
+                U[j, i] = NumOps.Divide(NumOps.Subtract(A[j, i], sum), D[j]);
+            }
+        }
+    }
+
+    private void DecomposeDoolittle()
+    {
+        int n = A.Rows;
+        U = new Matrix<T>(n, n, NumOps);
+        D = new Vector<T>(n, NumOps);
+
+        for (int i = 0; i < n; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int k = 0; k < i; k++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, i]), D[k]));
+            }
+            D[i] = NumOps.Subtract(A[i, i], sum);
+
+            U[i, i] = NumOps.One;
+
+            for (int j = i + 1; j < n; j++)
+            {
+                sum = NumOps.Zero;
+                for (int k = 0; k < i; k++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
+                }
+                U[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[i]);
             }
         }
     }
@@ -100,13 +104,13 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
             throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
 
         // Forward substitution
-        Vector<T> y = new(b.Length, NumOps);
+        Vector<T> y = new Vector<T>(b.Length, NumOps);
         for (int i = 0; i < b.Length; i++)
         {
             T sum = NumOps.Zero;
             for (int j = 0; j < i; j++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], y[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(U[j, i], y[j]));
             }
             y[i] = NumOps.Subtract(b[i], sum);
         }
@@ -124,7 +128,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
             T sum = NumOps.Zero;
             for (int j = i + 1; j < b.Length; j++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(L[j, i], x[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(U[i, j], x[j]));
             }
             x[i] = NumOps.Subtract(y[i], sum);
         }
@@ -135,14 +139,12 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> Invert()
     {
         int n = A.Rows;
-        Matrix<T> inverse = new(n, n, NumOps);
+        Matrix<T> inverse = new Matrix<T>(n, n, NumOps);
 
         for (int i = 0; i < n; i++)
         {
-            Vector<T> ei = new(n, NumOps)
-            {
-                [i] = NumOps.One
-            };
+            Vector<T> ei = new Vector<T>(n, NumOps);
+            ei[i] = NumOps.One;
             Vector<T> column = Solve(ei);
             for (int j = 0; j < n; j++)
             {
@@ -153,8 +155,8 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
         return inverse;
     }
 
-    public (Matrix<T> L, Vector<T> D) GetFactors()
+    public (Matrix<T> U, Vector<T> D) GetFactors()
     {
-        return (L, D);
+        return (U, D);
     }
 }

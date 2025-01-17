@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class QrDecomposition<T> : IMatrixDecomposition<T>
 {

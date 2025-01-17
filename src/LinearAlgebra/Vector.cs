@@ -143,6 +143,20 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return result;
     }
 
+    public Vector<T> Subvector(int startIndex, int length)
+    {
+        if (startIndex < 0 || startIndex + length > Length)
+            throw new ArgumentOutOfRangeException(nameof(startIndex));
+
+        Vector<T> result = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            result[i] = this[startIndex + i];
+        }
+
+        return result;
+    }
+
     public Vector<T> GetRange(int startIndex, int count)
     {
         if (startIndex < 0 || startIndex >= Length)

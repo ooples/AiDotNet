@@ -1,3 +1,5 @@
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
+
 namespace AiDotNet.Factories;
 
 public static class MatrixDecompositionFactory

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -61,7 +61,7 @@ public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
         for (int i = 0; i < n; i++)
         {
             var v = matrix.GetColumn(i);
-                
+
             for (int j = 0; j < i; j++)
             {
                 R[j, i] = Q.GetColumn(j).DotProduct(v);

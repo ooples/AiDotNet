@@ -83,6 +83,26 @@ public static class VectorExtensions
         return result;
     }
 
+    public static T Median<T>(this Vector<T> vector)
+    {
+        if (vector == null || vector.Length == 0)
+            throw new ArgumentException("Vector is null or empty.");
+
+        var sortedCopy = vector.ToArray();
+        Array.Sort(sortedCopy);
+
+        int mid = sortedCopy.Length / 2;
+        if (sortedCopy.Length % 2 == 0)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            return numOps.Divide(numOps.Add(sortedCopy[mid - 1], sortedCopy[mid]), numOps.FromDouble(2.0));
+        }
+        else
+        {
+            return sortedCopy[mid];
+        }
+    }
+
     public static T EuclideanDistance<T>(this Vector<T> v1, Vector<T> v2)
     {
         if (v1.Length != v2.Length)

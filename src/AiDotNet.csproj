@@ -52,7 +52,6 @@
 	  <Folder Include="GaussianProcesses\" />
 	  <Folder Include="WindowFunctions\" />
 	  <Folder Include="Wavelets\" />
-	  <Folder Include="TimeSeries\" />
 	</ItemGroup>
 
 </Project>

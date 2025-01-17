@@ -1,3 +1,5 @@
+global using AiDotNet.DecompositionMethods.MatrixDecomposition;
+
 namespace AiDotNet.Helpers;
 
 public static class MatrixSolutionHelper
