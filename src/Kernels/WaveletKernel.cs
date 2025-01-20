@@ -1,4 +1,4 @@
-global using AiDotNet.Wavelets;
+global using AiDotNet.WaveletFunctions;
 
 namespace AiDotNet.Kernels;
 

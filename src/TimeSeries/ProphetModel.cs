@@ -388,48 +388,16 @@ public class ProphetModel<T> : TimeSeriesModelBase<T>
         Dictionary<string, T> metrics = new Dictionary<string, T>();
 
         // Mean Absolute Error (MAE)
-        T mae = NumOps.FromDouble(0);
-        for (int i = 0; i < yTest.Length; i++)
-        {
-            mae = NumOps.Add(mae, NumOps.Abs(NumOps.Subtract(yTest[i], predictions[i])));
-        }
-        mae = NumOps.Divide(mae, NumOps.FromDouble(yTest.Length));
-        metrics["MAE"] = mae;
+        metrics["MAE"] = StatisticsHelper<T>.CalculateMeanAbsoluteError(yTest, predictions);
 
         // Mean Squared Error (MSE)
-        T mse = NumOps.FromDouble(0);
-        for (int i = 0; i < yTest.Length; i++)
-        {
-            T diff = NumOps.Subtract(yTest[i], predictions[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-        }
-        mse = NumOps.Divide(mse, NumOps.FromDouble(yTest.Length));
-        metrics["MSE"] = mse;
+        metrics["MSE"] = StatisticsHelper<T>.CalculateMeanSquaredError(yTest, predictions);
 
         // Root Mean Squared Error (RMSE)
-        T rmse = NumOps.Sqrt(mse);
-        metrics["RMSE"] = rmse;
+        metrics["RMSE"] = StatisticsHelper<T>.CalculateRootMeanSquaredError(yTest, predictions);;
 
         // R-squared (R2)
-        T yMean = NumOps.FromDouble(0);
-        for (int i = 0; i < yTest.Length; i++)
-        {
-            yMean = NumOps.Add(yMean, yTest[i]);
-        }
-        yMean = NumOps.Divide(yMean, NumOps.FromDouble(yTest.Length));
-
-        T ssTotal = NumOps.FromDouble(0);
-        T ssResidual = NumOps.FromDouble(0);
-        for (int i = 0; i < yTest.Length; i++)
-        {
-            T diffTotal = NumOps.Subtract(yTest[i], yMean);
-            ssTotal = NumOps.Add(ssTotal, NumOps.Multiply(diffTotal, diffTotal));
-
-            T diffResidual = NumOps.Subtract(yTest[i], predictions[i]);
-            ssResidual = NumOps.Add(ssResidual, NumOps.Multiply(diffResidual, diffResidual));
-        }
-        T r2 = NumOps.Subtract(NumOps.One, NumOps.Divide(ssResidual, ssTotal));
-        metrics["R2"] = r2;
+        metrics["R2"] = StatisticsHelper<T>.CalculateR2(yTest, predictions);;
 
         return metrics;
     }

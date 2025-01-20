@@ -1,4 +1,4 @@
-namespace AiDotNet.TimeSeries;
+namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<T>
 {

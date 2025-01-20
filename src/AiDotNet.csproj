@@ -51,7 +51,7 @@
 	  <Folder Include="Caching\" />
 	  <Folder Include="GaussianProcesses\" />
 	  <Folder Include="WindowFunctions\" />
-	  <Folder Include="Wavelets\" />
+	  <Folder Include="WaveletFunctions\" />
 	</ItemGroup>
 
 </Project>
