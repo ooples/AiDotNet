@@ -64,6 +64,103 @@ public static class MathHelper
         return sum;
     }
 
+    public static T Gamma<T>(T x)
+    {
+        var numOps = GetNumericOperations<T>();
+        
+        // Lanczos approximation for Gamma function
+        T[] p = { numOps.FromDouble(676.5203681218851),
+                  numOps.FromDouble(-1259.1392167224028),
+                  numOps.FromDouble(771.32342877765313),
+                  numOps.FromDouble(-176.61502916214059),
+                  numOps.FromDouble(12.507343278686905),
+                  numOps.FromDouble(-0.13857109526572012),
+                  numOps.FromDouble(9.9843695780195716e-6),
+                  numOps.FromDouble(1.5056327351493116e-7) };
+
+        if (numOps.LessThanOrEquals(x, numOps.Zero))
+        {
+            return numOps.Divide(Pi<T>(), 
+                numOps.Multiply(Sin(numOps.Multiply(Pi<T>(), x)), 
+                Gamma(numOps.Subtract(numOps.One, x))));
+        }
+
+        x = numOps.Subtract(x, numOps.One);
+        T t = numOps.Add(x, numOps.FromDouble(7.5));
+        T y = numOps.Exp(numOps.Multiply(numOps.Multiply(numOps.Add(x, numOps.FromDouble(0.5)), 
+            numOps.Log(t)), numOps.FromDouble(-1)));
+
+        T sum = numOps.Zero;
+        for (int i = 7; i >= 0; i--)
+        {
+            sum = numOps.Add(sum, numOps.Divide(p[i], numOps.Add(x, numOps.FromDouble(i))));
+        }
+
+        return numOps.Multiply(numOps.Multiply(numOps.Sqrt(numOps.FromDouble(2 * Math.PI)), sum), y);
+    }
+
+    public static T BesselK<T>(T nu, T x)
+    {
+        var numOps = GetNumericOperations<T>();
+
+        // Approximation for modified Bessel function of the second kind
+        if (numOps.LessThanOrEquals(x, numOps.Zero))
+        {
+            throw new ArgumentException("x must be positive");
+        }
+
+        T result;
+        if (numOps.LessThan(x, numOps.FromDouble(2)))
+        {
+            T y = numOps.Multiply(numOps.FromDouble(0.25), numOps.Power(x, numOps.FromDouble(2)));
+            result = numOps.Multiply(numOps.Power(numOps.FromDouble(0.5), nu), 
+                numOps.Divide(Gamma(numOps.Add(nu, numOps.FromDouble(1))), 
+                numOps.Power(x, nu)));
+
+            T sum = numOps.One;
+            T term = numOps.One;
+            for (int k = 1; k <= 20; k++)
+            {
+                term = numOps.Multiply(term, 
+                    numOps.Divide(y, 
+                        numOps.Multiply(numOps.FromDouble(k), 
+                            numOps.Add(nu, numOps.FromDouble(k)))));
+                sum = numOps.Add(sum, term);
+                if (numOps.LessThan(numOps.Abs(term), numOps.Multiply(sum, numOps.FromDouble(1e-15))))
+                {
+                    break;
+                }
+            }
+            result = numOps.Multiply(result, sum);
+        }
+        else
+        {
+            T y = numOps.Divide(numOps.FromDouble(2), x);
+            result = numOps.Multiply(numOps.Exp(numOps.Multiply(x, numOps.FromDouble(-1))), 
+                numOps.Divide(numOps.Sqrt(numOps.Multiply(Pi<T>(), y)), numOps.FromDouble(2)));
+
+            T sum = numOps.One;
+            T term = numOps.One;
+            for (int k = 1; k <= 20; k++)
+            {
+                term = numOps.Multiply(term, 
+                    numOps.Multiply(numOps.Add(numOps.Multiply(numOps.FromDouble(4), 
+                        numOps.Power(nu, numOps.FromDouble(2))), 
+                        numOps.Subtract(numOps.Power(numOps.FromDouble(2 * k - 1), numOps.FromDouble(2)), 
+                            numOps.One)), 
+                        numOps.Divide(y, numOps.FromDouble(k))));
+                sum = numOps.Add(sum, term);
+                if (numOps.LessThan(numOps.Abs(term), numOps.Multiply(sum, numOps.FromDouble(1e-15))))
+                {
+                    break;
+                }
+            }
+            result = numOps.Multiply(result, sum);
+        }
+
+        return result;
+    }
+
     public static T Reciprocal<T>(T value)
     {
         var numOps = GetNumericOperations<T>();
@@ -104,6 +201,129 @@ public static class MathHelper
     {
         var numOps = GetNumericOperations<T>();
         return AlmostEqual(a, b, numOps.FromDouble(1e-8));
+    }
+
+    public static T BesselJ<T>(T nu, T x)
+    {
+        var numOps = GetNumericOperations<T>();
+    
+        // Handle special cases
+        if (numOps.Equals(x, numOps.Zero))
+        {
+            return numOps.Equals(nu, numOps.Zero) ? numOps.One : numOps.Zero;
+        }
+
+        if (numOps.LessThan(x, numOps.Zero))
+        {
+            return numOps.Multiply(
+                numOps.Power(numOps.FromDouble(-1), nu),
+                BesselJ(nu, numOps.Abs(x))
+            );
+        }
+
+        // Convert nu to double for comparisons
+        double nuDouble = Convert.ToDouble(nu);
+        double xDouble = Convert.ToDouble(x);
+
+        // Use series expansion for small x
+        if (xDouble <= 12)
+        {
+            return BesselJSeries(nu, x);
+        }
+
+        // Use asymptotic expansion for large x
+        if (xDouble > 12 && xDouble > Math.Abs(nuDouble))
+        {
+            return BesselJAsymptotic(nu, x);
+        }
+
+        // Use recurrence relation for intermediate values
+        return BesselJRecurrence(nu, x);
+    }
+
+    private static T BesselJSeries<T>(T nu, T x)
+    {
+        var numOps = GetNumericOperations<T>();
+        T sum = numOps.Zero;
+        T factorial = numOps.One;
+        T xOver2 = numOps.Divide(x, numOps.FromDouble(2));
+        T xOver2Squared = numOps.Square(xOver2);
+        T term = numOps.One;
+
+        for (int m = 0; m <= 50; m++)  // Increased max terms for better accuracy
+        {
+            if (m > 0)
+            {
+                factorial = numOps.Multiply(factorial, numOps.FromDouble(m));
+                term = numOps.Divide(term, factorial);
+                term = numOps.Multiply(term, xOver2Squared);
+            }
+
+            T numerator = numOps.Power(numOps.Negate(numOps.One), numOps.FromDouble(m));
+            T denominator = numOps.Multiply(factorial, Gamma(numOps.Add(numOps.FromDouble(m), numOps.Add(nu, numOps.One))));
+        
+            T summand = numOps.Multiply(numerator, numOps.Divide(numOps.Power(xOver2, numOps.Add(numOps.FromDouble(2 * m), nu)), denominator));
+            sum = numOps.Add(sum, summand);
+
+            if (numOps.LessThan(numOps.Abs(summand), numOps.FromDouble(1e-15)))
+            {
+                break;
+            }
+        }
+
+        return sum;
+    }
+
+    private static T BesselJAsymptotic<T>(T nu, T x)
+    {
+        var numOps = GetNumericOperations<T>();
+        T mu = numOps.Subtract(numOps.Multiply(nu, nu), numOps.FromDouble(0.25));
+        T theta = numOps.Subtract(x, numOps.Multiply(numOps.FromDouble(0.25 * Math.PI), numOps.Add(numOps.Multiply(numOps.FromDouble(2), nu), numOps.One)));
+
+        T p = numOps.One;
+        T q = numOps.Divide(mu, numOps.Multiply(numOps.FromDouble(8), x));
+
+        T cosTheta = Cos(theta);
+        T sinTheta = Sin(theta);
+
+        T sqrtX = numOps.Sqrt(x);
+        T sqrtPi = numOps.Sqrt(numOps.FromDouble(Math.PI));
+        T factor = numOps.Divide(numOps.Sqrt(numOps.FromDouble(2)), numOps.Multiply(sqrtPi, sqrtX));
+
+        return numOps.Multiply(factor, numOps.Add(numOps.Multiply(p, cosTheta), numOps.Multiply(q, sinTheta)));
+    }
+
+    private static T BesselJRecurrence<T>(T nu, T x)
+    {
+        var numOps = GetNumericOperations<T>();
+        int n = (int)Math.Ceiling(Convert.ToDouble(nu));
+        T nuInt = numOps.FromDouble(n);
+
+        T jn = BesselJAsymptotic(nuInt, x);
+        T jnMinus1 = BesselJAsymptotic(numOps.Subtract(nuInt, numOps.One), x);
+
+        for (int k = n - 1; k >= 0; k--)
+        {
+            T jnMinus2 = numOps.Subtract(
+                numOps.Multiply(numOps.FromDouble(2 * k + 2), numOps.Divide(jnMinus1, x)),
+                jn
+            );
+            jn = jnMinus1;
+            jnMinus1 = jnMinus2;
+        }
+
+        if (numOps.Equals(nu, nuInt))
+        {
+            return jn;
+        }
+
+        // Interpolate for non-integer nu
+        T jnPlus1 = numOps.Subtract(
+            numOps.Multiply(numOps.FromDouble(2 * n), numOps.Divide(jn, x)),
+            jnMinus1
+        );
+        T t = numOps.Subtract(nu, numOps.Round(nu));
+        return numOps.Add(numOps.Multiply(jn, numOps.Subtract(numOps.One, t)), numOps.Multiply(jnPlus1, t));
     }
 
     public static T Factorial<T>(int n)

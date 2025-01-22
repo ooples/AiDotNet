@@ -157,6 +157,28 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return result;
     }
 
+    public int BinarySearch(T value)
+    {
+        IComparer<T> comparer = Comparer<T>.Default;
+        int low = 0;
+        int high = Length - 1;
+
+        while (low <= high)
+        {
+            int mid = low + ((high - low) >> 1);
+            int comparison = comparer.Compare(this[mid], value);
+
+            if (comparison == 0)
+                return mid;
+            else if (comparison < 0)
+                low = mid + 1;
+            else
+                high = mid - 1;
+        }
+
+        return ~low;
+    }
+
     public Vector<T> GetRange(int startIndex, int count)
     {
         if (startIndex < 0 || startIndex >= Length)
