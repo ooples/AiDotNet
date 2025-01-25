@@ -17,4 +17,17 @@ public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>
     public int SeasonalLoessWindow { get; set; } = 121; // 10 * default SeasonalPeriod + 1
     public int LowPassFilterWindowSize { get; set; } = 12; // Same as default SeasonalPeriod
     public int TrendLoessWindow { get; set; } = 12; // Same as default SeasonalPeriod
+    public STLAlgorithmType AlgorithmType { get; set; } = STLAlgorithmType.Standard;
+    public DateTime[] Dates { get; set; } = [];
+    public DateTime? StartDate { get; set; }
+    public TimeSpan? Interval { get; set; }
+    public bool AdjustForDayOfWeek { get; set; } = false;
+    public bool AdjustForMonthOfYear { get; set; } = false;
+    public bool AdjustForHolidays { get; set; } = false;
+    public Vector<T> DayOfWeekFactors { get; set; } = new Vector<T>(7);
+    public Vector<T> MonthOfYearFactors { get; set; } = new Vector<T>(12);
+    public Dictionary<DateTime, T> Holidays { get; set; } = [];
+    public OutlierDetectionMethod OutlierDetectionMethod { get; set; } = OutlierDetectionMethod.ZScore;
+    public double ZScoreThreshold { get; set; } = 3.0; // Default value: 3 standard deviations
+    public double IQRMultiplier { get; set; } = 1.5; // Default value: 1.5 times the IQR
 }

@@ -6,6 +6,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     private Matrix<T> _coefficients;
     private Vector<T> _intercepts;
     private Matrix<T> _residuals;
+    public Matrix<T> Coefficients => _coefficients;
 
     public VectorAutoRegressionModel(VARModelOptions<T> options) : base(options)
     {

@@ -5,25 +5,69 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     protected readonly INumericOperations<T> NumOps;
 
     public Vector<T> TimeSeries { get; }
-    protected Dictionary<DecompositionComponentType, Vector<T>> Components { get; }
+    protected Dictionary<DecompositionComponentType, object> Components { get; }
 
     protected TimeSeriesDecompositionBase(Vector<T> timeSeries)
     {
         TimeSeries = timeSeries;
         NumOps = MathHelper.GetNumericOperations<T>();
-        Components = new Dictionary<DecompositionComponentType, Vector<T>>();
+        Components = new Dictionary<DecompositionComponentType, object>();
     }
 
-    public Dictionary<DecompositionComponentType, Vector<T>> GetComponents() => Components;
+    protected abstract void Decompose();
 
-    protected void AddComponent(DecompositionComponentType componentType, Vector<T> component)
+    public Dictionary<DecompositionComponentType, object> GetComponents() => Components;
+
+    protected void AddComponent(DecompositionComponentType componentType, object component)
     {
-        Components[componentType] = component;
+        if (component is Vector<T> vector)
+        {
+            Components[componentType] = vector;
+        }
+        else if (component is Matrix<T> matrix)
+        {
+            Components[componentType] = matrix;
+        }
+        else
+        {
+            throw new ArgumentException("Component must be either Vector<T> or Matrix<T>", nameof(component));
+        }
     }
 
-    public Vector<T> GetComponent(DecompositionComponentType componentType)
+    public object? GetComponent(DecompositionComponentType componentType)
     {
-        return Components.TryGetValue(componentType, out var component) ? component : Vector<T>.Empty();
+        if (Components.TryGetValue(componentType, out var component))
+        {
+            return component;
+        }
+        else
+        {
+            return null;
+        }
+    }
+
+    public Vector<T> GetComponentAsVector(DecompositionComponentType componentType)
+    {
+        if (Components.TryGetValue(componentType, out var component))
+        {
+            return component as Vector<T> ?? Vector<T>.Empty();
+        }
+        else
+        {
+            return Vector<T>.Empty();
+        }
+    }
+
+    public Matrix<T> GetComponentAsMatrix(DecompositionComponentType componentType)
+    {
+        if (Components.TryGetValue(componentType, out var component))
+        {
+            return component as Matrix<T> ?? Matrix<T>.Empty();
+        }
+        else
+        {
+            return Matrix<T>.Empty();
+        }
     }
 
     public bool HasComponent(DecompositionComponentType componentType)

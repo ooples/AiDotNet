@@ -28,31 +28,56 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         _seasonal = new Vector<T>(n, NumOps);
         _residual = new Vector<T>(n, NumOps);
 
+        switch (_stlOptions.AlgorithmType)
+        {
+            case STLAlgorithmType.Standard:
+                PerformStandardSTL(y);
+                break;
+            case STLAlgorithmType.Robust:
+                PerformRobustSTL(y);
+                break;
+            case STLAlgorithmType.Fast:
+                PerformFastSTL(y);
+                break;
+            default:
+                throw new ArgumentException("Invalid STL algorithm type.");
+        }
+    }
+
+    private void PerformStandardSTL(Vector<T> y)
+    {
         Vector<T> detrended = y;
-        Vector<T> robustnessWeights = Vector<T>.CreateDefault(n, NumOps.One);
+
+        // Step 1: Detrending
+        detrended = SubtractVectors(y, _trend);
+
+        // Step 2: Cycle-subseries Smoothing
+        _seasonal = CycleSubseriesSmoothing(detrended, _stlOptions.SeasonalPeriod, _stlOptions.SeasonalLoessWindow);
+
+        // Step 3: Low-pass Filtering of Smoothed Cycle-subseries
+        Vector<T> lowPassSeasonal = LowPassFilter(_seasonal, _stlOptions.LowPassFilterWindowSize);
+
+        // Step 4: Detrending of Smoothed Cycle-subseries
+        _seasonal = SubtractVectors(_seasonal, lowPassSeasonal);
+
+        // Step 5: Deseasonalizing
+        Vector<T> deseasonalized = SubtractVectors(y, _seasonal);
+
+        // Step 6: Trend Smoothing
+        _trend = LoessSmoothing(deseasonalized, _stlOptions.TrendLoessWindow);
+
+        // Step 7: Calculation of Residuals
+        _residual = CalculateResiduals(y, _trend, _seasonal);
+    }
+
+    private void PerformRobustSTL(Vector<T> y)
+    {
+        Vector<T> detrended = y;
+        Vector<T> robustnessWeights = Vector<T>.CreateDefault(y.Length, NumOps.One);
 
         for (int iteration = 0; iteration < _stlOptions.RobustIterations; iteration++)
         {
-            // Step 1: Detrending
-            detrended = SubtractVectors(y, _trend);
-
-            // Step 2: Cycle-subseries Smoothing
-            _seasonal = CycleSubseriesSmoothing(detrended, _stlOptions.SeasonalPeriod, _stlOptions.SeasonalLoessWindow);
-
-            // Step 3: Low-pass Filtering of Smoothed Cycle-subseries
-            Vector<T> lowPassSeasonal = LowPassFilter(_seasonal, _stlOptions.LowPassFilterWindowSize);
-
-            // Step 4: Detrending of Smoothed Cycle-subseries
-            _seasonal = SubtractVectors(_seasonal, lowPassSeasonal);
-
-            // Step 5: Deseasonalizing
-            Vector<T> deseasonalized = SubtractVectors(y, _seasonal);
-
-            // Step 6: Trend Smoothing
-            _trend = LoessSmoothing(deseasonalized, _stlOptions.TrendLoessWindow);
-
-            // Step 7: Calculation of Residuals
-            _residual = CalculateResiduals(y, _trend, _seasonal);
+            PerformStandardSTL(y);
 
             // Apply robustness weights if not the last iteration
             if (iteration < _stlOptions.RobustIterations - 1)
@@ -61,6 +86,127 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 y = ApplyRobustnessWeights(y, robustnessWeights);
             }
         }
+    }
+
+    private void PerformFastSTL(Vector<T> y)
+    {
+        int n = y.Length;
+        int period = _stlOptions.SeasonalPeriod;
+        int trendWindow = _stlOptions.TrendWindowSize;
+        int seasonalWindow = _stlOptions.SeasonalLoessWindow;
+
+        // Step 1: Initial Trend Estimation (using moving average)
+        _trend = MovingAverage(y, trendWindow);
+
+        // Step 2: Detrending
+        Vector<T> detrended = SubtractVectors(y, _trend);
+
+        // Step 3: Initial Seasonal Estimation
+        _seasonal = new Vector<T>(n, NumOps);
+        for (int i = 0; i < period; i++)
+        {
+            T seasonalValue = NumOps.Zero;
+            int count = 0;
+            for (int j = i; j < n; j += period)
+            {
+                seasonalValue = NumOps.Add(seasonalValue, detrended[j]);
+                count++;
+            }
+            seasonalValue = NumOps.Divide(seasonalValue, NumOps.FromDouble(count));
+            for (int j = i; j < n; j += period)
+            {
+                _seasonal[j] = seasonalValue;
+            }
+        }
+
+        // Step 4: Seasonal Smoothing
+        _seasonal = SmoothSeasonal(_seasonal, period, seasonalWindow);
+
+        // Step 5: Seasonal Adjustment
+        Vector<T> seasonallyAdjusted = SubtractVectors(y, _seasonal);
+
+        // Step 6: Final Trend Estimation
+        _trend = MovingAverage(seasonallyAdjusted, trendWindow);
+
+        // Step 7: Calculation of Residuals
+        _residual = CalculateResiduals(y, _trend, _seasonal);
+
+        // Step 8: Normalize Seasonal Component
+        NormalizeSeasonal();
+    }
+
+    private Vector<T> SmoothSeasonal(Vector<T> seasonal, int period, int window)
+    {
+        Vector<T> smoothed = new Vector<T>(seasonal.Length, NumOps);
+        for (int i = 0; i < period; i++)
+        {
+            List<T> subseries = new List<T>();
+            for (int j = i; j < seasonal.Length; j += period)
+            {
+                subseries.Add(seasonal[j]);
+            }
+            Vector<T> smoothedSubseries = MovingAverage(new Vector<T>(subseries), window);
+            for (int j = 0; j < smoothedSubseries.Length; j++)
+            {
+                smoothed[i + j * period] = smoothedSubseries[j];
+            }
+        }
+
+        return smoothed;
+    }
+
+    private void NormalizeSeasonal()
+    {
+        T seasonalMean = _seasonal.Sum();
+        seasonalMean = NumOps.Divide(seasonalMean, NumOps.FromDouble(_seasonal.Length));
+        _seasonal = _seasonal.Transform(s => NumOps.Subtract(s, seasonalMean));
+        _trend = _trend.Transform(t => NumOps.Add(t, seasonalMean));
+    }
+
+    private Vector<T> MovingAverage(Vector<T> data, int windowSize)
+    {
+        int n = data.Length;
+        Vector<T> result = new Vector<T>(n, NumOps);
+        T windowSum = NumOps.Zero;
+        int effectiveWindow = Math.Min(windowSize, n);
+
+        // Initialize the first window
+        for (int i = 0; i < effectiveWindow; i++)
+        {
+            windowSum = NumOps.Add(windowSum, data[i]);
+        }
+
+        // Calculate moving average
+        for (int i = 0; i < n; i++)
+        {
+            if (i < effectiveWindow / 2 || i >= n - effectiveWindow / 2)
+            {
+                // Edge case: use available data points
+                int start = Math.Max(0, i - effectiveWindow / 2);
+                int end = Math.Min(n, i + effectiveWindow / 2 + 1);
+                T sum = NumOps.Zero;
+                for (int j = start; j < end; j++)
+                {
+                    sum = NumOps.Add(sum, data[j]);
+                }
+                result[i] = NumOps.Divide(sum, NumOps.FromDouble(end - start));
+            }
+            else
+            {
+                // Regular case: use full window
+                result[i] = NumOps.Divide(windowSum, NumOps.FromDouble(effectiveWindow));
+                if (i + effectiveWindow / 2 + 1 < n)
+                {
+                    windowSum = NumOps.Add(windowSum, data[i + effectiveWindow / 2 + 1]);
+                }
+                if (i - effectiveWindow / 2 >= 0)
+                {
+                    windowSum = NumOps.Subtract(windowSum, data[i - effectiveWindow / 2]);
+                }
+            }
+        }
+
+        return result;
     }
 
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
@@ -182,30 +328,6 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         }
 
         return NumOps.Divide(sumWeightedY, sumWeights);
-    }
-
-    private Vector<T> MovingAverage(Vector<T> y, int windowSize)
-    {
-        int n = y.Length;
-        Vector<T> result = new Vector<T>(n, NumOps);
-
-        for (int i = 0; i < n; i++)
-        {
-            int start = Math.Max(0, i - windowSize / 2);
-            int end = Math.Min(n - 1, i + windowSize / 2);
-            T sum = NumOps.Zero;
-            int count = 0;
-
-            for (int j = start; j <= end; j++)
-            {
-                sum = NumOps.Add(sum, y[j]);
-                count++;
-            }
-
-            result[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
-        }
-
-        return result;
     }
 
     private Vector<T> LoessSmoothing(List<(T x, T y)> data, double span)

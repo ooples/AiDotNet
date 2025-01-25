@@ -27,6 +27,31 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         _D = _sarimaOptions.SeasonalD;
     }
 
+    public Vector<T> GetARParameters()
+    {
+        return new Vector<T>(_p);
+    }
+
+    public Vector<T> GetMAParameters()
+    {
+        return new Vector<T>(_q);
+    }
+
+    public Vector<T> GetSeasonalARParameters()
+    {
+        return new Vector<T>(_P);
+    }
+
+    public Vector<T> GetSeasonalMAParameters()
+    {
+        return new Vector<T>(_Q);
+    }
+
+    public int GetSeasonalPeriod()
+    {
+        return _m;
+    }
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         // Step 1: Apply seasonal and non-seasonal differencing

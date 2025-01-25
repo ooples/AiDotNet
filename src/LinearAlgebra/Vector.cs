@@ -24,6 +24,22 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return GetEnumerator();
     }
 
+    public Vector<T> ElementwiseDivide(Vector<T> other)
+    {
+        if (this.Length != other.Length)
+        {
+            throw new ArgumentException("Vectors must have the same length for element-wise division.");
+        }
+
+        Vector<T> result = new Vector<T>(this.Length);
+        for (int i = 0; i < this.Length; i++)
+        {
+            result[i] = ops.Divide(this[i], other[i]);
+        }
+
+        return result;
+    }
+
     public T Variance()
     {
         T mean = Mean();

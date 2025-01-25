@@ -2,259 +2,232 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
-    private readonly int _maxLag;
-    private readonly T _differenceThreshold;
-    private readonly IMatrixDecomposition<T>? _decomposition;
+    private readonly BeveridgeNelsonAlgorithm _algorithm;
+    private readonly ARIMAOptions<T> _arimaOptions;
+    private readonly int _forecastHorizon;
+    private readonly Matrix<T> _multivariateSeries;
 
-    public BeveridgeNelsonDecomposition(Vector<T> timeSeries, int maxLag = 10, double differenceThreshold = 1e-6, IMatrixDecomposition<T>? decomposition = null)
+    public BeveridgeNelsonDecomposition(Vector<T> timeSeries, 
+        BeveridgeNelsonAlgorithm algorithm = BeveridgeNelsonAlgorithm.Standard,
+        ARIMAOptions<T>? arimaOptions = null,
+        int forecastHorizon = 100,
+        Matrix<T>? multivariateSeries = null) 
         : base(timeSeries)
     {
-        _maxLag = maxLag;
-        _decomposition = decomposition;
-        _differenceThreshold = NumOps.FromDouble(differenceThreshold);
+        _algorithm = algorithm;
+        _arimaOptions = arimaOptions ?? new ARIMAOptions<T> { P = 1, D = 1, Q = 1 };
+        _forecastHorizon = forecastHorizon;
+        _multivariateSeries = multivariateSeries ?? new Matrix<T>(TimeSeries.Length, 1);
     }
 
-    public void Decompose()
+    protected override void Decompose()
     {
-        int n = TimeSeries.Length;
-        Vector<T> trend = new Vector<T>(n, NumOps);
-        Vector<T> cycle = new Vector<T>(n, NumOps);
-
-        // Compute first differences
-        Vector<T> differences = ComputeDifferences(TimeSeries);
-
-        // Estimate ARIMA model (simplified approach using AR model)
-        Vector<T> arCoefficients = FitARModel(differences, _maxLag);
-
-        // Compute long-run multiplier
-        T longRunMultiplier = ComputeLongRunMultiplier(arCoefficients);
-
-        // Compute trend and cycle components
-        trend[0] = TimeSeries[0];
-        for (int t = 1; t < n; t++)
+        switch (_algorithm)
         {
-            trend[t] = NumOps.Add(trend[t - 1], NumOps.Multiply(longRunMultiplier, differences[t - 1]));
-            cycle[t] = NumOps.Subtract(TimeSeries[t], trend[t]);
+            case BeveridgeNelsonAlgorithm.Standard:
+                DecomposeStandard();
+                break;
+            case BeveridgeNelsonAlgorithm.ARIMA:
+                DecomposeARIMA();
+                break;
+            case BeveridgeNelsonAlgorithm.Multivariate:
+                DecomposeMultivariate();
+                break;
+            default:
+                throw new NotImplementedException($"Beveridge-Nelson decomposition algorithm {_algorithm} is not implemented.");
         }
+    }
+
+    private void DecomposeStandard()
+    {
+        // Implement standard Beveridge-Nelson decomposition
+        Vector<T> trend = CalculateStandardTrend();
+        Vector<T> cycle = CalculateStandardCycle(trend);
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Cycle, cycle);
     }
 
-    private Vector<T> ComputeDifferences(Vector<T> series)
+    private void DecomposeARIMA()
     {
-        int n = series.Length;
-        Vector<T> differences = new Vector<T>(n - 1, NumOps);
-        for (int i = 0; i < n - 1; i++)
-        {
-            differences[i] = NumOps.Subtract(series[i + 1], series[i]);
-        }
+        // Implement ARIMA-based Beveridge-Nelson decomposition
+        var arimaModel = new ARIMAModel<T>(_arimaOptions);
+        arimaModel.Train(new Matrix<T>(TimeSeries.Length, 1), TimeSeries);
 
-        return differences;
+        Vector<T> trend = CalculateARIMATrend(arimaModel);
+        Vector<T> cycle = CalculateARIMACycle(trend);
+
+        AddComponent(DecompositionComponentType.Trend, trend);
+        AddComponent(DecompositionComponentType.Cycle, cycle);
     }
 
-    private Vector<T> FitARModel(Vector<T> series, int maxLag)
+    private void DecomposeMultivariate()
     {
-        if (series == null || series.Length == 0)
-        {
-            throw new ArgumentException("Series cannot be null or empty", nameof(series));
-        }
+        int n = _multivariateSeries.Rows;
+        int m = _multivariateSeries.Columns;
 
-        if (maxLag <= 0 || maxLag >= series.Length)
-        {
-            throw new ArgumentException("Invalid maxLag value", nameof(maxLag));
-        }
+        // Step 1: Estimate VAR model
+        var varOptions = new VARModelOptions<T> { Lag = 1, OutputDimension = m }; // Assuming first-order VAR
+        var varModel = new VectorAutoRegressionModel<T>(varOptions);
+        varModel.Train(_multivariateSeries, Vector<T>.Empty()); // Passing an empty vector as y since it's not used in VAR
 
-        // Compute ACF up to maxLag
-        Vector<T> acf = ComputeAutocorrelation(series, maxLag);
+        // Step 2: Calculate long-run impact matrix
+        Matrix<T> longRunImpact = CalculateLongRunImpactMatrix(varModel, varOptions);
 
-        // Use AIC for model selection
-        int bestLag = SelectBestLagUsingAIC(series, acf, maxLag);
-
-        // Construct Toeplitz matrix and right-hand side vector
-        Matrix<T> toeplitz = ConstructToeplitzMatrix(acf.GetSubVector(0, bestLag));
-        Vector<T> rhs = acf.GetSubVector(1, bestLag);
-
-        // Solve Yule-Walker equations
-        Vector<T> arCoefficients;
-        try
-        {
-            var decomposition = _decomposition ?? new LuDecomposition<T>(toeplitz);
-            arCoefficients = MatrixSolutionHelper.SolveLinearSystem(rhs, decomposition);
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException("Failed to solve Yule-Walker equations", ex);
-        }
-
-        // Ensure stability of the AR model
-        if (!IsStableARModel(arCoefficients))
-        {
-            throw new InvalidOperationException("Estimated AR model is not stable");
-        }
-
-        return arCoefficients;
-    }
-
-    private int SelectBestLagUsingAIC(Vector<T> series, Vector<T> acf, int maxLag)
-    {
-        T minAIC = NumOps.MaxValue;
-        int bestLag = 1;
-
-        for (int p = 1; p <= maxLag; p++)
-        {
-            Matrix<T> toeplitz = ConstructToeplitzMatrix(acf.GetSubVector(0, p));
-            Vector<T> rhs = acf.GetSubVector(1, p);
-
-            try
-            {
-                var decomposition = _decomposition ?? new LuDecomposition<T>(toeplitz);
-                Vector<T> arCoefficients = MatrixSolutionHelper.SolveLinearSystem(rhs, decomposition);
-                T aic = CalculateAIC(series, arCoefficients, p);
-
-                if (NumOps.LessThan(aic, minAIC))
-                {
-                    minAIC = aic;
-                    bestLag = p;
-                }
-            }
-            catch
-            {
-                // If solving fails for this lag, skip it
-                continue;
-            }
-        }
-
-        return bestLag;
-    }
-
-    private bool IsStableARModel(Vector<T> arCoefficients)
-    {
-        // Construct the characteristic polynomial
-        int p = arCoefficients.Length;
-        Vector<Complex<T>> polynomial = new Vector<Complex<T>>(p + 1);
-        polynomial[0] = new Complex<T>(NumOps.One, NumOps.Zero);
-        for (int i = 0; i < p; i++)
-        {
-            polynomial[i + 1] = new Complex<T>(NumOps.Negate(arCoefficients[i]), NumOps.Zero);
-        }
-
-        // Find the roots of the characteristic polynomial
-        Vector<Complex<T>> roots = FindPolynomialRoots(polynomial);
-
-        // Check if all roots lie outside the unit circle
-        for (int i = 0; i < roots.Length; i++)
-        {
-            if (NumOps.LessThanOrEquals(roots[i].Magnitude, NumOps.One))
-            {
-                return false; // Model is not stable
-            }
-        }
-
-        return true; // Model is stable
-    }
-
-    private Vector<Complex<T>> FindPolynomialRoots(Vector<Complex<T>> coefficients)
-    {
-        int n = coefficients.Length - 1;
-        Matrix<Complex<T>> companion = new Matrix<Complex<T>>(n, n);
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-
-        // Construct the companion matrix
-        for (int i = 0; i < n - 1; i++)
-        {
-            companion[i + 1, i] = new Complex<T>(NumOps.One, NumOps.Zero);
-        }
+        // Step 3: Calculate permanent component
+        Matrix<T> permanent = new Matrix<T>(n, m);
         for (int i = 0; i < n; i++)
         {
-            companion[i, n - 1] = complexOps.Divide(complexOps.Negate(coefficients[i]), coefficients[n]);
+            Vector<T> cumSum = new Vector<T>(m);
+            for (int j = 0; j <= i; j++)
+            {
+                cumSum = cumSum.Add(longRunImpact.Multiply(_multivariateSeries.GetRow(j)));
+            }
+
+            permanent.SetRow(i, cumSum);
         }
 
-        // Compute eigenvalues of the companion matrix
-        var eigenDecomp = new EigenDecomposition<Complex<T>>(companion);
-        return eigenDecomp.EigenValues;
+        // Step 4: Calculate transitory component
+        Matrix<T> transitory = _multivariateSeries.Subtract(permanent);
+
+        // Add components
+        AddComponent(DecompositionComponentType.Trend, permanent.GetColumn(0));
+        AddComponent(DecompositionComponentType.Cycle, transitory.GetColumn(0));
+
+        // If there are additional series, add them as separate components
+        for (int i = 1; i < m; i++)
+        {
+            AddComponent((DecompositionComponentType)((int)DecompositionComponentType.Trend + i), permanent.GetColumn(i));
+            AddComponent((DecompositionComponentType)((int)DecompositionComponentType.Cycle + i), transitory.GetColumn(i));
+        }
     }
 
-    private Vector<T> ComputeAutocorrelation(Vector<T> series, int maxLag)
+    private Matrix<T> CalculateLongRunImpactMatrix(VectorAutoRegressionModel<T> varModel, VARModelOptions<T> varOptions)
     {
-        int n = series.Length;
-        Vector<T> acf = new Vector<T>(maxLag + 1, NumOps);
-        T mean = series.Mean();
-        T variance = series.Variance();
+        int m = _multivariateSeries.Columns;
+        Matrix<T> identity = Matrix<T>.CreateIdentity(m);
+        Matrix<T> coeffSum = new Matrix<T>(m, m, NumOps);
 
-        for (int lag = 0; lag <= maxLag; lag++)
+        // Assuming Coefficients is a single matrix representing all lags
+        Matrix<T> coefficients = varModel.Coefficients;
+
+        // Sum up the coefficient matrices for each lag
+        for (int i = 0; i < varOptions.Lag; i++)
+        {
+            int startRow = i * m;
+            Matrix<T> lagCoeff = coefficients.Slice(startRow, m);
+            coeffSum = coeffSum.Add(lagCoeff);
+        }
+
+        return identity.Subtract(coeffSum).Inverse();
+    }
+
+    private Vector<T> CalculateStandardTrend()
+    {
+        int n = TimeSeries.Length;
+        var trend = new Vector<T>(n, NumOps);
+        var differenced = new Vector<T>(n - 1, NumOps);
+
+        // Calculate first differences
+        for (int i = 1; i < n; i++)
+        {
+            differenced[i - 1] = NumOps.Subtract(TimeSeries[i], TimeSeries[i - 1]);
+        }
+
+        // Calculate mean of differenced series
+        T meanDiff = StatisticsHelper<T>.CalculateMean(differenced);
+
+        // Calculate autocovariance of differenced series
+        var autocovariance = new Vector<T>(n, NumOps);
+        for (int k = 0; k < n - 1; k++)
         {
             T sum = NumOps.Zero;
-            for (int t = lag; t < n; t++)
+            for (int i = k; i < n - 1; i++)
             {
                 sum = NumOps.Add(sum, NumOps.Multiply(
-                    NumOps.Subtract(series[t], mean),
-                    NumOps.Subtract(series[t - lag], mean)));
+                    NumOps.Subtract(differenced[i], meanDiff),
+                    NumOps.Subtract(differenced[i - k], meanDiff)
+                ));
             }
-            acf[lag] = NumOps.Divide(sum, NumOps.Multiply(NumOps.FromDouble(n - lag), variance));
+            autocovariance[k] = NumOps.Divide(sum, NumOps.FromDouble(n - 1 - k));
         }
 
-        return acf;
-    }
-
-    private T CalculateAIC(Vector<T> series, Vector<T> arCoefficients, int p)
-    {
-        int n = series.Length;
-        T logLikelihood = CalculateLogLikelihood(series, arCoefficients);
-        return NumOps.Add(
-            NumOps.Multiply(NumOps.FromDouble(-2), logLikelihood),
-            NumOps.Multiply(NumOps.FromDouble(2), NumOps.FromDouble(p))
-        );
-    }
-
-    private T CalculateLogLikelihood(Vector<T> series, Vector<T> arCoefficients)
-    {
-        int n = series.Length;
-        int p = arCoefficients.Length;
-        T sumSquaredResiduals = NumOps.Zero;
-
-        for (int t = p; t < n; t++)
+        // Calculate long-run variance
+        T longRunVariance = autocovariance[0];
+        for (int k = 1; k < n - 1; k++)
         {
-            T predicted = NumOps.Zero;
-            for (int i = 0; i < p; i++)
+            longRunVariance = NumOps.Add(longRunVariance, NumOps.Multiply(NumOps.FromDouble(2), autocovariance[k]));
+        }
+
+        // Calculate trend
+        trend[0] = TimeSeries[0];
+        for (int i = 1; i < n; i++)
+        {
+            T adjustment = NumOps.Multiply(NumOps.FromDouble(i), NumOps.Divide(longRunVariance, autocovariance[0]));
+            trend[i] = NumOps.Add(TimeSeries[i], NumOps.Multiply(adjustment, meanDiff));
+        }
+
+        return trend;
+    }
+
+    private Vector<T> CalculateStandardCycle(Vector<T> trend)
+    {
+        // Calculate cycle as the difference between the time series and the trend
+        return TimeSeries.Subtract(trend);
+    }
+
+    private Vector<T> CalculateARIMATrend(ARIMAModel<T> model)
+    {
+        int n = TimeSeries.Length;
+        Vector<T> trend = new Vector<T>(n, NumOps);
+
+        // Calculate input dimension based on ARIMA order
+        int inputDimension = Math.Max(_arimaOptions.P, _arimaOptions.Q + 1);
+        if (_arimaOptions.SeasonalPeriod > 0)
+        {
+            inputDimension = Math.Max(inputDimension, 
+                Math.Max(_arimaOptions.P + _arimaOptions.SeasonalP * _arimaOptions.SeasonalPeriod, 
+                         _arimaOptions.Q + _arimaOptions.SeasonalQ * _arimaOptions.SeasonalPeriod + 1));
+        }
+
+        // Create input matrix for prediction
+        Matrix<T> input = new Matrix<T>(1, inputDimension);
+
+        // Calculate the long-run forecast for each time point
+        for (int i = 0; i < n; i++)
+        {
+            // Set the input values based on the available data
+            for (int j = 0; j < inputDimension; j++)
             {
-                predicted = NumOps.Add(predicted, NumOps.Multiply(arCoefficients[i], series[t - i - 1]));
+                if (i - j >= 0)
+                {
+                    input[0, j] = TimeSeries[i - j];
+                }
+                else
+                {
+                    input[0, j] = NumOps.Zero;
+                }
             }
-            T residual = NumOps.Subtract(series[t], predicted);
-            sumSquaredResiduals = NumOps.Add(sumSquaredResiduals, NumOps.Square(residual));
-        }
 
-        T variance = NumOps.Divide(sumSquaredResiduals, NumOps.FromDouble(n - p));
-        return NumOps.Multiply(
-            NumOps.FromDouble(-0.5 * (n - p)),
-            NumOps.Add(NumOps.Log(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), variance)), NumOps.One)
-        );
-    }
+            // Predict future values
+            Vector<T> forecast = model.Predict(input);
 
-    private Matrix<T> ConstructToeplitzMatrix(Vector<T> acf)
-    {
-        int size = acf.Length - 1;
-        Matrix<T> toeplitz = new Matrix<T>(size, size, NumOps);
-
-        for (int i = 0; i < size; i++)
-        {
-            for (int j = 0; j < size; j++)
+            // Calculate the long-run forecast (Beveridge-Nelson trend)
+            T longRunForecast = forecast[0];
+            for (int k = 1; k < forecast.Length; k++)
             {
-                toeplitz[i, j] = acf[Math.Abs(i - j)];
+                longRunForecast = NumOps.Add(longRunForecast, NumOps.Subtract(forecast[k], forecast[k - 1]));
             }
+
+            trend[i] = longRunForecast;
         }
 
-        return toeplitz;
+        return trend;
     }
 
-    private T ComputeLongRunMultiplier(Vector<T> arCoefficients)
+    private Vector<T> CalculateARIMACycle(Vector<T> trend)
     {
-        T sum = NumOps.One;
-        for (int i = 0; i < arCoefficients.Length; i++)
-        {
-            sum = NumOps.Add(sum, arCoefficients[i]);
-        }
-
-        return NumOps.Divide(NumOps.One, sum);
+        // Calculate cycle as the difference between the time series and the trend
+        return TimeSeries.Subtract(trend);
     }
 }

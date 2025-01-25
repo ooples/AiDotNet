@@ -10,9 +10,10 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         _algorithm = algorithm;
         _seasonalPeriod = seasonalPeriod;
+        Decompose();
     }
 
-    public void Decompose()
+    protected override void Decompose()
     {
         switch (_algorithm)
         {

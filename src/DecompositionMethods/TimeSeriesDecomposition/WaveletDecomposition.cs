@@ -15,9 +15,10 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
         _wavelet = wavelet ?? new HaarWavelet<T>();
         _algorithm = algorithm;
         _minimumDecompositionLength = minimumDecompositionLength;
+        Decompose();
     }
 
-    public void Decompose()
+    protected override void Decompose()
     {
         switch (_algorithm)
         {

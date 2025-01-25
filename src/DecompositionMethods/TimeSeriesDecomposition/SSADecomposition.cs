@@ -4,8 +4,9 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly int _windowSize;
     private readonly int _numberOfComponents;
+    private readonly SSAAlgorithmType _algorithmType;
 
-    public SSADecomposition(Vector<T> timeSeries, int windowSize, int numberOfComponents)
+    public SSADecomposition(Vector<T> timeSeries, int windowSize, int numberOfComponents, SSAAlgorithmType algorithmType = SSAAlgorithmType.Basic)
         : base(timeSeries)
     {
         if (windowSize <= 0 || windowSize > timeSeries.Length / 2)
@@ -20,27 +21,130 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
 
         _windowSize = windowSize;
         _numberOfComponents = numberOfComponents;
+        _algorithmType = algorithmType;
+        Decompose();
     }
 
-    public void Decompose()
+    protected override void Decompose()
     {
-        // Step 1: Embedding
-        var trajectoryMatrix = CreateTrajectoryMatrix();
+        Matrix<T> trajectoryMatrix;
+        Matrix<T> U;
+        Vector<T> S;
+        Matrix<T> V;
 
-        // Step 2: SVD
-        var svdDecomposition = new SvdDecomposition<T>(trajectoryMatrix);
+        switch (_algorithmType)
+        {
+            case SSAAlgorithmType.Basic:
+                trajectoryMatrix = CreateTrajectoryMatrix();
+                (U, S, V) = PerformSVD(trajectoryMatrix);
+                break;
+            case SSAAlgorithmType.Sequential:
+                (U, S, V) = PerformSequentialSSA();
+                break;
+            case SSAAlgorithmType.Toeplitz:
+                (U, S, V) = PerformToeplitzSSA();
+                break;
+            default:
+                throw new ArgumentException("Invalid SSA algorithm type.");
+        }
 
-        Matrix<T> U = svdDecomposition.U;
-        Vector<T> S = svdDecomposition.S;
-        Matrix<T> V = svdDecomposition.Vt;
-
-        // Step 3: Grouping
         var groupedComponents = GroupComponents(U, S, V);
-
-        // Step 4: Diagonal Averaging (Reconstruction)
         var reconstructedComponents = ReconstructComponents(groupedComponents);
 
-        // Assign components
+        AssignComponents(reconstructedComponents);
+    }
+
+    private (Matrix<T> U, Vector<T> S, Matrix<T> V) PerformSVD(Matrix<T> trajectoryMatrix)
+    {
+        var svdDecomposition = new SvdDecomposition<T>(trajectoryMatrix);
+        return (svdDecomposition.U, svdDecomposition.S, svdDecomposition.Vt);
+    }
+
+    private (Matrix<T> U, Vector<T> S, Matrix<T> V) PerformSequentialSSA()
+    {
+        int N = TimeSeries.Length;
+        int K = N - _windowSize + 1;
+    
+        Matrix<T> X = CreateTrajectoryMatrix();
+        Matrix<T> U = new Matrix<T>(_windowSize, _numberOfComponents, NumOps);
+        Vector<T> S = new Vector<T>(_numberOfComponents, NumOps);
+        Matrix<T> V = new Matrix<T>(K, _numberOfComponents, NumOps);
+
+        for (int i = 0; i < _numberOfComponents; i++)
+        {
+            Vector<T> u = Vector<T>.CreateRandom(_windowSize);
+            u = u.Normalize();
+
+            for (int iter = 0; iter < 10; iter++) // Number of iterations for power method
+            {
+                Vector<T> v1 = X.Transpose().Multiply(u);
+                T s1 = v1.Norm();
+                v1 = v1.Divide(s1);
+
+                u = X.Multiply(v1);
+                u = u.Normalize();
+            }
+
+            Vector<T> v = X.Transpose().Multiply(u);
+            T s = v.Norm();
+            v = v.Divide(s);
+
+            U.SetColumn(i, u);
+            S[i] = s;
+            V.SetColumn(i, v);
+
+            // Deflate X
+            X = X.Subtract(u.OuterProduct(v).Multiply(s));
+        }
+
+        return (U, S, V);
+    }
+
+    private (Matrix<T> U, Vector<T> S, Matrix<T> V) PerformToeplitzSSA()
+    {
+        int N = TimeSeries.Length;
+        int K = N - _windowSize + 1;
+
+        // Create the Toeplitz matrix
+        Matrix<T> C = new Matrix<T>(_windowSize, _windowSize, NumOps);
+        for (int i = 0; i < _windowSize; i++)
+        {
+            for (int j = 0; j <= i; j++)
+            {
+                T sum = NumOps.Zero;
+                for (int k = 0; k < N - i + j; k++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(TimeSeries[k], TimeSeries[k + i - j]));
+                }
+                C[i, j] = C[j, i] = NumOps.Divide(sum, NumOps.FromDouble(N - i + j));
+            }
+        }
+
+        // Perform eigendecomposition
+        var eigenDecomposition = new EigenDecomposition<T>(C);
+        Matrix<T> U = eigenDecomposition.EigenVectors;
+        Vector<T> S = eigenDecomposition.EigenValues.Transform(x => NumOps.Sqrt(x));
+
+        // Compute V
+        Matrix<T> V = new Matrix<T>(K, _numberOfComponents, NumOps);
+        Matrix<T> X = CreateTrajectoryMatrix();
+        for (int i = 0; i < _numberOfComponents; i++)
+        {
+            Vector<T> v = X.Transpose().Multiply(U.GetColumn(i));
+            v = v.Divide(S[i]);
+            V.SetColumn(i, v);
+        }
+
+        // Truncate to the specified number of components
+        U = U.Submatrix(0, _windowSize - 1, 0, _numberOfComponents - 1);
+        S = S.Subvector(0, _numberOfComponents - 1);
+        V = V.Submatrix(0, K - 1, 0, _numberOfComponents - 1);
+
+        return (U, S, V);
+    }
+
+    private void AssignComponents(Vector<T>[] reconstructedComponents)
+    {
         AddComponent(DecompositionComponentType.Trend, reconstructedComponents[0]);
         
         if (reconstructedComponents.Length > 2)

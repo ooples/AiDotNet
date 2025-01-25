@@ -2,15 +2,18 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
+    private readonly AdditiveDecompositionAlgorithm _algorithm;
+
     public AdditiveDecomposition(Vector<T> timeSeries, AdditiveDecompositionAlgorithm algorithm = AdditiveDecompositionAlgorithm.MovingAverage)
         : base(timeSeries)
     {
-        Decompose(algorithm);
+        _algorithm = algorithm;
+        Decompose();
     }
 
-    public void Decompose(AdditiveDecompositionAlgorithm algorithm = AdditiveDecompositionAlgorithm.MovingAverage)
+    protected override void Decompose()
     {
-        switch (algorithm)
+        switch (_algorithm)
         {
             case AdditiveDecompositionAlgorithm.MovingAverage:
                 DecomposeMovingAverage();
