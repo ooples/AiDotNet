@@ -62,18 +62,6 @@ public abstract class RegressionBase<T> : IRegression<T>
         return Coefficients.Transform(NumOps.Abs);
     }
 
-    private RegularizationType GetRegularizationType(IRegularization<T> regularization)
-    {
-        return regularization switch
-        {
-            NoRegularization<T> => RegularizationType.None,
-            L1Regularization<T> => RegularizationType.L1,
-            L2Regularization<T> => RegularizationType.L2,
-            ElasticNetRegularization<T> => RegularizationType.ElasticNet,
-            _ => throw new ArgumentException($"Unknown regularization type: {regularization.GetType().Name}")
-        };
-    }
-
     public virtual byte[] Serialize()
     {
         var modelData = new Dictionary<string, object>

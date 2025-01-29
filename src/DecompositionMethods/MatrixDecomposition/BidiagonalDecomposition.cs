@@ -1,3 +1,5 @@
+using AiDotNet.Enums.AlgorithmTypes;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
@@ -9,7 +11,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> B { get; private set; }
     public Matrix<T> V { get; private set; }
 
-    public BidiagonalDecomposition(Matrix<T> matrix, BidiagonalAlgorithm algorithm = BidiagonalAlgorithm.Householder)
+    public BidiagonalDecomposition(Matrix<T> matrix, BidiagonalAlgorithmType algorithm = BidiagonalAlgorithmType.Householder)
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
@@ -19,17 +21,17 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
         Decompose(algorithm);
     }
 
-    public void Decompose(BidiagonalAlgorithm algorithm = BidiagonalAlgorithm.Householder)
+    public void Decompose(BidiagonalAlgorithmType algorithm = BidiagonalAlgorithmType.Householder)
     {
         switch (algorithm)
         {
-            case BidiagonalAlgorithm.Householder:
+            case BidiagonalAlgorithmType.Householder:
                 DecomposeHouseholder();
                 break;
-            case BidiagonalAlgorithm.Givens:
+            case BidiagonalAlgorithmType.Givens:
                 DecomposeGivens();
                 break;
-            case BidiagonalAlgorithm.Lanczos:
+            case BidiagonalAlgorithmType.Lanczos:
                 DecomposeLanczos();
                 break;
             default:

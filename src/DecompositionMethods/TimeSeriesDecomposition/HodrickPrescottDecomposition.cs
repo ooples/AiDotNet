@@ -1,13 +1,15 @@
-﻿namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
+﻿using AiDotNet.Enums.AlgorithmTypes;
+
+namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly T _lambda;
     private readonly IMatrixDecomposition<T>? _decomposition;
-    private readonly HodrickPrescottAlgorithm _algorithm;
+    private readonly HodrickPrescottAlgorithmType _algorithm;
 
     public HodrickPrescottDecomposition(Vector<T> timeSeries, double lambda = 1600, IMatrixDecomposition<T>? decomposition = null, 
-        HodrickPrescottAlgorithm algorithm = HodrickPrescottAlgorithm.MatrixMethod) 
+        HodrickPrescottAlgorithmType algorithm = HodrickPrescottAlgorithmType.MatrixMethod) 
         : base(timeSeries)
     {
         if (lambda <= 0)
@@ -25,22 +27,22 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         switch (_algorithm)
         {
-            case HodrickPrescottAlgorithm.MatrixMethod:
+            case HodrickPrescottAlgorithmType.MatrixMethod:
                 DecomposeMatrixMethod();
                 break;
-            case HodrickPrescottAlgorithm.IterativeMethod:
+            case HodrickPrescottAlgorithmType.IterativeMethod:
                 DecomposeIterativeMethod();
                 break;
-            case HodrickPrescottAlgorithm.KalmanFilterMethod:
+            case HodrickPrescottAlgorithmType.KalmanFilterMethod:
                 DecomposeKalmanFilterMethod();
                 break;
-            case HodrickPrescottAlgorithm.WaveletMethod:
+            case HodrickPrescottAlgorithmType.WaveletMethod:
                 DecomposeWaveletMethod();
                 break;
-            case HodrickPrescottAlgorithm.FrequencyDomainMethod:
+            case HodrickPrescottAlgorithmType.FrequencyDomainMethod:
                 DecomposeFrequencyDomainMethod();
                 break;
-            case HodrickPrescottAlgorithm.StateSpaceMethod:
+            case HodrickPrescottAlgorithmType.StateSpaceMethod:
                 DecomposeStateSpaceMethod();
                 break;
             default:

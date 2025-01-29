@@ -6,11 +6,11 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly int _maxImf;
     private readonly double _threshold;
-    private readonly EMDAlgorithm _algorithm;
+    private readonly EMDAlgorithmType _algorithm;
     private readonly IInterpolation<T>? _interpolation;
     private readonly double _residualEnergyThreshold = 1e-6;
 
-    public EMDDecomposition(Vector<T> timeSeries, IInterpolation<T>? interpolation = null, int maxImf = 10, double threshold = 0.05, EMDAlgorithm algorithm = EMDAlgorithm.Standard)
+    public EMDDecomposition(Vector<T> timeSeries, IInterpolation<T>? interpolation = null, int maxImf = 10, double threshold = 0.05, EMDAlgorithmType algorithm = EMDAlgorithmType.Standard)
         : base(timeSeries)
     {
         _maxImf = maxImf;
@@ -24,16 +24,16 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         switch (_algorithm)
         {
-            case EMDAlgorithm.Standard:
+            case EMDAlgorithmType.Standard:
                 DecomposeStandard();
                 break;
-            case EMDAlgorithm.Ensemble:
+            case EMDAlgorithmType.Ensemble:
                 DecomposeEnsemble();
                 break;
-            case EMDAlgorithm.CompleteEnsemble:
+            case EMDAlgorithmType.CompleteEnsemble:
                 DecomposeCompleteEnsemble();
                 break;
-            case EMDAlgorithm.Multivariate:
+            case EMDAlgorithmType.Multivariate:
                 DecomposeMultivariate();
                 break;
             default:

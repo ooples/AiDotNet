@@ -1,3 +1,5 @@
+using AiDotNet.Enums.AlgorithmTypes;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class LdlDecomposition<T> : IMatrixDecomposition<T>
@@ -8,7 +10,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> L { get; private set; }
     public Vector<T> D { get; private set; }
 
-    public LdlDecomposition(Matrix<T> matrix, LdlAlgorithm algorithm = LdlAlgorithm.Cholesky)
+    public LdlDecomposition(Matrix<T> matrix, LdlAlgorithmType algorithm = LdlAlgorithmType.Cholesky)
     {
         if (!matrix.IsSquareMatrix())
             throw new ArgumentException("Matrix must be square for LDL decomposition.");
@@ -21,14 +23,14 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
         Decompose(algorithm);
     }
 
-    public void Decompose(LdlAlgorithm algorithm = LdlAlgorithm.Cholesky)
+    public void Decompose(LdlAlgorithmType algorithm = LdlAlgorithmType.Cholesky)
     {
         switch (algorithm)
         {
-            case LdlAlgorithm.Cholesky:
+            case LdlAlgorithmType.Cholesky:
                 DecomposeCholesky();
                 break;
-            case LdlAlgorithm.Crout:
+            case LdlAlgorithmType.Crout:
                 DecomposeCrout();
                 break;
             default:

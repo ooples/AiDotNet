@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.Enums.AlgorithmTypes;
+
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class SchurDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -8,20 +10,20 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
 
     private readonly INumericOperations<T> NumOps;
 
-    public SchurDecomposition(Matrix<T> matrix, SchurAlgorithm algorithm = SchurAlgorithm.Francis)
+    public SchurDecomposition(Matrix<T> matrix, SchurAlgorithmType algorithm = SchurAlgorithmType.Francis)
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
         (SchurMatrix, UnitaryMatrix) = Decompose(matrix, algorithm);
     }
 
-    private (Matrix<T> S, Matrix<T> U) Decompose(Matrix<T> matrix, SchurAlgorithm algorithm)
+    private (Matrix<T> S, Matrix<T> U) Decompose(Matrix<T> matrix, SchurAlgorithmType algorithm)
     {
         return algorithm switch
         {
-            SchurAlgorithm.Francis => ComputeSchurFrancis(matrix),
-            SchurAlgorithm.QR => ComputeSchurQR(matrix),
-            SchurAlgorithm.Implicit => ComputeSchurImplicit(matrix),
+            SchurAlgorithmType.Francis => ComputeSchurFrancis(matrix),
+            SchurAlgorithmType.QR => ComputeSchurQR(matrix),
+            SchurAlgorithmType.Implicit => ComputeSchurImplicit(matrix),
             _ => throw new ArgumentException("Unsupported Schur decomposition algorithm.")
         };
     }

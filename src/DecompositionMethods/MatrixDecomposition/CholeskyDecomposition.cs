@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.Enums.AlgorithmTypes;
+
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -7,7 +9,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> L { get; private set; }
     public Matrix<T> A { get; private set; }
 
-    public CholeskyDecomposition(Matrix<T> matrix, CholeskyAlgorithm algorithm = CholeskyAlgorithm.Crout)
+    public CholeskyDecomposition(Matrix<T> matrix, CholeskyAlgorithmType algorithm = CholeskyAlgorithmType.Crout)
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
@@ -20,14 +22,14 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
         return BackSubstitution(L.Transpose(), y);
     }
 
-    private Matrix<T> Decompose(Matrix<T> matrix, CholeskyAlgorithm algorithm)
+    private Matrix<T> Decompose(Matrix<T> matrix, CholeskyAlgorithmType algorithm)
     {
         return algorithm switch
         {
-            CholeskyAlgorithm.Crout => ComputeCholeskyCrout(matrix),
-            CholeskyAlgorithm.Banachiewicz => ComputeCholeskyBanachiewicz(matrix),
-            CholeskyAlgorithm.LDL => ComputeCholeskyLDL(matrix),
-            CholeskyAlgorithm.BlockCholesky => ComputeBlockCholesky(matrix),
+            CholeskyAlgorithmType.Crout => ComputeCholeskyCrout(matrix),
+            CholeskyAlgorithmType.Banachiewicz => ComputeCholeskyBanachiewicz(matrix),
+            CholeskyAlgorithmType.LDL => ComputeCholeskyLDL(matrix),
+            CholeskyAlgorithmType.BlockCholesky => ComputeBlockCholesky(matrix),
             _ => throw new ArgumentException("Unsupported Cholesky decomposition algorithm.")
         };
     }

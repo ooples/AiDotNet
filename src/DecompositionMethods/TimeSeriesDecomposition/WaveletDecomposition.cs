@@ -1,14 +1,16 @@
+using AiDotNet.Enums.AlgorithmTypes;
+
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly int _levels;
     private readonly IWaveletFunction<T> _wavelet;
-    private readonly WaveletDecompositionAlgorithm _algorithm;
+    private readonly WaveletAlgorithmType _algorithm;
     private readonly int _minimumDecompositionLength;
 
     public WaveletDecomposition(Vector<T> timeSeries, IWaveletFunction<T>? wavelet = null, int levels = 3, 
-        WaveletDecompositionAlgorithm algorithm = WaveletDecompositionAlgorithm.DWT, int minimumDecompositionLength = 2)
+        WaveletAlgorithmType algorithm = WaveletAlgorithmType.DWT, int minimumDecompositionLength = 2)
         : base(timeSeries)
     {
         _levels = levels;
@@ -22,13 +24,13 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         switch (_algorithm)
         {
-            case WaveletDecompositionAlgorithm.DWT:
+            case WaveletAlgorithmType.DWT:
                 DecomposeDWT();
                 break;
-            case WaveletDecompositionAlgorithm.MODWT:
+            case WaveletAlgorithmType.MODWT:
                 DecomposeMODWT();
                 break;
-            case WaveletDecompositionAlgorithm.SWT:
+            case WaveletAlgorithmType.SWT:
                 DecomposeSWT();
                 break;
             default:

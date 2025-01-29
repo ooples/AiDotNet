@@ -1,3 +1,5 @@
+using AiDotNet.Enums.AlgorithmTypes;
+
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>

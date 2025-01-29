@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.Enums.AlgorithmTypes;
+
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class PolarDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -8,7 +10,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> U { get; private set; }
     public Matrix<T> P { get; private set; }
 
-    public PolarDecomposition(Matrix<T> matrix, PolarAlgorithm algorithm = PolarAlgorithm.SVD)
+    public PolarDecomposition(Matrix<T> matrix, PolarAlgorithmType algorithm = PolarAlgorithmType.SVD)
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
@@ -17,23 +19,23 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
         Decompose(algorithm);
     }
 
-    public void Decompose(PolarAlgorithm algorithm = PolarAlgorithm.SVD)
+    public void Decompose(PolarAlgorithmType algorithm = PolarAlgorithmType.SVD)
     {
         switch (algorithm)
         {
-            case PolarAlgorithm.SVD:
+            case PolarAlgorithmType.SVD:
                 DecomposeSVD();
                 break;
-            case PolarAlgorithm.NewtonSchulz:
+            case PolarAlgorithmType.NewtonSchulz:
                 DecomposeNewtonSchulz();
                 break;
-            case PolarAlgorithm.HalleyIteration:
+            case PolarAlgorithmType.HalleyIteration:
                 DecomposeHalleyIteration();
                 break;
-            case PolarAlgorithm.QRIteration:
+            case PolarAlgorithmType.QRIteration:
                 DecomposeQRIteration();
                 break;
-            case PolarAlgorithm.ScalingAndSquaring:
+            case PolarAlgorithmType.ScalingAndSquaring:
                 DecomposeScalingAndSquaring();
                 break;
             default:

@@ -1,3 +1,5 @@
+using AiDotNet.Enums.AlgorithmTypes;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
@@ -8,7 +10,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> QMatrix { get; private set; }
     public Matrix<T> TMatrix { get; private set; }
 
-    public TridiagonalDecomposition(Matrix<T> matrix, TridiagonalAlgorithm algorithm = TridiagonalAlgorithm.Householder)
+    public TridiagonalDecomposition(Matrix<T> matrix, TridiagonalAlgorithmType algorithm = TridiagonalAlgorithmType.Householder)
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
@@ -17,17 +19,17 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
         Decompose(algorithm);
     }
 
-    public void Decompose(TridiagonalAlgorithm algorithm = TridiagonalAlgorithm.Householder)
+    public void Decompose(TridiagonalAlgorithmType algorithm = TridiagonalAlgorithmType.Householder)
     {
         switch (algorithm)
         {
-            case TridiagonalAlgorithm.Householder:
+            case TridiagonalAlgorithmType.Householder:
                 DecomposeHouseholder();
                 break;
-            case TridiagonalAlgorithm.Givens:
+            case TridiagonalAlgorithmType.Givens:
                 DecomposeGivens();
                 break;
-            case TridiagonalAlgorithm.Lanczos:
+            case TridiagonalAlgorithmType.Lanczos:
                 DecomposeLanczos();
                 break;
             default:

@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.Enums.AlgorithmTypes;
+
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class LuDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -9,7 +11,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
 
     private readonly INumericOperations<T> NumOps;
 
-    public LuDecomposition(Matrix<T> matrix, LuAlgorithm luAlgorithm = LuAlgorithm.PartialPivoting)
+    public LuDecomposition(Matrix<T> matrix, LuAlgorithmType luAlgorithm = LuAlgorithmType.PartialPivoting)
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
@@ -24,15 +26,15 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         return BackSubstitution(U, y);
     }
 
-    private (Matrix<T> L, Matrix<T> U, Vector<int> P) Decompose(Matrix<T> matrix, LuAlgorithm algorithm)
+    private (Matrix<T> L, Matrix<T> U, Vector<int> P) Decompose(Matrix<T> matrix, LuAlgorithmType algorithm)
     {
         return algorithm switch
         {
-            LuAlgorithm.Doolittle => ComputeLuDoolittle(matrix),
-            LuAlgorithm.Crout => ComputeLuCrout(matrix),
-            LuAlgorithm.PartialPivoting => ComputeLuPartialPivoting(matrix),
-            LuAlgorithm.CompletePivoting => ComputeLuCompletePivoting(matrix),
-            LuAlgorithm.Cholesky => ComputeCholesky(matrix),
+            LuAlgorithmType.Doolittle => ComputeLuDoolittle(matrix),
+            LuAlgorithmType.Crout => ComputeLuCrout(matrix),
+            LuAlgorithmType.PartialPivoting => ComputeLuPartialPivoting(matrix),
+            LuAlgorithmType.CompletePivoting => ComputeLuCompletePivoting(matrix),
+            LuAlgorithmType.Cholesky => ComputeCholesky(matrix),
             _ => throw new ArgumentException("Unsupported LU decomposition algorithm."),
         };
     }

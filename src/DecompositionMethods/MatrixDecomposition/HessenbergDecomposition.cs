@@ -7,22 +7,22 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> HessenbergMatrix { get; private set; }
     public Matrix<T> A { get; private set; }
 
-    public HessenbergDecomposition(Matrix<T> matrix, HessenbergAlgorithm algorithm = HessenbergAlgorithm.Householder)
+    public HessenbergDecomposition(Matrix<T> matrix, HessenbergAlgorithmType algorithm = HessenbergAlgorithmType.Householder)
     {
         NumOps = MathHelper.GetNumericOperations<T>();
         A = matrix;
         HessenbergMatrix = Decompose(matrix, algorithm);
     }
 
-    private Matrix<T> Decompose(Matrix<T> matrix, HessenbergAlgorithm algorithm)
+    private Matrix<T> Decompose(Matrix<T> matrix, HessenbergAlgorithmType algorithm)
     {
         return algorithm switch
         {
-            HessenbergAlgorithm.Householder => ComputeHessenbergHouseholder(matrix),
-            HessenbergAlgorithm.Givens => ComputeHessenbergGivens(matrix),
-            HessenbergAlgorithm.ElementaryTransformations => ComputeHessenbergElementaryTransformations(matrix),
-            HessenbergAlgorithm.ImplicitQR => ComputeHessenbergImplicitQR(matrix),
-            HessenbergAlgorithm.Lanczos => ComputeHessenbergLanczos(matrix),
+            HessenbergAlgorithmType.Householder => ComputeHessenbergHouseholder(matrix),
+            HessenbergAlgorithmType.Givens => ComputeHessenbergGivens(matrix),
+            HessenbergAlgorithmType.ElementaryTransformations => ComputeHessenbergElementaryTransformations(matrix),
+            HessenbergAlgorithmType.ImplicitQR => ComputeHessenbergImplicitQR(matrix),
+            HessenbergAlgorithmType.Lanczos => ComputeHessenbergLanczos(matrix),
             _ => throw new ArgumentException("Unsupported Hessenberg decomposition algorithm.")
         };
     }

@@ -1,3 +1,5 @@
+using AiDotNet.Enums.AlgorithmTypes;
+
 namespace AiDotNet.Models.Options;
 
 public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>

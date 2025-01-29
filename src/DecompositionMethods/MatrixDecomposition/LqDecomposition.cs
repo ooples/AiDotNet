@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.Enums.AlgorithmTypes;
+
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class LqDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -8,7 +10,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> Q { get; private set; }
     public Matrix<T> A { get; private set; }
 
-    public LqDecomposition(Matrix<T> matrix, LqAlgorithm algorithm = LqAlgorithm.Householder)
+    public LqDecomposition(Matrix<T> matrix, LqAlgorithmType algorithm = LqAlgorithmType.Householder)
     {
         NumOps = MathHelper.GetNumericOperations<T>();
         A = matrix;
@@ -21,13 +23,13 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
         return Q.Transpose().Multiply(y);
     }
 
-    private (Matrix<T> L, Matrix<T> Q) Decompose(Matrix<T> matrix, LqAlgorithm algorithm)
+    private (Matrix<T> L, Matrix<T> Q) Decompose(Matrix<T> matrix, LqAlgorithmType algorithm)
     {
         return algorithm switch
         {
-            LqAlgorithm.Householder => ComputeLqHouseholder(matrix),
-            LqAlgorithm.GramSchmidt => ComputeLqGramSchmidt(matrix),
-            LqAlgorithm.Givens => ComputeLqGivens(matrix),
+            LqAlgorithmType.Householder => ComputeLqHouseholder(matrix),
+            LqAlgorithmType.GramSchmidt => ComputeLqGramSchmidt(matrix),
+            LqAlgorithmType.Givens => ComputeLqGivens(matrix),
             _ => throw new ArgumentException("Unsupported LQ decomposition algorithm."),
         };
     }

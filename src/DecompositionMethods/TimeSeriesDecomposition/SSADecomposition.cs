@@ -1,3 +1,5 @@
+using AiDotNet.Enums.AlgorithmTypes;
+
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>

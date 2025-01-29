@@ -8,19 +8,19 @@ public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> R { get; private set; }
     public Matrix<T> A { get; private set; }
 
-    public GramSchmidtDecomposition(Matrix<T> matrix, GramSchmidtAlgorithm algorithm = GramSchmidtAlgorithm.Classical)
+    public GramSchmidtDecomposition(Matrix<T> matrix, GramSchmidtAlgorithmType algorithm = GramSchmidtAlgorithmType.Classical)
     {
         NumOps = MathHelper.GetNumericOperations<T>();
         A = matrix;
         (Q, R) = Decompose(matrix, algorithm);
     }
 
-    private (Matrix<T> Q, Matrix<T> R) Decompose(Matrix<T> matrix, GramSchmidtAlgorithm algorithm)
+    private (Matrix<T> Q, Matrix<T> R) Decompose(Matrix<T> matrix, GramSchmidtAlgorithmType algorithm)
     {
         return algorithm switch
         {
-            GramSchmidtAlgorithm.Classical => ComputeClassicalGramSchmidt(matrix),
-            GramSchmidtAlgorithm.Modified => ComputeModifiedGramSchmidt(matrix),
+            GramSchmidtAlgorithmType.Classical => ComputeClassicalGramSchmidt(matrix),
+            GramSchmidtAlgorithmType.Modified => ComputeModifiedGramSchmidt(matrix),
             _ => throw new ArgumentException("Unsupported Gram-Schmidt algorithm.")
         };
     }

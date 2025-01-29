@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.Enums.AlgorithmTypes;
+
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class EigenDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -9,20 +11,20 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
 
     public Matrix<T> A { get; private set; }
 
-    public EigenDecomposition(Matrix<T> matrix, EigenAlgorithm algorithm = EigenAlgorithm.QR)
+    public EigenDecomposition(Matrix<T> matrix, EigenAlgorithmType algorithm = EigenAlgorithmType.QR)
     {
         NumOps = MathHelper.GetNumericOperations<T>();
         A = matrix;
         (EigenValues, EigenVectors) = Decompose(matrix, algorithm);
     }
 
-    private (Vector<T> eigenValues, Matrix<T> eigenVectors) Decompose(Matrix<T> matrix, EigenAlgorithm algorithm)
+    private (Vector<T> eigenValues, Matrix<T> eigenVectors) Decompose(Matrix<T> matrix, EigenAlgorithmType algorithm)
     {
         return algorithm switch
         {
-            EigenAlgorithm.QR => ComputeEigenQR(matrix),
-            EigenAlgorithm.PowerIteration => ComputeEigenPowerIteration(matrix),
-            EigenAlgorithm.Jacobi => ComputeEigenJacobi(matrix),
+            EigenAlgorithmType.QR => ComputeEigenQR(matrix),
+            EigenAlgorithmType.PowerIteration => ComputeEigenPowerIteration(matrix),
+            EigenAlgorithmType.Jacobi => ComputeEigenJacobi(matrix),
             _ => throw new ArgumentException("Unsupported eigenvalue decomposition algorithm.")
         };
     }

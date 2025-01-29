@@ -1,11 +1,13 @@
+using AiDotNet.Enums.AlgorithmTypes;
+
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
-    private readonly MultiplicativeDecompositionAlgorithm _algorithm;
+    private readonly MultiplicativeAlgorithmType _algorithm;
     private readonly int _seasonalPeriod;
 
-    public MultiplicativeDecomposition(Vector<T> timeSeries, MultiplicativeDecompositionAlgorithm algorithm = MultiplicativeDecompositionAlgorithm.GeometricMovingAverage, int seasonalPeriod = 12)
+    public MultiplicativeDecomposition(Vector<T> timeSeries, MultiplicativeAlgorithmType algorithm = MultiplicativeAlgorithmType.GeometricMovingAverage, int seasonalPeriod = 12)
         : base(timeSeries)
     {
         _algorithm = algorithm;
@@ -17,13 +19,13 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         switch (_algorithm)
         {
-            case MultiplicativeDecompositionAlgorithm.GeometricMovingAverage:
+            case MultiplicativeAlgorithmType.GeometricMovingAverage:
                 DecomposeGeometricMovingAverage();
                 break;
-            case MultiplicativeDecompositionAlgorithm.MultiplicativeExponentialSmoothing:
+            case MultiplicativeAlgorithmType.MultiplicativeExponentialSmoothing:
                 DecomposeMultiplicativeExponentialSmoothing();
                 break;
-            case MultiplicativeDecompositionAlgorithm.LogTransformedSTL:
+            case MultiplicativeAlgorithmType.LogTransformedSTL:
                 DecomposeLogTransformedSTL();
                 break;
             default:

@@ -1,12 +1,14 @@
+using AiDotNet.Enums.AlgorithmTypes;
+
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly SARIMAOptions<T> _sarimaOptions;
     private readonly int _forecastHorizon;
-    private readonly SEATSAlgorithm _algorithm;
+    private readonly SEATSAlgorithmType _algorithm;
 
-    public SEATSDecomposition(Vector<T> timeSeries, SARIMAOptions<T>? sarimaOptions = null, int forecastHorizon = 12, SEATSAlgorithm algorithm = SEATSAlgorithm.Standard) 
+    public SEATSDecomposition(Vector<T> timeSeries, SARIMAOptions<T>? sarimaOptions = null, int forecastHorizon = 12, SEATSAlgorithmType algorithm = SEATSAlgorithmType.Standard) 
         : base(timeSeries)
     {
         _sarimaOptions = sarimaOptions ?? new();
@@ -19,13 +21,13 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         switch (_algorithm)
         {
-            case SEATSAlgorithm.Standard:
+            case SEATSAlgorithmType.Standard:
                 DecomposeStandard();
                 break;
-            case SEATSAlgorithm.Canonical:
+            case SEATSAlgorithmType.Canonical:
                 DecomposeCanonical();
                 break;
-            case SEATSAlgorithm.Burman:
+            case SEATSAlgorithmType.Burman:
                 DecomposeBurman();
                 break;
             default:

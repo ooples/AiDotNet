@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.Enums.AlgorithmTypes;
+
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class TakagiDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -8,22 +10,22 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<Complex<T>> UnitaryMatrix { get; private set; }
     public Matrix<T> A { get; private set; }
 
-    public TakagiDecomposition(Matrix<T> matrix, TakagiAlgorithm algorithm = TakagiAlgorithm.Jacobi)
+    public TakagiDecomposition(Matrix<T> matrix, TakagiAlgorithmType algorithm = TakagiAlgorithmType.Jacobi)
     {
         NumOps = MathHelper.GetNumericOperations<T>();
         A = matrix;
         (SigmaMatrix, UnitaryMatrix) = Decompose(A, algorithm);
     }
 
-    private (Matrix<T> S, Matrix<Complex<T>> U) Decompose(Matrix<T> matrix, TakagiAlgorithm algorithm)
+    private (Matrix<T> S, Matrix<Complex<T>> U) Decompose(Matrix<T> matrix, TakagiAlgorithmType algorithm)
     {
         return algorithm switch
         {
-            TakagiAlgorithm.Jacobi => ComputeTakagiJacobi(matrix),
-            TakagiAlgorithm.QR => ComputeTakagiQR(matrix),
-            TakagiAlgorithm.EigenDecomposition => ComputeTakagiEigenDecomposition(matrix),
-            TakagiAlgorithm.PowerIteration => ComputeTakagiPowerIteration(matrix),
-            TakagiAlgorithm.LanczosIteration => ComputeTakagiLanczosIteration(matrix),
+            TakagiAlgorithmType.Jacobi => ComputeTakagiJacobi(matrix),
+            TakagiAlgorithmType.QR => ComputeTakagiQR(matrix),
+            TakagiAlgorithmType.EigenDecomposition => ComputeTakagiEigenDecomposition(matrix),
+            TakagiAlgorithmType.PowerIteration => ComputeTakagiPowerIteration(matrix),
+            TakagiAlgorithmType.LanczosIteration => ComputeTakagiLanczosIteration(matrix),
             _ => throw new ArgumentException("Unsupported Takagi decomposition algorithm.")
         };
     }

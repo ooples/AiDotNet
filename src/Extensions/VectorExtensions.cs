@@ -83,6 +83,29 @@ public static class VectorExtensions
         return result;
     }
 
+    public static T StandardDeviation<T>(this Vector<T> vector)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = vector.Length;
+            
+        if (n < 2)
+        {
+            return numOps.Zero;
+        }
+
+        T mean = vector.Average();
+        T sum = numOps.Zero;
+
+        for (int i = 0; i < n; i++)
+        {
+            T diff = numOps.Subtract(vector[i], mean);
+            sum = numOps.Add(sum, numOps.Multiply(diff, diff));
+        }
+
+        T variance = numOps.Divide(sum, numOps.FromDouble(n - 1));
+        return numOps.Sqrt(variance);
+    }
+
     public static T Median<T>(this Vector<T> vector)
     {
         if (vector == null || vector.Length == 0)

@@ -2,13 +2,13 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
-    private readonly BeveridgeNelsonAlgorithm _algorithm;
+    private readonly BeveridgeNelsonAlgorithmType _algorithm;
     private readonly ARIMAOptions<T> _arimaOptions;
     private readonly int _forecastHorizon;
     private readonly Matrix<T> _multivariateSeries;
 
     public BeveridgeNelsonDecomposition(Vector<T> timeSeries, 
-        BeveridgeNelsonAlgorithm algorithm = BeveridgeNelsonAlgorithm.Standard,
+        BeveridgeNelsonAlgorithmType algorithm = BeveridgeNelsonAlgorithmType.Standard,
         ARIMAOptions<T>? arimaOptions = null,
         int forecastHorizon = 100,
         Matrix<T>? multivariateSeries = null) 
@@ -24,13 +24,13 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         switch (_algorithm)
         {
-            case BeveridgeNelsonAlgorithm.Standard:
+            case BeveridgeNelsonAlgorithmType.Standard:
                 DecomposeStandard();
                 break;
-            case BeveridgeNelsonAlgorithm.ARIMA:
+            case BeveridgeNelsonAlgorithmType.ARIMA:
                 DecomposeARIMA();
                 break;
-            case BeveridgeNelsonAlgorithm.Multivariate:
+            case BeveridgeNelsonAlgorithmType.Multivariate:
                 DecomposeMultivariate();
                 break;
             default:

@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Enums;
+using AiDotNet.Enums.AlgorithmTypes;
 
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
@@ -12,7 +12,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> U { get; private set; }
     public Vector<T> D { get; private set; }
 
-    public UduDecomposition(Matrix<T> matrix, UduAlgorithm algorithm = UduAlgorithm.Crout)
+    public UduDecomposition(Matrix<T> matrix, UduAlgorithmType algorithm = UduAlgorithmType.Crout)
     {
         if (!matrix.IsSquareMatrix())
             throw new ArgumentException("Matrix must be square for UDU decomposition.");
@@ -25,14 +25,14 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
         Decompose(algorithm);
     }
 
-    public void Decompose(UduAlgorithm algorithm = UduAlgorithm.Crout)
+    public void Decompose(UduAlgorithmType algorithm = UduAlgorithmType.Crout)
     {
         switch (algorithm)
         {
-            case UduAlgorithm.Crout:
+            case UduAlgorithmType.Crout:
                 DecomposeCrout();
                 break;
-            case UduAlgorithm.Doolittle:
+            case UduAlgorithmType.Doolittle:
                 DecomposeDoolittle();
                 break;
             default:

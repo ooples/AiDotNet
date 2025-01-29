@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.Enums.AlgorithmTypes;
+
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class QrDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -8,7 +10,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
 
     private readonly INumericOperations<T> NumOps;
 
-    public QrDecomposition(Matrix<T> matrix, QrAlgorithm qrAlgorithm = QrAlgorithm.Householder)
+    public QrDecomposition(Matrix<T> matrix, QrAlgorithmType qrAlgorithm = QrAlgorithmType.Householder)
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
@@ -21,15 +23,15 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
         return BackSubstitution(R, y);
     }
 
-    private (Matrix<T> Q, Matrix<T> R) Decompose(Matrix<T> matrix, QrAlgorithm algorithm)
+    private (Matrix<T> Q, Matrix<T> R) Decompose(Matrix<T> matrix, QrAlgorithmType algorithm)
     {
         return algorithm switch
         {
-            QrAlgorithm.GramSchmidt => ComputeQrGramSchmidt(matrix),
-            QrAlgorithm.Householder => ComputeQrHouseholder(matrix),
-            QrAlgorithm.Givens => ComputeQrGivens(matrix),
-            QrAlgorithm.ModifiedGramSchmidt => ComputeQrModifiedGramSchmidt(matrix),
-            QrAlgorithm.IterativeGramSchmidt => ComputeQrIterativeGramSchmidt(matrix),
+            QrAlgorithmType.GramSchmidt => ComputeQrGramSchmidt(matrix),
+            QrAlgorithmType.Householder => ComputeQrHouseholder(matrix),
+            QrAlgorithmType.Givens => ComputeQrGivens(matrix),
+            QrAlgorithmType.ModifiedGramSchmidt => ComputeQrModifiedGramSchmidt(matrix),
+            QrAlgorithmType.IterativeGramSchmidt => ComputeQrIterativeGramSchmidt(matrix),
             _ => throw new ArgumentException("Unsupported QR decomposition algorithm.")
         };
     }

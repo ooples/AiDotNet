@@ -4,7 +4,6 @@ public static class NeuralNetworkHelper<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    // Activation functions
     public static T ReLU(T x) => MathHelper.Max(x, NumOps.Zero);
     public static T ReLUDerivative(T x) => NumOps.GreaterThan(x, NumOps.Zero) ? NumOps.One : NumOps.Zero;
 
@@ -26,8 +25,95 @@ public static class NeuralNetworkHelper<T>
         return NumOps.Subtract(NumOps.One, NumOps.Multiply(tanh, tanh));
     }
 
+    public static Vector<T> Softmax(Vector<T> x)
+    {
+        Vector<T> expValues = x.Transform(NumOps.Exp);
+        T sum = expValues.Sum();
+
+        return expValues.Transform(v => NumOps.Divide(v, sum));
+    }
+    public static Matrix<T> SoftmaxDerivative(Vector<T> x)
+    {
+        Vector<T> s = Softmax(x);
+        int n = s.Length;
+        Matrix<T> jacobian = new Matrix<T>(n, n);
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                if (i == j)
+                {
+                    jacobian[i, j] = NumOps.Multiply(s[i], NumOps.Subtract(NumOps.One, s[i]));
+                }
+                else
+                {
+                    jacobian[i, j] = NumOps.Negate(NumOps.Multiply(s[i], s[j]));
+                }
+            }
+        }
+
+        return jacobian;
+    }
+
     public static T Linear(T x) => x;
     public static T LinearDerivative(T x) => NumOps.One;
+
+    public static T LeakyReLU(T x, T alpha) => NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Multiply(alpha, x);
+    public static T LeakyReLUDerivative(T x, T alpha) => NumOps.GreaterThan(x, NumOps.Zero) ? NumOps.One : alpha;
+
+    public static T ELU(T x, T alpha) => NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Multiply(alpha, NumOps.Subtract(NumOps.Exp(x), NumOps.One));
+    public static T ELUDerivative(T x, T alpha) => NumOps.GreaterThan(x, NumOps.Zero) ? NumOps.One : NumOps.Add(ELU(x, alpha), alpha);
+
+    public static T SELU(T x)
+    {
+        T alpha = NumOps.FromDouble(1.6732632423543772848170429916717);
+        T scale = NumOps.FromDouble(1.0507009873554804934193349852946);
+
+        return NumOps.Multiply(scale, ELU(x, alpha));
+    }
+    public static T SELUDerivative(T x)
+    {
+        T alpha = NumOps.FromDouble(1.6732632423543772848170429916717);
+        T scale = NumOps.FromDouble(1.0507009873554804934193349852946);
+
+        return NumOps.Multiply(scale, ELUDerivative(x, alpha));
+    }
+
+    public static T Softplus(T x) => NumOps.Log(NumOps.Add(NumOps.One, NumOps.Exp(x)));
+    public static T SoftplusDerivative(T x) => NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(x))));
+
+    public static T SoftSign(T x) => NumOps.Divide(x, NumOps.Add(NumOps.One, NumOps.Abs(x)));
+    public static T SoftSignDerivative(T x)
+    {
+        T denominator = NumOps.Add(NumOps.One, NumOps.Abs(x));
+        return NumOps.Divide(NumOps.One, NumOps.Multiply(denominator, denominator));
+    }
+
+    public static T Swish(T x) => NumOps.Multiply(x, Sigmoid(x));
+    public static T SwishDerivative(T x)
+    {
+        T sigX = Sigmoid(x);
+        return NumOps.Add(NumOps.Multiply(x, NumOps.Multiply(sigX, NumOps.Subtract(NumOps.One, sigX))), sigX);
+    }
+
+    public static T GELU(T x)
+    {
+        T sqrt2OverPi = NumOps.FromDouble(0.7978845608028654);
+        T half = NumOps.FromDouble(0.5);
+        T tanh = MathHelper.Tanh(NumOps.Multiply(sqrt2OverPi, NumOps.Add(x, NumOps.Multiply(NumOps.FromDouble(0.044715), NumOps.Power(x, NumOps.FromDouble(3))))));
+
+        return NumOps.Multiply(half, NumOps.Multiply(x, NumOps.Add(NumOps.One, tanh)));
+    }
+    public static T GELUDerivative(T x)
+    {
+        T sqrt2OverPi = NumOps.FromDouble(0.7978845608028654);
+        T half = NumOps.FromDouble(0.5);
+        T tanh = MathHelper.Tanh(NumOps.Multiply(sqrt2OverPi, NumOps.Add(x, NumOps.Multiply(NumOps.FromDouble(0.044715), NumOps.Power(x, NumOps.FromDouble(3))))));
+        T sech2 = NumOps.Subtract(NumOps.One, NumOps.Multiply(tanh, tanh));
+
+        return NumOps.Add(half, NumOps.Multiply(half, NumOps.Multiply(tanh, NumOps.Add(NumOps.One, NumOps.Multiply(x, NumOps.Multiply(sqrt2OverPi, sech2))))));
+    }
 
     // Loss functions
     public static T MeanSquaredError(Vector<T> predicted, Vector<T> actual)

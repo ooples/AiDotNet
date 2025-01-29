@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.Enums.AlgorithmTypes;
+
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class SvdDecomposition<T> : IMatrixDecomposition<T>
 {
@@ -9,23 +11,23 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
 
     private readonly INumericOperations<T> NumOps;
 
-    public SvdDecomposition(Matrix<T> matrix, SvdAlgorithm svdAlgorithm = SvdAlgorithm.GolubReinsch)
+    public SvdDecomposition(Matrix<T> matrix, SvdAlgorithmType svdAlgorithm = SvdAlgorithmType.GolubReinsch)
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
         (U, S, Vt) = Decompose(matrix, svdAlgorithm);
     }
 
-    private (Matrix<T> U, Vector<T> S, Matrix<T> VT) Decompose(Matrix<T> matrix, SvdAlgorithm algorithm)
+    private (Matrix<T> U, Vector<T> S, Matrix<T> VT) Decompose(Matrix<T> matrix, SvdAlgorithmType algorithm)
     {
         return algorithm switch
         {
-            SvdAlgorithm.GolubReinsch => ComputeSvdGolubReinsch(matrix),
-            SvdAlgorithm.Jacobi => ComputeSvdJacobi(matrix),
-            SvdAlgorithm.Randomized => ComputeSvdRandomized(matrix),
-            SvdAlgorithm.PowerIteration => ComputeSvdPowerIteration(matrix),
-            SvdAlgorithm.TruncatedSVD => ComputeTruncatedSvd(matrix),
-            SvdAlgorithm.DividedAndConquer => ComputeSvdDividedAndConquer(matrix),
+            SvdAlgorithmType.GolubReinsch => ComputeSvdGolubReinsch(matrix),
+            SvdAlgorithmType.Jacobi => ComputeSvdJacobi(matrix),
+            SvdAlgorithmType.Randomized => ComputeSvdRandomized(matrix),
+            SvdAlgorithmType.PowerIteration => ComputeSvdPowerIteration(matrix),
+            SvdAlgorithmType.TruncatedSVD => ComputeTruncatedSvd(matrix),
+            SvdAlgorithmType.DividedAndConquer => ComputeSvdDividedAndConquer(matrix),
             _ => throw new ArgumentException("Unsupported SVD algorithm", nameof(algorithm)),
         };
     }

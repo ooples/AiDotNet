@@ -1,3 +1,5 @@
+using AiDotNet.Enums.AlgorithmTypes;
+
 namespace AiDotNet.TimeSeries;
 
 public class STLDecomposition<T> : TimeSeriesModelBase<T>
