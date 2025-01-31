@@ -57,7 +57,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
 
     private void InitializeCoefficients(int featureCount)
     {
-        Coefficients = new Vector<T>(featureCount, NumOps);
+        Coefficients = new Vector<T>(featureCount);
         Intercept = NumOps.Zero;
     }
 

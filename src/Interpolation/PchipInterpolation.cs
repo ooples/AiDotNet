@@ -17,7 +17,7 @@ public class PchipInterpolation<T> : IInterpolation<T>
         _x = x;
         _y = y;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _slopes = new Vector<T>(x.Length, _numOps);
+        _slopes = new Vector<T>(x.Length);
 
         CalculateSlopes();
     }

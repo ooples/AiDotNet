@@ -12,8 +12,8 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new GeneralizedAdditiveModelOptions<T>();
-        _basisFunctions = new Matrix<T>(0, 0, NumOps);
-        _coefficients = new Vector<T>(0, NumOps);
+        _basisFunctions = new Matrix<T>(0, 0);
+        _coefficients = new Vector<T>(0);
     }
 
     public override void Train(Matrix<T> x, Vector<T> y)
@@ -35,7 +35,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     {
         int numFeatures = x.Columns;
         int numBasisFunctions = _options.NumSplines * numFeatures;
-        Matrix<T> basisFunctions = new Matrix<T>(x.Rows, numBasisFunctions, NumOps);
+        Matrix<T> basisFunctions = new Matrix<T>(x.Rows, numBasisFunctions);
 
         for (int i = 0; i < numFeatures; i++)
         {
@@ -56,7 +56,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     {
         Vector<T> sortedFeature = new Vector<T>(feature.OrderBy(v => v));
         int step = sortedFeature.Length / (_options.NumSplines + 1);
-        return new Vector<T>([.. Enumerable.Range(1, _options.NumSplines).Select(i => sortedFeature[i * step])], NumOps);
+        return new Vector<T>([.. Enumerable.Range(1, _options.NumSplines).Select(i => sortedFeature[i * step])]);
     }
 
     private Vector<T> CreateSpline(Vector<T> feature, T knot, int degree)
@@ -86,7 +86,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     private Matrix<T> CreatePenaltyMatrix()
     {
         int size = _basisFunctions.Columns;
-        Matrix<T> penaltyMatrix = Matrix<T>.CreateIdentity(size, NumOps);
+        Matrix<T> penaltyMatrix = Matrix<T>.CreateIdentity(size);
         return penaltyMatrix;
     }
 
@@ -116,7 +116,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     protected override Vector<T> CalculateFeatureImportances()
     {
         int numFeatures = _basisFunctions.Columns / _options.NumSplines;
-        Vector<T> importances = new Vector<T>(numFeatures, NumOps);
+        Vector<T> importances = new Vector<T>(numFeatures);
 
         for (int i = 0; i < numFeatures; i++)
         {
@@ -179,7 +179,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         // Read _basisFunctions
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
-        _basisFunctions = new Matrix<T>(rows, cols, NumOps);
+        _basisFunctions = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
@@ -190,7 +190,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
 
         // Read _coefficients
         int length = reader.ReadInt32();
-        _coefficients = new Vector<T>(length, NumOps);
+        _coefficients = new Vector<T>(length);
         for (int i = 0; i < length; i++)
         {
             _coefficients[i] = NumOps.FromDouble(reader.ReadDouble());

@@ -33,6 +33,6 @@ public class VarianceThresholdFeatureSelector<T> : IFeatureSelector<T>
             }
         }
 
-        return new Matrix<T>(selectedFeatures, _numOps);
+        return new Matrix<T>(selectedFeatures);
     }
 }

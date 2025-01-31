@@ -17,7 +17,7 @@ public class NullSymbolicModel<T> : ISymbolicModel<T>
         return new NullSymbolicModel<T>();
     }
 
-    public ISymbolicModel<T> Crossover(ISymbolicModel<T> other, double crossoverRate, INumericOperations<T> numOps)
+    public ISymbolicModel<T> Crossover(ISymbolicModel<T> other, double crossoverRate)
     {
         return new NullSymbolicModel<T>();
     }
@@ -48,7 +48,7 @@ public class NullSymbolicModel<T> : ISymbolicModel<T>
         return false;
     }
 
-    public ISymbolicModel<T> Mutate(double mutationRate, INumericOperations<T> numOps)
+    public ISymbolicModel<T> Mutate(double mutationRate)
     {
         return new NullSymbolicModel<T>();
     }

@@ -46,8 +46,8 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
         InitializeAdaptiveParameters();
 
         // Initial random sampling
-        _sampledPoints = new Matrix<T>(_options.InitialSamples, inputData.XTrain.Columns, NumOps);
-        _sampledValues = new Vector<T>(_options.InitialSamples, NumOps);
+        _sampledPoints = new Matrix<T>(_options.InitialSamples, inputData.XTrain.Columns);
+        _sampledValues = new Vector<T>(_options.InitialSamples);
 
         for (int i = 0; i < _options.InitialSamples; i++)
         {
@@ -77,8 +77,8 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
 
             // Resize _sampledPoints and _sampledValues
             int newSize = _sampledPoints.Rows + 1;
-            var newSampledPoints = new Matrix<T>(newSize, inputData.XTrain.Columns, NumOps);
-            var newSampledValues = new Vector<T>(newSize, NumOps);
+            var newSampledPoints = new Matrix<T>(newSize, inputData.XTrain.Columns);
+            var newSampledValues = new Vector<T>(newSize);
 
             // Copy existing data
             for (int i = 0; i < _sampledPoints.Rows; i++)
@@ -233,7 +233,7 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
             // Deserialize _sampledPoints
             int rows = reader.ReadInt32();
             int columns = reader.ReadInt32();
-            _sampledPoints = new Matrix<T>(rows, columns, NumOps);
+            _sampledPoints = new Matrix<T>(rows, columns);
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < columns; j++)
@@ -244,7 +244,7 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
 
             // Deserialize _sampledValues
             int valueCount = reader.ReadInt32();
-            _sampledValues = new Vector<T>(valueCount, NumOps);
+            _sampledValues = new Vector<T>(valueCount);
             for (int i = 0; i < valueCount; i++)
             {
                 _sampledValues[i] = NumOps.FromDouble(reader.ReadDouble());

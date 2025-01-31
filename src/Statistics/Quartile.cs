@@ -2,20 +2,19 @@
 
 public class Quartile<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly Vector<T> _sortedData;
 
     public T Q1 { get; }
     public T Q2 { get; }
     public T Q3 { get; }
 
-    public Quartile(Vector<T> data, INumericOperations<T> numOps)
+    public Quartile(Vector<T> data)
     {
-        _numOps = numOps;
-        _sortedData = new Vector<T>([.. data.OrderBy(x => x)], _numOps);
+        _sortedData = new Vector<T>([.. data.OrderBy(x => x)]);
 
-        Q1 = StatisticsHelper<T>.CalculateQuantile(_sortedData, _numOps.FromDouble(0.25));
-        Q2 = StatisticsHelper<T>.CalculateQuantile(_sortedData, _numOps.FromDouble(0.5));
-        Q3 = StatisticsHelper<T>.CalculateQuantile(_sortedData, _numOps.FromDouble(0.75));
+        Q1 = StatisticsHelper<T>.CalculateQuantile(_sortedData, NumOps.FromDouble(0.25));
+        Q2 = StatisticsHelper<T>.CalculateQuantile(_sortedData, NumOps.FromDouble(0.5));
+        Q3 = StatisticsHelper<T>.CalculateQuantile(_sortedData, NumOps.FromDouble(0.75));
     }
 }

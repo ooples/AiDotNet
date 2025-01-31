@@ -28,8 +28,8 @@ public class GaborWavelet<T> : IWaveletFunction<T>
     public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
-        var approximation = new Vector<T>(size, _numOps);
-        var detail = new Vector<T>(size, _numOps);
+        var approximation = new Vector<T>(size);
+        var detail = new Vector<T>(size);
 
         for (int x = 0; x < size; x++)
         {
@@ -46,7 +46,7 @@ public class GaborWavelet<T> : IWaveletFunction<T>
     public Vector<T> GetScalingCoefficients()
     {
         int size = 100;
-        var coefficients = new Vector<T>(size, _numOps);
+        var coefficients = new Vector<T>(size);
 
         for (int x = 0; x < size; x++)
         {
@@ -59,7 +59,7 @@ public class GaborWavelet<T> : IWaveletFunction<T>
     public Vector<T> GetWaveletCoefficients()
     {
         int size = 100;
-        var coefficients = new Vector<T>(size, _numOps);
+        var coefficients = new Vector<T>(size);
 
         for (int x = 0; x < size; x++)
         {

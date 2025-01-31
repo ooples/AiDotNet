@@ -27,9 +27,9 @@ public class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     public T Interpolate(T x, T y)
     {
         int basisSize = (_polynomialDegree + 1) * (_polynomialDegree + 2) / 2;
-        var A = new Matrix<T>(_x.Length, basisSize, _numOps);
-        var W = new Matrix<T>(_x.Length, _x.Length, _numOps);
-        var b = new Vector<T>(_x.Length, _numOps);
+        var A = new Matrix<T>(_x.Length, basisSize);
+        var W = new Matrix<T>(_x.Length, _x.Length);
+        var b = new Vector<T>(_x.Length);
 
         for (int i = 0; i < _x.Length; i++)
         {

@@ -14,15 +14,15 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     {
         _tbatsOptions = (TBATSModelOptions<T>)_options;
 
-        _level = new Vector<T>(1, NumOps);
-        _trend = new Vector<T>(1, NumOps);
+        _level = new Vector<T>(1);
+        _trend = new Vector<T>(1);
         _seasonalComponents = new List<Vector<T>>();
         foreach (int period in _tbatsOptions.SeasonalPeriods)
         {
-            _seasonalComponents.Add(new Vector<T>(period, NumOps));
+            _seasonalComponents.Add(new Vector<T>(period));
         }
-        _arCoefficients = new Vector<T>(_tbatsOptions.ARMAOrder, NumOps);
-        _maCoefficients = new Vector<T>(_tbatsOptions.ARMAOrder, NumOps);
+        _arCoefficients = new Vector<T>(_tbatsOptions.ARMAOrder);
+        _maCoefficients = new Vector<T>(_tbatsOptions.ARMAOrder);
         _boxCoxLambda = NumOps.FromDouble(_tbatsOptions.BoxCoxLambda);
     }
 
@@ -51,7 +51,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     private T CalculateLogLikelihood(Vector<T> y)
     {
         T logLikelihood = NumOps.Zero;
-        Vector<T> predictions = Predict(new Matrix<T>(y.Length, 1, NumOps)); // Create a dummy input matrix
+        Vector<T> predictions = Predict(new Matrix<T>(y.Length, 1)); // Create a dummy input matrix
 
         for (int t = 0; t < y.Length; t++)
         {
@@ -72,7 +72,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new Vector<T>(input.Rows, NumOps);
+        Vector<T> predictions = new Vector<T>(input.Rows);
 
         for (int t = 0; t < input.Rows; t++)
         {
@@ -106,7 +106,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
         // Initialize level using a robust moving median
         int windowSize = Math.Min(14, n); // Use two weeks' worth of data or less if not available
-        _level = new Vector<T>(n, NumOps);
+        _level = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             int start = Math.Max(0, i - windowSize + 1);
@@ -115,7 +115,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         }
 
         // Initialize trend using robust slope estimation
-        _trend = new Vector<T>(n, NumOps);
+        _trend = new Vector<T>(n);
         for (int i = windowSize; i < n; i++)
         {
             Vector<T> x = Vector<T>.Range(0, windowSize);
@@ -155,18 +155,18 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        T medianSlope = StatisticsHelper<T>.CalculateMedian(new Vector<T>(slopes.ToArray(), NumOps));
+        T medianSlope = StatisticsHelper<T>.CalculateMedian(new Vector<T>(slopes.ToArray()));
         T intercept = NumOps.Subtract(StatisticsHelper<T>.CalculateMedian(y), 
                                       NumOps.Multiply(medianSlope, StatisticsHelper<T>.CalculateMedian(x)));
 
-        return new Vector<T>(new T[] { intercept, medianSlope }, NumOps);
+        return new Vector<T>(new T[] { intercept, medianSlope });
     }
 
     private Vector<T> InitializeSeasonalComponentRobust(Vector<T> y, int period)
     {
         int n = y.Length;
-        Vector<T> seasonal = new Vector<T>(period, NumOps);
-        Vector<T> detrended = new Vector<T>(n, NumOps);
+        Vector<T> seasonal = new Vector<T>(period);
+        Vector<T> detrended = new Vector<T>(n);
 
         // Detrend the series
         for (int i = 0; i < n; i++)
@@ -182,7 +182,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
             {
                 values.Add(detrended[j]);
             }
-            seasonal[i] = StatisticsHelper<T>.CalculateMedian(new Vector<T>(values.ToArray(), NumOps));
+            seasonal[i] = StatisticsHelper<T>.CalculateMedian(new Vector<T>(values.ToArray()));
         }
 
         // Normalize seasonal component
@@ -204,8 +204,8 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         T[] autocorrelations = CalculateRobustAutocorrelations(y, Math.Max(p, q));
 
         // Initialize AR coefficients using Yule-Walker method with robust autocorrelations
-        Matrix<T> R = new Matrix<T>(p, p, NumOps);
-        Vector<T> r = new Vector<T>(p, NumOps);
+        Matrix<T> R = new Matrix<T>(p, p);
+        Vector<T> r = new Vector<T>(p);
 
         for (int i = 0; i < p; i++)
         {
@@ -220,8 +220,8 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
         // Initialize MA coefficients using innovations algorithm with robust autocorrelations
         Vector<T> residuals = CalculateRobustResiduals(y);
-        _maCoefficients = new Vector<T>(q, NumOps);
-        Vector<T> v = new Vector<T>(q + 1, NumOps);
+        _maCoefficients = new Vector<T>(q);
+        Vector<T> v = new Vector<T>(q + 1);
         v[0] = StatisticsHelper<T>.CalculateMedianAbsoluteDeviation(residuals);
 
         for (int k = 1; k <= q; k++)
@@ -255,7 +255,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
                 products.Add(NumOps.Multiply(diff1, diff2));
             }
 
-            autocorrelations[lag] = StatisticsHelper<T>.CalculateMedian(new Vector<T>(products.ToArray(), NumOps));
+            autocorrelations[lag] = StatisticsHelper<T>.CalculateMedian(new Vector<T>(products.ToArray()));
         }
 
         return autocorrelations;
@@ -263,8 +263,8 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
     private Vector<T> CalculateRobustResiduals(Vector<T> y)
     {
-        Vector<T> residuals = new Vector<T>(y.Length, NumOps);
-        Vector<T> predictions = Predict(new Matrix<T>(y.Length, 1, NumOps)); // Create a dummy input matrix
+        Vector<T> residuals = new Vector<T>(y.Length);
+        Vector<T> predictions = Predict(new Matrix<T>(y.Length, 1)); // Create a dummy input matrix
 
         for (int t = 0; t < y.Length; t++)
         {
@@ -292,7 +292,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     private Vector<T> InitializeSeasonalComponent(Vector<T> y, int period)
     {
         int n = y.Length;
-        Vector<T> seasonal = new Vector<T>(period, NumOps);
+        Vector<T> seasonal = new Vector<T>(period);
 
         // Calculate seasonal indices
         for (int i = 0; i < period; i++)
@@ -324,8 +324,8 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
         // Initialize AR coefficients using Yule-Walker method
         T[] autocorrelations = CalculateAutocorrelations(y, Math.Max(p, q));
-        Matrix<T> R = new Matrix<T>(p, p, NumOps);
-        Vector<T> r = new Vector<T>(p, NumOps);
+        Matrix<T> R = new Matrix<T>(p, p);
+        Vector<T> r = new Vector<T>(p);
 
         for (int i = 0; i < p; i++)
         {
@@ -340,8 +340,8 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
         // Initialize MA coefficients using innovations algorithm
         Vector<T> residuals = CalculateRobustResiduals(y);
-        _maCoefficients = new Vector<T>(q, NumOps);
-        Vector<T> v = new Vector<T>(q + 1, NumOps);
+        _maCoefficients = new Vector<T>(q);
+        Vector<T> v = new Vector<T>(q + 1);
         v[0] = StatisticsHelper<T>.CalculateMedianAbsoluteDeviation(residuals);
 
         for (int k = 1; k <= q; k++)
@@ -359,8 +359,8 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
     private Vector<T> CalculateResiduals(Vector<T> y)
     {
-        Vector<T> residuals = new Vector<T>(y.Length, NumOps);
-        Vector<T> predictions = Predict(new Matrix<T>(y.Length, 1, NumOps)); // Create a dummy input matrix
+        Vector<T> residuals = new Vector<T>(y.Length);
+        Vector<T> predictions = Predict(new Matrix<T>(y.Length, 1)); // Create a dummy input matrix
 
         for (int t = 0; t < y.Length; t++)
         {
@@ -441,8 +441,8 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
     private Vector<T> DurbinLevinsonAlgorithm(T[] autocorrelations, int p)
     {
-        Vector<T> phi = new Vector<T>(p, NumOps);
-        Vector<T> prevPhi = new Vector<T>(p, NumOps);
+        Vector<T> phi = new Vector<T>(p);
+        Vector<T> prevPhi = new Vector<T>(p);
         T v = autocorrelations[0];
 
         for (int k = 1; k <= p; k++)
@@ -474,8 +474,8 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
     private Vector<T> InnovationsAlgorithm(T[] autocorrelations, int q)
     {
-        Vector<T> theta = new Vector<T>(q, NumOps);
-        Vector<T> v = new Vector<T>(q + 1, NumOps);
+        Vector<T> theta = new Vector<T>(q);
+        Vector<T> v = new Vector<T>(q + 1);
         v[0] = autocorrelations[0];
 
         for (int k = 1; k <= q; k++)
@@ -571,12 +571,12 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     {
         // Deserialize TBATSModel specific data
         int levelLength = reader.ReadInt32();
-        _level = new Vector<T>(levelLength, NumOps);
+        _level = new Vector<T>(levelLength);
         for (int i = 0; i < levelLength; i++)
             _level[i] = NumOps.FromDouble(reader.ReadDouble());
 
         int trendLength = reader.ReadInt32();
-        _trend = new Vector<T>(trendLength, NumOps);
+        _trend = new Vector<T>(trendLength);
         for (int i = 0; i < trendLength; i++)
             _trend[i] = NumOps.FromDouble(reader.ReadDouble());
 
@@ -585,19 +585,19 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         for (int j = 0; j < seasonalComponentsCount; j++)
         {
             int componentLength = reader.ReadInt32();
-            Vector<T> component = new Vector<T>(componentLength, NumOps);
+            Vector<T> component = new Vector<T>(componentLength);
             for (int i = 0; i < componentLength; i++)
                 component[i] = NumOps.FromDouble(reader.ReadDouble());
             _seasonalComponents.Add(component);
         }
 
         int arCoefficientsLength = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(arCoefficientsLength, NumOps);
+        _arCoefficients = new Vector<T>(arCoefficientsLength);
         for (int i = 0; i < arCoefficientsLength; i++)
             _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
 
         int maCoefficientsLength = reader.ReadInt32();
-        _maCoefficients = new Vector<T>(maCoefficientsLength, NumOps);
+        _maCoefficients = new Vector<T>(maCoefficientsLength);
         for (int i = 0; i < maCoefficientsLength; i++)
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
 

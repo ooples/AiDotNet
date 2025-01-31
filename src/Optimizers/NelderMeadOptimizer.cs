@@ -119,7 +119,7 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
 
     private ISymbolicModel<T> CalculateCentroid(List<ISymbolicModel<T>> simplex, int n)
     {
-        var centroidCoefficients = new Vector<T>(n, NumOps);
+        var centroidCoefficients = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -160,7 +160,7 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
 
     private ISymbolicModel<T> PerformVectorOperation(ISymbolicModel<T> a, ISymbolicModel<T> b, T factor, Func<T, T, T, T> operation)
     {
-        var newCoefficients = new Vector<T>(a.Coefficients.Length, NumOps);
+        var newCoefficients = new Vector<T>(a.Coefficients.Length);
         for (int i = 0; i < a.Coefficients.Length; i++)
         {
             newCoefficients[i] = operation(a.Coefficients[i], b.Coefficients[i], factor);

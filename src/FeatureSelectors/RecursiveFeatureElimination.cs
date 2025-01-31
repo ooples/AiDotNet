@@ -26,14 +26,14 @@ public class RecursiveFeatureElimination<T> : IFeatureSelector<T>
 
         while (selectedFeatures.Count < _numFeaturesToSelect && featureIndices.Count > 0)
         {
-            var subMatrix = new Matrix<T>(allFeaturesMatrix.Rows, featureIndices.Count, _numOps);
+            var subMatrix = new Matrix<T>(allFeaturesMatrix.Rows, featureIndices.Count);
             for (int i = 0; i < featureIndices.Count; i++)
             {
                 subMatrix.SetColumn(i, allFeaturesMatrix.GetColumn(featureIndices[i]));
             }
 
             // Assuming we have a dummy target vector for feature importance calculation
-            var dummyTarget = new Vector<T>(allFeaturesMatrix.Rows, _numOps);
+            var dummyTarget = new Vector<T>(allFeaturesMatrix.Rows);
             _model.Train(subMatrix, dummyTarget);
 
             var featureImportances = _model.Coefficients.Select((c, i) => (_numOps.Abs(c), i)).ToList();
@@ -44,7 +44,7 @@ public class RecursiveFeatureElimination<T> : IFeatureSelector<T>
             featureIndices.RemoveAt(leastImportantFeatureIndex);
         }
 
-        var result = new Matrix<T>(allFeaturesMatrix.Rows, _numFeaturesToSelect, _numOps);
+        var result = new Matrix<T>(allFeaturesMatrix.Rows, _numFeaturesToSelect);
         for (int i = 0; i < _numFeaturesToSelect; i++)
         {
             result.SetColumn(i, allFeaturesMatrix.GetColumn(selectedFeatures[i]));

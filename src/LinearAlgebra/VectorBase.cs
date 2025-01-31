@@ -3,21 +3,19 @@
 public abstract class VectorBase<T>
 {
     protected readonly T[] data;
-    protected readonly INumericOperations<T> ops;
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    protected VectorBase(int length, INumericOperations<T> operations)
+    protected VectorBase(int length)
     {
         if (length <= 0)
             throw new ArgumentException("Length must be positive", nameof(length));
     
         data = new T[length];
-        ops = operations;
     }
 
-    protected VectorBase(IEnumerable<T> values, INumericOperations<T> operations)
+    protected VectorBase(IEnumerable<T> values)
     {
         data = [.. values];
-        ops = operations;
     }
 
     public int Length => data.Length;
@@ -64,7 +62,7 @@ public abstract class VectorBase<T>
         var result = CreateInstance(size);
         for (int i = 0; i < size; i++)
         {
-            result[i] = ops.Zero;
+            result[i] = NumOps.Zero;
         }
 
         return result;
@@ -125,28 +123,30 @@ public abstract class VectorBase<T>
     public virtual T Mean()
     {
         if (Length == 0) throw new InvalidOperationException("Cannot calculate mean of an empty vector.");
-        return ops.Divide(this.Sum(), ops.FromDouble(Length));
+        return NumOps.Divide(this.Sum(), NumOps.FromDouble(Length));
     }
 
     public virtual T Sum()
     {
-        T sum = ops.Zero;
+        T sum = NumOps.Zero;
         for (int i = 0; i < Length; i++)
         {
-            sum = ops.Add(sum, data[i]);
+            sum = NumOps.Add(sum, data[i]);
         }
+
         return sum;
     }
 
     public virtual T L2Norm()
     {
-        T sum = ops.Zero;
+        T sum = NumOps.Zero;
         for (int i = 0; i < Length; i++)
         {
             T value = data[i];
-            sum = ops.Add(sum, ops.Multiply(value, value));
+            sum = NumOps.Add(sum, NumOps.Multiply(value, value));
         }
-        return ops.Sqrt(sum);
+
+        return NumOps.Sqrt(sum);
     }
 
     public virtual VectorBase<TResult> Transform<TResult>(Func<T, TResult> function)
@@ -176,7 +176,7 @@ public abstract class VectorBase<T>
         var result = CreateInstance(size);
         for (int i = 0; i < size; i++)
         {
-            result[i] = ops.One;
+            result[i] = NumOps.One;
         }
 
         return result;
@@ -205,7 +205,7 @@ public abstract class VectorBase<T>
         var result = CreateInstance(Length);
         for (int i = 0; i < Length; i++)
         {
-            result[i] = ops.Add(this[i], other[i]);
+            result[i] = NumOps.Add(this[i], other[i]);
         }
         return result;
     }
@@ -218,7 +218,7 @@ public abstract class VectorBase<T>
         var result = CreateInstance(Length);
         for (int i = 0; i < Length; i++)
         {
-            result[i] = ops.Subtract(this[i], other[i]);
+            result[i] = NumOps.Subtract(this[i], other[i]);
         }
         return result;
     }
@@ -228,7 +228,7 @@ public abstract class VectorBase<T>
         var result = CreateInstance(Length);
         for (int i = 0; i < Length; i++)
         {
-            result[i] = ops.Multiply(this[i], scalar);
+            result[i] = NumOps.Multiply(this[i], scalar);
         }
         return result;
     }
@@ -238,7 +238,7 @@ public abstract class VectorBase<T>
         var result = CreateInstance(Length);
         for (int i = 0; i < Length; i++)
         {
-            result[i] = ops.Divide(this[i], scalar);
+            result[i] = NumOps.Divide(this[i], scalar);
         }
         return result;
     }

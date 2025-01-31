@@ -150,7 +150,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
         return new ExpressionTree<T>(type, value, left, right);
     }
 
-    public ISymbolicModel<T> Mutate(double mutationRate, INumericOperations<T> numOps)
+    public ISymbolicModel<T> Mutate(double mutationRate)
     {
         ExpressionTree<T> mutatedTree = (ExpressionTree<T>)Copy();
         Random random = new Random();
@@ -165,16 +165,16 @@ public class ExpressionTree<T> : ISymbolicModel<T>
                 case 1: // Change value (for Constant or Variable nodes)
                     if (mutatedTree.Type == NodeType.Constant)
                     {
-                        mutatedTree.Value = numOps.FromDouble(random.NextDouble() * 10 - 5); // Random value between -5 and 5
+                        mutatedTree.Value = NumOps.FromDouble(random.NextDouble() * 10 - 5); // Random value between -5 and 5
                     }
                     else if (mutatedTree.Type == NodeType.Variable)
                     {
-                        mutatedTree.Value = numOps.FromDouble(random.Next(10)); // Assume max 10 variables
+                        mutatedTree.Value = NumOps.FromDouble(random.Next(10)); // Assume max 10 variables
                     }
                     break;
                 case 2: // Regenerate subtree
                     int maxDepth = 3;
-                    mutatedTree = GenerateRandomTree(maxDepth, numOps);
+                    mutatedTree = GenerateRandomTree(maxDepth);
                     break;
             }
         }
@@ -182,17 +182,17 @@ public class ExpressionTree<T> : ISymbolicModel<T>
         // Recursively mutate children
         if (mutatedTree.Left != null)
         {
-            mutatedTree.Left = (ExpressionTree<T>)mutatedTree.Left.Mutate(mutationRate, numOps);
+            mutatedTree.Left = (ExpressionTree<T>)mutatedTree.Left.Mutate(mutationRate);
         }
         if (mutatedTree.Right != null)
         {
-            mutatedTree.Right = (ExpressionTree<T>)mutatedTree.Right.Mutate(mutationRate, numOps);
+            mutatedTree.Right = (ExpressionTree<T>)mutatedTree.Right.Mutate(mutationRate);
         }
 
         return mutatedTree;
     }
 
-    public ISymbolicModel<T> Crossover(ISymbolicModel<T> other, double crossoverRate, INumericOperations<T> numOps)
+    public ISymbolicModel<T> Crossover(ISymbolicModel<T> other, double crossoverRate)
     {
         if (!(other is ExpressionTree<T> otherTree))
         {
@@ -224,18 +224,18 @@ public class ExpressionTree<T> : ISymbolicModel<T>
         );
     }
 
-    private ExpressionTree<T> GenerateRandomTree(int maxDepth, INumericOperations<T> numOps)
+    private ExpressionTree<T> GenerateRandomTree(int maxDepth)
     {
         Random random = new Random();
         if (maxDepth == 0 || random.NextDouble() < 0.3) // 30% chance of leaf node
         {
             if (random.NextDouble() < 0.5)
             {
-                return new ExpressionTree<T>(NodeType.Constant, numOps.FromDouble(random.NextDouble() * 10 - 5));
+                return new ExpressionTree<T>(NodeType.Constant, NumOps.FromDouble(random.NextDouble() * 10 - 5));
             }
             else
             {
-                return new ExpressionTree<T>(NodeType.Variable, numOps.FromDouble(random.Next(10)));
+                return new ExpressionTree<T>(NodeType.Variable, NumOps.FromDouble(random.Next(10)));
             }
         }
         else
@@ -244,8 +244,8 @@ public class ExpressionTree<T> : ISymbolicModel<T>
             return new ExpressionTree<T>(
                 operationType,
                 default,
-                GenerateRandomTree(maxDepth - 1, numOps),
-                GenerateRandomTree(maxDepth - 1, numOps)
+                GenerateRandomTree(maxDepth - 1),
+                GenerateRandomTree(maxDepth - 1)
             );
         }
     }
@@ -321,7 +321,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
             throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model expects {FeatureCount} features.");
         }
 
-        Vector<T> predictions = new(input.Rows, NumOps);
+        Vector<T> predictions = new(input.Rows);
         for (int i = 0; i < input.Rows; i++)
         {
             predictions[i] = Evaluate(input.GetRow(i));
@@ -445,7 +445,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
             }
 
             CollectCoefficients(this);
-            return new Vector<T>(coefficients.ToArray(), NumOps);
+            return new Vector<T>(coefficients.ToArray());
         }
     }
 }

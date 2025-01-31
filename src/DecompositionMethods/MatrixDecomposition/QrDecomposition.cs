@@ -40,8 +40,8 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     {
         int m = matrix.Rows;
         int n = matrix.Columns;
-        Matrix<T> Q = new(m, n, NumOps);
-        Matrix<T> R = new(n, n, NumOps);
+        Matrix<T> Q = new(m, n);
+        Matrix<T> R = new(n, n);
 
         for (int j = 0; j < n; j++)
         {
@@ -75,7 +75,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
         {
             Vector<T> x = R.GetSubColumn(k, k, m - k);
             T normX = x.Norm();
-            Vector<T> e = new(m - k, NumOps)
+            Vector<T> e = new(m - k)
             {
                 [0] = NumOps.One
             };
@@ -144,8 +144,8 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     {
         int m = matrix.Rows;
         int n = matrix.Columns;
-        Matrix<T> Q = new(m, n, NumOps);
-        Matrix<T> R = new(n, n, NumOps);
+        Matrix<T> Q = new(m, n);
+        Matrix<T> R = new(n, n);
 
         for (int k = 0; k < n; k++)
         {
@@ -167,8 +167,8 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     {
         int m = matrix.Rows;
         int n = matrix.Columns;
-        Matrix<T> Q = new(m, n, NumOps);
-        Matrix<T> R = new(n, n, NumOps);
+        Matrix<T> Q = new(m, n);
+        Matrix<T> R = new(n, n);
 
         for (int k = 0; k < n; k++)
         {
@@ -191,7 +191,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
 
     private Vector<T> BackSubstitution(Matrix<T> R, Vector<T> y)
     {
-        var x = new Vector<T>(R.Columns, NumOps);
+        var x = new Vector<T>(R.Columns);
         for (int i = R.Columns - 1; i >= 0; i--)
         {
             T sum = NumOps.Zero;
@@ -207,6 +207,6 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
 
     public Matrix<T> Invert()
     {
-        return MatrixHelper.InvertUsingDecomposition(this);
+        return MatrixHelper<T>.InvertUsingDecomposition(this);
     }
 }

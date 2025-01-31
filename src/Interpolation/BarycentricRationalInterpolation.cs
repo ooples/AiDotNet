@@ -50,7 +50,7 @@ public class BarycentricRationalInterpolation<T> : IInterpolation<T>
     private Vector<T> CalculateWeights()
     {
         int n = _x.Length;
-        Vector<T> weights = new Vector<T>(n, _numOps);
+        Vector<T> weights = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {

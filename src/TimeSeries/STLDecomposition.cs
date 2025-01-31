@@ -26,9 +26,9 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         }
 
         int n = y.Length;
-        _trend = new Vector<T>(n, NumOps);
-        _seasonal = new Vector<T>(n, NumOps);
-        _residual = new Vector<T>(n, NumOps);
+        _trend = new Vector<T>(n);
+        _seasonal = new Vector<T>(n);
+        _residual = new Vector<T>(n);
 
         switch (_stlOptions.AlgorithmType)
         {
@@ -104,7 +104,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         Vector<T> detrended = SubtractVectors(y, _trend);
 
         // Step 3: Initial Seasonal Estimation
-        _seasonal = new Vector<T>(n, NumOps);
+        _seasonal = new Vector<T>(n);
         for (int i = 0; i < period; i++)
         {
             T seasonalValue = NumOps.Zero;
@@ -139,7 +139,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
 
     private Vector<T> SmoothSeasonal(Vector<T> seasonal, int period, int window)
     {
-        Vector<T> smoothed = new Vector<T>(seasonal.Length, NumOps);
+        Vector<T> smoothed = new Vector<T>(seasonal.Length);
         for (int i = 0; i < period; i++)
         {
             List<T> subseries = new List<T>();
@@ -168,7 +168,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     private Vector<T> MovingAverage(Vector<T> data, int windowSize)
     {
         int n = data.Length;
-        Vector<T> result = new Vector<T>(n, NumOps);
+        Vector<T> result = new Vector<T>(n);
         T windowSum = NumOps.Zero;
         int effectiveWindow = Math.Min(windowSize, n);
 
@@ -218,7 +218,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
 
     private Vector<T> CycleSubseriesSmoothing(Vector<T> data, int period, int loessWindow)
     {
-        Vector<T> smoothed = new Vector<T>(data.Length, NumOps);
+        Vector<T> smoothed = new Vector<T>(data.Length);
         for (int i = 0; i < period; i++)
         {
             List<(T x, T y)> subseries = new List<(T x, T y)>();
@@ -288,7 +288,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     private Vector<T> LoessSmoothing(Vector<T> data, int windowSize)
     {
         int n = data.Length;
-        Vector<T> result = new Vector<T>(n, NumOps);
+        Vector<T> result = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -335,7 +335,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     private Vector<T> LoessSmoothing(List<(T x, T y)> data, double span)
     {
         int n = data.Count;
-        Vector<T> result = new Vector<T>(n, NumOps);
+        Vector<T> result = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -411,14 +411,14 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model has not been trained.");
 
         int forecastHorizon = input.Rows;
-        Vector<T> forecast = new Vector<T>(forecastHorizon, NumOps);
+        Vector<T> forecast = new Vector<T>(forecastHorizon);
 
         // Extend trend using last trend value
         T lastTrendValue = _trend[_trend.Length - 1];
 
         // Use last full season for seasonal component
         int seasonLength = _stlOptions.SeasonalPeriod;
-        Vector<T> lastSeason = new Vector<T>(seasonLength, NumOps);
+        Vector<T> lastSeason = new Vector<T>(seasonLength);
         for (int i = 0; i < seasonLength; i++)
         {
             lastSeason[i] = _seasonal[_seasonal.Length - seasonLength + i];

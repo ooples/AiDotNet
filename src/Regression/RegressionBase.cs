@@ -20,7 +20,7 @@ public abstract class RegressionBase<T> : IRegression<T>
         Regularization = regularization ?? new NoRegularization<T>();
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new RegressionOptions<T>();
-        Coefficients = new Vector<T>(0, NumOps);
+        Coefficients = new Vector<T>(0);
         Intercept = NumOps.Zero;
     }
 
@@ -95,7 +95,7 @@ public abstract class RegressionBase<T> : IRegression<T>
             throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
         }
 
-        Coefficients = new Vector<T>((T[])modelDataDict["Coefficients"], NumOps);
+        Coefficients = new Vector<T>((T[])modelDataDict["Coefficients"]);
         Intercept = (T)modelDataDict["Intercept"];
 
         var regularizationOptionsJson = JsonConvert.SerializeObject(modelDataDict["RegularizationOptions"]);

@@ -82,7 +82,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         var population = new List<ISymbolicModel<T>>();
         for (int i = 0; i < populationSize; i++)
         {
-            population.Add(SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions, NumOps));
+            population.Add(SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions));
         }
 
         return population;
@@ -128,7 +128,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
     {
         if (NumOps.LessThan(NumOps.FromDouble(_random.NextDouble()), _currentCrossoverRate))
         {
-            return SymbolicModelFactory<T>.Crossover(parent1, parent2, Convert.ToDouble(_currentCrossoverRate), NumOps);
+            return SymbolicModelFactory<T>.Crossover(parent1, parent2, Convert.ToDouble(_currentCrossoverRate));
         }
         else
         {
@@ -145,7 +145,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
     {
         if (NumOps.LessThan(NumOps.FromDouble(_random.NextDouble()), _currentMutationRate))
         {
-            return SymbolicModelFactory<T>.Mutate(individual, Convert.ToDouble(_currentMutationRate), NumOps);
+            return SymbolicModelFactory<T>.Mutate(individual, Convert.ToDouble(_currentMutationRate));
         }
 
         return individual;

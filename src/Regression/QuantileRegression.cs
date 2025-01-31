@@ -16,7 +16,7 @@ public class QuantileRegression<T> : RegressionBase<T>
         int p = x.Columns;
 
         // Initialize coefficients
-        Coefficients = new Vector<T>(p, NumOps);
+        Coefficients = new Vector<T>(p);
         Intercept = NumOps.Zero;
 
         // Apply regularization to the input matrix
@@ -25,7 +25,7 @@ public class QuantileRegression<T> : RegressionBase<T>
         // Gradient descent optimization
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
-            Vector<T> gradients = new(p, NumOps);
+            Vector<T> gradients = new(p);
             T interceptGradient = NumOps.Zero;
 
             for (int i = 0; i < n; i++)
@@ -57,7 +57,7 @@ public class QuantileRegression<T> : RegressionBase<T>
 
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows, NumOps);
+        var predictions = new Vector<T>(input.Rows);
         for (int i = 0; i < input.Rows; i++)
         {
             predictions[i] = Predict(input.GetRow(i));

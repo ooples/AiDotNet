@@ -18,9 +18,9 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
 
         int n = x.Length - 1;
         _a = y.Copy();
-        _b = new Vector<T>(n, _numOps);
-        _c = new Vector<T>(n + 1, _numOps);
-        _d = new Vector<T>(n, _numOps);
+        _b = new Vector<T>(n);
+        _c = new Vector<T>(n + 1);
+        _d = new Vector<T>(n);
 
         CalculateCoefficients();
     }
@@ -45,14 +45,14 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
     private void CalculateCoefficients()
     {
         int n = _x.Length - 1;
-        Vector<T> h = new Vector<T>(n, _numOps);
+        Vector<T> h = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
             h[i] = _numOps.Subtract(_x[i + 1], _x[i]);
         }
 
-        Vector<T> alpha = new Vector<T>(n, _numOps);
+        Vector<T> alpha = new Vector<T>(n);
         for (int i = 1; i < n; i++)
         {
             alpha[i] = _numOps.Multiply(
@@ -64,9 +64,9 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
             );
         }
 
-        Vector<T> l = new Vector<T>(n + 1, _numOps);
-        Vector<T> mu = new Vector<T>(n + 1, _numOps);
-        Vector<T> z = new Vector<T>(n + 1, _numOps);
+        Vector<T> l = new Vector<T>(n + 1);
+        Vector<T> mu = new Vector<T>(n + 1);
+        Vector<T> z = new Vector<T>(n + 1);
 
         l[0] = _numOps.One;
         mu[0] = _numOps.Zero;

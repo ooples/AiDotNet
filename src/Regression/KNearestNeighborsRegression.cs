@@ -10,8 +10,8 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new KNearestNeighborsOptions();
-        _xTrain = new Matrix<T>(0, 0, NumOps);
-        _yTrain = new Vector<T>(0, NumOps);
+        _xTrain = new Matrix<T>(0, 0);
+        _yTrain = new Vector<T>(0);
     }
 
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
@@ -34,7 +34,7 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         // Apply regularization to the input data if available
         Matrix<T> regularizedInput = Regularization != null ? Regularization.RegularizeMatrix(input) : input;
 
-        var predictions = new Vector<T>(regularizedInput.Rows, NumOps);
+        var predictions = new Vector<T>(regularizedInput.Rows);
         for (int i = 0; i < regularizedInput.Rows; i++)
         {
             predictions[i] = PredictSingle(regularizedInput.GetRow(i));
@@ -124,13 +124,13 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         // Deserialize training data
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
-        _xTrain = new Matrix<T>(rows, cols, NumOps);
+        _xTrain = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
                 _xTrain[i, j] = NumOps.FromDouble(reader.ReadDouble());
 
         int yLength = reader.ReadInt32();
-        _yTrain = new Vector<T>(yLength, NumOps);
+        _yTrain = new Vector<T>(yLength);
         for (int i = 0; i < yLength; i++)
             _yTrain[i] = NumOps.FromDouble(reader.ReadDouble());
 

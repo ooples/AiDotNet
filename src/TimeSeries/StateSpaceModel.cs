@@ -70,11 +70,11 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
             // Update
             var observationVector = observations.GetRow(t);
             var predictedObservation = _observationMatrix.Multiply(predictedState);
-            var innovation = VectorHelper.Subtract(observationVector, predictedObservation);
+            var innovation = observationVector.Subtract(predictedObservation);
             var innovationCovariance = _observationMatrix.Multiply(predictedCovariance).Multiply(_observationMatrix.Transpose()).Add(_observationNoise);
             var kalmanGain = predictedCovariance.Multiply(_observationMatrix.Transpose()).Multiply(innovationCovariance.Inverse());
 
-            currentState = VectorHelper.Add(predictedState, kalmanGain.Multiply(innovation));
+            currentState = predictedState.Add(kalmanGain.Multiply(innovation));
             currentCovariance = predictedCovariance.Subtract(kalmanGain.Multiply(_observationMatrix).Multiply(predictedCovariance));
 
             filteredStates.Add(currentState);
@@ -99,9 +99,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
                 .Multiply(_transitionMatrix.Transpose())
                 .Multiply(predictedCovariance.Inverse());
 
-            currentSmoothedState = VectorHelper.Add(
-                filteredStates[t], 
-                smoothingGain.Multiply(VectorHelper.Subtract(currentSmoothedState, predictedStates[t + 1]))
+            currentSmoothedState = filteredStates[t].Add(smoothingGain.Multiply(currentSmoothedState.Subtract(predictedStates[t + 1]))
             );
 
             currentSmoothedCovariance = filteredStates[t].OuterProduct(filteredStates[t]).Add(
@@ -125,8 +123,8 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
 
         for (int t = 1; t < smoothedStates.Count; t++)
         {
-            sumXX = sumXX.Add(smoothedCovariances[t - 1].Add(VectorHelper.OuterProduct(smoothedStates[t - 1], smoothedStates[t - 1])));
-            sumXY = sumXY.Add(VectorHelper.OuterProduct(smoothedStates[t], smoothedStates[t - 1]));
+            sumXX = sumXX.Add(smoothedCovariances[t - 1].Add(smoothedStates[t - 1].OuterProduct(smoothedStates[t - 1])));
+            sumXY = sumXY.Add(smoothedStates[t].OuterProduct(smoothedStates[t - 1]));
         }
 
         _transitionMatrix = sumXY.Multiply(sumXX.Inverse());
@@ -137,8 +135,8 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
 
         for (int t = 0; t < observations.Rows; t++)
         {
-            sumYX = sumYX.Add(VectorHelper.OuterProduct(observations.GetRow(t), smoothedStates[t]));
-            sumXX_obs = sumXX_obs.Add(smoothedCovariances[t].Add(VectorHelper.OuterProduct(smoothedStates[t], smoothedStates[t])));
+            sumYX = sumYX.Add(observations.GetRow(t).OuterProduct(smoothedStates[t]));
+            sumXX_obs = sumXX_obs.Add(smoothedCovariances[t].Add(smoothedStates[t].OuterProduct(smoothedStates[t])));
         }
 
         _observationMatrix = sumYX.Multiply(sumXX_obs.Inverse());
@@ -147,20 +145,22 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         _processNoise = Matrix<T>.CreateZeros(_stateSize, _stateSize);
         for (int t = 1; t < smoothedStates.Count; t++)
         {
-            var diff = VectorHelper.Subtract(smoothedStates[t], _transitionMatrix.Multiply(smoothedStates[t - 1]));
-            _processNoise = _processNoise.Add(VectorHelper.OuterProduct(diff, diff)).Add(smoothedCovariances[t]);
+            var diff = smoothedStates[t].Subtract(_transitionMatrix.Multiply(smoothedStates[t - 1]));
+            _processNoise = _processNoise.Add(diff.OuterProduct(diff)).Add(smoothedCovariances[t]);
             _processNoise = _processNoise.Subtract(_transitionMatrix.Multiply(smoothedCovariances[t - 1]).Multiply(_transitionMatrix.Transpose()));
         }
+
         _processNoise = _processNoise.Divide(NumOps.FromDouble(smoothedStates.Count - 1));
 
         // Update observation noise
         _observationNoise = Matrix<T>.CreateZeros(_observationSize, _observationSize);
         for (int t = 0; t < observations.Rows; t++)
         {
-            var diff = VectorHelper.Subtract(observations.GetRow(t), _observationMatrix.Multiply(smoothedStates[t]));
-            _observationNoise = _observationNoise.Add(VectorHelper.OuterProduct(diff, diff));
+            var diff = observations.GetRow(t).Subtract(_observationMatrix.Multiply(smoothedStates[t]));
+            _observationNoise = _observationNoise.Add(diff.OuterProduct(diff));
             _observationNoise = _observationNoise.Add(_observationMatrix.Multiply(smoothedCovariances[t]).Multiply(_observationMatrix.Transpose()));
         }
+
         _observationNoise = _observationNoise.Divide(NumOps.FromDouble(observations.Rows));
     }
 

@@ -18,8 +18,8 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
         NumOps = MathHelper.GetNumericOperations<T>();
         A = matrix;
         int n = A.Rows;
-        L = new Matrix<T>(n, n, NumOps);
-        D = new Vector<T>(n, NumOps);
+        L = new Matrix<T>(n, n);
+        D = new Vector<T>(n);
         Decompose(algorithm);
     }
 
@@ -41,8 +41,8 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeCholesky()
     {
         int n = A.Rows;
-        L = new Matrix<T>(n, n, NumOps);
-        D = new Vector<T>(n, NumOps);
+        L = new Matrix<T>(n, n);
+        D = new Vector<T>(n);
 
         for (int j = 0; j < n; j++)
         {
@@ -70,8 +70,8 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeCrout()
     {
         int n = A.Rows;
-        L = new Matrix<T>(n, n, NumOps);
-        D = new Vector<T>(n, NumOps);
+        L = new Matrix<T>(n, n);
+        D = new Vector<T>(n);
 
         for (int j = 0; j < n; j++)
         {
@@ -102,7 +102,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
             throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
 
         // Forward substitution
-        Vector<T> y = new(b.Length, NumOps);
+        Vector<T> y = new(b.Length);
         for (int i = 0; i < b.Length; i++)
         {
             T sum = NumOps.Zero;
@@ -120,7 +120,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
         }
 
         // Backward substitution
-        Vector<T> x = new Vector<T>(b.Length, NumOps);
+        Vector<T> x = new Vector<T>(b.Length);
         for (int i = b.Length - 1; i >= 0; i--)
         {
             T sum = NumOps.Zero;
@@ -137,11 +137,11 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> Invert()
     {
         int n = A.Rows;
-        Matrix<T> inverse = new(n, n, NumOps);
+        Matrix<T> inverse = new(n, n);
 
         for (int i = 0; i < n; i++)
         {
-            Vector<T> ei = new(n, NumOps)
+            Vector<T> ei = new(n)
             {
                 [i] = NumOps.One
             };

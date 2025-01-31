@@ -11,7 +11,7 @@ public class ParzenWindow<T> : IWindowFunction<T>
 
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize, _numOps);
+        Vector<T> window = new Vector<T>(windowSize);
         T N = _numOps.FromDouble(windowSize - 1);
         T halfN = _numOps.Divide(N, _numOps.FromDouble(2));
 

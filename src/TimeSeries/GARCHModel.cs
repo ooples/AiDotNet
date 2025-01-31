@@ -14,11 +14,11 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     {
         _garchOptions = (GARCHModelOptions<T>)_options;
         _meanModel = _garchOptions.MeanModel ?? new ARIMAModel<T>();
-        _omega = new Vector<T>(1, NumOps);
-        _alpha = new Vector<T>(_garchOptions.ARCHOrder, NumOps);
-        _beta = new Vector<T>(_garchOptions.GARCHOrder, NumOps);
-        _residuals = new Vector<T>(0, NumOps);
-        _conditionalVariances = new Vector<T>(0, NumOps);
+        _omega = new Vector<T>(1);
+        _alpha = new Vector<T>(_garchOptions.ARCHOrder);
+        _beta = new Vector<T>(_garchOptions.GARCHOrder);
+        _residuals = new Vector<T>(0);
+        _conditionalVariances = new Vector<T>(0);
     }
 
     public override void Train(Matrix<T> x, Vector<T> y)
@@ -43,8 +43,8 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> xNew)
     {
         int forecastHorizon = xNew.Rows;
-        Vector<T> predictions = new Vector<T>(forecastHorizon, NumOps);
-        Vector<T> variances = new Vector<T>(forecastHorizon, NumOps);
+        Vector<T> predictions = new Vector<T>(forecastHorizon);
+        Vector<T> variances = new Vector<T>(forecastHorizon);
 
         // Predict mean using the mean model
         Vector<T> meanPredictions = _meanModel.Predict(xNew);
@@ -132,9 +132,9 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         Vector<T> previousAlpha = _alpha.Copy();
         Vector<T> previousBeta = _beta.Copy();
 
-        Vector<T> velocityOmega = new Vector<T>(_omega.Length, NumOps);
-        Vector<T> velocityAlpha = new Vector<T>(_alpha.Length, NumOps);
-        Vector<T> velocityBeta = new Vector<T>(_beta.Length, NumOps);
+        Vector<T> velocityOmega = new Vector<T>(_omega.Length);
+        Vector<T> velocityAlpha = new Vector<T>(_alpha.Length);
+        Vector<T> velocityBeta = new Vector<T>(_beta.Length);
 
         T previousLogLikelihood = CalculateLogLikelihood(y);
         T currentLearningRate = initialLearningRate;
@@ -199,7 +199,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
 
         if (gradientType == GradientType.Omega)
         {
-            Vector<T> gradient = new Vector<T>(1, NumOps);
+            Vector<T> gradient = new Vector<T>(1);
             T originalOmega = _omega[0];
 
             _omega[0] = NumOps.Add(originalOmega, epsilon);
@@ -215,7 +215,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         }
         else if (gradientType == GradientType.Alpha)
         {
-            Vector<T> gradient = new Vector<T>(_garchOptions.ARCHOrder, NumOps);
+            Vector<T> gradient = new Vector<T>(_garchOptions.ARCHOrder);
             for (int i = 0; i < _garchOptions.ARCHOrder; i++)
             {
                 T originalAlpha = _alpha[i];
@@ -233,7 +233,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         }
         else // beta
         {
-            Vector<T> gradient = new Vector<T>(_garchOptions.GARCHOrder, NumOps);
+            Vector<T> gradient = new Vector<T>(_garchOptions.GARCHOrder);
             for (int i = 0; i < _garchOptions.GARCHOrder; i++)
             {
                 T originalBeta = _beta[i];
@@ -271,7 +271,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     private Vector<T> CalculateConditionalVariances(Vector<T> y)
     {
         int n = y.Length;
-        Vector<T> conditionalVariances = new Vector<T>(n, NumOps);
+        Vector<T> conditionalVariances = new Vector<T>(n);
         T unconditionalVariance = CalculateUnconditionalVariance(y);
 
         // Initialize with unconditional variance
@@ -324,7 +324,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     private void CalculateResidualsAndVariances(Vector<T> residuals)
     {
         int n = residuals.Length;
-        _conditionalVariances = new Vector<T>(n, NumOps);
+        _conditionalVariances = new Vector<T>(n);
 
         // Initialize with unconditional variance
         T unconditionalVariance = CalculateUnconditionalVariance(residuals);

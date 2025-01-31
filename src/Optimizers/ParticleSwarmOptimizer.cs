@@ -121,7 +121,7 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
         var swarm = new List<ISymbolicModel<T>>();
         for (int i = 0; i < swarmSize; i++)
         {
-            var particle = SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions, NumOps);
+            var particle = SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions);
             
             if (particle is VectorModel<T> vectorModel)
             {
@@ -163,7 +163,7 @@ public class ParticleSwarmOptimizer<T> : OptimizerBase<T>
         var velocities = new List<ISymbolicModel<T>>();
         for (int i = 0; i < swarmSize; i++)
         {
-            var velocity = SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions, NumOps);
+            var velocity = SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions);
 
             // Initialize velocity with small random values
             var randomVector = new Vector<T>(dimensions);

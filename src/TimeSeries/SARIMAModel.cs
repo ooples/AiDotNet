@@ -58,7 +58,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         Vector<T> diffY = ApplyDifferencing(y);
 
         // Step 2: Estimate non-seasonal AR coefficients
-        _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(diffY, _p, MatrixDecompositionType.Qr, NumOps);
+        _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(diffY, _p, MatrixDecompositionType.Qr);
 
         // Step 3: Estimate seasonal AR coefficients
         _sarCoefficients = EstimateSeasonalARCoefficients(diffY);
@@ -67,7 +67,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         Vector<T> arResiduals = CalculateARSARResiduals(diffY);
 
         // Step 5: Estimate non-seasonal MA coefficients
-        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(arResiduals, _q, NumOps);
+        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(arResiduals, _q);
 
         // Step 6: Estimate seasonal MA coefficients
         _smaCoefficients = EstimateSeasonalMACoefficients(arResiduals);
@@ -87,14 +87,14 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         // Apply non-seasonal differencing
-        result = TimeSeriesHelper<T>.DifferenceSeries(result, _d, NumOps);
+        result = TimeSeriesHelper<T>.DifferenceSeries(result, _d);
 
         return result;
     }
 
     private Vector<T> SeasonalDifference(Vector<T> y, int period)
     {
-        Vector<T> result = new Vector<T>(y.Length - period, NumOps);
+        Vector<T> result = new Vector<T>(y.Length - period);
         for (int i = period; i < y.Length; i++)
         {
             result[i - period] = NumOps.Subtract(y[i], y[i - period]);
@@ -104,8 +104,8 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
 
     private Vector<T> EstimateSeasonalARCoefficients(Vector<T> y)
     {
-        Matrix<T> X = new Matrix<T>(y.Length - _P * _m, _P, NumOps);
-        Vector<T> Y = new Vector<T>(y.Length - _P * _m, NumOps);
+        Matrix<T> X = new Matrix<T>(y.Length - _P * _m, _P);
+        Vector<T> Y = new Vector<T>(y.Length - _P * _m);
 
         for (int i = _P * _m; i < y.Length; i++)
         {
@@ -123,7 +123,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         int maxLag = Math.Max(_p, _P * _m);
-        Vector<T> residuals = new Vector<T>(n - maxLag, NumOps);
+        Vector<T> residuals = new Vector<T>(n - maxLag);
 
         for (int i = maxLag; i < n; i++)
         {
@@ -149,10 +149,10 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
 
     private Vector<T> EstimateSeasonalMACoefficients(Vector<T> residuals)
     {
-        Vector<T> smaCoefficients = new Vector<T>(_Q, NumOps);
+        Vector<T> smaCoefficients = new Vector<T>(_Q);
         for (int i = 0; i < _Q; i++)
         {
-            smaCoefficients[i] = TimeSeriesHelper<T>.CalculateAutoCorrelation(residuals, (i + 1) * _m, NumOps);
+            smaCoefficients[i] = TimeSeriesHelper<T>.CalculateAutoCorrelation(residuals, (i + 1) * _m);
         }
 
         return smaCoefficients;
@@ -179,10 +179,10 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
 
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new(input.Rows, NumOps);
+        Vector<T> predictions = new(input.Rows);
         int maxLag = Math.Max(_p, _P * _m);
-        Vector<T> lastObservedValues = new(maxLag, NumOps);
-        Vector<T> lastErrors = new(Math.Max(_q, _Q * _m), NumOps);
+        Vector<T> lastObservedValues = new(maxLag);
+        Vector<T> lastErrors = new(Math.Max(_q, _Q * _m));
 
         for (int i = 0; i < predictions.Length; i++)
         {

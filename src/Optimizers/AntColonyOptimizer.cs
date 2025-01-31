@@ -110,7 +110,7 @@ public class AntColonyOptimizer<T> : OptimizerBase<T>
 
     private Matrix<T> InitializePheromones(int dimensions)
     {
-        var pheromones = new Matrix<T>(dimensions, dimensions, NumOps);
+        var pheromones = new Matrix<T>(dimensions, dimensions);
         for (int i = 0; i < dimensions; i++)
         {
             for (int j = 0; j < dimensions; j++)
@@ -125,7 +125,7 @@ public class AntColonyOptimizer<T> : OptimizerBase<T>
 private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTrain)
 {
     var dimensions = XTrain.Columns;
-    var model = SymbolicModelFactory<T>.CreateEmptyModel(Options.UseExpressionTrees, dimensions, NumOps);
+    var model = SymbolicModelFactory<T>.CreateEmptyModel(Options.UseExpressionTrees, dimensions);
     var visited = new bool[dimensions];
     int current = _random.Next(dimensions);
     visited[current] = true;
@@ -169,7 +169,7 @@ private ISymbolicModel<T> ConstructSolution(Matrix<T> pheromones, Matrix<T> XTra
 
     private int SelectNextFeature(int current, Matrix<T> pheromones, Matrix<T> XTrain, bool[] visited)
     {
-        var probabilities = new Vector<T>(XTrain.Columns, NumOps);
+        var probabilities = new Vector<T>(XTrain.Columns);
         T total = NumOps.Zero;
 
         for (int i = 0; i < XTrain.Columns; i++)

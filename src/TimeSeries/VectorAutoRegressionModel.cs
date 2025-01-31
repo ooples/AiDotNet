@@ -11,9 +11,9 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     public VectorAutoRegressionModel(VARModelOptions<T> options) : base(options)
     {
         _varOptions = options;
-        _coefficients = new Matrix<T>(options.OutputDimension, options.OutputDimension * options.Lag, NumOps);
-        _intercepts = new Vector<T>(options.OutputDimension, NumOps);
-        _residuals = new Matrix<T>(0, options.OutputDimension, NumOps);
+        _coefficients = new Matrix<T>(options.OutputDimension, options.OutputDimension * options.Lag);
+        _intercepts = new Vector<T>(options.OutputDimension);
+        _residuals = new Matrix<T>(0, options.OutputDimension);
     }
 
     public override void Train(Matrix<T> x, Vector<T> y)
@@ -57,7 +57,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException("Input dimensions do not match the model.");
         }
 
-        Vector<T> prediction = new Vector<T>(_varOptions.OutputDimension, NumOps);
+        Vector<T> prediction = new Vector<T>(_varOptions.OutputDimension);
         Vector<T> laggedValues = input.GetRow(input.Rows - 1);
 
         for (int i = 0; i < _varOptions.OutputDimension; i++)
@@ -121,21 +121,21 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         // Deserialize _coefficients
         int coeffRows = reader.ReadInt32();
         int coeffCols = reader.ReadInt32();
-        _coefficients = new Matrix<T>(coeffRows, coeffCols, NumOps);
+        _coefficients = new Matrix<T>(coeffRows, coeffCols);
         for (int i = 0; i < coeffRows; i++)
             for (int j = 0; j < coeffCols; j++)
                 _coefficients[i, j] = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize _intercepts
         int interceptsLength = reader.ReadInt32();
-        _intercepts = new Vector<T>(interceptsLength, NumOps);
+        _intercepts = new Vector<T>(interceptsLength);
         for (int i = 0; i < interceptsLength; i++)
             _intercepts[i] = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize _residuals
         int residualsRows = reader.ReadInt32();
         int residualsCols = reader.ReadInt32();
-        _residuals = new Matrix<T>(residualsRows, residualsCols, NumOps);
+        _residuals = new Matrix<T>(residualsRows, residualsCols);
         for (int i = 0; i < residualsRows; i++)
             for (int j = 0; j < residualsCols; j++)
                 _residuals[i, j] = NumOps.FromDouble(reader.ReadDouble());
@@ -145,7 +145,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     {
         int n = x.Rows;
         int m = x.Columns;
-        Matrix<T> laggedData = new Matrix<T>(n - _varOptions.Lag, m * _varOptions.Lag + 1, NumOps);
+        Matrix<T> laggedData = new Matrix<T>(n - _varOptions.Lag, m * _varOptions.Lag + 1);
 
         for (int i = _varOptions.Lag; i < n; i++)
         {
@@ -174,7 +174,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     {
         int n = x.Rows;
         int m = x.Columns;
-        Matrix<T> residuals = new Matrix<T>(n - _varOptions.Lag, m, NumOps);
+        Matrix<T> residuals = new Matrix<T>(n - _varOptions.Lag, m);
 
         for (int i = _varOptions.Lag; i < n; i++)
         {

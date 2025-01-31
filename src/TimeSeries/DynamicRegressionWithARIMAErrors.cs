@@ -13,10 +13,10 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     public DynamicRegressionWithARIMAErrors(DynamicRegressionWithARIMAErrorsOptions<T> options) : base(options)
     {
         _arimaOptions = options;
-        _regressionCoefficients = new Vector<T>(options.ExternalRegressors, NumOps);
-        _arCoefficients = new Vector<T>(options.AROrder, NumOps);
-        _maCoefficients = new Vector<T>(options.MAOrder, NumOps);
-        _differenced = new Vector<T>(0, NumOps);
+        _regressionCoefficients = new Vector<T>(options.ExternalRegressors);
+        _arCoefficients = new Vector<T>(options.AROrder);
+        _maCoefficients = new Vector<T>(options.MAOrder);
+        _differenced = new Vector<T>(0);
         _intercept = NumOps.Zero;
         _regularization = options.Regularization ?? new NoRegularization<T>();
     }
@@ -41,7 +41,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
 
     public override Vector<T> Predict(Matrix<T> xNew)
     {
-        Vector<T> predictions = new Vector<T>(xNew.Rows, NumOps);
+        Vector<T> predictions = new Vector<T>(xNew.Rows);
 
         for (int t = 0; t < xNew.Rows; t++)
         {
@@ -88,7 +88,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         Vector<T> diffY = y;
         for (int d = 0; d < order; d++)
         {
-            Vector<T> temp = new Vector<T>(diffY.Length - 1, NumOps);
+            Vector<T> temp = new Vector<T>(diffY.Length - 1);
             for (int i = 0; i < temp.Length; i++)
             {
                 temp[i] = NumOps.Subtract(diffY[i + 1], diffY[i]);
@@ -105,7 +105,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         Vector<T> y = diffY;
         for (int d = _arimaOptions.DifferenceOrder - 1; d >= 0; d--)
         {
-            Vector<T> temp = new Vector<T>(y.Length + 1, NumOps);
+            Vector<T> temp = new Vector<T>(y.Length + 1);
             temp[0] = original[d];
             for (int i = 1; i < temp.Length; i++)
             {
@@ -155,8 +155,8 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
 
     private void EstimateARCoefficients(T[] autocorrelations, int p)
     {
-        Matrix<T> R = new Matrix<T>(p, p, NumOps);
-        Vector<T> r = new Vector<T>(p, NumOps);
+        Matrix<T> R = new Matrix<T>(p, p);
+        Vector<T> r = new Vector<T>(p);
 
         for (int i = 0; i < p; i++)
         {
@@ -175,14 +175,14 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         {
             // Handle potential numerical instability
             Console.WriteLine($"Error in AR coefficient estimation: {ex.Message}");
-            _arCoefficients = new Vector<T>(p, NumOps); // Initialize with zeros
+            _arCoefficients = new Vector<T>(p); // Initialize with zeros
         }
     }
 
     private void EstimateMACoefficients(Vector<T> residuals, T[] autocorrelations, int q)
     {
-        _maCoefficients = new Vector<T>(q, NumOps);
-        Vector<T> v = new Vector<T>(q + 1, NumOps);
+        _maCoefficients = new Vector<T>(q);
+        Vector<T> v = new Vector<T>(q + 1);
         v[0] = autocorrelations[0];
 
         for (int k = 1; k <= q; k++)
@@ -235,7 +235,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     private Vector<T> ComputeModelResiduals(Vector<T> residuals)
     {
         int n = residuals.Length;
-        Vector<T> modelResiduals = new Vector<T>(n, NumOps);
+        Vector<T> modelResiduals = new Vector<T>(n);
 
         for (int t = 0; t < n; t++)
         {
@@ -470,22 +470,22 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     protected override void DeserializeCore(BinaryReader reader)
     {
         int regressionCoefficientsLength = reader.ReadInt32();
-        _regressionCoefficients = new Vector<T>(regressionCoefficientsLength, NumOps);
+        _regressionCoefficients = new Vector<T>(regressionCoefficientsLength);
         for (int i = 0; i < regressionCoefficientsLength; i++)
             _regressionCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
 
         int arCoefficientsLength = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(arCoefficientsLength, NumOps);
+        _arCoefficients = new Vector<T>(arCoefficientsLength);
         for (int i = 0; i < arCoefficientsLength; i++)
             _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
 
         int maCoeffientsLength = reader.ReadInt32();
-        _maCoefficients = new Vector<T>(maCoeffientsLength, NumOps);
+        _maCoefficients = new Vector<T>(maCoeffientsLength);
         for (int i = 0; i < maCoeffientsLength; i++)
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
 
         int differencedLength = reader.ReadInt32();
-        _differenced = new Vector<T>(differencedLength, NumOps);
+        _differenced = new Vector<T>(differencedLength);
         for (int i = 0; i < differencedLength; i++)
             _differenced[i] = NumOps.FromDouble(reader.ReadDouble());
 

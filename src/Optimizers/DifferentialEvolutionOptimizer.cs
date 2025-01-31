@@ -73,7 +73,7 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
         var population = new List<ISymbolicModel<T>>();
         for (int i = 0; i < populationSize; i++)
         {
-            population.Add(SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions, NumOps));
+            population.Add(SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions));
         }
 
         return population;
@@ -97,8 +97,8 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
         if (Options.UseExpressionTrees)
         {
             // For expression trees, we'll use crossover and mutation
-            trialModel = SymbolicModelFactory<T>.Crossover(population[a], population[b], currentCrossOverRate, NumOps).Item1;
-            trialModel = SymbolicModelFactory<T>.Mutate(trialModel, currentMutationRate, NumOps);
+            trialModel = SymbolicModelFactory<T>.Crossover(population[a], population[b], currentCrossOverRate).Item1;
+            trialModel = SymbolicModelFactory<T>.Mutate(trialModel, currentMutationRate);
         }
         else
         {
@@ -107,7 +107,7 @@ public class DifferentialEvolutionOptimizer<T> : OptimizerBase<T>
             var cVector = ((VectorModel<T>)population[c]).Coefficients;
             var currentVector = ((VectorModel<T>)currentModel).Coefficients;
 
-            var trialVector = new Vector<T>(dimensions, NumOps);
+            var trialVector = new Vector<T>(dimensions);
             int R = _random.Next(dimensions);
 
             for (int i = 0; i < dimensions; i++)

@@ -61,7 +61,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 
     private Vector<T> ForecastWithParameters(Vector<T> y, T alpha, T beta, T gamma)
     {
-        Vector<T> forecasts = new(y.Length, NumOps);
+        Vector<T> forecasts = new(y.Length);
         T level = y[0];
         T trend = _options.IncludeTrend ? NumOps.Subtract(y[1], y[0]) : NumOps.Zero;
         Vector<T> seasonalFactors = _options.SeasonalPeriod > 0 ? EstimateInitialSeasonalFactors(y) : Vector<T>.Empty();
@@ -117,7 +117,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 
     private Vector<T> EstimateInitialValues(Vector<T> y)
     {
-        Vector<T> initialValues = new Vector<T>(_options.SeasonalPeriod > 0 ? _options.SeasonalPeriod + 2 : 2, NumOps);
+        Vector<T> initialValues = new Vector<T>(_options.SeasonalPeriod > 0 ? _options.SeasonalPeriod + 2 : 2);
         
         // Initial level
         initialValues[0] = y[0];
@@ -147,7 +147,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 
     private Vector<T> EstimateInitialSeasonalFactors(Vector<T> y)
     {
-        Vector<T> seasonalFactors = new Vector<T>(_options.SeasonalPeriod, NumOps);
+        Vector<T> seasonalFactors = new Vector<T>(_options.SeasonalPeriod);
         int seasons = y.Length / _options.SeasonalPeriod;
 
         for (int i = 0; i < _options.SeasonalPeriod; i++)
@@ -172,7 +172,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new Vector<T>(input.Rows, NumOps);
+        Vector<T> predictions = new Vector<T>(input.Rows);
         T level = _initialValues[0];
         T trend = _options.IncludeTrend ? _initialValues[1] : NumOps.Zero;
         Vector<T> seasonalFactors = _options.SeasonalPeriod > 0 ? new Vector<T>([.. _initialValues.Skip(2)]) : Vector<T>.Empty();
@@ -252,7 +252,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         _beta = NumOps.FromDouble(reader.ReadDouble());
         _gamma = NumOps.FromDouble(reader.ReadDouble());
         int initialValuesLength = reader.ReadInt32();
-        _initialValues = new Vector<T>(initialValuesLength, NumOps);
+        _initialValues = new Vector<T>(initialValuesLength);
 
         for (int i = 0; i < initialValuesLength; i++)
         {

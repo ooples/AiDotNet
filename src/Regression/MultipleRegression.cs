@@ -21,11 +21,11 @@ public class MultipleRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
         {
             Intercept = solution[0];
-            Coefficients = new Vector<T>([.. solution.Skip(1)], NumOps);
+            Coefficients = new Vector<T>([.. solution.Skip(1)]);
         }
         else
         {
-            Coefficients = new Vector<T>(solution, NumOps);
+            Coefficients = new Vector<T>(solution);
         }
     }
 

@@ -24,8 +24,8 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
-        var approximation = new Vector<T>(size, _numOps);
-        var detail = new Vector<T>(size, _numOps);
+        var approximation = new Vector<T>(size);
+        var detail = new Vector<T>(size);
 
         for (int i = 0; i < size; i++)
         {
@@ -43,7 +43,7 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     public Vector<T> GetScalingCoefficients()
     {
         int size = 101; // Odd number to have a center point
-        var coefficients = new Vector<T>(size, _numOps);
+        var coefficients = new Vector<T>(size);
 
         for (int i = 0; i < size; i++)
         {
@@ -57,7 +57,7 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     public Vector<T> GetWaveletCoefficients()
     {
         int size = 101; // Odd number to have a center point
-        var coefficients = new Vector<T>(size, _numOps);
+        var coefficients = new Vector<T>(size);
 
         for (int i = 0; i < size; i++)
         {

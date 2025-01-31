@@ -11,14 +11,14 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         : base(options, regularization)
     {
         Options = options ?? new GaussianProcessRegressionOptions();
-        _kernelMatrix = new Matrix<T>(0, 0, NumOps);
-        _alpha = new Vector<T>(0, NumOps);
+        _kernelMatrix = new Matrix<T>(0, 0);
+        _alpha = new Vector<T>(0);
     }
 
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
-        _kernelMatrix = new Matrix<T>(n, n, NumOps);
+        _kernelMatrix = new Matrix<T>(n, n);
 
         // Compute the kernel matrix
         for (int i = 0; i < n; i++)
@@ -108,7 +108,7 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     private Matrix<T> ComputeKernelMatrix(Matrix<T> x, double lengthScale, double signalVariance)
     {
         int n = x.Rows;
-        var K = new Matrix<T>(n, n, NumOps);
+        var K = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {
@@ -149,7 +149,7 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         var choleskyDecomposition = new CholeskyDecomposition<T>(K);
         Vector<T> alpha = choleskyDecomposition.Solve(y);
 
-        Matrix<T> KInverse = MatrixHelper.InvertUsingDecomposition(choleskyDecomposition);
+        Matrix<T> KInverse = MatrixHelper<T>.InvertUsingDecomposition(choleskyDecomposition);
 
         Matrix<T> dK_dLengthScale = ComputeKernelMatrixDerivative(x, lengthScale, signalVariance, true);
         Matrix<T> dK_dSignalVariance = ComputeKernelMatrixDerivative(x, lengthScale, signalVariance, false);
@@ -163,7 +163,7 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     private Matrix<T> ComputeKernelMatrixDerivative(Matrix<T> x, double lengthScale, double signalVariance, bool isLengthScale)
     {
         int n = x.Rows;
-        var dK = new Matrix<T>(n, n, NumOps);
+        var dK = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {

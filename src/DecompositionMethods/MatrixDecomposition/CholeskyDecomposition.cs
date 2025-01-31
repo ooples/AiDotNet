@@ -42,7 +42,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
         }
 
         int n = matrix.Rows;
-        var L = new Matrix<T>(n, n, NumOps);
+        var L = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {
@@ -90,7 +90,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
         }
 
         int n = matrix.Rows;
-        var L = new Matrix<T>(n, n, NumOps);
+        var L = new Matrix<T>(n, n);
 
         for (int j = 0; j < n; j++)
         {
@@ -128,7 +128,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
         }
 
         int n = matrix.Rows;
-        var L = new Matrix<T>(n, n, NumOps);
+        var L = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {
@@ -167,8 +167,8 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
         }
 
         int n = matrix.Rows;
-        var L = Matrix<T>.CreateIdentity(n, NumOps);
-        var D = new Vector<T>(n, NumOps);
+        var L = Matrix<T>.CreateIdentity(n);
+        var D = new Vector<T>(n);
 
         for (int j = 0; j < n; j++)
         {
@@ -211,7 +211,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
 
         int n = matrix.Rows;
         int blockSize = 64; // Adjust this based on your needs
-        var L = new Matrix<T>(n, n, NumOps);
+        var L = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i += blockSize)
         {
@@ -264,7 +264,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
     private Matrix<T> SolveMatrix(Matrix<T> B)
     {
         int columns = B.Columns;
-        var X = new Matrix<T>(L.Columns, columns, NumOps);
+        var X = new Matrix<T>(L.Columns, columns);
 
         for (int i = 0; i < columns; i++)
         {
@@ -278,7 +278,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
 
     private Vector<T> ForwardSubstitution(Matrix<T> L, Vector<T> b)
     {
-        var y = new Vector<T>(L.Rows, NumOps);
+        var y = new Vector<T>(L.Rows);
         for (int i = 0; i < L.Rows; i++)
         {
             T sum = NumOps.Zero;
@@ -294,7 +294,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
 
     private Vector<T> BackSubstitution(Matrix<T> LT, Vector<T> y)
     {
-        var x = new Vector<T>(LT.Columns, NumOps);
+        var x = new Vector<T>(LT.Columns);
         for (int i = LT.Columns - 1; i >= 0; i--)
         {
             T sum = NumOps.Zero;
@@ -310,6 +310,6 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
 
     public Matrix<T> Invert()
     {
-        return MatrixHelper.InvertUsingDecomposition(this);
+        return MatrixHelper<T>.InvertUsingDecomposition(this);
     }
 }

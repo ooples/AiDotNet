@@ -16,7 +16,7 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     protected override void OptimizeModel(Matrix<T> X, Vector<T> y)
     {
         int n = X.Rows;
-        _gramMatrix = new Matrix<T>(n, n, NumOps);
+        _gramMatrix = new Matrix<T>(n, n);
 
         // Compute the Gram matrix
         for (int i = 0; i < n; i++)
@@ -126,7 +126,7 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         // Deserialize _gramMatrix
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
-        _gramMatrix = new Matrix<T>(rows, cols, NumOps);
+        _gramMatrix = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
@@ -137,7 +137,7 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
 
         // Deserialize _dualCoefficients
         int length = reader.ReadInt32();
-        _dualCoefficients = new Vector<T>(length, NumOps);
+        _dualCoefficients = new Vector<T>(length);
         for (int i = 0; i < length; i++)
         {
             _dualCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());

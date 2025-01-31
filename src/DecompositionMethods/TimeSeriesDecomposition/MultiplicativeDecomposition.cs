@@ -36,9 +36,9 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeGeometricMovingAverage()
     {
         int n = TimeSeries.Length;
-        Vector<T> trend = new Vector<T>(n, NumOps);
-        Vector<T> seasonal = new Vector<T>(n, NumOps);
-        Vector<T> residual = new Vector<T>(n, NumOps);
+        Vector<T> trend = new Vector<T>(n);
+        Vector<T> seasonal = new Vector<T>(n);
+        Vector<T> residual = new Vector<T>(n);
 
         // Calculate trend using geometric moving average
         int halfWindow = _seasonalPeriod / 2;
@@ -95,9 +95,9 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeMultiplicativeExponentialSmoothing()
     {
         int n = TimeSeries.Length;
-        Vector<T> trend = new Vector<T>(n, NumOps);
-        Vector<T> seasonal = new Vector<T>(n, NumOps);
-        Vector<T> residual = new Vector<T>(n, NumOps);
+        Vector<T> trend = new Vector<T>(n);
+        Vector<T> seasonal = new Vector<T>(n);
+        Vector<T> residual = new Vector<T>(n);
 
         T alpha = NumOps.FromDouble(0.2); // Smoothing factor for level
         T beta = NumOps.FromDouble(0.1);  // Smoothing factor for trend
@@ -150,7 +150,7 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeLogTransformedSTL()
     {
         int n = TimeSeries.Length;
-        Vector<T> logTimeSeries = new Vector<T>(n, NumOps);
+        Vector<T> logTimeSeries = new Vector<T>(n);
 
         // Log transform the time series
         for (int i = 0; i < n; i++)
@@ -174,16 +174,16 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
         };
 
         var stlDecomposition = new STLDecomposition<T>(stlOptions);
-        stlDecomposition.Train(new Matrix<T>(logTimeSeries.Length, 1, NumOps), logTimeSeries);
+        stlDecomposition.Train(new Matrix<T>(logTimeSeries.Length, 1), logTimeSeries);
 
         Vector<T> logTrend = stlDecomposition.GetTrend();
         Vector<T> logSeasonal = stlDecomposition.GetSeasonal();
         Vector<T> logResidual = stlDecomposition.GetResidual();
 
         // Transform components back to original scale
-        Vector<T> trend = new Vector<T>(n, NumOps);
-        Vector<T> seasonal = new Vector<T>(n, NumOps);
-        Vector<T> residual = new Vector<T>(n, NumOps);
+        Vector<T> trend = new Vector<T>(n);
+        Vector<T> seasonal = new Vector<T>(n);
+        Vector<T> residual = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {

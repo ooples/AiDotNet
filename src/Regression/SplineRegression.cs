@@ -11,7 +11,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     {
         _options = options ?? new SplineRegressionOptions();
         _knots = [];
-        _coefficients = new Vector<T>(0, NumOps);
+        _coefficients = new Vector<T>(0);
     }
 
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
@@ -46,7 +46,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
             totalBasis += _options.Degree + _knots[i].Length;
         }
 
-        var basis = new Matrix<T>(x.Rows, totalBasis, NumOps);
+        var basis = new Matrix<T>(x.Rows, totalBasis);
 
         // Constant term
         for (int i = 0; i < x.Rows; i++)
@@ -103,7 +103,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
             .Select(i => (int)Math.Round((double)(i * (sortedX.Length - 1)) / (numKnots + 1)))
             .ToArray();
 
-        return new Vector<T>([.. knotIndices.Select(i => sortedX[i])], NumOps);
+        return new Vector<T>([.. knotIndices.Select(i => sortedX[i])]);
     }
 
     protected override ModelType GetModelType() => ModelType.SplineRegression;
@@ -159,7 +159,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
         for (int j = 0; j < knotsCount; j++)
         {
             int knotsLength = reader.ReadInt32();
-            var knotVector = new Vector<T>(knotsLength, NumOps);
+            var knotVector = new Vector<T>(knotsLength);
             for (int i = 0; i < knotsLength; i++)
                 knotVector[i] = NumOps.FromDouble(reader.ReadDouble());
             _knots.Add(knotVector);
@@ -167,7 +167,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
 
         // Deserialize coefficients
         int coefficientsLength = reader.ReadInt32();
-        _coefficients = new Vector<T>(coefficientsLength, NumOps);
+        _coefficients = new Vector<T>(coefficientsLength);
         for (int i = 0; i < coefficientsLength; i++)
             _coefficients[i] = NumOps.FromDouble(reader.ReadDouble());
     }

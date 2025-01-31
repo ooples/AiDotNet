@@ -46,7 +46,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         {
             if (_regression == null || _regression.Length != x.Columns)
             {
-                _regression = new Vector<T>(x.Columns, NumOps);
+                _regression = new Vector<T>(x.Columns);
             }
     
             // Initialize regression coefficients using Ordinary Least Squares (OLS)
@@ -108,7 +108,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         {
             // If matrix is singular or near-singular, use ridge regression
             T ridgeParameter = NumOps.FromDouble(_bayesianOptions.RidgeParameter);
-            Vector<T> ridgeDiagonal = new Vector<T>(x.Columns, NumOps);
+            Vector<T> ridgeDiagonal = new Vector<T>(x.Columns);
             for (int i = 0; i < x.Columns; i++)
             {
                 ridgeDiagonal[i] = ridgeParameter;

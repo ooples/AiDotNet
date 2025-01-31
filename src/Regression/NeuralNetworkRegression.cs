@@ -24,7 +24,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             int inputSize = _options.LayerSizes[i];
             int outputSize = _options.LayerSizes[i + 1];
 
-            Matrix<T> weight = Matrix<T>.CreateRandom(outputSize, inputSize, NumOps);
+            Matrix<T> weight = Matrix<T>.CreateRandom(outputSize, inputSize);
             Vector<T> bias = Vector<T>.CreateRandom(outputSize);
 
             // Xavier/Glorot initialization
@@ -84,7 +84,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     private Matrix<T> GetBatchRows(Matrix<T> matrix, int[] indices, int startIdx, int endIdx)
     {
         int batchSize = endIdx - startIdx;
-        Matrix<T> result = new Matrix<T>(batchSize, matrix.Columns, NumOps);
+        Matrix<T> result = new Matrix<T>(batchSize, matrix.Columns);
         for (int i = 0; i < batchSize; i++)
         {
             result.SetRow(i, matrix.GetRow(indices[startIdx + i]));
@@ -96,7 +96,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     private Vector<T> GetBatchElements(Vector<T> vector, int[] indices, int startIdx, int endIdx)
     {
         int batchSize = endIdx - startIdx;
-        Vector<T> result = new(batchSize, NumOps);
+        Vector<T> result = new(batchSize);
         for (int i = 0; i < batchSize; i++)
         {
             result[i] = vector[indices[startIdx + i]];
@@ -115,7 +115,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         for (int i = 0; i < X.Rows; i++)
         {
             Vector<T> input = X.GetRow(i);
-            Vector<T> target = new([y[i]], NumOps);
+            Vector<T> target = new([y[i]]);
 
             // Forward pass
             List<Vector<T>> activations = ForwardPass(input);
@@ -221,7 +221,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 
     public override Vector<T> Predict(Matrix<T> X)
     {
-        Vector<T> predictions = new(X.Rows, NumOps);
+        Vector<T> predictions = new(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
         {
@@ -325,7 +325,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
                     weightData[r, c] = NumOps.FromDouble(reader.ReadDouble());
                 }
             }
-            _weights.Add(new Matrix<T>(weightData, NumOps));
+            _weights.Add(new Matrix<T>(weightData));
         }
 
         int biasCount = reader.ReadInt32();
@@ -338,7 +338,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             {
                 biasData[j] = NumOps.FromDouble(reader.ReadDouble());
             }
-            _biases.Add(new Vector<T>(biasData, NumOps));
+            _biases.Add(new Vector<T>(biasData));
         }
 
         InitializeNetwork();

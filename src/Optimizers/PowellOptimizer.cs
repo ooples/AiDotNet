@@ -92,7 +92,7 @@ public class PowellOptimizer<T> : OptimizerBase<T>
         var directions = new List<Vector<T>>();
         for (int i = 0; i < n; i++)
         {
-            var direction = new Vector<T>(n, NumOps);
+            var direction = new Vector<T>(n);
             direction[i] = NumOps.One;
             directions.Add(direction);
         }
@@ -129,7 +129,7 @@ public class PowellOptimizer<T> : OptimizerBase<T>
 
     private ISymbolicModel<T> MoveInDirection(ISymbolicModel<T> solution, Vector<T> direction, T step)
     {
-        var newCoefficients = new Vector<T>(solution.Coefficients.Length, NumOps);
+        var newCoefficients = new Vector<T>(solution.Coefficients.Length);
         for (int i = 0; i < solution.Coefficients.Length; i++)
         {
             newCoefficients[i] = NumOps.Add(solution.Coefficients[i], NumOps.Multiply(direction[i], step));
@@ -139,7 +139,7 @@ public class PowellOptimizer<T> : OptimizerBase<T>
 
     private ISymbolicModel<T> ExtrapolatePoint(ISymbolicModel<T> oldPoint, ISymbolicModel<T> newPoint)
     {
-        var extrapolatedCoefficients = new Vector<T>(oldPoint.Coefficients.Length, NumOps);
+        var extrapolatedCoefficients = new Vector<T>(oldPoint.Coefficients.Length);
         for (int i = 0; i < oldPoint.Coefficients.Length; i++)
         {
             extrapolatedCoefficients[i] = NumOps.Add(

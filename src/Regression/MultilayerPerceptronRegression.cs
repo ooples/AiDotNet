@@ -24,7 +24,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
             int inputSize = _options.LayerSizes[i];
             int outputSize = _options.LayerSizes[i + 1];
 
-            Matrix<T> weight = Matrix<T>.CreateRandom(outputSize, inputSize, NumOps);
+            Matrix<T> weight = Matrix<T>.CreateRandom(outputSize, inputSize);
             Vector<T> bias = Vector<T>.CreateRandom(outputSize);
 
             // Xavier/Glorot initialization
@@ -149,7 +149,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
     public override Vector<T> Predict(Matrix<T> X)
     {
-        Vector<T> predictions = new Vector<T>(X.Rows, NumOps);
+        Vector<T> predictions = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
         {

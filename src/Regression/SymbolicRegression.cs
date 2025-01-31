@@ -38,7 +38,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         _fitDetector = fitDetector ?? new DefaultFitDetector<T>();
         _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T>();
         _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T>(_normalizer, _featureSelector, _outlierRemoval);
-        _bestModel = SymbolicModelFactory<T>.CreateRandomModel(true, 1, NumOps);
+        _bestModel = SymbolicModelFactory<T>.CreateRandomModel(true, 1);
         _bestFitness = _fitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue;
     }
 
@@ -59,7 +59,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
 
     public override Vector<T> Predict(Matrix<T> X)
     {
-        var predictions = new Vector<T>(X.Rows, NumOps);
+        var predictions = new Vector<T>(X.Rows);
         for (int i = 0; i < X.Rows; i++)
         {
             predictions[i] = _bestModel.Evaluate(X.GetRow(i));

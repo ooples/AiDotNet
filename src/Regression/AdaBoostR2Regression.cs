@@ -80,7 +80,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
             result[i] = NumOps.Divide(result[i], sumWeights);
         }
 
-        var finalPredictions = new Vector<T>(result, NumOps);
+        var finalPredictions = new Vector<T>(result);
         return Regularization.RegularizeCoefficients(finalPredictions);
     }
 

@@ -2062,13 +2062,14 @@ public static class StatisticsHelper<T>
         var numOps = MathHelper.GetNumericOperations<T>();
         var numerator = numOps.Multiply(numOps.FromDouble(2), numOps.Multiply(precision, recall));
         var denominator = numOps.Add(precision, recall);
+
         return numOps.Equals(denominator, numOps.Zero) ? numOps.Zero : numOps.Divide(numerator, denominator);
     }
 
     public static Matrix<T> CalculateCorrelationMatrix(Matrix<T> features, ModelStatsOptions options)
     {
         int featureCount = features.Columns;
-        var correlationMatrix = new Matrix<T>(featureCount, featureCount, NumOps);
+        var correlationMatrix = new Matrix<T>(featureCount, featureCount);
 
         for (int i = 0; i < featureCount; i++)
         {
@@ -2571,9 +2572,8 @@ public static class StatisticsHelper<T>
 
     public static Vector<T> GenerateThresholds(Vector<T> predictedValues)
     {
-        var _numOps = MathHelper.GetNumericOperations<T>();
         var uniqueValues = new HashSet<T>(predictedValues);
-        var thresholds = new Vector<T>(uniqueValues.Count, _numOps);
+        var thresholds = new Vector<T>(uniqueValues.Count);
         int index = 0;
         foreach (var value in uniqueValues)
         {
@@ -2585,16 +2585,15 @@ public static class StatisticsHelper<T>
 
     public static (Vector<T> fpr, Vector<T> tpr) CalculateROCCurve(Vector<T> actualValues, Vector<T> predictedValues)
     {
-        var _numOps = MathHelper.GetNumericOperations<T>();
         var thresholds = GenerateThresholds(predictedValues);
-        var fpr = new Vector<T>(thresholds.Length, _numOps);
-        var tpr = new Vector<T>(thresholds.Length, _numOps);
+        var fpr = new Vector<T>(thresholds.Length);
+        var tpr = new Vector<T>(thresholds.Length);
 
         for (int i = 0; i < thresholds.Length; i++)
         {
             var confusionMatrix = StatisticsHelper<T>.CalculateConfusionMatrix(actualValues, predictedValues, thresholds[i]);
-            fpr[i] = _numOps.Divide(confusionMatrix.FalsePositives, _numOps.Add(confusionMatrix.FalsePositives, confusionMatrix.TrueNegatives));
-            tpr[i] = _numOps.Divide(confusionMatrix.TruePositives, _numOps.Add(confusionMatrix.TruePositives, confusionMatrix.FalseNegatives));
+            fpr[i] = NumOps.Divide(confusionMatrix.FalsePositives, NumOps.Add(confusionMatrix.FalsePositives, confusionMatrix.TrueNegatives));
+            tpr[i] = NumOps.Divide(confusionMatrix.TruePositives, NumOps.Add(confusionMatrix.TruePositives, confusionMatrix.FalseNegatives));
         }
 
         return (fpr, tpr);

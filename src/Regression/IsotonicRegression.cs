@@ -29,8 +29,8 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     {
         // Implement Pool Adjacent Violators (PAV) algorithm
         var n = y.Length;
-        var yhat = new Vector<T>(n, NumOps);
-        var w = new Vector<T>(n, NumOps);
+        var yhat = new Vector<T>(n);
+        var w = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -62,7 +62,7 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
         // Apply regularization to the coefficients
         yhat = Regularization.RegularizeCoefficients(yhat);
 
-        SupportVectors = new Matrix<T>(n, 1, NumOps);
+        SupportVectors = new Matrix<T>(n, 1);
         for (int i = 0; i < n; i++)
         {
             SupportVectors[i, 0] = _xValues[i];
@@ -72,7 +72,7 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
 
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows, NumOps);
+        var predictions = new Vector<T>(input.Rows);
         for (int i = 0; i < input.Rows; i++)
         {
             predictions[i] = PredictSingle(input.GetRow(i));
@@ -158,14 +158,14 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
 
         // Deserialize IsotonicRegression specific data
         int xLength = reader.ReadInt32();
-        _xValues = new Vector<T>(xLength, NumOps);
+        _xValues = new Vector<T>(xLength);
         for (int i = 0; i < xLength; i++)
         {
             _xValues[i] = NumOps.FromDouble(reader.ReadDouble());
         }
 
         int yLength = reader.ReadInt32();
-        _yValues = new Vector<T>(yLength, NumOps);
+        _yValues = new Vector<T>(yLength);
         for (int i = 0; i < yLength; i++)
         {
             _yValues[i] = NumOps.FromDouble(reader.ReadDouble());

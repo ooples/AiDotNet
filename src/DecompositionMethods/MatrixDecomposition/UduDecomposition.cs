@@ -43,8 +43,8 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeCrout()
     {
         int n = A.Rows;
-        U = new Matrix<T>(n, n, NumOps);
-        D = new Vector<T>(n, NumOps);
+        U = new Matrix<T>(n, n);
+        D = new Vector<T>(n);
 
         for (int j = 0; j < n; j++)
         {
@@ -72,8 +72,8 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeDoolittle()
     {
         int n = A.Rows;
-        U = new Matrix<T>(n, n, NumOps);
-        D = new Vector<T>(n, NumOps);
+        U = new Matrix<T>(n, n);
+        D = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -104,7 +104,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
             throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
 
         // Forward substitution
-        Vector<T> y = new Vector<T>(b.Length, NumOps);
+        Vector<T> y = new Vector<T>(b.Length);
         for (int i = 0; i < b.Length; i++)
         {
             T sum = NumOps.Zero;
@@ -122,7 +122,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
         }
 
         // Backward substitution
-        Vector<T> x = new Vector<T>(b.Length, NumOps);
+        Vector<T> x = new Vector<T>(b.Length);
         for (int i = b.Length - 1; i >= 0; i--)
         {
             T sum = NumOps.Zero;
@@ -139,11 +139,11 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> Invert()
     {
         int n = A.Rows;
-        Matrix<T> inverse = new Matrix<T>(n, n, NumOps);
+        Matrix<T> inverse = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {
-            Vector<T> ei = new Vector<T>(n, NumOps);
+            Vector<T> ei = new Vector<T>(n);
             ei[i] = NumOps.One;
             Vector<T> column = Solve(ei);
             for (int j = 0; j < n; j++)

@@ -23,7 +23,7 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
 
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows, NumOps);
+        var predictions = new Vector<T>(input.Rows);
         for (int i = 0; i < input.Rows; i++)
         {
             predictions[i] = PredictSingle(input.GetRow(i));
@@ -58,7 +58,7 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
 
     private Vector<T> ComputeWeights(Vector<T> input)
     {
-        var weights = new Vector<T>(_xTrain.Rows, NumOps);
+        var weights = new Vector<T>(_xTrain.Rows);
         var bandwidth = NumOps.FromDouble(_options.Bandwidth);
 
         for (int i = 0; i < _xTrain.Rows; i++)
@@ -137,7 +137,7 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // Deserialize _xTrain
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
-        _xTrain = new Matrix<T>(rows, cols, NumOps);
+        _xTrain = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
@@ -148,7 +148,7 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
 
         // Deserialize _yTrain
         int length = reader.ReadInt32();
-        _yTrain = new Vector<T>(length, NumOps);
+        _yTrain = new Vector<T>(length);
         for (int i = 0; i < length; i++)
         {
             _yTrain[i] = NumOps.FromDouble(reader.ReadDouble());

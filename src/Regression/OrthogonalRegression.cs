@@ -19,14 +19,14 @@ public class OrthogonalRegression<T> : RegressionBase<T>
         x = Regularization.RegularizeMatrix(x);
 
         // Center the data
-        Vector<T> meanX = new(p, NumOps);
+        Vector<T> meanX = new(p);
         for (int j = 0; j < p; j++)
         {
             meanX[j] = x.GetColumn(j).Mean();
         }
         T meanY = y.Mean();
 
-        Matrix<T> centeredX = new(n, p, NumOps);
+        Matrix<T> centeredX = new(n, p);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < p; j++)
@@ -55,7 +55,7 @@ public class OrthogonalRegression<T> : RegressionBase<T>
         }
 
         // Compute the augmented matrix [X y]
-        Matrix<T> augmentedMatrix = new(n, p + 1, NumOps);
+        Matrix<T> augmentedMatrix = new(n, p + 1);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < p; j++)

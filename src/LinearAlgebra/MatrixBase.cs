@@ -7,9 +7,9 @@ public abstract class MatrixBase<T>
     protected readonly T[] data;
     protected readonly int rows;
     protected readonly int cols;
-    protected readonly INumericOperations<T> ops;
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    protected MatrixBase(int rows, int cols, INumericOperations<T>? operations = null)
+    protected MatrixBase(int rows, int cols)
     {
         if (rows <= 0) throw new ArgumentException("Rows must be positive", nameof(rows));
         if (cols <= 0) throw new ArgumentException("Columns must be positive", nameof(cols));
@@ -17,16 +17,14 @@ public abstract class MatrixBase<T>
         this.rows = rows;
         this.cols = cols;
         this.data = new T[rows * cols];
-        this.ops = operations ?? MathHelper.GetNumericOperations<T>();
     }
 
-    protected MatrixBase(IEnumerable<IEnumerable<T>> values, INumericOperations<T>? operations = null)
+    protected MatrixBase(IEnumerable<IEnumerable<T>> values)
     {
         var valuesList = values.Select(v => v.ToArray()).ToList();
         this.rows = valuesList.Count;
         this.cols = valuesList.First().Length;
         this.data = new T[rows * cols];
-        this.ops = operations ?? MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < rows; i++)
         {
@@ -43,12 +41,11 @@ public abstract class MatrixBase<T>
         }
     }
 
-    protected MatrixBase(T[,] data, INumericOperations<T>? operations = null)
+    protected MatrixBase(T[,] data)
     {
         this.rows = data.GetLength(0);
         this.cols = data.GetLength(1);
         this.data = new T[rows * cols];
-        this.ops = operations ?? MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < rows; i++)
         {
@@ -83,7 +80,7 @@ public abstract class MatrixBase<T>
         var result = CreateInstance(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
-                result[i, j] = ops.One;
+                result[i, j] = NumOps.One;
 
         return result;
     }
@@ -93,7 +90,7 @@ public abstract class MatrixBase<T>
         var result = CreateInstance(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
-                result[i, j] = ops.Zero;
+                result[i, j] = NumOps.Zero;
 
         return result;
     }
@@ -105,7 +102,7 @@ public abstract class MatrixBase<T>
         if (rowCount < 1 || startRow + rowCount > rows)
             throw new ArgumentOutOfRangeException(nameof(rowCount));
 
-        MatrixBase<T> result = new Matrix<T>(rowCount, cols, ops);
+        MatrixBase<T> result = new Matrix<T>(rowCount, cols);
         for (int i = 0; i < rowCount; i++)
         {
             for (int j = 0; j < cols; j++)
@@ -149,19 +146,19 @@ public abstract class MatrixBase<T>
     public virtual Vector<T> GetRow(int row)
     {
         ValidateIndices(row, 0);
-        return new Vector<T>([.. Enumerable.Range(0, cols).Select(col => this[row, col])], ops);
+        return new Vector<T>([.. Enumerable.Range(0, cols).Select(col => this[row, col])]);
     }
 
     public virtual Vector<T> GetColumn(int col)
     {
         ValidateIndices(0, col);
-        return new Vector<T>([.. Enumerable.Range(0, rows).Select(row => this[row, col])], ops);
+        return new Vector<T>([.. Enumerable.Range(0, rows).Select(row => this[row, col])]);
     }
 
     public virtual Vector<T> Diagonal()
     {
         int minDimension = Math.Min(Rows, Columns);
-        var diagonal = new Vector<T>(minDimension, ops);
+        var diagonal = new Vector<T>(minDimension);
 
         for (int i = 0; i < minDimension; i++)
         {
@@ -178,7 +175,7 @@ public abstract class MatrixBase<T>
             throw new ArgumentException("Invalid submatrix dimensions");
         }
 
-        var subMatrix = new Matrix<T>(numRows, numCols, ops);
+        var subMatrix = new Matrix<T>(numRows, numCols);
 
         for (int i = 0; i < numRows; i++)
         {
@@ -206,7 +203,7 @@ public abstract class MatrixBase<T>
         int numRows = endRow - startRow;
         int numCols = columnIndices.Count;
 
-        var subMatrix = new Matrix<T>(numRows, numCols, ops);
+        var subMatrix = new Matrix<T>(numRows, numCols);
 
         for (int i = 0; i < numRows; i++)
         {
@@ -226,12 +223,12 @@ public abstract class MatrixBase<T>
             throw new ArgumentException("Matrices must have the same dimensions for element-wise multiplication.");
         }
 
-        T sum = ops.Zero;
+        T sum = NumOps.Zero;
         for (int i = 0; i < Rows; i++)
         {
             for (int j = 0; j < Columns; j++)
             {
-                sum = ops.Add(sum, ops.Multiply(this[i, j], other[i, j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(this[i, j], other[i, j]));
             }
         }
 
@@ -246,7 +243,7 @@ public abstract class MatrixBase<T>
         var result = CreateInstance(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
-                result[i, j] = ops.Add(this[i, j], other[i, j]);
+                result[i, j] = NumOps.Add(this[i, j], other[i, j]);
 
         return result;
     }
@@ -259,7 +256,7 @@ public abstract class MatrixBase<T>
         var result = CreateInstance(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
-                result[i, j] = ops.Subtract(this[i, j], other[i, j]);
+                result[i, j] = NumOps.Subtract(this[i, j], other[i, j]);
 
         return result;
     }
@@ -273,7 +270,7 @@ public abstract class MatrixBase<T>
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < other.Columns; j++)
                 for (int k = 0; k < cols; k++)
-                    result[i, j] = ops.Add(result[i, j], ops.Multiply(this[i, k], other[k, j]));
+                    result[i, j] = NumOps.Add(result[i, j], NumOps.Multiply(this[i, k], other[k, j]));
 
         return result;
     }
@@ -283,10 +280,10 @@ public abstract class MatrixBase<T>
         if (cols != vector.Length)
             throw new ArgumentException("Number of columns in the matrix must equal the length of the vector.");
 
-        var result = new Vector<T>(rows, ops);
+        var result = new Vector<T>(rows);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
-                result[i] = ops.Add(result[i], ops.Multiply(this[i, j], vector[j]));
+                result[i] = NumOps.Add(result[i], NumOps.Multiply(this[i, j], vector[j]));
 
         return result;
     }
@@ -296,7 +293,7 @@ public abstract class MatrixBase<T>
         var result = CreateInstance(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
-                result[i, j] = ops.Multiply(this[i, j], scalar);
+                result[i, j] = NumOps.Multiply(this[i, j], scalar);
 
         return result;
     }
@@ -340,6 +337,7 @@ public abstract class MatrixBase<T>
             }
             sb.AppendLine();
         }
+
         return sb.ToString();
     }
 }

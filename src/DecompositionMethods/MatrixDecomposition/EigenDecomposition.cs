@@ -32,8 +32,8 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     private (Vector<T> eigenValues, Matrix<T> eigenVectors) ComputeEigenPowerIteration(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        Vector<T> eigenValues = new(n, NumOps);
-        Matrix<T> eigenVectors = Matrix<T>.CreateIdentity(n, NumOps);
+        Vector<T> eigenValues = new(n);
+        Matrix<T> eigenVectors = Matrix<T>.CreateIdentity(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -51,9 +51,10 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
                 }
                 eigenValues[i] = eigenValue;
             }
+
             eigenVectors.SetColumn(i, v);
             // Fix the Multiply operation
-            matrix = matrix.Subtract(MatrixHelper.OuterProduct(v, v).Multiply(eigenValues[i]));
+            matrix = matrix.Subtract(MatrixHelper<T>.OuterProduct(v, v).Multiply(eigenValues[i]));
         }
 
         return (eigenValues, eigenVectors);
@@ -63,7 +64,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     {
         int n = matrix.Rows;
         Matrix<T> A = matrix.Copy();
-        Matrix<T> Q = Matrix<T>.CreateIdentity(n, NumOps);
+        Matrix<T> Q = Matrix<T>.CreateIdentity(n);
 
         for (int iter = 0; iter < 100; iter++)
         {
@@ -76,7 +77,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
                 break;
         }
 
-        Vector<T> eigenValues = MatrixHelper.ExtractDiagonal(A);
+        Vector<T> eigenValues = MatrixHelper<T>.ExtractDiagonal(A);
         return (eigenValues, Q);
     }
 
@@ -84,7 +85,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     {
         int n = matrix.Rows;
         Matrix<T> A = matrix.Copy();
-        Matrix<T> V = Matrix<T>.CreateIdentity(n, NumOps);
+        Matrix<T> V = Matrix<T>.CreateIdentity(n);
 
         for (int iter = 0; iter < 100; iter++)
         {
@@ -113,7 +114,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
             T c = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Multiply(t, t))));
             T s = NumOps.Multiply(t, c);
 
-            Matrix<T> J = Matrix<T>.CreateIdentity(n, NumOps);
+            Matrix<T> J = Matrix<T>.CreateIdentity(n);
             J[p, p] = c; J[q, q] = c;
             J[p, q] = s; J[q, p] = NumOps.Negate(s);
 
@@ -121,19 +122,19 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
             V = V.Multiply(J);
         }
 
-        Vector<T> eigenValues = MatrixHelper.ExtractDiagonal(A);
+        Vector<T> eigenValues = MatrixHelper<T>.ExtractDiagonal(A);
         return (eigenValues, V);
     }
 
     public Vector<T> Solve(Vector<T> b)
     {
-        Matrix<T> D = Matrix<T>.CreateDiagonal(EigenValues, NumOps);
+        Matrix<T> D = Matrix<T>.CreateDiagonal(EigenValues);
         return EigenVectors.Multiply(D.InvertDiagonalMatrix()).Multiply(EigenVectors.Transpose()).Multiply(b);
     }
 
     public Matrix<T> Invert()
     {
-        Matrix<T> D = Matrix<T>.CreateDiagonal(EigenValues, NumOps);
+        Matrix<T> D = Matrix<T>.CreateDiagonal(EigenValues);
         return EigenVectors.Multiply(D.InvertDiagonalMatrix()).Multiply(EigenVectors.Transpose());
     }
 }

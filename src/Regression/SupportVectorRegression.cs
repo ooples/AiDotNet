@@ -28,7 +28,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         // Apply regularization to the input matrix for prediction
         Matrix<T> regularizedInput = Regularization.RegularizeMatrix(input);
 
-        var predictions = new Vector<T>(regularizedInput.Rows, NumOps);
+        var predictions = new Vector<T>(regularizedInput.Rows);
         for (int i = 0; i < regularizedInput.Rows; i++)
         {
             predictions[i] = PredictSingle(regularizedInput.GetRow(i));
@@ -52,8 +52,8 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     private void SequentialMinimalOptimization(Matrix<T> x, Vector<T> y)
     {
         int m = x.Rows;
-        Alphas = new Vector<T>(m, NumOps);
-        Vector<T> errors = new(m, NumOps);
+        Alphas = new Vector<T>(m);
+        Vector<T> errors = new(m);
 
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {

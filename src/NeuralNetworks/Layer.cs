@@ -1,8 +1,5 @@
 ﻿namespace AiDotNet.NeuralNetworks;
 
-using AiDotNet.Interfaces;
-using AiDotNet.Factories;
-
 public class Layer<T>
 {
     private Matrix<T> _weights;

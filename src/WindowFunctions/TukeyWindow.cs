@@ -13,7 +13,7 @@ public class TukeyWindow<T> : IWindowFunction<T>
 
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize, _numOps);
+        Vector<T> window = new Vector<T>(windowSize);
         T N = _numOps.FromDouble(windowSize - 1);
         T alphaN = _numOps.Multiply(_alpha, N);
 

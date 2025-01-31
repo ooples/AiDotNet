@@ -37,7 +37,7 @@ public class ThresholdOutlierRemoval<T> : IOutlierRemoval<T>
             }
         }
 
-        return (new Matrix<T>(cleanedInputs, _numOps), new Vector<T>(cleanedOutputs, _numOps));
+        return (new Matrix<T>(cleanedInputs), new Vector<T>(cleanedOutputs));
     }
 
     private T GetDefaultThreshold()

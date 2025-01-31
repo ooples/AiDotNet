@@ -1,4 +1,4 @@
-﻿using AiDotNet.Enums.AlgorithmTypes;
+﻿global using AiDotNet.Enums.AlgorithmTypes;
 
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
@@ -46,8 +46,8 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
             throw new ArgumentException("Matrix must be square for LU decomposition.");
 
         Matrix<T> A = matrix.Copy();
-        Matrix<T> L = new(n, n, NumOps);
-        Vector<int> P = new(n, MathHelper.GetNumericOperations<int>());
+        Matrix<T> L = new(n, n);
+        Vector<int> P = new(n);
 
         for (int i = 0; i < n; i++)
             P[i] = i;
@@ -89,7 +89,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
             }
         }
 
-        Matrix<T> U = new(n, n, NumOps);
+        Matrix<T> U = new(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -113,9 +113,9 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
             throw new ArgumentException("Matrix must be square for LU decomposition.");
 
         Matrix<T> A = matrix.Copy();
-        Matrix<T> L = new(n, n, NumOps);
-        Vector<int> P = new(n, MathHelper.GetNumericOperations<int>());
-        Vector<int> Q = new(n, MathHelper.GetNumericOperations<int>());
+        Matrix<T> L = new(n, n);
+        Vector<int> P = new(n);
+        Vector<int> Q = new(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -175,7 +175,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
             }
         }
 
-        Matrix<T> U = new(n, n, NumOps);
+        Matrix<T> U = new(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -190,7 +190,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         }
 
         // Adjust U and P for column permutations
-        Matrix<T> adjustedU = new(n, n, NumOps);
+        Matrix<T> adjustedU = new(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -208,8 +208,8 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         if (n != matrix.Columns)
             throw new ArgumentException("Matrix must be square for Cholesky decomposition.");
 
-        Matrix<T> L = new(n, n, NumOps);
-        Vector<int> P = new(n, MathHelper.GetNumericOperations<int>());
+        Matrix<T> L = new(n, n);
+        Vector<int> P = new(n);
 
         for (int i = 0; i < n; i++)
             P[i] = i;
@@ -250,9 +250,9 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         if (n != matrix.Columns)
             throw new ArgumentException("Matrix must be square for LU decomposition.");
 
-        Matrix<T> L = new(n, n, NumOps);
-        Matrix<T> U = new(n, n, NumOps);
-        Vector<int> P = new(n, MathHelper.GetNumericOperations<int>());
+        Matrix<T> L = new(n, n);
+        Matrix<T> U = new(n, n);
+        Vector<int> P = new(n);
 
         // Initialize P as [0, 1, 2, ..., n-1]
         for (int i = 0; i < n; i++)
@@ -293,9 +293,9 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         if (n != matrix.Columns)
             throw new ArgumentException("Matrix must be square for LU decomposition.");
 
-        Matrix<T> L = new(n, n, NumOps);
-        Matrix<T> U = new(n, n, NumOps);
-        Vector<int> P = new(n, MathHelper.GetNumericOperations<int>());
+        Matrix<T> L = new(n, n);
+        Matrix<T> U = new(n, n);
+        Vector<int> P = new(n);
 
         // Initialize P as [0, 1, 2, ..., n-1]
         for (int i = 0; i < n; i++)
@@ -339,81 +339,9 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         return (L, U, P);
     }
 
-    private (Matrix<T> L, Matrix<T> U, Vector<int> P) ComputeLuDefault(Matrix<T> matrix)
-    {
-        int n = matrix.Rows;
-        if (n != matrix.Columns)
-            throw new ArgumentException("Matrix must be square for LU decomposition.");
-
-        Matrix<T> A = matrix.Copy();
-        Matrix<T> L = new(n, n, NumOps);
-        Vector<int> P = new(n, MathHelper.GetNumericOperations<int>());
-
-        // Initialize P as [0, 1, 2, ..., n-1]
-        for (int i = 0; i < n; i++)
-            P[i] = i;
-
-        for (int k = 0; k < n - 1; k++)
-        {
-            // Find pivot
-            int pivotRow = k;
-            T pivotValue = NumOps.Abs(A[k, k]);
-            for (int i = k + 1; i < n; i++)
-            {
-                T absValue = NumOps.Abs(A[i, k]);
-                if (NumOps.GreaterThan(absValue, pivotValue))
-                {
-                    pivotRow = i;
-                    pivotValue = absValue;
-                }
-            }
-
-            // Swap rows if necessary
-            if (pivotRow != k)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    T temp = A[k, j];
-                    A[k, j] = A[pivotRow, j];
-                    A[pivotRow, j] = temp;
-                }
-
-                (P[pivotRow], P[k]) = (P[k], P[pivotRow]);
-            }
-
-            // Perform elimination
-            for (int i = k + 1; i < n; i++)
-            {
-                T factor = NumOps.Divide(A[i, k], A[k, k]);
-                L[i, k] = factor;
-                for (int j = k; j < n; j++)
-                {
-                    A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(factor, A[k, j]));
-                }
-            }
-        }
-
-        // Separate L and U
-        Matrix<T> U = new(n, n, NumOps);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (i > j)
-                    L[i, j] = A[i, j];
-                else if (i == j)
-                    L[i, j] = NumOps.One;
-                else
-                    U[i, j] = A[i, j];
-            }
-        }
-
-        return (L, U, P);
-    }
-
     private Vector<T> PermutateVector(Vector<T> b, Vector<int> P)
     {
-        var pb = new Vector<T>(b.Length, NumOps);
+        var pb = new Vector<T>(b.Length);
         for (int i = 0; i < b.Length; i++)
         {
             pb[i] = b[P[i]];
@@ -424,7 +352,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
 
     private Vector<T> ForwardSubstitution(Matrix<T> L, Vector<T> b)
     {
-        var y = new Vector<T>(L.Rows, NumOps);
+        var y = new Vector<T>(L.Rows);
         for (int i = 0; i < L.Rows; i++)
         {
             T sum = NumOps.Zero;
@@ -440,7 +368,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
 
     private Vector<T> BackSubstitution(Matrix<T> U, Vector<T> y)
     {
-        var x = new Vector<T>(U.Columns, NumOps);
+        var x = new Vector<T>(U.Columns);
         for (int i = U.Columns - 1; i >= 0; i--)
         {
             T sum = NumOps.Zero;
@@ -456,6 +384,6 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
 
     public Matrix<T> Invert()
     {
-        return MatrixHelper.InvertUsingDecomposition(this);
+        return MatrixHelper<T>.InvertUsingDecomposition(this);
     }
 }

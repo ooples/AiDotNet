@@ -15,13 +15,13 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new PartialLeastSquaresRegressionOptions<T>();
-        _loadings = new Matrix<T>(0, 0, NumOps);
-        _scores = new Matrix<T>(0, 0, NumOps);
-        _weights = new Matrix<T>(0, 0, NumOps);
-        _yMean = new Vector<T>(0, NumOps);
-        _xMean = new Vector<T>(0, NumOps);
+        _loadings = new Matrix<T>(0, 0);
+        _scores = new Matrix<T>(0, 0);
+        _weights = new Matrix<T>(0, 0);
+        _yMean = new Vector<T>(0);
+        _xMean = new Vector<T>(0);
         _yStd = NumOps.Zero;
-        _xStd = new Vector<T>(0, NumOps);
+        _xStd = new Vector<T>(0);
     }
 
     public override void Train(Matrix<T> x, Vector<T> y)
@@ -32,9 +32,9 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
 
         int numComponents = Math.Min(_options.NumComponents, x.Columns);
-        _loadings = new Matrix<T>(x.Columns, numComponents, NumOps);
-        _scores = new Matrix<T>(x.Rows, numComponents, NumOps);
-        _weights = new Matrix<T>(x.Columns, numComponents, NumOps);
+        _loadings = new Matrix<T>(x.Columns, numComponents);
+        _scores = new Matrix<T>(x.Rows, numComponents);
+        _weights = new Matrix<T>(x.Columns, numComponents);
 
         Matrix<T> xResidual = xScaled.Copy();
         Vector<T> yResidual = yScaled.Copy();
@@ -96,7 +96,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         int cols = input.Columns;
 
         // Scale the input
-        Matrix<T> scaledInput = new Matrix<T>(rows, cols, NumOps);
+        Matrix<T> scaledInput = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
@@ -137,7 +137,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     protected override Vector<T> CalculateFeatureImportances()
     {
         // VIP (Variable Importance in Projection) scores
-        Vector<T> vip = new Vector<T>(Coefficients.Length, NumOps);
+        Vector<T> vip = new Vector<T>(Coefficients.Length);
     
         // Calculate ssY (sum of squares of Y)
         T ssY = NumOps.Zero;

@@ -29,7 +29,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
 
         for (int i = 0; i < 4; i++)
         {
-            _coefficients[i] = new Vector<T>(x.Length - 1, _numOps);
+            _coefficients[i] = new Vector<T>(x.Length - 1);
         }
 
         CalculateCoefficients();
@@ -52,8 +52,8 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     private void CalculateCoefficients()
     {
         int n = _x.Length;
-        Matrix<T> A = new Matrix<T>(n, n, _numOps);
-        Vector<T> b = new Vector<T>(n, _numOps);
+        Matrix<T> A = new Matrix<T>(n, n);
+        Vector<T> b = new Vector<T>(n);
 
         // Set up the system of equations
         for (int i = 1; i < n - 1; i++)

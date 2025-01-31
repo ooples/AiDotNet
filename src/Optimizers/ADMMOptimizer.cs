@@ -38,8 +38,8 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
         ValidationHelper<T>.ValidateInputData(inputData);
 
         var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        _z = new Vector<T>(currentSolution.Coefficients.Length, NumOps);
-        _u = new Vector<T>(currentSolution.Coefficients.Length, NumOps);
+        _z = new Vector<T>(currentSolution.Coefficients.Length);
+        _u = new Vector<T>(currentSolution.Coefficients.Length);
 
         var bestStepData = new OptimizationStepData<T>();
         var previousStepData = new OptimizationStepData<T>();
@@ -81,7 +81,7 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
         // Solve (X^T X + rho I)x = X^T y + rho(z - u)
         var XTranspose = X.Transpose();
         var XTX = XTranspose.Multiply(X);
-        var rhoI = Matrix<T>.CreateIdentity(XTX.Rows, NumOps).Multiply(NumOps.FromDouble(_options.Rho));
+        var rhoI = Matrix<T>.CreateIdentity(XTX.Rows).Multiply(NumOps.FromDouble(_options.Rho));
         var leftSide = XTX.Add(rhoI);
 
         var XTy = XTranspose.Multiply(y);

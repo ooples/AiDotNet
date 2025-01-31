@@ -202,7 +202,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         for (int i = 0; i < maxImfCount; i++)
         {
-            Vector<T> sum = new Vector<T>(TimeSeries.Length, NumOps);
+            Vector<T> sum = new Vector<T>(TimeSeries.Length);
             int count = 0;
 
             foreach (var imfs in allImfs)
@@ -247,7 +247,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)
     {
-        Vector<T> sum = new Vector<T>(vectors[0].Length, NumOps);
+        Vector<T> sum = new Vector<T>(vectors[0].Length);
         foreach (var vector in vectors)
         {
             sum = sum.Add(vector);
@@ -293,7 +293,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
         for (int i = 0; i < numDirections; i++)
         {
             double angle = 2 * Math.PI * i / numDirections;
-            Vector<T> direction = new Vector<T>(channels, NumOps);
+            Vector<T> direction = new Vector<T>(channels);
             for (int j = 0; j < channels; j++)
             {
                 direction[j] = NumOps.FromDouble(Math.Cos(angle + 2 * Math.PI * j / channels));
@@ -320,7 +320,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
 
     private Vector<T> ComputeMeanEnvelope(List<Vector<T>> envelopes)
     {
-        Vector<T> sum = new Vector<T>(envelopes[0].Length, NumOps);
+        Vector<T> sum = new Vector<T>(envelopes[0].Length);
         foreach (var envelope in envelopes)
         {
             sum = sum.Add(envelope);
@@ -447,8 +447,8 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
         if (extremaIndices[extremaIndices.Count - 1] != signal.Length - 1)
             extremaIndices.Add(signal.Length - 1);
 
-        Vector<T> x = new Vector<T>(extremaIndices.Count, NumOps);
-        Vector<T> y = new Vector<T>(extremaIndices.Count, NumOps);
+        Vector<T> x = new Vector<T>(extremaIndices.Count);
+        Vector<T> y = new Vector<T>(extremaIndices.Count);
 
         for (int i = 0; i < extremaIndices.Count; i++)
         {
@@ -458,7 +458,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         IInterpolation<T> spline = _interpolation ?? new CubicSplineInterpolation<T>(x, y);
 
-        Vector<T> envelope = new Vector<T>(signal.Length, NumOps);
+        Vector<T> envelope = new Vector<T>(signal.Length);
         for (int i = 0; i < signal.Length; i++)
         {
             envelope[i] = spline.Interpolate(NumOps.FromDouble(i));

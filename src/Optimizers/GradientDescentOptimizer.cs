@@ -72,7 +72,7 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
             return cachedGradient.Coefficients;
         }
 
-        Vector<T> gradient = new(solution.Coefficients.Length, NumOps);
+        Vector<T> gradient = new(solution.Coefficients.Length);
         T epsilon = NumOps.FromDouble(1e-8);
 
         for (int i = 0; i < solution.Coefficients.Length; i++)
@@ -97,7 +97,7 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
 
     private T CalculateLoss(ISymbolicModel<T> solution, Matrix<T> X, Vector<T> y)
     {
-        Vector<T> predictions = new Vector<T>(X.Rows, NumOps);
+        Vector<T> predictions = new Vector<T>(X.Rows);
         for (int i = 0; i < X.Rows; i++)
         {
             predictions[i] = solution.Evaluate(X.GetRow(i));

@@ -85,15 +85,15 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     private void InitializeCMAESParameters(int dimensions)
     {
         _mean = InitializeRandomSolution(dimensions).Coefficients;
-        _C = Matrix<T>.CreateIdentity(dimensions, NumOps);
-        _pc = new Vector<T>(dimensions, NumOps);
-        _ps = new Vector<T>(dimensions, NumOps);
+        _C = Matrix<T>.CreateIdentity(dimensions);
+        _pc = new Vector<T>(dimensions);
+        _ps = new Vector<T>(dimensions);
     }
 
     private Matrix<T> GeneratePopulation()
     {
         int dimensions = _mean.Length;
-        var population = new Matrix<T>(_options.PopulationSize, dimensions, NumOps);
+        var population = new Matrix<T>(_options.PopulationSize, dimensions);
 
         for (int i = 0; i < _options.PopulationSize; i++)
         {
@@ -110,7 +110,7 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     private Vector<T> GenerateMultivariateNormalSample(int dimensions)
     {
         // Generate a vector of standard normal samples
-        var standardNormal = new Vector<T>(dimensions, NumOps);
+        var standardNormal = new Vector<T>(dimensions);
         for (int i = 0; i < dimensions; i++)
         {
             standardNormal[i] = NumOps.FromDouble(GenerateStandardNormal());
@@ -144,7 +144,7 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
 
     private Vector<T> EvaluatePopulation(Matrix<T> population, OptimizationInputData<T> inputData)
     {
-        var fitnessValues = new Vector<T>(population.Rows, NumOps);
+        var fitnessValues = new Vector<T>(population.Rows);
         for (int i = 0; i < population.Rows; i++)
         {
             var solution = new VectorModel<T>(population.GetRow(i));
@@ -163,7 +163,7 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
 
         // Sort and select the best individuals
         var sortedIndices = fitnessValues.Argsort().Reverse().ToArray();
-        var selectedPopulation = new Matrix<T>(mu, dimensions, NumOps);
+        var selectedPopulation = new Matrix<T>(mu, dimensions);
         for (int i = 0; i < mu; i++)
         {
             for (int j = 0; j < dimensions; j++)
@@ -173,7 +173,7 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         }
 
         // Calculate weights
-        var weights = new Vector<T>(mu, NumOps);
+        var weights = new Vector<T>(mu);
         T sumWeights = NumOps.Zero;
         for (int i = 0; i < mu; i++)
         {

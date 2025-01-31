@@ -13,7 +13,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new PrincipalComponentRegressionOptions<T>();
-        _components = new Matrix<T>(0, 0, NumOps);
+        _components = new Matrix<T>(0, 0);
         _xMean = Vector<T>.Empty();
         _yMean = Vector<T>.Empty();
         _xStd = Vector<T>.Empty();
@@ -104,7 +104,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         // Scale the input
-        Matrix<T> scaledInput = new Matrix<T>(input.Rows, input.Columns, NumOps);
+        Matrix<T> scaledInput = new Matrix<T>(input.Rows, input.Columns);
         for (int i = 0; i < input.Rows; i++)
         {
             for (int j = 0; j < input.Columns; j++)

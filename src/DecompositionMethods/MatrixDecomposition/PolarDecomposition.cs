@@ -14,8 +14,8 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
-        U = new Matrix<T>(matrix.Rows, matrix.Columns, NumOps);
-        P = new Matrix<T>(matrix.Rows, matrix.Columns, NumOps);
+        U = new Matrix<T>(matrix.Rows, matrix.Columns);
+        P = new Matrix<T>(matrix.Rows, matrix.Columns);
         Decompose(algorithm);
     }
 
@@ -48,14 +48,14 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
         var svd = new SvdDecomposition<T>(A);
 
         U = svd.U.Multiply(svd.Vt.Transpose());
-        var sigma = Matrix<T>.CreateDiagonal(svd.S, NumOps);
+        var sigma = Matrix<T>.CreateDiagonal(svd.S);
         P = svd.Vt.Transpose().Multiply(sigma).Multiply(svd.Vt);
     }
 
     private void DecomposeNewtonSchulz()
     {
         Matrix<T> X = A.Copy();
-        Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows, NumOps);
+        Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows);
         T tolerance = NumOps.FromDouble(1e-12);
         int maxIterations = 100;
 
@@ -65,7 +65,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             Matrix<T> YtY = Y.Transpose().Multiply(Y);
 
             // Check for numerical stability
-            if (!MatrixHelper.IsInvertible(XtX) || !MatrixHelper.IsInvertible(YtY))
+            if (!MatrixHelper<T>.IsInvertible(XtX) || !MatrixHelper<T>.IsInvertible(YtY))
             {
                 throw new InvalidOperationException("Matrix became singular during Newton-Schulz iteration.");
             }
@@ -95,7 +95,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
         P = X.Transpose().Multiply(A);
 
         // Ensure orthogonality of U
-        U = MatrixHelper.OrthogonalizeColumns(U);
+        U = MatrixHelper<T>.OrthogonalizeColumns(U);
     }
 
     private void DecomposeHalleyIteration()
@@ -106,7 +106,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
 
         for (int i = 0; i < maxIterations; i++)
         {
-            if (!MatrixHelper.IsInvertible(X))
+            if (!MatrixHelper<T>.IsInvertible(X))
             {
                 throw new InvalidOperationException("Matrix became singular during Halley iteration.");
             }
@@ -136,7 +136,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
         P = X.Transpose().Multiply(A);
 
         // Ensure orthogonality of U
-        U = MatrixHelper.OrthogonalizeColumns(U);
+        U = MatrixHelper<T>.OrthogonalizeColumns(U);
     }
 
     private void DecomposeQRIteration()
@@ -173,13 +173,13 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
         P = X.Transpose().Multiply(A);
 
         // Ensure orthogonality of U
-        U = MatrixHelper.OrthogonalizeColumns(U);
+        U = MatrixHelper<T>.OrthogonalizeColumns(U);
     }
 
     private void DecomposeScalingAndSquaring()
     {
         Matrix<T> X = A.Copy();
-        T norm = MatrixHelper.SpectralNorm(X);
+        T norm = MatrixHelper<T>.SpectralNorm(X);
         int scalingFactor = (int)Math.Ceiling(MathHelper.Log2(Convert.ToDouble(norm)));
 
         if (scalingFactor > 0)
@@ -187,13 +187,13 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             X = X.Multiply(NumOps.FromDouble(Math.Pow(2, -scalingFactor)));
         }
 
-        Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows, NumOps);
+        Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows);
         T tolerance = NumOps.FromDouble(1e-12);
         int maxIterations = 20;
 
         for (int i = 0; i < maxIterations; i++)
         {
-            if (!MatrixHelper.IsInvertible(Y))
+            if (!MatrixHelper<T>.IsInvertible(Y))
             {
                 throw new InvalidOperationException("Matrix became singular during Scaling and Squaring iteration.");
             }
@@ -225,7 +225,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
         P = Y.Transpose().Multiply(A);
 
         // Ensure orthogonality of U
-        U = MatrixHelper.OrthogonalizeColumns(U);
+        U = MatrixHelper<T>.OrthogonalizeColumns(U);
     }
 
     public Vector<T> Solve(Vector<T> b)

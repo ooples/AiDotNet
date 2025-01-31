@@ -162,7 +162,7 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
 
     private Vector<T> SolveSubproblem(Vector<T> gradient, Matrix<T> hessian)
     {
-        var z = new Vector<T>(gradient.Length, NumOps);
+        var z = new Vector<T>(gradient.Length);
         var r = gradient.Copy();
         var d = r.Copy();
         for (int i = 0; i < d.Length; i++)

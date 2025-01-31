@@ -11,7 +11,7 @@ public class BartlettWindow<T> : IWindowFunction<T>
 
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize, _numOps);
+        Vector<T> window = new Vector<T>(windowSize);
         T N = _numOps.FromDouble(windowSize - 1);
         for (int n = 0; n < windowSize; n++)
         {

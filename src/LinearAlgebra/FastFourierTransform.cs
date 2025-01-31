@@ -26,7 +26,7 @@ public readonly struct FastFourierTransform<T>
     {
         int n = input.Length;
         var complexOutput = FFTInternal(input, true);
-        var result = new Vector<T>(n, _numOps);
+        var result = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {

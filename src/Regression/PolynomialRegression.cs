@@ -26,11 +26,11 @@ public class PolynomialRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
         {
             Intercept = solution[0];
-            Coefficients = new Vector<T>([.. solution.Skip(1)], NumOps);
+            Coefficients = new Vector<T>([.. solution.Skip(1)]);
         }
         else
         {
-            Coefficients = new Vector<T>(solution, NumOps);
+            Coefficients = new Vector<T>(solution);
         }
     }
 
@@ -38,7 +38,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
     {
         var rows = x.Rows;
         var cols = x.Columns * _polyOptions.Degree;
-        var polyX = new Matrix<T>(rows, cols, NumOps);
+        var polyX = new Matrix<T>(rows, cols);
 
         for (int i = 0; i < rows; i++)
         {

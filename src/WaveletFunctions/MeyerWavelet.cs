@@ -99,7 +99,7 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
     public Vector<T> GetScalingCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
-        var coefficients = new Vector<T>(size, _numOps);
+        var coefficients = new Vector<T>(size);
 
         for (int i = 0; i < size; i++)
         {
@@ -126,7 +126,7 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
     public Vector<T> GetWaveletCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
-        var coefficients = new Vector<T>(size, _numOps);
+        var coefficients = new Vector<T>(size);
 
         for (int i = 0; i < size; i++)
         {

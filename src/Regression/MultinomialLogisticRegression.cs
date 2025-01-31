@@ -18,7 +18,7 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
         _numClasses = y.Distinct().Count();
 
         int numFeatures = x.Columns;
-        _coefficients = new Matrix<T>(_numClasses, numFeatures + 1, NumOps);
+        _coefficients = new Matrix<T>(_numClasses, numFeatures + 1);
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
 
@@ -37,7 +37,7 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
             Vector<T> flattenedGradient = gradient.Flatten();
             Vector<T> update = MatrixSolutionHelper.SolveLinearSystem(hessian, flattenedGradient, MatrixDecompositionFactory.GetDecompositionType(_options.DecompositionMethod));
 
-            Matrix<T> updateMatrix = new Matrix<T>(gradient.Rows, gradient.Columns, NumOps);
+            Matrix<T> updateMatrix = new Matrix<T>(gradient.Rows, gradient.Columns);
             for (int i = 0; i < update.Length; i++)
             {
                 updateMatrix[i / gradient.Columns, i % gradient.Columns] = update[i];
@@ -97,7 +97,7 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
 
     private Matrix<T> CreateOneHotEncoding(Vector<T> y)
     {
-        Matrix<T> oneHot = new Matrix<T>(y.Length, _numClasses, NumOps);
+        Matrix<T> oneHot = new Matrix<T>(y.Length, _numClasses);
         for (int i = 0; i < y.Length; i++)
         {
             int classIndex = Convert.ToInt32(NumOps.ToInt32(y[i]));
@@ -181,7 +181,7 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
         {
             int rows = reader.ReadInt32();
             int cols = reader.ReadInt32();
-            _coefficients = new Matrix<T>(rows, cols, NumOps);
+            _coefficients = new Matrix<T>(rows, cols);
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)

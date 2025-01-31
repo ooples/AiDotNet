@@ -27,7 +27,7 @@ public class RobustRegression<T> : RegressionBase<T>
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
             Vector<T> residuals = y.Subtract(Predict(x));
-            Vector<T> weights = WeightFunctionHelper.CalculateWeights(residuals, _options.WeightFunction, _options.TuningConstant, NumOps);
+            Vector<T> weights = WeightFunctionHelper<T>.CalculateWeights(residuals, _options.WeightFunction, _options.TuningConstant);
 
             // Weighted least squares
             Matrix<T> weightedX = x.PointwiseMultiply(weights);

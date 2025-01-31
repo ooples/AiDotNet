@@ -14,8 +14,8 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
-        QMatrix = new Matrix<T>(matrix.Rows, matrix.Columns, NumOps);
-        TMatrix = new Matrix<T>(matrix.Rows, matrix.Columns, NumOps);
+        QMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
+        TMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
         Decompose(algorithm);
     }
 
@@ -41,7 +41,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     {
         int n = A.Rows;
         TMatrix = A.Copy();
-        QMatrix = Matrix<T>.CreateIdentity(n, NumOps);
+        QMatrix = Matrix<T>.CreateIdentity(n);
 
         for (int k = 0; k < n - 2; k++)
         {
@@ -50,7 +50,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
             Vector<T> u = x.Subtract(Vector<T>.CreateDefault(x.Length, alpha).SetValue(0, x[0]));
             u = u.Divide(u.Norm());
 
-            Matrix<T> P = Matrix<T>.CreateIdentity(n, NumOps);
+            Matrix<T> P = Matrix<T>.CreateIdentity(n);
             for (int i = k + 1; i < n; i++)
             {
                 for (int j = k + 1; j < n; j++)
@@ -67,7 +67,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeGivens()
     {
         int n = A.Rows;
-        QMatrix = Matrix<T>.CreateIdentity(n, NumOps);
+        QMatrix = Matrix<T>.CreateIdentity(n);
         TMatrix = A.Copy();
 
         for (int i = 0; i < n - 1; i++)
@@ -120,10 +120,10 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeLanczos()
     {
         int n = A.Rows;
-        QMatrix = new Matrix<T>(n, n, NumOps);
-        TMatrix = new Matrix<T>(n, n, NumOps);
+        QMatrix = new Matrix<T>(n, n);
+        TMatrix = new Matrix<T>(n, n);
 
-        Vector<T> v = new Vector<T>(n, NumOps);
+        Vector<T> v = new Vector<T>(n);
         v[0] = NumOps.One;
         Vector<T> w = A.Multiply(v);
         T alpha = w.DotProduct(v);
@@ -178,9 +178,9 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     private Vector<T> SolveTridiagonal(Vector<T> b)
     {
         int n = TMatrix.Rows;
-        Vector<T> x = new(n, NumOps);
-        Vector<T> d = new(n, NumOps);
-        Vector<T> temp = new(n, NumOps);
+        Vector<T> x = new(n);
+        Vector<T> d = new(n);
+        Vector<T> temp = new(n);
 
         // Forward elimination
         d[0] = TMatrix[0, 0];
@@ -214,7 +214,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     private Matrix<T> InvertTridiagonal()
     {
         int n = TMatrix.Rows;
-        Matrix<T> inv = new(n, n, NumOps);
+        Matrix<T> inv = new(n, n);
 
         for (int j = 0; j < n; j++)
         {

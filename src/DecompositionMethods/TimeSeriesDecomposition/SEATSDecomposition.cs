@@ -362,10 +362,10 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
         int filterLength = filter.Length;
         int resultLength = signalLength + filterLength - 1;
 
-        var result = new Vector<T>(resultLength, NumOps);
+        var result = new Vector<T>(resultLength);
 
         // Reverse the filter for convolution
-        var reversedFilter = new Vector<T>(filterLength, NumOps);
+        var reversedFilter = new Vector<T>(filterLength);
         for (int i = 0; i < filterLength; i++)
         {
             reversedFilter[i] = filter[filterLength - 1 - i];
@@ -387,7 +387,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
         }
 
         // Trim the result to match the original signal length
-        var trimmedResult = new Vector<T>(signalLength, NumOps);
+        var trimmedResult = new Vector<T>(signalLength);
         int startIndex = (filterLength - 1) / 2;
         for (int i = 0; i < signalLength; i++)
         {

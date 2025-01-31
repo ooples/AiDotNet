@@ -58,7 +58,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
             result[i] = samplePredictions[index];
         }
 
-        var quantilePredictions = new Vector<T>(result, NumOps);
+        var quantilePredictions = new Vector<T>(result);
         return Regularization.RegularizeCoefficients(quantilePredictions);
     }
 
@@ -77,14 +77,14 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         var sampledX = new Matrix<T>(sampledIndices.Select(i => x.GetRow(i)).ToList());
-        var sampledY = new Vector<T>([.. sampledIndices.Select(i => y[i])], NumOps);
+        var sampledY = new Vector<T>([.. sampledIndices.Select(i => y[i])]);
 
         return (sampledX, sampledY);
     }
 
     protected override async Task CalculateFeatureImportancesAsync(int numFeatures)
     {
-        FeatureImportances = new Vector<T>(new T[numFeatures], NumOps);
+        FeatureImportances = new Vector<T>(new T[numFeatures]);
         var importanceTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.FeatureImportances));
         var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks, _options.MaxDegreeOfParallelism);
 

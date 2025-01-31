@@ -22,7 +22,7 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
 
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows, NumOps);
+        var predictions = new Vector<T>(input.Rows);
         var tasks = Enumerable.Range(0, input.Rows).Select(i => Task.Run(() => PredictSingle(input.GetRow(i))));
         var results = await ParallelProcessingHelper.ProcessTasksInParallel(tasks);
         for (int i = 0; i < results.Count; i++)
@@ -198,7 +198,7 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
 
     protected override async Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        FeatureImportances = new Vector<T>(featureCount, NumOps);
+        FeatureImportances = new Vector<T>(featureCount);
         await CalculateFeatureImportancesRecursiveAsync(Root, NumOps.One);
         FeatureImportances = FeatureImportances.Divide(FeatureImportances.Sum());
     }

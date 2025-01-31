@@ -46,7 +46,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     private Vector<T> GenerateKnots()
     {
         int n = _x.Length;
-        Vector<T> knots = new Vector<T>(n + 6, _numOps);
+        Vector<T> knots = new Vector<T>(n + 6);
 
         // Not-a-knot condition
         knots[0] = _numOps.Subtract(_x[0], _numOps.Multiply(_numOps.FromDouble(3), _numOps.Subtract(_x[1], _x[0])));
@@ -69,8 +69,8 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     private Vector<T> CalculateCoefficients()
     {
         int n = _x.Length;
-        Matrix<T> A = new Matrix<T>(n, n, _numOps);
-        Vector<T> b = new Vector<T>(n, _numOps);
+        Matrix<T> A = new Matrix<T>(n, n);
+        Vector<T> b = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -110,9 +110,9 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
 
     private Vector<T> CalculateBasisFunctions(T x, int i)
     {
-        Vector<T> basis = new Vector<T>(4, _numOps);
-        Vector<T> left = new Vector<T>(4, _numOps);
-        Vector<T> right = new Vector<T>(4, _numOps);
+        Vector<T> basis = new Vector<T>(4);
+        Vector<T> left = new Vector<T>(4);
+        Vector<T> right = new Vector<T>(4);
 
         basis[0] = _numOps.One;
 

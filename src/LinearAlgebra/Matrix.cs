@@ -2,24 +2,21 @@
 
 public class Matrix<T> : MatrixBase<T>
 {
-    public Matrix(int rows, int columns, INumericOperations<T>? numericOperations = null) 
-        : base(rows, columns, numericOperations)
+    public Matrix(int rows, int columns) : base(rows, columns)
     {
     }
 
-    public Matrix(IEnumerable<IEnumerable<T>> values, INumericOperations<T>? numericOperations = null)
-        : base(values, numericOperations)
+    public Matrix(IEnumerable<IEnumerable<T>> values) : base(values)
     {
     }
 
-    public Matrix(T[,] data, INumericOperations<T>? numericOperations = null)
-        : base(data, numericOperations)
+    public Matrix(T[,] data) : base(data)
     {
     }
 
     protected override MatrixBase<T> CreateInstance(int rows, int cols)
     {
-        return new Matrix<T>(rows, cols, ops);
+        return new Matrix<T>(rows, cols);
     }
 
     public static Matrix<T> CreateMatrix<T2>(int rows, int columns)
@@ -34,11 +31,10 @@ public class Matrix<T> : MatrixBase<T>
             throw new ArgumentException($"{nameof(size)} has to be a minimum of 2", nameof(size));
         }
 
-        var operations = MathHelper.GetNumericOperations<T>();
-        var identityMatrix = new Matrix<T>(size, size, operations);
+        var identityMatrix = new Matrix<T>(size, size);
         for (int i = 0; i < size; i++)
         {
-            identityMatrix[i, i] = operations.One;
+            identityMatrix[i, i] = NumOps.One;
         }
 
         return identityMatrix;
@@ -46,7 +42,7 @@ public class Matrix<T> : MatrixBase<T>
 
     public new Vector<T> GetColumn(int col)
     {
-        return (Vector<T>)base.GetColumn(col);
+        return base.GetColumn(col);
     }
 
     public new Matrix<T> Copy()
@@ -134,21 +130,21 @@ public class Matrix<T> : MatrixBase<T>
         return (Matrix<T>)base.Zeros(rows, cols);
     }
 
-    public static Matrix<T> CreateOnes(int rows, int cols, INumericOperations<T>? numericOperations = null)
+    public static Matrix<T> CreateOnes(int rows, int cols)
     {
-        var matrix = new Matrix<T>(rows, cols, numericOperations);
+        var matrix = new Matrix<T>(rows, cols);
         return matrix.Ones(rows, cols);
     }
 
-    public static Matrix<T> CreateZeros(int rows, int cols, INumericOperations<T>? numericOperations = null)
+    public static Matrix<T> CreateZeros(int rows, int cols)
     {
-        var matrix = new Matrix<T>(rows, cols, numericOperations);
+        var matrix = new Matrix<T>(rows, cols);
         return matrix.Zeros(rows, cols);
     }
 
-    public static Matrix<T> CreateDiagonal(Vector<T> diagonal, INumericOperations<T>? numericOperations = null)
+    public static Matrix<T> CreateDiagonal(Vector<T> diagonal)
     {
-        var matrix = new Matrix<T>(diagonal.Length, diagonal.Length, numericOperations);
+        var matrix = new Matrix<T>(diagonal.Length, diagonal.Length);
         for (int i = 0; i < diagonal.Length; i++)
         {
             matrix[i, i] = diagonal[i];
@@ -157,29 +153,27 @@ public class Matrix<T> : MatrixBase<T>
         return matrix;
     }
 
-    public static Matrix<T> CreateIdentity(int size, INumericOperations<T>? numericOperations = null)
+    public static Matrix<T> CreateIdentity(int size)
     {
-        var numOp = numericOperations ?? MathHelper.GetNumericOperations<T>();
-        var identity = new Matrix<T>(size, size, numOp);
+        var identity = new Matrix<T>(size, size);
         for (int i = 0; i < size; i++)
         {
-            identity[i, i] = numOp.One;
+            identity[i, i] = NumOps.One;
         }
 
         return identity;
     }
 
-    public static Matrix<T> CreateRandom(int rows, int columns, INumericOperations<T>? numericOperations = null)
+    public static Matrix<T> CreateRandom(int rows, int columns)
     {
-        var numOp = numericOperations ?? MathHelper.GetNumericOperations<T>();
-        Matrix<T> matrix = new(rows, columns, numOp);
+        Matrix<T> matrix = new(rows, columns);
         Random random = new();
 
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < columns; j++)
             {
-                matrix[i, j] = numOp.FromDouble(random.NextDouble());
+                matrix[i, j] = NumOps.FromDouble(random.NextDouble());
             }
         }
 
@@ -246,13 +240,12 @@ public class Matrix<T> : MatrixBase<T>
             throw new ArgumentException("Matrices must have the same dimensions for subtraction.");
         }
 
-        var numOp = MathHelper.GetNumericOperations<T>();
         Matrix<T> result = new(Rows, Columns);
         for (int i = 0; i < Rows; i++)
         {
             for (int j = 0; j < Columns; j++)
             {
-                result[i, j] = numOp.Subtract(this[i, j], other[i, j]);
+                result[i, j] = NumOps.Subtract(this[i, j], other[i, j]);
             }
         }
 
@@ -281,6 +274,36 @@ public class Matrix<T> : MatrixBase<T>
         }
 
         return subMatrix;
+    }
+
+    public Vector<T> ToColumnVector()
+    {
+        Vector<T> result = new Vector<T>(Rows * Columns);
+        int index = 0;
+        for (int j = 0; j < Columns; j++)
+        {
+            for (int i = 0; i < Rows; i++)
+            {
+                result[index++] = this[i, j];
+            }
+        }
+
+        return result;
+    }
+
+    public Vector<T> ToRowVector()
+    {
+        Vector<T> result = new Vector<T>(Rows * Columns);
+        int index = 0;
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                result[index++] = this[i, j];
+            }
+        }
+
+        return result;
     }
 
     public void SetSubMatrix(int startRow, int startColumn, Matrix<T> subMatrix)
@@ -347,7 +370,7 @@ public class Matrix<T> : MatrixBase<T>
             T max = this[i, 0];
             for (int j = 1; j < Columns; j++)
             {
-                if (ops.GreaterThan(this[i, j], max))
+                if (NumOps.GreaterThan(this[i, j], max))
                     max = this[i, j];
             }
 
@@ -378,11 +401,11 @@ public class Matrix<T> : MatrixBase<T>
 
         for (int i = 0; i < Rows; i++)
         {
-            T sum = ops.Zero;
+            T sum = NumOps.Zero;
 
             for (int j = 0; j < Columns; j++)
             {
-                sum = ops.Add(sum, this[i, j]);
+                sum = NumOps.Add(sum, this[i, j]);
             }
 
             result[i] = sum;
@@ -402,7 +425,7 @@ public class Matrix<T> : MatrixBase<T>
         {
             for (int j = 0; j < Columns; j++)
             {
-                result[i, j] = ops.Divide(this[i, j], other[i, j]);
+                result[i, j] = NumOps.Divide(this[i, j], other[i, j]);
             }
         }
 
@@ -411,13 +434,12 @@ public class Matrix<T> : MatrixBase<T>
 
     public Matrix<T> Divide(T scalar)
     {
-        var numOp = MathHelper.GetNumericOperations<T>();
         Matrix<T> result = new(Rows, Columns);
         for (int i = 0; i < Rows; i++)
         {
             for (int j = 0; j < Columns; j++)
             {
-                result[i, j] = numOp.Divide(this[i, j], scalar);
+                result[i, j] = NumOps.Divide(this[i, j], scalar);
             }
         }
 
@@ -431,13 +453,12 @@ public class Matrix<T> : MatrixBase<T>
             throw new ArgumentException("Matrices must have the same dimensions for division.");
         }
 
-        var numOp = MathHelper.GetNumericOperations<T>();
         Matrix<T> result = new(Rows, Columns);
         for (int i = 0; i < Rows; i++)
         {
             for (int j = 0; j < Columns; j++)
             {
-                result[i, j] = numOp.Divide(this[i, j], other[i, j]);
+                result[i, j] = NumOps.Divide(this[i, j], other[i, j]);
             }
         }
 
@@ -454,13 +475,12 @@ public class Matrix<T> : MatrixBase<T>
         int rows = a.Length;
         int cols = b.Length;
         var result = new Matrix<T>(rows, cols);
-        var numOps = MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
-                result[i, j] = numOps.Multiply(a[i], b[j]);
+                result[i, j] = NumOps.Multiply(a[i], b[j]);
             }
         }
 
@@ -569,28 +589,5 @@ public class Matrix<T> : MatrixBase<T>
         }
 
         return new Matrix<T>(newMatrix);
-    }
-}
-
-public static class Matrix
-{
-    public static Matrix<double> CreateDoubleMatrix(int rows, int columns)
-    {
-        return new Matrix<double>(rows, columns, new DoubleOperations());
-    }
-
-    public static Matrix<Complex<T>> CreateComplexMatrix<T>(int rows, int columns)
-    {
-        return new Matrix<Complex<T>>(rows, columns);
-    }
-
-    public static Matrix<double> CreateDoubleMatrix(IEnumerable<IEnumerable<double>> values)
-    {
-        return new Matrix<double>(values, new DoubleOperations());
-    }
-
-    public static Matrix<Complex<T>> CreateComplexMatrix<T>(IEnumerable<IEnumerable<Complex<T>>> values)
-    {
-        return new Matrix<Complex<T>>(values);
     }
 }

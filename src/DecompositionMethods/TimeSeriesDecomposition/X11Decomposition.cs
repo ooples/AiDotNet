@@ -111,7 +111,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> EstimateSeasonalFactorsMultiplicative(Vector<T> seasonalIrregular)
     {
         int n = seasonalIrregular.Length;
-        Vector<T> seasonalFactors = new Vector<T>(n, NumOps);
+        Vector<T> seasonalFactors = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -146,7 +146,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> HendersonMovingAverage(Vector<T> data, int terms)
     {
         int n = data.Length;
-        Vector<T> result = new Vector<T>(n, NumOps);
+        Vector<T> result = new Vector<T>(n);
         T[] weights = CalculateHendersonWeights(terms);
 
         int halfTerms = terms / 2;
@@ -249,17 +249,17 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
 
     private void EnsureMultiplicativeConsistency()
     {
-        Vector<T> trend = (Vector<T>?)GetComponent(DecompositionComponentType.Trend) ?? new Vector<T>(TimeSeries.Length, NumOps);
-        Vector<T> seasonal = (Vector<T>?)GetComponent(DecompositionComponentType.Seasonal) ?? new Vector<T>(TimeSeries.Length, NumOps);
-        Vector<T> irregular = (Vector<T>?)GetComponent(DecompositionComponentType.Irregular) ?? new Vector<T>(TimeSeries.Length, NumOps);
+        Vector<T> trend = (Vector<T>?)GetComponent(DecompositionComponentType.Trend) ?? new Vector<T>(TimeSeries.Length);
+        Vector<T> seasonal = (Vector<T>?)GetComponent(DecompositionComponentType.Seasonal) ?? new Vector<T>(TimeSeries.Length);
+        Vector<T> irregular = (Vector<T>?)GetComponent(DecompositionComponentType.Irregular) ?? new Vector<T>(TimeSeries.Length);
 
-        Vector<T> reconstructed = new Vector<T>(TimeSeries.Length, NumOps);
+        Vector<T> reconstructed = new Vector<T>(TimeSeries.Length);
         for (int i = 0; i < TimeSeries.Length; i++)
         {
             reconstructed[i] = NumOps.Multiply(NumOps.Multiply(trend[i], seasonal[i]), irregular[i]);
         }
 
-        Vector<T> adjustmentFactor = new Vector<T>(TimeSeries.Length, NumOps);
+        Vector<T> adjustmentFactor = new Vector<T>(TimeSeries.Length);
         for (int i = 0; i < TimeSeries.Length; i++)
         {
             adjustmentFactor[i] = NumOps.Divide(TimeSeries[i], reconstructed[i]);
@@ -267,15 +267,15 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
 
         // Distribute the adjustment factor equally among the components
         T cubicRoot = NumOps.FromDouble(1.0 / 3.0);
-        Vector<T> componentAdjustment = new Vector<T>(TimeSeries.Length, NumOps);
+        Vector<T> componentAdjustment = new Vector<T>(TimeSeries.Length);
         for (int i = 0; i < TimeSeries.Length; i++)
         {
             componentAdjustment[i] = NumOps.Power(adjustmentFactor[i], cubicRoot);
         }
 
-        Vector<T> adjustedTrend = new Vector<T>(TimeSeries.Length, NumOps);
-        Vector<T> adjustedSeasonal = new Vector<T>(TimeSeries.Length, NumOps);
-        Vector<T> adjustedIrregular = new Vector<T>(TimeSeries.Length, NumOps);
+        Vector<T> adjustedTrend = new Vector<T>(TimeSeries.Length);
+        Vector<T> adjustedSeasonal = new Vector<T>(TimeSeries.Length);
+        Vector<T> adjustedIrregular = new Vector<T>(TimeSeries.Length);
 
         for (int i = 0; i < TimeSeries.Length; i++)
         {
@@ -292,7 +292,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> CenteredMovingAverage(Vector<T> data, int window)
     {
         int n = data.Length;
-        Vector<T> result = new Vector<T>(n, NumOps);
+        Vector<T> result = new Vector<T>(n);
 
         int halfWindow = window / 2;
 
@@ -318,7 +318,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> EstimateSeasonalFactors(Vector<T> seasonalIrregular)
     {
         int n = seasonalIrregular.Length;
-        Vector<T> seasonalFactors = new Vector<T>(n, NumOps);
+        Vector<T> seasonalFactors = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {

@@ -22,7 +22,7 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
             for (int j = 0; j < inputs.Columns; j++)
             {
                 var column = inputs.GetColumn(j);
-                var quartiles = new Quartile<T>(column, _numOps);
+                var quartiles = new Quartile<T>(column);
                 var q1 = quartiles.Q1;
                 var q3 = quartiles.Q3;
                 var iqr = _numOps.Subtract(q3, q1);
@@ -38,12 +38,12 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
 
             if (!isOutlier)
             {
-                cleanedInputs.Add(new Vector<T>(inputs.GetRow(i), _numOps));
+                cleanedInputs.Add(new Vector<T>(inputs.GetRow(i)));
                 cleanedOutputs.Add(outputs[i]);
             }
         }
 
-        return (new Matrix<T>(cleanedInputs, _numOps), new Vector<T>(cleanedOutputs, _numOps));
+        return (new Matrix<T>(cleanedInputs), new Vector<T>(cleanedOutputs));
     }
 
     private T GetDefaultMultiplier()

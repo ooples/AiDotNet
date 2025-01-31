@@ -13,7 +13,7 @@ public class GaussianWindow<T> : IWindowFunction<T>
 
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize, _numOps);
+        Vector<T> window = new Vector<T>(windowSize);
         T center = _numOps.Divide(_numOps.FromDouble(windowSize - 1), _numOps.FromDouble(2.0));
 
         for (int n = 0; n < windowSize; n++)

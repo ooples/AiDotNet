@@ -29,7 +29,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
             throw new InvalidOperationException("The matrix is singular and cannot be solved using Cramer's rule.");
         }
 
-        Vector<T> x = new(A.Columns, NumOps);
+        Vector<T> x = new(A.Columns);
         for (int i = 0; i < A.Columns; i++)
         {
             Matrix<T> Ai = ReplaceColumn(A, b, i);
@@ -47,7 +47,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
             throw new InvalidOperationException("The matrix is singular and cannot be inverted.");
         }
 
-        Matrix<T> inverse = new(A.Rows, A.Columns, NumOps);
+        Matrix<T> inverse = new(A.Rows, A.Columns);
         for (int i = 0; i < A.Rows; i++)
         {
             for (int j = 0; j < A.Columns; j++)
@@ -78,7 +78,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
 
     private T Cofactor(Matrix<T> matrix, int row, int col)
     {
-        Matrix<T> minor = new(matrix.Rows - 1, matrix.Columns - 1, NumOps);
+        Matrix<T> minor = new(matrix.Rows - 1, matrix.Columns - 1);
         int m = 0, n = 0;
 
         for (int i = 0; i < matrix.Rows; i++)

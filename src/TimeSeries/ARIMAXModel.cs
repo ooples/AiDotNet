@@ -12,10 +12,10 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     public ARIMAXModel(ARIMAXModelOptions<T>? options = null) : base(options ?? new ARIMAXModelOptions<T>())
     {
         _arimaxOptions = options ?? new();
-        _arCoefficients = new Vector<T>(_arimaxOptions.AROrder, NumOps);
-        _maCoefficients = new Vector<T>(_arimaxOptions.MAOrder, NumOps);
-        _exogenousCoefficients = new Vector<T>(_arimaxOptions.ExogenousVariables, NumOps);
-        _differenced = new Vector<T>(0, NumOps);
+        _arCoefficients = new Vector<T>(_arimaxOptions.AROrder);
+        _maCoefficients = new Vector<T>(_arimaxOptions.MAOrder);
+        _exogenousCoefficients = new Vector<T>(_arimaxOptions.ExogenousVariables);
+        _differenced = new Vector<T>(0);
         _intercept = NumOps.Zero;
     }
 
@@ -33,7 +33,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
 
     public override Vector<T> Predict(Matrix<T> xNew)
     {
-        Vector<T> predictions = new Vector<T>(xNew.Rows, NumOps);
+        Vector<T> predictions = new Vector<T>(xNew.Rows);
 
         for (int t = 0; t < xNew.Rows; t++)
         {
@@ -81,12 +81,12 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         Vector<T> diffY = y;
         for (int d = 0; d < order; d++)
         {
-            Vector<T> temp = new Vector<T>(diffY.Length - 1, NumOps);
+            Vector<T> temp = new Vector<T>(diffY.Length - 1);
             for (int i = 0; i < temp.Length; i++)
             {
                 temp[i] = NumOps.Subtract(diffY[i + 1], diffY[i]);
             }
-            _differenced = new Vector<T>(order, NumOps);
+            _differenced = new Vector<T>(order);
             for (int i = 0; i < order; i++)
             {
                 _differenced[i] = diffY[i];
@@ -102,7 +102,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         Vector<T> y = diffY;
         for (int d = _arimaxOptions.DifferenceOrder - 1; d >= 0; d--)
         {
-            Vector<T> temp = new Vector<T>(y.Length + 1, NumOps);
+            Vector<T> temp = new Vector<T>(y.Length + 1);
             temp[0] = original[d];
             for (int i = 1; i < temp.Length; i++)
             {
@@ -143,8 +143,8 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         T[] autocorrelations = CalculateAutocorrelations(residuals, Math.Max(p, q));
 
         // Update AR coefficients using Yule-Walker equations
-        Matrix<T> R = new Matrix<T>(p, p, NumOps);
-        Vector<T> r = new Vector<T>(p, NumOps);
+        Matrix<T> R = new Matrix<T>(p, p);
+        Vector<T> r = new Vector<T>(p);
 
         for (int i = 0; i < p; i++)
         {
@@ -234,22 +234,22 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     protected override void DeserializeCore(BinaryReader reader)
     {
         int arCoefficientsLength = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(arCoefficientsLength, NumOps);
+        _arCoefficients = new Vector<T>(arCoefficientsLength);
         for (int i = 0; i < arCoefficientsLength; i++)
             _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
 
         int maCoefficientsLength = reader.ReadInt32();
-        _maCoefficients = new Vector<T>(maCoefficientsLength, NumOps);
+        _maCoefficients = new Vector<T>(maCoefficientsLength);
         for (int i = 0; i < maCoefficientsLength; i++)
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
 
         int exogenousCoefficientsLength = reader.ReadInt32();
-        _exogenousCoefficients = new Vector<T>(exogenousCoefficientsLength, NumOps);
+        _exogenousCoefficients = new Vector<T>(exogenousCoefficientsLength);
         for (int i = 0; i < exogenousCoefficientsLength; i++)
             _exogenousCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
 
         int differencedLength = reader.ReadInt32();
-        _differenced = new Vector<T>(differencedLength, NumOps);
+        _differenced = new Vector<T>(differencedLength);
         for (int i = 0; i < differencedLength; i++)
             _differenced[i] = NumOps.FromDouble(reader.ReadDouble());
 

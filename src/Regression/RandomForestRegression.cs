@@ -63,7 +63,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
             );
         }
 
-        var regularizedPredictions = new Vector<T>(result, NumOps);
+        var regularizedPredictions = new Vector<T>(result);
         return Regularization.RegularizeCoefficients(regularizedPredictions);
     }
 

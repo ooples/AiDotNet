@@ -68,9 +68,9 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         int K = N - _windowSize + 1;
     
         Matrix<T> X = CreateTrajectoryMatrix();
-        Matrix<T> U = new Matrix<T>(_windowSize, _numberOfComponents, NumOps);
-        Vector<T> S = new Vector<T>(_numberOfComponents, NumOps);
-        Matrix<T> V = new Matrix<T>(K, _numberOfComponents, NumOps);
+        Matrix<T> U = new Matrix<T>(_windowSize, _numberOfComponents);
+        Vector<T> S = new Vector<T>(_numberOfComponents);
+        Matrix<T> V = new Matrix<T>(K, _numberOfComponents);
 
         for (int i = 0; i < _numberOfComponents; i++)
         {
@@ -108,7 +108,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         int K = N - _windowSize + 1;
 
         // Create the Toeplitz matrix
-        Matrix<T> C = new Matrix<T>(_windowSize, _windowSize, NumOps);
+        Matrix<T> C = new Matrix<T>(_windowSize, _windowSize);
         for (int i = 0; i < _windowSize; i++)
         {
             for (int j = 0; j <= i; j++)
@@ -128,7 +128,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         Vector<T> S = eigenDecomposition.EigenValues.Transform(x => NumOps.Sqrt(x));
 
         // Compute V
-        Matrix<T> V = new Matrix<T>(K, _numberOfComponents, NumOps);
+        Matrix<T> V = new Matrix<T>(K, _numberOfComponents);
         Matrix<T> X = CreateTrajectoryMatrix();
         for (int i = 0; i < _numberOfComponents; i++)
         {

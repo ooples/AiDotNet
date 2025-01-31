@@ -23,7 +23,7 @@ public class OptimizationResult<T>
     public OptimizationResult()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        BestSolution = SymbolicModelFactory<T>.CreateRandomModel(false, 1, _numOps); // Default to vector model
+        BestSolution = SymbolicModelFactory<T>.CreateRandomModel(false, 1); // Default to vector model
         FitnessHistory = Vector<T>.Empty();
         SelectedFeatures = [];
         TrainingResult = new DatasetResult();
@@ -48,8 +48,7 @@ public class OptimizationResult<T>
 
         public DatasetResult()
         {
-            var numOps = MathHelper.GetNumericOperations<T>();
-            X = new Matrix<T>(0, 0, numOps);
+            X = Matrix<T>.Empty();
             Y = Vector<T>.Empty();
             Predictions = Vector<T>.Empty();
             ErrorStats = ErrorStats<T>.Empty();

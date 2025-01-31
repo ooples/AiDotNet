@@ -118,7 +118,7 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
     private Vector<T> CalculateFeatureImportances(ModelEvaluationData<T> evaluationData)
     {
         var baselineError = CalculateError(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
-        var featureImportances = new Vector<T>(evaluationData.ModelStats.FeatureMatrix.Columns, _numOps);
+        var featureImportances = new Vector<T>(evaluationData.ModelStats.FeatureMatrix.Columns);
 
         for (int i = 0; i < evaluationData.ModelStats.FeatureMatrix.Columns; i++)
         {
@@ -159,7 +159,7 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
     private Matrix<T> CalculateFeatureCorrelations(Matrix<T> features)
     {
         int numFeatures = features.Columns;
-        var correlations = new Matrix<T>(numFeatures, numFeatures, _numOps);
+        var correlations = new Matrix<T>(numFeatures, numFeatures);
 
         for (int i = 0; i < numFeatures; i++)
         {

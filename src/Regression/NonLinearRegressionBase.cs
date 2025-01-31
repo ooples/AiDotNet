@@ -14,8 +14,8 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         Options = options ?? new NonLinearRegressionOptions();
         Regularization = regularization ?? new NoRegularization<T>();
         NumOps = MathHelper.GetNumericOperations<T>();
-        SupportVectors = new Matrix<T>(0, 0, NumOps);
-        Alphas = new Vector<T>(0, NumOps);
+        SupportVectors = new Matrix<T>(0, 0);
+        Alphas = new Vector<T>(0);
         B = NumOps.Zero;
     }
 
@@ -29,7 +29,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
 
     public virtual Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows, NumOps);
+        var predictions = new Vector<T>(input.Rows);
         for (int i = 0; i < input.Rows; i++)
         {
             predictions[i] = PredictSingle(input.GetRow(i));
@@ -49,7 +49,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     protected virtual void InitializeModel(Matrix<T> x, Vector<T> y)
     {
         // Initialize model parameters (e.g., Alphas, B) based on input data
-        Alphas = new Vector<T>(x.Rows, NumOps);
+        Alphas = new Vector<T>(x.Rows);
         B = NumOps.Zero;
     }
 
@@ -63,8 +63,8 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             .ToArray();
 
         int featureCount = SupportVectors.Columns;
-        SupportVectors = new Matrix<T>(supportVectorIndices.Length, featureCount, NumOps);
-        var newAlphas = new Vector<T>(supportVectorIndices.Length, NumOps);
+        SupportVectors = new Matrix<T>(supportVectorIndices.Length, featureCount);
+        var newAlphas = new Vector<T>(supportVectorIndices.Length);
 
         for (int i = 0; i < supportVectorIndices.Length; i++)
         {
@@ -198,7 +198,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         // Deserialize support vectors
         int svRows = reader.ReadInt32();
         int svCols = reader.ReadInt32();
-        SupportVectors = new Matrix<T>(svRows, svCols, NumOps);
+        SupportVectors = new Matrix<T>(svRows, svCols);
         for (int i = 0; i < svRows; i++)
         {
             for (int j = 0; j < svCols; j++)
@@ -209,7 +209,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
 
         // Deserialize alphas
         int alphaCount = reader.ReadInt32();
-        Alphas = new Vector<T>(alphaCount, NumOps);
+        Alphas = new Vector<T>(alphaCount);
         for (int i = 0; i < alphaCount; i++)
         {
             Alphas[i] = NumOps.FromDouble(reader.ReadDouble());

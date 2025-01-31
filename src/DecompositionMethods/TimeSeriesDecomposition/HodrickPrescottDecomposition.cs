@@ -53,29 +53,29 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeKalmanFilterMethod()
     {
         int n = TimeSeries.Length;
-        Vector<T> trend = new Vector<T>(n, NumOps);
-        Vector<T> cycle = new Vector<T>(n, NumOps);
+        Vector<T> trend = new Vector<T>(n);
+        Vector<T> cycle = new Vector<T>(n);
 
         // State transition matrix
-        Matrix<T> F = new Matrix<T>(new T[,] { { NumOps.One, NumOps.One }, { NumOps.Zero, NumOps.One } }, NumOps);
+        Matrix<T> F = new Matrix<T>(new T[,] { { NumOps.One, NumOps.One }, { NumOps.Zero, NumOps.One } });
     
         // Observation matrix
-        Matrix<T> H = new Matrix<T>(new T[,] { { NumOps.One, NumOps.Zero } }, NumOps);
+        Matrix<T> H = new Matrix<T>(new T[,] { { NumOps.One, NumOps.Zero } });
 
         // Initial state estimate
-        Vector<T> x = new Vector<T>(new T[] { TimeSeries[0], NumOps.Zero }, NumOps);
+        Vector<T> x = new Vector<T>(new T[] { TimeSeries[0], NumOps.Zero });
 
         // Initial error covariance
         Matrix<T> P = new Matrix<T>(new T[,] { 
             { NumOps.FromDouble(1000), NumOps.Zero }, 
             { NumOps.Zero, NumOps.FromDouble(1000) } 
-        }, NumOps);
+        });
 
         // Process noise covariance
         Matrix<T> Q = new Matrix<T>(new T[,] { 
             { NumOps.FromDouble(0.01), NumOps.Zero }, 
             { NumOps.Zero, NumOps.FromDouble(0.01) } 
-        }, NumOps);
+        });
 
         // Measurement noise covariance
         T R = NumOps.FromDouble(1);
@@ -107,8 +107,8 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         int n = TimeSeries.Length;
         int levels = (int)Math.Log(n, 2);
 
-        Vector<T> trend = new Vector<T>(n, NumOps);
-        Vector<T> cycle = new Vector<T>(n, NumOps);
+        Vector<T> trend = new Vector<T>(n);
+        Vector<T> cycle = new Vector<T>(n);
 
         // Perform wavelet decomposition
         Vector<T> coeffs = DiscreteWaveletTransform(TimeSeries, levels);
@@ -202,7 +202,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         Vector<T> trend = fft.Inverse(frequencyDomain);
 
         // Calculate cycle
-        Vector<T> cycle = new Vector<T>(n, NumOps);
+        Vector<T> cycle = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             cycle[i] = NumOps.Subtract(TimeSeries[i], trend[i]);
@@ -215,8 +215,8 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeStateSpaceMethod()
     {
         int n = TimeSeries.Length;
-        Vector<T> trend = new Vector<T>(n, NumOps);
-        Vector<T> cycle = new Vector<T>(n, NumOps);
+        Vector<T> trend = new Vector<T>(n);
+        Vector<T> cycle = new Vector<T>(n);
 
         // State space model parameters
         T alpha = NumOps.FromDouble(0.1);  // Trend smoothness parameter
@@ -248,7 +248,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         int n = TimeSeries.Length;
 
         Matrix<T> D = ConstructSecondDifferenceMatrix(n);
-        Matrix<T> I = Matrix<T>.CreateIdentity(n, NumOps);
+        Matrix<T> I = Matrix<T>.CreateIdentity(n);
         Matrix<T> A = I.Add(D.Transpose().Multiply(D).Multiply(_lambda));
 
         var decomposition = _decomposition ?? new LuDecomposition<T>(A);
@@ -263,7 +263,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         int n = TimeSeries.Length;
         Vector<T> trend = new Vector<T>(TimeSeries);
-        Vector<T> cycle = new Vector<T>(n, NumOps);
+        Vector<T> cycle = new Vector<T>(n);
 
         T two = NumOps.FromDouble(2);
         T lambda2 = NumOps.Multiply(_lambda, two);
@@ -297,7 +297,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
 
     private Matrix<T> ConstructSecondDifferenceMatrix(int n)
     {
-        Matrix<T> D = new Matrix<T>(n - 2, n, NumOps);
+        Matrix<T> D = new Matrix<T>(n - 2, n);
 
         for (int i = 0; i < n - 2; i++)
         {

@@ -83,7 +83,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         var neighbors = new List<ISymbolicModel<T>>();
         for (int i = 0; i < _currentNeighborhoodSize; i++)
         {
-            neighbors.Add(currentSolution.Mutate(_currentMutationRate, NumOps));
+            neighbors.Add(currentSolution.Mutate(_currentMutationRate));
         }
 
         return neighbors;

@@ -18,7 +18,7 @@ public class LogisticRegression<T> : RegressionBase<T>
         int n = x.Rows;
         int p = x.Columns;
 
-        Coefficients = new Vector<T>(p, NumOps);
+        Coefficients = new Vector<T>(p);
         Intercept = NumOps.Zero;
 
         // Apply regularization to the input matrix

@@ -55,7 +55,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         var random = new Random(_options.Seed ?? Environment.TickCount);
 
         // Initialize centers randomly
-        var centers = new Matrix<T>(numCenters, x.Columns, NumOps);
+        var centers = new Matrix<T>(numCenters, x.Columns);
         var selectedIndices = new HashSet<int>();
         while (selectedIndices.Count < numCenters)
         {
@@ -69,7 +69,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         // Perform K-means clustering
         const int maxIterations = 100;
         var assignments = new int[x.Rows];
-        var newCenters = new Matrix<T>(numCenters, x.Columns, NumOps);
+        var newCenters = new Matrix<T>(numCenters, x.Columns);
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
@@ -139,7 +139,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
 
     private Matrix<T> ComputeRBFFeatures(Matrix<T> x)
     {
-        var rbfFeatures = new Matrix<T>(x.Rows, _centers.Rows + 1, NumOps);
+        var rbfFeatures = new Matrix<T>(x.Rows, _centers.Rows + 1);
 
         for (int i = 0; i < x.Rows; i++)
         {
@@ -155,7 +155,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
 
     private Vector<T> ComputeRBFFeaturesSingle(Vector<T> x)
     {
-        var features = new Vector<T>(_centers.Rows + 1, NumOps)
+        var features = new Vector<T>(_centers.Rows + 1)
         {
             [0] = NumOps.One // Bias term
         };
@@ -257,7 +257,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         // Deserialize centers
         int centerRows = reader.ReadInt32();
         int centerColumns = reader.ReadInt32();
-        _centers = new Matrix<T>(centerRows, centerColumns, NumOps);
+        _centers = new Matrix<T>(centerRows, centerColumns);
         for (int i = 0; i < centerRows; i++)
         {
             for (int j = 0; j < centerColumns; j++)
@@ -268,7 +268,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
 
         // Deserialize weights
         int weightsLength = reader.ReadInt32();
-        _weights = new Vector<T>(weightsLength, NumOps);
+        _weights = new Vector<T>(weightsLength);
         for (int i = 0; i < weightsLength; i++)
         {
             _weights[i] = NumOps.FromDouble(reader.ReadDouble());

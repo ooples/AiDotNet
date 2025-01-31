@@ -212,6 +212,6 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
 
     public Matrix<T> Invert()
     {
-        return MatrixHelper.InvertUsingDecomposition(this);
+        return MatrixHelper<T>.InvertUsingDecomposition(this);
     }
 }

@@ -15,9 +15,9 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     {
         A = matrix;
         NumOps = MathHelper.GetNumericOperations<T>();
-        U = new Matrix<T>(matrix.Rows, matrix.Rows, NumOps);
-        B = new Matrix<T>(matrix.Rows, matrix.Columns, NumOps);
-        V = new Matrix<T>(matrix.Columns, matrix.Columns, NumOps);
+        U = new Matrix<T>(matrix.Rows, matrix.Rows);
+        B = new Matrix<T>(matrix.Columns, matrix.Columns);
+        V = new Matrix<T>(matrix.Columns, matrix.Columns);
         Decompose(algorithm);
     }
 
@@ -54,7 +54,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
             Vector<T> v = HouseholderVector(x);
 
             // Apply Householder reflection to B
-            Matrix<T> P = Matrix<T>.CreateIdentity(m - k, NumOps).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
+            Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
             Matrix<T> subB = B.GetSubMatrix(k, k, m - k, n - k);
             B.SetSubMatrix(k, k, P.Multiply(subB));
 
@@ -69,7 +69,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
                 v = HouseholderVector(x);
 
                 // Apply Householder reflection to B
-                P = Matrix<T>.CreateIdentity(n - k - 1, NumOps).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
+                P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
                 subB = B.GetSubMatrix(k, k + 1, m - k, n - k - 1);
                 B.SetSubMatrix(k, k + 1, subB.Multiply(P));
 
@@ -85,8 +85,8 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
         int m = A.Rows;
         int n = A.Columns;
         B = A.Copy();
-        U = Matrix<T>.CreateIdentity(m, NumOps);
-        V = Matrix<T>.CreateIdentity(n, NumOps);
+        U = Matrix<T>.CreateIdentity(m);
+        V = Matrix<T>.CreateIdentity(n);
 
         for (int k = 0; k < Math.Min(m - 1, n); k++)
         {
@@ -109,12 +109,12 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     {
         int m = A.Rows;
         int n = A.Columns;
-        B = new Matrix<T>(m, n, NumOps);
-        U = new Matrix<T>(m, m, NumOps);
-        V = new Matrix<T>(n, n, NumOps);
+        B = new Matrix<T>(m, n);
+        U = new Matrix<T>(m, m);
+        V = new Matrix<T>(n, n);
 
-        Vector<T> u = new Vector<T>(m, NumOps);
-        Vector<T> v = new Vector<T>(n, NumOps);
+        Vector<T> u = new Vector<T>(m);
+        Vector<T> v = new Vector<T>(n);
 
         // Initialize with random unit vector
         Random rand = new();
@@ -156,11 +156,11 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> Invert()
     {
         int n = A.Columns;
-        Matrix<T> inverse = new Matrix<T>(n, n, NumOps);
+        Matrix<T> inverse = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {
-            Vector<T> ei = new Vector<T>(n, NumOps);
+            Vector<T> ei = new Vector<T>(n);
             ei[i] = NumOps.One;
             inverse.SetColumn(i, Solve(ei));
         }
@@ -226,7 +226,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     private Vector<T> SolveBidiagonal(Vector<T> y)
     {
         int n = B.Columns;
-        Vector<T> x = new(n, NumOps);
+        Vector<T> x = new(n);
 
         for (int i = n - 1; i >= 0; i--)
         {

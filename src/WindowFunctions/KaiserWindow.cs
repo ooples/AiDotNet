@@ -13,7 +13,7 @@ public class KaiserWindow<T> : IWindowFunction<T>
 
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize, _numOps);
+        Vector<T> window = new Vector<T>(windowSize);
         T alphaSq = _numOps.Multiply(_numOps.FromDouble(((windowSize - 1) / 2.0)), _numOps.FromDouble(((windowSize - 1) / 2.0)));
 
         for (int n = 0; n < windowSize; n++)

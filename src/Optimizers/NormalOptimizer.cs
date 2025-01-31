@@ -23,7 +23,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
 
         var bestStepData = new OptimizationStepData<T>
         {
-            Solution = SymbolicModelFactory<T>.CreateEmptyModel(Options.UseExpressionTrees, inputData.XTrain.Columns, NumOps),
+            Solution = SymbolicModelFactory<T>.CreateEmptyModel(Options.UseExpressionTrees, inputData.XTrain.Columns),
             FitnessScore = _fitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
         };
         var previousStepData = new OptimizationStepData<T>();
@@ -137,7 +137,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     private ISymbolicModel<T> CreateRandomSolution(int totalFeatures)
     {
         var selectedFeatures = RandomlySelectFeatures(totalFeatures);
-        return SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, selectedFeatures.Count, NumOps);
+        return SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, selectedFeatures.Count);
     }
 
     private List<int> RandomlySelectFeatures(int totalFeatures)

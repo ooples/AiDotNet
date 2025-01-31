@@ -42,6 +42,6 @@ public class CorrelationFeatureSelector<T> : IFeatureSelector<T>
             }
         }
 
-        return new Matrix<T>(selectedFeatures, _numOps);
+        return new Matrix<T>(selectedFeatures);
     }
 }

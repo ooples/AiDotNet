@@ -62,8 +62,8 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     private T[,] CalculateBicubicCoefficients(T[,] p)
     {
         T[,] a = new T[4, 4];
-        Matrix<T> coefficients = new Matrix<T>(16, 16, _numOps);
-        Vector<T> values = new Vector<T>(16, _numOps);
+        Matrix<T> coefficients = new Matrix<T>(16, 16);
+        Vector<T> values = new Vector<T>(16);
 
         // Fill the coefficients matrix and values vector
         for (int i = 0; i < 4; i++)

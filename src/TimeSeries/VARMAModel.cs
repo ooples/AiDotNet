@@ -9,7 +9,7 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     public VARMAModel(VARMAModelOptions<T> options) : base(options)
     {
         _varmaOptions = options;
-        _maCoefficients = new Matrix<T>(options.OutputDimension, options.OutputDimension * options.MaLag, NumOps);
+        _maCoefficients = new Matrix<T>(options.OutputDimension, options.OutputDimension * options.MaLag);
         _residuals = Matrix<T>.Empty();
     }
 
@@ -61,7 +61,7 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     {
         int n = _residuals.Rows;
         int m = _residuals.Columns;
-        Matrix<T> laggedResiduals = new Matrix<T>(n - _varmaOptions.MaLag, m * _varmaOptions.MaLag, NumOps);
+        Matrix<T> laggedResiduals = new Matrix<T>(n - _varmaOptions.MaLag, m * _varmaOptions.MaLag);
 
         for (int i = _varmaOptions.MaLag; i < n; i++)
         {
@@ -79,7 +79,7 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
 
     private Vector<T> PredictMA()
     {
-        Vector<T> maPrediction = new Vector<T>(_varmaOptions.OutputDimension, NumOps);
+        Vector<T> maPrediction = new Vector<T>(_varmaOptions.OutputDimension);
         Vector<T> lastResiduals = _residuals.GetRow(_residuals.Rows - 1);
 
         for (int i = 0; i < _varmaOptions.OutputDimension; i++)
@@ -129,7 +129,7 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
         // Deserialize _maCoefficients
         int maCoeffRows = reader.ReadInt32();
         int maCoeffCols = reader.ReadInt32();
-        _maCoefficients = new Matrix<T>(maCoeffRows, maCoeffCols, NumOps);
+        _maCoefficients = new Matrix<T>(maCoeffRows, maCoeffCols);
         for (int i = 0; i < maCoeffRows; i++)
             for (int j = 0; j < maCoeffCols; j++)
                 _maCoefficients[i, j] = NumOps.FromDouble(reader.ReadDouble());

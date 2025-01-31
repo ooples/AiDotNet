@@ -11,7 +11,7 @@ public class HanningWindow<T> : IWindowFunction<T>
 
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize, _numOps);
+        Vector<T> window = new Vector<T>(windowSize);
         for (int n = 0; n < windowSize; n++)
         {
             T nT = _numOps.FromDouble(n);

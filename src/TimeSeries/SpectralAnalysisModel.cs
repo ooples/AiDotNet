@@ -10,8 +10,8 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     public SpectralAnalysisModel(SpectralAnalysisOptions<T>? options = null) : base(options ?? new SpectralAnalysisOptions<T>())
     {
         _spectralOptions = (SpectralAnalysisOptions<T>)_options;
-        _frequencies = new Vector<T>(1, NumOps);
-        _periodogram = new Vector<T>(1, NumOps);
+        _frequencies = new Vector<T>(1);
+        _periodogram = new Vector<T>(1);
     }
 
     public override void Train(Matrix<T> x, Vector<T> y)
@@ -26,7 +26,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         Vector<Complex<T>> fft = ComputeFFT(windowedSignal, nfft);
 
         // Compute periodogram
-        _periodogram = new Vector<T>(nfft / 2 + 1, NumOps);
+        _periodogram = new Vector<T>(nfft / 2 + 1);
         for (int i = 0; i < _periodogram.Length; i++)
         {
             T magnitude = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(fft[i].Real, fft[i].Real), NumOps.Multiply(fft[i].Imaginary, fft[i].Imaginary)));
@@ -34,7 +34,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         }
 
         // Compute frequencies
-        _frequencies = new Vector<T>(nfft / 2 + 1, NumOps);
+        _frequencies = new Vector<T>(nfft / 2 + 1);
         for (int i = 0; i < _frequencies.Length; i++)
         {
             _frequencies[i] = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(nfft));
@@ -60,7 +60,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     private Vector<T> ApplyWindowFunction(Vector<T> signal)
     {
         var window = _spectralOptions.WindowFunction.Create(signal.Length);
-        Vector<T> windowedSignal = new Vector<T>(signal.Length, NumOps);
+        Vector<T> windowedSignal = new Vector<T>(signal.Length);
         for (int i = 0; i < signal.Length; i++)
         {
             windowedSignal[i] = NumOps.Multiply(signal[i], window[i]);
@@ -150,7 +150,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
 
         // Deserialize frequencies
         int frequenciesLength = reader.ReadInt32();
-        _frequencies = new Vector<T>(frequenciesLength, NumOps);
+        _frequencies = new Vector<T>(frequenciesLength);
         for (int i = 0; i < frequenciesLength; i++)
         {
             _frequencies[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -158,7 +158,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
 
         // Deserialize periodogram
         int periodogramLength = reader.ReadInt32();
-        _periodogram = new Vector<T>(periodogramLength, NumOps);
+        _periodogram = new Vector<T>(periodogramLength);
         for (int i = 0; i < periodogramLength; i++)
         {
             _periodogram[i] = NumOps.FromDouble(reader.ReadDouble());

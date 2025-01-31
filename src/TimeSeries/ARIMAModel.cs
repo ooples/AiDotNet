@@ -22,14 +22,14 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         int q = _arimaOptions.Q;
 
         // Step 1: Difference the series
-        Vector<T> diffY = TimeSeriesHelper<T>.DifferenceSeries(y, d, NumOps);
+        Vector<T> diffY = TimeSeriesHelper<T>.DifferenceSeries(y, d);
 
         // Step 2: Estimate AR coefficients
-        _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(diffY, p, MatrixDecompositionType.Qr, NumOps);
+        _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(diffY, p, MatrixDecompositionType.Qr);
 
         // Step 3: Estimate MA coefficients
-        Vector<T> arResiduals = TimeSeriesHelper<T>.CalculateARResiduals(diffY, _arCoefficients, NumOps);
-        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(arResiduals, q, NumOps);
+        Vector<T> arResiduals = TimeSeriesHelper<T>.CalculateARResiduals(diffY, _arCoefficients);
+        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(arResiduals, q);
 
         // Step 4: Estimate constant term
         _constant = EstimateConstant(diffY, _arCoefficients, _maCoefficients);
@@ -49,9 +49,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
 
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new(input.Rows, NumOps);
-        Vector<T> lastObservedValues = new(_options.LagOrder, NumOps);
-        Vector<T> lastErrors = new(_maCoefficients.Length, NumOps);
+        Vector<T> predictions = new(input.Rows);
+        Vector<T> lastObservedValues = new(_options.LagOrder);
+        Vector<T> lastErrors = new(_maCoefficients.Length);
 
         for (int i = 0; i < predictions.Length; i++)
         {
@@ -151,7 +151,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Read AR coefficients
         int arLength = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(arLength, NumOps);
+        _arCoefficients = new Vector<T>(arLength);
         for (int i = 0; i < arLength; i++)
         {
             _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -159,7 +159,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Read MA coefficients
         int maLength = reader.ReadInt32();
-        _maCoefficients = new Vector<T>(maLength, NumOps);
+        _maCoefficients = new Vector<T>(maLength);
         for (int i = 0; i < maLength; i++)
         {
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());

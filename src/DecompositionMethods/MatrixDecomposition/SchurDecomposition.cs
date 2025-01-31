@@ -31,8 +31,8 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     private (Matrix<T> S, Matrix<T> U) ComputeSchurQR(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        Matrix<T> H = MatrixHelper.ReduceToHessenbergFormat(matrix);
-        Matrix<T> U = Matrix<T>.CreateIdentity(n, NumOps);
+        Matrix<T> H = MatrixHelper<T>.ReduceToHessenbergFormat(matrix);
+        Matrix<T> U = Matrix<T>.CreateIdentity(n);
         Matrix<T> S = H.Copy();
 
         const int maxIterations = 100;
@@ -55,8 +55,8 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     private (Matrix<T> S, Matrix<T> U) ComputeSchurFrancis(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        Matrix<T> H = MatrixHelper.ReduceToHessenbergFormat(matrix);
-        Matrix<T> U = Matrix<T>.CreateIdentity(n, NumOps);
+        Matrix<T> H = MatrixHelper<T>.ReduceToHessenbergFormat(matrix);
+        Matrix<T> U = Matrix<T>.CreateIdentity(n);
 
         const int maxIterations = 100;
         T tolerance = NumOps.FromDouble(1e-10);
@@ -104,8 +104,8 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     private (Matrix<T> S, Matrix<T> U) ComputeSchurImplicit(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        Matrix<T> H = MatrixHelper.ReduceToHessenbergFormat(matrix);
-        Matrix<T> U = Matrix<T>.CreateIdentity(n, NumOps);
+        Matrix<T> H = MatrixHelper<T>.ReduceToHessenbergFormat(matrix);
+        Matrix<T> U = Matrix<T>.CreateIdentity(n);
 
         const int maxIterations = 100;
         T tolerance = NumOps.FromDouble(1e-10);
@@ -152,7 +152,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     private Matrix<T> ComputeHouseholderReflection(T x, T y, T? z = default)
     {
         int n = NumOps.Equals(z ?? NumOps.Zero, NumOps.Zero) ? 2 : 3;
-        Vector<T> v = new(n, NumOps)
+        Vector<T> v = new(n)
         {
             [0] = x,
             [1] = y
@@ -160,15 +160,15 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
         if (n == 3) v[2] = z ?? NumOps.Zero;
 
         T alpha = NumOps.Sqrt(v.DotProduct(v));
-        if (NumOps.Equals(alpha, NumOps.Zero)) return Matrix<T>.CreateIdentity(n, NumOps);
+        if (NumOps.Equals(alpha, NumOps.Zero)) return Matrix<T>.CreateIdentity(n);
 
         v[0] = NumOps.Add(v[0], NumOps.Multiply(NumOps.SignOrZero(x), alpha));
         T beta = NumOps.Sqrt(NumOps.Multiply(NumOps.FromDouble(2), v.DotProduct(v)));
 
-        if (NumOps.Equals(beta, NumOps.Zero)) return Matrix<T>.CreateIdentity(n, NumOps);
+        if (NumOps.Equals(beta, NumOps.Zero)) return Matrix<T>.CreateIdentity(n);
 
         v = v.Divide(beta);
-        return Matrix<T>.CreateIdentity(n, NumOps).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
+        return Matrix<T>.CreateIdentity(n).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
     }
 
     public Vector<T> Solve(Vector<T> b)

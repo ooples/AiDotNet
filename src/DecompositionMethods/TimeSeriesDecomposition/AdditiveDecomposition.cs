@@ -73,9 +73,9 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
         int trendWindow = (int)Math.Ceiling(1.5 * seasonalPeriod / (1 - 1.5 / seasonalPeriod));
         trendWindow = trendWindow % 2 == 0 ? trendWindow + 1 : trendWindow;
 
-        Vector<T> trend = new Vector<T>(n, NumOps);
-        Vector<T> seasonal = new Vector<T>(n, NumOps);
-        Vector<T> detrended = new Vector<T>(n, NumOps);
+        Vector<T> trend = new Vector<T>(n);
+        Vector<T> seasonal = new Vector<T>(n);
+        Vector<T> detrended = new Vector<T>(n);
 
         for (int i = 0; i < nOuter; i++)
         {
@@ -107,7 +107,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
     {
         int n = a.Length;
-        Vector<T> result = new Vector<T>(n, NumOps);
+        Vector<T> result = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             result[i] = NumOps.Subtract(a[i], b[i]);
@@ -119,7 +119,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> CycleSubseriesSmoothing(Vector<T> data, int period)
     {
         int n = data.Length;
-        Vector<T> smoothed = new Vector<T>(n, NumOps);
+        Vector<T> smoothed = new Vector<T>(n);
 
         for (int i = 0; i < period; i++)
         {
@@ -144,7 +144,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> LowPassFilter(Vector<T> data, int period)
     {
         int n = data.Length;
-        Vector<T> filtered = new Vector<T>(n, NumOps);
+        Vector<T> filtered = new Vector<T>(n);
         int windowSize = period + 1;
 
         for (int i = 0; i < n; i++)
@@ -169,7 +169,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> LoessSmoothing(Vector<T> data, int windowSize)
     {
         int n = data.Length;
-        Vector<T> smoothed = new Vector<T>(n, NumOps);
+        Vector<T> smoothed = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -193,7 +193,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> LoessSmoothing(List<(T x, T y)> data, double span)
     {
         int n = data.Count;
-        Vector<T> smoothed = new Vector<T>(n, NumOps);
+        Vector<T> smoothed = new Vector<T>(n);
         int windowSize = (int)(span * n);
 
         for (int i = 0; i < n; i++)
@@ -241,7 +241,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> CalculateTrendMovingAverage()
     {
         int windowSize = 7;
-        Vector<T> trend = new Vector<T>(TimeSeries.Length, NumOps);
+        Vector<T> trend = new Vector<T>(TimeSeries.Length);
 
         for (int i = 0; i < TimeSeries.Length; i++)
         {
@@ -264,7 +264,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
 
     private Vector<T> CalculateSeasonalMovingAverage(Vector<T> trend)
     {
-        Vector<T> seasonal = new Vector<T>(TimeSeries.Length, NumOps);
+        Vector<T> seasonal = new Vector<T>(TimeSeries.Length);
         int seasonalPeriod = 12;
 
         for (int i = 0; i < TimeSeries.Length; i++)
@@ -273,7 +273,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
         }
 
         // Calculate average seasonal component for each period
-        Vector<T> averageSeasonal = new Vector<T>(seasonalPeriod, NumOps);
+        Vector<T> averageSeasonal = new Vector<T>(seasonalPeriod);
         for (int i = 0; i < seasonalPeriod; i++)
         {
             T sum = NumOps.Zero;
@@ -298,7 +298,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> CalculateTrendExponentialSmoothing()
     {
         T alpha = NumOps.FromDouble(0.2); // Smoothing factor
-        Vector<T> trend = new Vector<T>(TimeSeries.Length, NumOps);
+        Vector<T> trend = new Vector<T>(TimeSeries.Length);
         trend[0] = TimeSeries[0];
 
         for (int i = 1; i < TimeSeries.Length; i++)
@@ -318,7 +318,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         T gamma = NumOps.FromDouble(0.3); // Seasonal smoothing factor
         int seasonalPeriod = 12;
-        Vector<T> seasonal = new Vector<T>(TimeSeries.Length, NumOps);
+        Vector<T> seasonal = new Vector<T>(TimeSeries.Length);
 
         // Initialize seasonal components
         for (int i = 0; i < seasonalPeriod; i++)

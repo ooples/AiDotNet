@@ -22,11 +22,11 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
         {
             case STLAlgorithmType.Standard:
                 // Standard options are already set
-                inputMatrix = new Matrix<T>(TimeSeries.Length, 1, NumOps);
+                inputMatrix = new Matrix<T>(TimeSeries.Length, 1);
                 break;
             case STLAlgorithmType.Robust:
                 _options.RobustIterations = 2;
-                inputMatrix = new Matrix<T>(TimeSeries.Length, 1, NumOps);
+                inputMatrix = new Matrix<T>(TimeSeries.Length, 1);
                 break;
             case STLAlgorithmType.Fast:
                 _options.TrendWindowSize = Math.Max(3, TimeSeries.Length / 10);
@@ -52,7 +52,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Matrix<T> CreateFastSTLInputMatrix()
     {
         int n = TimeSeries.Length;
-        var matrix = new Matrix<T>(n, 3, NumOps); // 3 columns: time index, original value, and preprocessed value
+        var matrix = new Matrix<T>(n, 3); // 3 columns: time index, original value, and preprocessed value
 
         DateTime[] dates = GetOrCreateDates();
 

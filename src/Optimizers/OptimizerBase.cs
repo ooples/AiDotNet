@@ -334,7 +334,7 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
 
     protected ISymbolicModel<T> InitializeRandomSolution(int numberOfFeatures)
     {
-        return SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, numberOfFeatures + 1, NumOps);
+        return SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, numberOfFeatures + 1);
     }
 
     public virtual byte[] Serialize()

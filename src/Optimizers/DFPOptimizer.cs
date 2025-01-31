@@ -39,7 +39,7 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
         var bestStepData = new OptimizationStepData<T>();
         var previousStepData = new OptimizationStepData<T>();
 
-        _inverseHessian = Matrix<T>.CreateIdentity(currentSolution.Coefficients.Length, NumOps);
+        _inverseHessian = Matrix<T>.CreateIdentity(currentSolution.Coefficients.Length);
 
         InitializeAdaptiveParameters();
 

@@ -18,17 +18,17 @@ public class ConfusionMatrix<T> : MatrixBase<T>
 
     protected override MatrixBase<T> CreateInstance(int rows, int cols)
     {
-        return new Matrix<T>(rows, cols, ops);
+        return new Matrix<T>(rows, cols);
     }
 
     public T Accuracy
     {
         get
         {
-            T numerator = ops.Add(TruePositives, TrueNegatives);
-            T denominator = ops.Add(ops.Add(ops.Add(TruePositives, TrueNegatives), FalsePositives), FalseNegatives);
+            T numerator = NumOps.Add(TruePositives, TrueNegatives);
+            T denominator = NumOps.Add(NumOps.Add(NumOps.Add(TruePositives, TrueNegatives), FalsePositives), FalseNegatives);
 
-            return ops.Divide(numerator, denominator);
+            return NumOps.Divide(numerator, denominator);
         }
     }
 
@@ -36,8 +36,8 @@ public class ConfusionMatrix<T> : MatrixBase<T>
     {
         get
         {
-            T denominator = ops.Add(TruePositives, FalsePositives);
-            return ops.Equals(denominator, ops.Zero) ? ops.Zero : ops.Divide(TruePositives, denominator);
+            T denominator = NumOps.Add(TruePositives, FalsePositives);
+            return NumOps.Equals(denominator, NumOps.Zero) ? NumOps.Zero : NumOps.Divide(TruePositives, denominator);
         }
     }
 
@@ -45,8 +45,8 @@ public class ConfusionMatrix<T> : MatrixBase<T>
     {
         get
         {
-            T denominator = ops.Add(TruePositives, FalseNegatives);
-            return ops.Equals(denominator, ops.Zero) ? ops.Zero : ops.Divide(TruePositives, denominator);
+            T denominator = NumOps.Add(TruePositives, FalseNegatives);
+            return NumOps.Equals(denominator, NumOps.Zero) ? NumOps.Zero : NumOps.Divide(TruePositives, denominator);
         }
     }
 
@@ -56,9 +56,9 @@ public class ConfusionMatrix<T> : MatrixBase<T>
         {
             T precision = Precision;
             T recall = Recall;
-            T numerator = ops.Multiply(ops.FromDouble(2), ops.Multiply(precision, recall));
-            T denominator = ops.Add(precision, recall);
-            return ops.Equals(denominator, ops.Zero) ? ops.Zero : ops.Divide(numerator, denominator);
+            T numerator = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(precision, recall));
+            T denominator = NumOps.Add(precision, recall);
+            return NumOps.Equals(denominator, NumOps.Zero) ? NumOps.Zero : NumOps.Divide(numerator, denominator);
         }
     }
 
@@ -66,8 +66,8 @@ public class ConfusionMatrix<T> : MatrixBase<T>
     {
         get
         {
-            T denominator = ops.Add(TrueNegatives, FalsePositives);
-            return ops.Equals(denominator, ops.Zero) ? ops.Zero : ops.Divide(TrueNegatives, denominator);
+            T denominator = NumOps.Add(TrueNegatives, FalsePositives);
+            return NumOps.Equals(denominator, NumOps.Zero) ? NumOps.Zero : NumOps.Divide(TrueNegatives, denominator);
         }
     }
 }

@@ -40,7 +40,7 @@ public class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
     private Vector<T> CalculateCoefficients(Vector<T> x, Vector<T> y)
     {
         int n = x.Length;
-        Vector<T> coefficients = new Vector<T>(n, _numOps);
+        Vector<T> coefficients = new Vector<T>(n);
         T[,] dividedDifferences = new T[n, n];
 
         // Initialize the first column with y values

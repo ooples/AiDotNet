@@ -162,7 +162,7 @@ public static class NeuralNetworkHelper<T>
         if (predicted.Length != actual.Length)
             throw new ArgumentException("Predicted and actual vectors must have the same length.");
 
-        Vector<T> derivative = new Vector<T>(predicted.Length, NumOps);
+        Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
             T p = MathHelper.Clamp(predicted[i], NumOps.FromDouble(1e-15), NumOps.FromDouble(1 - 1e-15));
@@ -230,7 +230,7 @@ public static class NeuralNetworkHelper<T>
 
         delta = delta ?? NumOps.FromDouble(1.0);
 
-        Vector<T> derivative = new(predicted.Length, NumOps);
+        Vector<T> derivative = new(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
             T diff = NumOps.Subtract(predicted[i], actual[i]);
@@ -263,7 +263,7 @@ public static class NeuralNetworkHelper<T>
 
     public static Vector<T> LogCoshLossDerivative(Vector<T> predicted, Vector<T> actual)
     {
-        var derivative = new Vector<T>(predicted.Length, NumOps);
+        var derivative = new Vector<T>(predicted.Length);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -292,7 +292,7 @@ public static class NeuralNetworkHelper<T>
 
     public static Vector<T> QuantileLossDerivative(Vector<T> predicted, Vector<T> actual, T quantile)
     {
-        var derivative = new Vector<T>(predicted.Length, NumOps);
+        var derivative = new Vector<T>(predicted.Length);
 
         for (int i = 0; i < predicted.Length; i++)
         {

@@ -40,8 +40,8 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
                 x[i] = H[k + 1 + i, k];
             }
 
-            var v = MatrixHelper.CreateHouseholderVector(x);
-            H = MatrixHelper.ApplyHouseholderTransformation(H, v, k);
+            var v = MatrixHelper<T>.CreateHouseholderVector(x);
+            H = MatrixHelper<T>.ApplyHouseholderTransformation(H, v, k);
         }
 
         return H;
@@ -56,8 +56,8 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int i = n - 1; i > k + 1; i--)
             {
-                var (c, s) = MatrixHelper.ComputeGivensRotation(H[i - 1, k], H[i, k]);
-                MatrixHelper.ApplyGivensRotation(H, c, s, i - 1, i, k, n);
+                var (c, s) = MatrixHelper<T>.ComputeGivensRotation(H[i - 1, k], H[i, k]);
+                MatrixHelper<T>.ApplyGivensRotation(H, c, s, i - 1, i, k, n);
             }
         }
 
@@ -92,18 +92,18 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     {
         var n = matrix.Rows;
         var H = matrix.Copy();
-        var Q = Matrix<T>.CreateIdentity(n, NumOps);
+        var Q = Matrix<T>.CreateIdentity(n);
 
         for (int iter = 0; iter < 100; iter++) // Max iterations
         {
             for (int k = 0; k < n - 1; k++)
             {
-                var (c, s) = MatrixHelper.ComputeGivensRotation(H[k, k], H[k + 1, k]);
-                MatrixHelper.ApplyGivensRotation(H, c, s, k, k + 1, k, n);
-                MatrixHelper.ApplyGivensRotation(Q, c, s, k, k + 1, 0, n);
+                var (c, s) = MatrixHelper<T>.ComputeGivensRotation(H[k, k], H[k + 1, k]);
+                MatrixHelper<T>.ApplyGivensRotation(H, c, s, k, k + 1, k, n);
+                MatrixHelper<T>.ApplyGivensRotation(Q, c, s, k, k + 1, 0, n);
             }
 
-            if (MatrixHelper.IsUpperHessenberg(H, NumOps.FromDouble(1e-10)))
+            if (MatrixHelper<T>.IsUpperHessenberg(H, NumOps.FromDouble(1e-10)))
             {
                 break;
             }
@@ -173,6 +173,6 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
 
     public Matrix<T> Invert()
     {
-        return MatrixHelper.InvertUsingDecomposition(this);
+        return MatrixHelper<T>.InvertUsingDecomposition(this);
     }
 }

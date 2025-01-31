@@ -106,7 +106,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         int m = _multivariateSeries.Columns;
         Matrix<T> identity = Matrix<T>.CreateIdentity(m);
-        Matrix<T> coeffSum = new Matrix<T>(m, m, NumOps);
+        Matrix<T> coeffSum = new Matrix<T>(m, m);
 
         // Assuming Coefficients is a single matrix representing all lags
         Matrix<T> coefficients = varModel.Coefficients;
@@ -125,8 +125,8 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> CalculateStandardTrend()
     {
         int n = TimeSeries.Length;
-        var trend = new Vector<T>(n, NumOps);
-        var differenced = new Vector<T>(n - 1, NumOps);
+        var trend = new Vector<T>(n);
+        var differenced = new Vector<T>(n - 1);
 
         // Calculate first differences
         for (int i = 1; i < n; i++)
@@ -138,7 +138,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         T meanDiff = StatisticsHelper<T>.CalculateMean(differenced);
 
         // Calculate autocovariance of differenced series
-        var autocovariance = new Vector<T>(n, NumOps);
+        var autocovariance = new Vector<T>(n);
         for (int k = 0; k < n - 1; k++)
         {
             T sum = NumOps.Zero;
@@ -179,7 +179,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> CalculateARIMATrend(ARIMAModel<T> model)
     {
         int n = TimeSeries.Length;
-        Vector<T> trend = new Vector<T>(n, NumOps);
+        Vector<T> trend = new Vector<T>(n);
 
         // Calculate input dimension based on ARIMA order
         int inputDimension = Math.Max(_arimaOptions.P, _arimaOptions.Q + 1);

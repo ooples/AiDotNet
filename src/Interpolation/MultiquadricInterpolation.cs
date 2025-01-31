@@ -27,7 +27,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     private void CalculateCoefficients()
     {
         int n = _x.Length;
-        var A = new Matrix<T>(n, n, _numOps);
+        var A = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {

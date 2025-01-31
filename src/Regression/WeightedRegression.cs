@@ -21,7 +21,7 @@ public class WeightedRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
             expandedX = expandedX.AddConstantColumn(NumOps.One);
 
-        var weightMatrix = Matrix<T>.CreateDiagonal(_weights, NumOps);
+        var weightMatrix = Matrix<T>.CreateDiagonal(_weights);
         var xTWx = expandedX.Transpose().Multiply(weightMatrix).Multiply(expandedX);
         var regularizedXTWx = xTWx.Add(Regularization.RegularizeMatrix(xTWx));
         var xTWy = expandedX.Transpose().Multiply(weightMatrix).Multiply(y);
@@ -47,7 +47,7 @@ public class WeightedRegression<T> : RegressionBase<T>
 
     private Matrix<T> ExpandFeatures(Matrix<T> x)
     {
-        var expandedX = new Matrix<T>(x.Rows, x.Columns * _order, NumOps);
+        var expandedX = new Matrix<T>(x.Rows, x.Columns * _order);
 
         for (int i = 0; i < x.Rows; i++)
         {

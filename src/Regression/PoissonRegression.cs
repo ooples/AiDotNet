@@ -16,14 +16,14 @@ public class PoissonRegression<T> : RegressionBase<T>
         ValidationHelper<T>.ValidatePoissonData(y);
 
         int numFeatures = x.Columns;
-        Coefficients = new Vector<T>(numFeatures, NumOps);
+        Coefficients = new Vector<T>(numFeatures);
         Intercept = NumOps.Zero;
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
-            Vector<T> currentCoefficients = new([.. Coefficients, Intercept], NumOps);
+            Vector<T> currentCoefficients = new([.. Coefficients, Intercept]);
             Vector<T> mu = PredictMean(xWithIntercept, currentCoefficients);
             Matrix<T> w = ComputeWeights(mu);
             Vector<T> z = ComputeWorkingResponse(xWithIntercept, y, mu, currentCoefficients);
@@ -51,7 +51,7 @@ public class PoissonRegression<T> : RegressionBase<T>
                 break;
             }
 
-            Coefficients = new Vector<T>([.. newCoefficients.Take(numFeatures)], NumOps);
+            Coefficients = new Vector<T>([.. newCoefficients.Take(numFeatures)]);
             Intercept = newCoefficients[numFeatures];
         }
     }
@@ -63,7 +63,7 @@ public class PoissonRegression<T> : RegressionBase<T>
 
     private Matrix<T> ComputeWeights(Vector<T> mu)
     {
-        return Matrix<T>.CreateDiagonal(mu, NumOps);
+        return Matrix<T>.CreateDiagonal(mu);
     }
 
     private static Vector<T> ComputeWorkingResponse(Matrix<T> x, Vector<T> y, Vector<T> mu, Vector<T> coefficients)
@@ -81,7 +81,7 @@ public class PoissonRegression<T> : RegressionBase<T>
     public override Vector<T> Predict(Matrix<T> x)
     {
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
-        Vector<T> coefficientsWithIntercept = new(Coefficients.Length + 1, NumOps);
+        Vector<T> coefficientsWithIntercept = new(Coefficients.Length + 1);
 
         for (int i = 0; i < Coefficients.Length; i++)
         {

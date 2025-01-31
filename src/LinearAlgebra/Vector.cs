@@ -4,13 +4,11 @@ namespace AiDotNet.LinearAlgebra;
 
 public class Vector<T> : VectorBase<T>, IEnumerable<T>
 {
-    public Vector(int length, INumericOperations<T>? numericOperations = null)
-        : base(length, numericOperations ?? MathHelper.GetNumericOperations<T>())
+    public Vector(int length) : base(length)
     {
     }
 
-    public Vector(IEnumerable<T> values, INumericOperations<T>? numericOperations = null)
-        : base(values, numericOperations ?? MathHelper.GetNumericOperations<T>())
+    public Vector(IEnumerable<T> values) : base(values)
     {
     }
 
@@ -34,7 +32,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         Vector<T> result = new Vector<T>(this.Length);
         for (int i = 0; i < this.Length; i++)
         {
-            result[i] = ops.Divide(this[i], other[i]);
+            result[i] = NumOps.Divide(this[i], other[i]);
         }
 
         return result;
@@ -43,27 +41,27 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public T Variance()
     {
         T mean = Mean();
-        return this.Select(x => ops.Square(ops.Subtract(x, mean))).Mean();
+        return this.Select(x => NumOps.Square(NumOps.Subtract(x, mean))).Mean();
     }
 
     public Vector<T> Where(Func<T, bool> predicate)
     {
-        return new Vector<T>(data.Where(predicate), ops);
+        return new Vector<T>(data.Where(predicate));
     }
 
     public Vector<TResult> Select<TResult>(Func<T, TResult> selector)
     {
-        return new Vector<TResult>(data.Select(selector), MathHelper.GetNumericOperations<TResult>());
+        return new Vector<TResult>(data.Select(selector));
     }
 
     public new Vector<T> Copy()
     {
-        return new Vector<T>([.. this], ops);
+        return new Vector<T>([.. this]);
     }
 
     public override VectorBase<T> Zeros(int size)
     {
-        return new Vector<T>(size, ops);
+        return new Vector<T>(size);
     }
 
     public override VectorBase<T> Default(int size, T defaultValue)
@@ -74,17 +72,17 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
 
     public new Vector<TResult> Transform<TResult>(Func<T, TResult> function)
     {
-        return new Vector<TResult>(base.Transform(function).ToArray(), MathHelper.GetNumericOperations<TResult>());
+        return new Vector<TResult>(base.Transform(function).ToArray());
     }
 
     public new Vector<TResult> Transform<TResult>(Func<T, int, TResult> function)
     {
-        return new Vector<TResult>(base.Transform(function).ToArray(), MathHelper.GetNumericOperations<TResult>());
+        return new Vector<TResult>(base.Transform(function).ToArray());
     }
 
     public override VectorBase<T> Ones(int size)
     {
-        return new Vector<T>(Enumerable.Repeat(ops.One, size), ops);
+        return new Vector<T>(Enumerable.Repeat(NumOps.One, size));
     }
 
     public new static Vector<T> Empty()
@@ -99,7 +97,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         if (length < 0 || startIndex + length > this.Length)
             throw new ArgumentOutOfRangeException(nameof(length));
 
-        Vector<T> subVector = new Vector<T>(length, ops);
+        Vector<T> subVector = new Vector<T>(length);
         for (int i = 0; i < length; i++)
         {
             subVector[i] = this[startIndex + i];
@@ -113,7 +111,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         if (index < 0 || index >= this.Length)
             throw new ArgumentOutOfRangeException(nameof(index));
 
-        Vector<T> newVector = new([.. this], ops)
+        Vector<T> newVector = new([.. this])
         {
             [index] = value
         };
@@ -147,13 +145,26 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return SerializationHelper<T>.DeserializeVector(data);
     }
 
+    public Vector<T> ElementwiseMultiply(Vector<T> other)
+    {
+        if (this.Length != other.Length)
+            throw new ArgumentException("Vectors must have the same length for element-wise multiplication.");
+
+        var result = new Vector<T>(this.Length);
+        for (int i = 0; i < this.Length; i++)
+        {
+            result[i] = NumOps.Multiply(this[i], other[i]);
+        }
+
+        return result;
+    }
+
     public static Vector<T> Range(int start, int count)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        Vector<T> result = new Vector<T>(count, numOps);
+        Vector<T> result = new Vector<T>(count);
         for (int i = 0; i < count; i++)
         {
-            result[i] = numOps.FromDouble(start + i);
+            result[i] = NumOps.FromDouble(start + i);
         }
 
         return result;
@@ -205,7 +216,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         T[] newData = new T[count];
         Array.Copy(data, startIndex, newData, 0, count);
 
-        return new Vector<T>(newData, ops);
+        return new Vector<T>(newData);
     }
 
     public int IndexOfMax()
@@ -265,22 +276,21 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
 
     protected override VectorBase<T> CreateInstance(T[] data)
     {
-        return new Vector<T>(data, ops);
+        return new Vector<T>(data);
     }
 
     protected override VectorBase<TResult> CreateInstance<TResult>(int size)
     {
-        return new Vector<TResult>(size, MathHelper.GetNumericOperations<TResult>());
+        return new Vector<TResult>(size);
     }
 
     public static Vector<T> CreateRandom(int size)
     {
         Vector<T> vector = new(size);
-        var ops = MathHelper.GetNumericOperations<T>();
         Random random = new();
         for (int i = 0; i < size; i++)
         {
-            vector[i] = ops.FromDouble(random.NextDouble());
+            vector[i] = NumOps.FromDouble(random.NextDouble());
         }
 
         return vector;
@@ -288,10 +298,9 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
 
     public static Vector<T> CreateStandardBasis(int size, int index)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var vector = new Vector<T>(size, ops)
+        var vector = new Vector<T>(size)
         {
-            [index] = ops.One
+            [index] = NumOps.One
         };
 
         return vector;
@@ -299,7 +308,6 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
 
     public Vector<T> Normalize()
     {
-        var NumOps = MathHelper.GetNumericOperations<T>();
         T norm = this.Norm();
         if (NumOps.Equals(norm, NumOps.Zero))
         {
@@ -353,7 +361,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
             newVector[i] = this[indexList[i]];
         }
 
-        return new Vector<T>(newVector, ops);
+        return new Vector<T>(newVector);
     }
 
     public Vector<T> RemoveAt(int index)
@@ -365,7 +373,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         Array.Copy(data, 0, newData, 0, index);
         Array.Copy(data, index + 1, newData, index, Length - index - 1);
 
-        return new Vector<T>(newData, ops);
+        return new Vector<T>(newData);
     }
 
     public int NonZeroCount()
@@ -393,17 +401,17 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
 
     public new Vector<T> Add(VectorBase<T> other)
     {
-        return new Vector<T>(base.Add(other).ToArray(), ops);
+        return new Vector<T>(base.Add(other).ToArray());
     }
 
     public new Vector<T> Subtract(VectorBase<T> other)
     {
-        return new Vector<T>(base.Subtract(other).ToArray(), ops);
+        return new Vector<T>(base.Subtract(other).ToArray());
     }
 
     public new Vector<T> Multiply(T scalar)
     {
-        return new Vector<T>(base.Multiply(scalar).ToArray(), ops);
+        return new Vector<T>(base.Multiply(scalar).ToArray());
     }
 
     public static Vector<T> operator +(Vector<T> left, Vector<T> right)

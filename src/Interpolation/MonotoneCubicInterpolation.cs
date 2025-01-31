@@ -22,7 +22,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
         _x = x;
         _y = y;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _m = new Vector<T>(x.Length, _numOps);
+        _m = new Vector<T>(x.Length);
 
         CalculateSlopes();
     }
@@ -59,7 +59,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
         int n = _x.Length;
 
         // Calculate secant slopes
-        Vector<T> delta = new Vector<T>(n - 1, _numOps);
+        Vector<T> delta = new Vector<T>(n - 1);
         for (int i = 0; i < n - 1; i++)
         {
             delta[i] = _numOps.Divide(

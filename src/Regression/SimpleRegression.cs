@@ -25,11 +25,11 @@ public class SimpleRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
         {
             Intercept = solution[0];
-            Coefficients = new Vector<T>([solution[1]], NumOps);
+            Coefficients = new Vector<T>([solution[1]]);
         }
         else
         {
-            Coefficients = new Vector<T>([solution[0]], NumOps);
+            Coefficients = new Vector<T>([solution[0]]);
         }
     }
 

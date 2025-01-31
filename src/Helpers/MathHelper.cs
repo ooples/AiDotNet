@@ -191,6 +191,12 @@ public static class MathHelper
         return numOps.Equals(value, numOps.Round(value));
     }
 
+    public static T Sigmoid<T>(T x)
+    {
+        var numOps = GetNumericOperations<T>();
+        return numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(x))));
+    }
+
     public static bool AlmostEqual<T>(T a, T b, T tolerance)
     {
         var numOps = GetNumericOperations<T>();

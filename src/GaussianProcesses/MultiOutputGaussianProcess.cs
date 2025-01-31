@@ -41,7 +41,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
         }
 
         // Solve for alpha using Cholesky decomposition
-        _alpha = new Matrix<T>(Y.Rows, Y.Columns, _numOps);
+        _alpha = new Matrix<T>(Y.Rows, Y.Columns);
         for (int i = 0; i < Y.Columns; i++)
         {
             var y_col = Y.GetColumn(i);
@@ -64,7 +64,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     public (Vector<T> means, Matrix<T> covariance) PredictMultiOutput(Vector<T> x)
     {
         var k_star = CalculateKernelVector(_X, x);
-        var means = new Vector<T>(_Y.Columns, _numOps);
+        var means = new Vector<T>(_Y.Columns);
 
         for (int i = 0; i < _Y.Columns; i++)
         {
@@ -77,7 +77,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
 
         var v = MatrixSolutionHelper.SolveLinearSystem(_K, k_star, MatrixDecompositionType.Cholesky);
         var variance = _numOps.Subtract(_kernel.Calculate(x, x), k_star.DotProduct(v));
-        var covariance = new Matrix<T>(_Y.Columns, _Y.Columns, _numOps);
+        var covariance = new Matrix<T>(_Y.Columns, _Y.Columns);
 
         for (int i = 0; i < _Y.Columns; i++)
         {
@@ -98,7 +98,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
 
     private Matrix<T> CalculateKernelMatrix(Matrix<T> X1, Matrix<T> X2)
     {
-        var K = new Matrix<T>(X1.Rows, X2.Rows, _numOps);
+        var K = new Matrix<T>(X1.Rows, X2.Rows);
         for (int i = 0; i < X1.Rows; i++)
         {
             for (int j = 0; j < X2.Rows; j++)
@@ -112,7 +112,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
 
     private Vector<T> CalculateKernelVector(Matrix<T> X, Vector<T> x)
     {
-        var k = new Vector<T>(X.Rows, _numOps);
+        var k = new Vector<T>(X.Rows);
         for (int i = 0; i < X.Rows; i++)
         {
             k[i] = _kernel.Calculate(X.GetRow(i), x);

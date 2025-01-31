@@ -70,8 +70,8 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
             }
 
             // Apply Cochrane-Orcutt transformation
-            Matrix<T> correctedX = new(x.Rows - 1, x.Columns, NumOps);
-            Vector<T> correctedY = new(y.Length - 1, NumOps);
+            Matrix<T> correctedX = new(x.Rows - 1, x.Columns);
+            Vector<T> correctedY = new(y.Length - 1);
 
             for (int i = 1; i < x.Rows; i++)
             {
@@ -91,8 +91,8 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
         // Apply final correction to the original data
         if (!MathHelper.AlmostEqual(autocorrelation, NumOps.Zero))
         {
-            Matrix<T> finalCorrectedX = new(x.Rows, x.Columns, NumOps);
-            Vector<T> finalCorrectedY = new(y.Length, NumOps);
+            Matrix<T> finalCorrectedX = new(x.Rows, x.Columns);
+            Vector<T> finalCorrectedY = new(y.Length);
 
             for (int j = 0; j < x.Columns; j++)
             {
@@ -122,7 +122,7 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
         int seasonalFeatures = _options.SeasonalPeriod > 0 ? _options.SeasonalPeriod - 1 : 0;
         int totalFeatures = x.Columns + laggedFeatures + trendFeatures + seasonalFeatures;
 
-        Matrix<T> preparedX = new(n - _options.LagOrder, totalFeatures, NumOps);
+        Matrix<T> preparedX = new(n - _options.LagOrder, totalFeatures);
 
         // Add original features
         for (int i = _options.LagOrder; i < n; i++)
@@ -183,7 +183,7 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
 
     private Vector<T> PrepareTargetData(Vector<T> y)
     {
-        return new Vector<T>([.. y.Skip(_options.LagOrder)], NumOps);
+        return new Vector<T>([.. y.Skip(_options.LagOrder)]);
     }
 
     private void ExtractCoefficients()
@@ -191,7 +191,7 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
         int originalFeatures = Coefficients.Length - (_options.LagOrder * (Coefficients.Length + 1) + (_options.IncludeTrend ? 1 : 0) + (_options.SeasonalPeriod > 0 ? _options.SeasonalPeriod - 1 : 0));
 
         // Remove trend and seasonal coefficients from the main Coefficients vector
-        Coefficients = new Vector<T>([.. Coefficients.Take(originalFeatures)], NumOps);
+        Coefficients = new Vector<T>([.. Coefficients.Take(originalFeatures)]);
     }
 
     private T CalculateAutocorrelation(Vector<T> residuals)
@@ -217,23 +217,23 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
             {
                 trendIndex -= (_options.SeasonalPeriod - 1);
             }
-            return new Vector<T>(new[] { Coefficients[trendIndex] }, NumOps);
+            return new Vector<T>(new[] { Coefficients[trendIndex] });
         }
-        return new Vector<T>(0, NumOps);
+        return new Vector<T>(0);
     }
 
     private Vector<T> ExtractSeasonalCoefficients()
     {
         if (_options.SeasonalPeriod > 0)
         {
-            return new Vector<T>(Coefficients.Skip(Coefficients.Length - (_options.SeasonalPeriod - 1)).ToArray(), NumOps);
+            return new Vector<T>(Coefficients.Skip(Coefficients.Length - (_options.SeasonalPeriod - 1)).ToArray());
         }
-        return new Vector<T>(0, NumOps);
+        return new Vector<T>(0);
     }
 
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Matrix<T> preparedInput = PrepareInputData(input, new Vector<T>(input.Rows, NumOps)); // Dummy y vector
+        Matrix<T> preparedInput = PrepareInputData(input, new Vector<T>(input.Rows)); // Dummy y vector
         Vector<T> predictions = base.Predict(preparedInput);
 
         Vector<T> trendCoefficients = ExtractTrendCoefficients();

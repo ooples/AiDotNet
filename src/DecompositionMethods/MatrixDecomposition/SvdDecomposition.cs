@@ -34,7 +34,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
 
     public Vector<T> Solve(Vector<T> b)
     {
-        var x = new Vector<T>(Vt.Rows, NumOps);
+        var x = new Vector<T>(Vt.Rows);
         for (int i = 0; i < S.Length; i++)
         {
             if (!NumOps.Equals(S[i], NumOps.Zero))
@@ -62,9 +62,9 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         int l = Math.Min(m, n);
 
         Matrix<T> A = matrix.Copy();
-        Matrix<T> U = new(m, m, NumOps);
-        Vector<T> S = new(l, NumOps);
-        Matrix<T> VT = new(n, n, NumOps);
+        Matrix<T> U = new(m, m);
+        Vector<T> S = new(l);
+        Matrix<T> VT = new(n, n);
 
         // Bidiagonalization
         Bidiagonalize(A, U, VT);
@@ -171,8 +171,8 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         int m = B.Rows;
         int n = B.Columns;
         int p = Math.Min(m, n);
-        Vector<T> e = new(n, NumOps);
-        Vector<T> d = new(p, NumOps);
+        Vector<T> e = new(n);
+        Vector<T> d = new(p);
 
         for (int i = 0; i < p; i++)
         {
@@ -281,7 +281,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
 
         Matrix<T> A = matrix.Copy();
         Matrix<T> U = Matrix<T>.CreateIdentityMatrix<T>(m);
-        Vector<T> S = new(l, NumOps);
+        Vector<T> S = new(l);
         Matrix<T> VT = Matrix<T>.CreateIdentityMatrix<T>(n);
 
         const int maxIterations = 100;
@@ -380,7 +380,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     private Matrix<T> GenerateRandomMatrix(int rows, int cols)
     {
         var random = new Random();
-        var matrix = new Matrix<T>(rows, cols, NumOps);
+        var matrix = new Matrix<T>(rows, cols);
 
         for (int i = 0; i < rows; i++)
         {
@@ -434,9 +434,9 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         int l = Math.Min(m, n);
 
         Matrix<T> A = matrix.Copy();
-        Matrix<T> U = new(m, m, NumOps);
-        Vector<T> S = new(l, NumOps);
-        Matrix<T> VT = new(n, n, NumOps);
+        Matrix<T> U = new(m, m);
+        Vector<T> S = new(l);
+        Matrix<T> VT = new(n, n);
 
         // Initialize U and VT as identity matrices
         for (int i = 0; i < m; i++) U[i, i] = NumOps.One;
@@ -454,7 +454,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
                 alpha = NumOps.Negate(alpha);
 
             T r = NumOps.Sqrt(NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(2), alpha), NumOps.Subtract(A[k, k], alpha)));
-            Vector<T> u = new Vector<T>(m - k, NumOps);
+            Vector<T> u = new Vector<T>(m - k);
             u[0] = NumOps.Divide(NumOps.Subtract(A[k, k], alpha), r);
             for (int i = 1; i < m - k; i++)
                 u[i] = NumOps.Divide(A[k + i, k], r);
@@ -473,7 +473,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
                     beta = NumOps.Negate(beta);
 
                 r = NumOps.Sqrt(NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(2), beta), NumOps.Subtract(A[k, k + 1], beta)));
-                Vector<T> v = new(n - k - 1, NumOps)
+                Vector<T> v = new(n - k - 1)
                 {
                     [0] = NumOps.Divide(NumOps.Subtract(A[k, k + 1], beta), r)
                 };
@@ -557,9 +557,9 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         int n = matrix.Columns;
         int k = Math.Min(m, n); // Number of singular values to compute
 
-        Matrix<T> U = new(m, k, NumOps);
-        Vector<T> S = new(k, NumOps);
-        Matrix<T> VT = new(k, n, NumOps);
+        Matrix<T> U = new(m, k);
+        Vector<T> S = new(k);
+        Matrix<T> VT = new(k, n);
 
         Matrix<T> ATA = matrix.Transpose().Multiply(matrix);
 
@@ -600,13 +600,13 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         int n = matrix.Columns;
         int k = Math.Min(m, n) / 2; // Truncate to half the singular values
 
-        Matrix<T> Q = Matrix<T>.CreateRandom(m, k, NumOps);
-        Q = MatrixHelper.OrthogonalizeColumns(Q);
+        Matrix<T> Q = Matrix<T>.CreateRandom(m, k);
+        Q = MatrixHelper<T>.OrthogonalizeColumns(Q);
 
         for (int iter = 0; iter < 5; iter++) // You may need to adjust the number of iterations
         {
             Q = matrix.Multiply(matrix.Transpose().Multiply(Q));
-            Q = MatrixHelper.OrthogonalizeColumns(Q);
+            Q = MatrixHelper<T>.OrthogonalizeColumns(Q);
         }
 
         Matrix<T> B = Q.Transpose().Multiply(matrix);
@@ -653,9 +653,9 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         for (int iter = 0; iter < 3; iter++)
         {
             Matrix<T> temp = matrix.Multiply(VT.Transpose());
-            U = MatrixHelper.OrthogonalizeColumns(temp);
+            U = MatrixHelper<T>.OrthogonalizeColumns(temp);
             temp = U.Transpose().Multiply(matrix);
-            VT = MatrixHelper.OrthogonalizeColumns(temp.Transpose()).Transpose();
+            VT = MatrixHelper<T>.OrthogonalizeColumns(temp.Transpose()).Transpose();
         }
 
         S = ComputeDiagonalElements(U.Transpose().Multiply(matrix).Multiply(VT.Transpose()));
@@ -666,7 +666,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     private Vector<T> ComputeDiagonalElements(Matrix<T> matrix)
     {
         int minDim = Math.Min(matrix.Rows, matrix.Columns);
-        Vector<T> diagonal = new Vector<T>(minDim, NumOps);
+        Vector<T> diagonal = new Vector<T>(minDim);
 
         for (int i = 0; i < minDim; i++)
         {
@@ -678,6 +678,6 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
 
     public Matrix<T> Invert()
     {
-        return MatrixHelper.InvertUsingDecomposition(this);
+        return MatrixHelper<T>.InvertUsingDecomposition(this);
     }
 }

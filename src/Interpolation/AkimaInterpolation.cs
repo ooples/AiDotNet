@@ -26,9 +26,9 @@ public class AkimaInterpolation<T> : IInterpolation<T>
         _numOps = MathHelper.GetNumericOperations<T>();
 
         int n = x.Length;
-        _b = new Vector<T>(n - 1, _numOps);
-        _c = new Vector<T>(n - 1, _numOps);
-        _d = new Vector<T>(n - 1, _numOps);
+        _b = new Vector<T>(n - 1);
+        _c = new Vector<T>(n - 1);
+        _d = new Vector<T>(n - 1);
 
         CalculateCoefficients();
     }
@@ -49,7 +49,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     private void CalculateCoefficients()
     {
         int n = _x.Length;
-        Vector<T> m = new Vector<T>(n + 3, _numOps);
+        Vector<T> m = new Vector<T>(n + 3);
 
         // Calculate slopes
         for (int i = 0; i < n - 1; i++)

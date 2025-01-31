@@ -49,7 +49,7 @@ public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
     public Vector<Complex<T>> Solve(Vector<Complex<T>> b)
     {
         // Extract real parts of b
-        var realB = new Vector<T>(b.Length, _ops);
+        var realB = new Vector<T>(b.Length);
         for (int i = 0; i < b.Length; i++)
         {
             realB[i] = b[i].Real;
@@ -59,7 +59,7 @@ public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
         var realSolution = _baseDecomposition.Solve(realB);
 
         // Convert solution to complex
-        var complexSolution = new Vector<Complex<T>>(realSolution.Length, MathHelper.GetNumericOperations<Complex<T>>());
+        var complexSolution = new Vector<Complex<T>>(realSolution.Length);
         for (int i = 0; i < realSolution.Length; i++)
         {
             complexSolution[i] = new Complex<T>(realSolution[i], _ops.Zero);

@@ -27,7 +27,7 @@ public class GaussianProcessInterpolation<T> : IInterpolation<T>
         _gpr = new GaussianProcessRegression<T>(options);
         
         // Train the GPR model
-        Matrix<T> xMatrix = new Matrix<T>(_x.Length, 1, _numOps);
+        Matrix<T> xMatrix = new Matrix<T>(_x.Length, 1);
         for (int i = 0; i < _x.Length; i++)
         {
             xMatrix[i, 0] = _x[i];
@@ -38,8 +38,8 @@ public class GaussianProcessInterpolation<T> : IInterpolation<T>
 
     public T Interpolate(T x)
     {
-        Vector<T> xVector = new Vector<T>([x], _numOps);
-        Matrix<T> xMatrix = new Matrix<T>(1, 1, _numOps);
+        Vector<T> xVector = new Vector<T>([x]);
+        Matrix<T> xMatrix = new Matrix<T>(1, 1);
         xMatrix[0, 0] = x;
 
         Vector<T> prediction = _gpr.Predict(xMatrix);
