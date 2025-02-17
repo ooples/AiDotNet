@@ -457,26 +457,52 @@ public static class VectorExtensions
         return vector.Transform(function);
     }
 
-    public static Matrix<T> ToRowMatrix<T>(this Vector<T> vector)
+    /// <summary>
+    /// Converts the vector to a diagonal matrix.
+    /// </summary>
+    /// <typeparam name="T">The type of the vector elements.</typeparam>
+    /// <param name="vector">The vector to convert.</param>
+    /// <returns>A square matrix with the vector elements on the diagonal and zeros elsewhere.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if the input vector is null.</exception>
+    public static Matrix<T> ToDiagonalMatrix<T>(this Vector<T> vector)
     {
-        var matrix = new Matrix<T>(1, vector.Length);
-        for (int i = 0; i < vector.Length; i++)
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
+        int n = vector.Length;
+        var matrix = Matrix<T>.CreateMatrix<T>(n, n);
+        var ops = MathHelper.GetNumericOperations<T>();
+
+        for (int i = 0; i < n; i++)
         {
-            matrix[0, i] = vector[i];
+            for (int j = 0; j < n; j++)
+            {
+                matrix[i, j] = i == j ? vector[i] : ops.Zero;
+            }
         }
 
         return matrix;
     }
 
-    public static Matrix<T> ToColumnMatrix<T>(this Vector<T> vector)
+    /// <summary>
+    /// Converts the vector to a row matrix (1 x n).
+    /// </summary>
+    /// <typeparam name="T">The type of the vector elements.</typeparam>
+    /// <param name="vector">The vector to convert.</param>
+    /// <returns>A matrix with one row containing the vector elements.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if the input vector is null.</exception>
+    public static Matrix<T> ToRowMatrix<T>(this Vector<T> vector)
     {
-        var operations = MathHelper.GetNumericOperations<T>();
-        var matrix = new Matrix<T>(vector.Length, 1);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            matrix[i, 0] = vector[i];
-        }
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
 
+        int n = vector.Length;
+        var matrix = Matrix<T>.CreateMatrix<T>(n, 1);
+        for (int i = 0; i < n; ++i)
+        {
+            matrix[0, i] = vector[i];
+        }
+        
         return matrix;
     }
 
@@ -546,15 +572,25 @@ public static class VectorExtensions
         return matrix;
     }
 
-    public static Matrix<T> ToMatrix<T>(this Vector<T> vector)
+    /// <summary>
+    /// Converts the vector to a column matrix (n x 1).
+    /// </summary>
+    /// <typeparam name="T">The type of the vector elements.</typeparam>
+    /// <param name="vector">The vector to convert.</param>
+    /// <returns>A matrix with one column containing the vector elements.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if the input vector is null.</exception>
+    public static Matrix<T> ToColumnMatrix<T>(this Vector<T> vector)
     {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
         int n = vector.Length;
         var matrix = Matrix<T>.CreateMatrix<T>(n, 1);
         for (int i = 0; i < n; ++i)
         {
             matrix[i, 0] = vector[i];
         }
-            
+        
         return matrix;
     }
 

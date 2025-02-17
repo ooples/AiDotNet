@@ -4,18 +4,26 @@ public class FullyConnectedLayer<T> : LayerBase<T>
 {
     private Matrix<T> _weights;
     private Vector<T> _biases;
-    private IActivationFunction<T> _activationFunction;
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
     private Matrix<T>? _weightsGradient;
     private Vector<T>? _biasesGradient;
 
     public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
-        : base([inputSize], [outputSize])
+        : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
         _weights = new Matrix<T>(outputSize, inputSize);
         _biases = new Vector<T>(outputSize);
-        _activationFunction = activationFunction ?? new ReLUActivation<T>();
+
+        InitializeParameters();
+    }
+
+    public FullyConnectedLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivationFunction = null)
+        : base([inputSize], [outputSize], vectorActivationFunction ?? new ReLUActivation<T>())
+    {
+        _weights = new Matrix<T>(outputSize, inputSize);
+        _biases = new Vector<T>(outputSize);
+
         InitializeParameters();
     }
 
@@ -52,7 +60,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
 
             var outputVector = _weights.Multiply(inputVector).Add(_biases);
-            outputVector = outputVector.Transform(_activationFunction.Activate);
+            outputVector = ApplyActivationToVector(outputVector);
 
             for (int j = 0; j < outputSize; j++)
             {
@@ -94,9 +102,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
                 inputVector[j] = _lastInput[i, j];
             }
 
-            var activationGradient = lastOutputVector.Transform(_activationFunction.Derivative);
-            var delta = outputGradientVector.ElementwiseMultiply(activationGradient);
-
+            var delta = ApplyActivationDerivative(lastOutputVector, outputGradientVector);
             weightsGradient = weightsGradient.Add(Matrix<T>.OuterProduct(delta, inputVector));
             biasesGradient = biasesGradient.Add(delta);
 

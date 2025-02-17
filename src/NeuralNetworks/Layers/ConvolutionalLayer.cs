@@ -2,14 +2,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 
 public class ConvolutionalLayer<T> : LayerBase<T>
 {
-    public int InputDepth { get; }
-    public int OutputDepth { get; }
-    public int KernelSize { get; }
-    public int Stride { get; }
-    public int Padding { get; }
+    public int InputDepth { get; private set; }
+    public int OutputDepth { get; private set; }
+    public int KernelSize { get; private set; }
+    public int Stride { get; private set; }
+    public int Padding { get; private set; }
     
-    private Tensor<T> Kernels { get; }
-    private Vector<T> Biases { get; }
+    private Tensor<T> Kernels { get; set; }
+    private Vector<T> Biases { get; set; }
     private Tensor<T> LastInput { get; set; }
     private Tensor<T> LastOutput { get; set; }
     private readonly Random _random;
@@ -39,7 +39,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
                               IVectorActivationFunction<T>? vectorActivation = null)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth), 
                CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding), 
-                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), vectorActivation ?? new SoftmaxActivation<T>())
+                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), vectorActivation ?? new ReLUActivation<T>())
     {
         InputDepth = inputDepth;
         OutputDepth = outputDepth;
@@ -54,6 +54,122 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         _random = new Random();
 
         InitializeWeights();
+    }
+
+    public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0, IActivationFunction<T>? activation = null)
+    {
+        if (inputShape.Length != 3)
+        {
+            throw new ArgumentException("Input shape must have 3 dimensions: depth, height, width");
+        }
+
+        int inputDepth = inputShape[0];
+        int inputHeight = inputShape[1];
+        int inputWidth = inputShape[2];
+
+        return new ConvolutionalLayer<T>(
+            inputDepth: inputDepth,
+            outputDepth: numberOfFilters,
+            kernelSize: kernelSize,
+            inputHeight: inputHeight,
+            inputWidth: inputWidth,
+            stride: stride,
+            padding: padding,
+            activation: activation
+        );
+    }
+
+    public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0, IVectorActivationFunction<T>? vectorActivation = null)
+    {
+        if (inputShape.Length != 3)
+        {
+            throw new ArgumentException("Input shape must have 3 dimensions: depth, height, width");
+        }
+
+        int inputDepth = inputShape[0];
+        int inputHeight = inputShape[1];
+        int inputWidth = inputShape[2];
+
+        return new ConvolutionalLayer<T>(
+            inputDepth: inputDepth,
+            outputDepth: numberOfFilters,
+            kernelSize: kernelSize,
+            inputHeight: inputHeight,
+            inputWidth: inputWidth,
+            stride: stride,
+            padding: padding,
+            vectorActivation: vectorActivation
+        );
+    }
+
+    public override void Serialize(BinaryWriter writer)
+    {
+        base.Serialize(writer);
+        writer.Write(InputDepth);
+        writer.Write(OutputDepth);
+        writer.Write(KernelSize);
+        writer.Write(Stride);
+        writer.Write(Padding);
+    
+        // Serialize Kernels
+        for (int i = 0; i < Kernels.Shape[0]; i++)
+        {
+            for (int j = 0; j < Kernels.Shape[1]; j++)
+            {
+                for (int k = 0; k < Kernels.Shape[2]; k++)
+                {
+                    for (int l = 0; l < Kernels.Shape[3]; l++)
+                    {
+                        writer.Write(Convert.ToDouble(Kernels[i, j, k, l]));
+                    }
+                }
+            }
+        }
+
+        // Serialize Biases
+        for (int i = 0; i < Biases.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(Biases[i]));
+        }
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        base.Deserialize(reader);
+        InputDepth = reader.ReadInt32();
+        OutputDepth = reader.ReadInt32();
+        KernelSize = reader.ReadInt32();
+        Stride = reader.ReadInt32();
+        Padding = reader.ReadInt32();
+
+        // Deserialize Kernels
+        Kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        for (int i = 0; i < Kernels.Shape[0]; i++)
+        {
+            for (int j = 0; j < Kernels.Shape[1]; j++)
+            {
+                for (int k = 0; k < Kernels.Shape[2]; k++)
+                {
+                    for (int l = 0; l < Kernels.Shape[3]; l++)
+                    {
+                        double value = reader.ReadDouble();
+                        Kernels[i, j, k, l] = NumOps.FromDouble(value);
+                    }
+                }
+            }
+        }
+
+        // Deserialize Biases
+        Biases = new Vector<T>(OutputDepth);
+        for (int i = 0; i < Biases.Length; i++)
+        {
+            double value = reader.ReadDouble();
+            Biases[i] = NumOps.FromDouble(value);
+        }
+
+        // Reinitialize LastInput and LastOutput
+        LastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        LastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
     }
 
     private static int CalculateOutputDimension(int inputDim, int kernelSize, int stride, int padding)

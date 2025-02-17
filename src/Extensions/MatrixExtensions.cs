@@ -1,6 +1,4 @@
-﻿using AiDotNet.Helpers;
-
-namespace AiDotNet.Extensions;
+﻿namespace AiDotNet.Extensions;
 
 public static class MatrixExtensions
 {
@@ -17,6 +15,42 @@ public static class MatrixExtensions
         }
 
         return newMatrix;
+    }
+
+    public static Matrix<T> AddVectorToEachRow<T>(this Matrix<T> matrix, Vector<T> vector)
+    {
+        if (matrix.Columns != vector.Length)
+            throw new ArgumentException("Vector length must match matrix column count");
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        var result = new Matrix<T>(matrix.Rows, matrix.Columns);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = ops.Add(matrix[i, j], vector[j]);
+            }
+        }
+
+        return result;
+    }
+
+    public static Vector<T> SumColumns<T>(this Matrix<T> matrix)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(matrix.Columns);
+        for (int j = 0; j < matrix.Columns; j++)
+        {
+            T sum = ops.Zero;
+            for (int i = 0; i < matrix.Rows; i++)
+            {
+                sum = ops.Add(sum, matrix[i, j]);
+            }
+
+            result[j] = sum;
+        }
+
+        return result;
     }
 
     public static Vector<T> GetColumn<T>(this Matrix<T> matrix, int columnIndex)

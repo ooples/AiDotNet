@@ -1,8 +1,9 @@
+
 namespace AiDotNet.NeuralNetworks;
 
-public class NeuralNetwork<T> : NeuralNetworkBase<T>
+public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
 {
-    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public ConvolutionalNeuralNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
     {
     }
 
@@ -22,18 +23,42 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
             else
             {
                 int inputSize = Architecture.LayerSizes[i];
-                int outputSize = Architecture.LayerSizes[i + 1];
+                int nextSize = Architecture.LayerSizes[i + 1];
 
-                // Add Dense Layer
-                Layers.Add(new DenseLayer<T>(inputSize, outputSize));
+                // Add Convolutional Layer
+                Layers.Add(new ConvolutionalLayer<T>(
+                    inputDepth: inputSize,
+                    outputDepth: nextSize,
+                    kernelSize: 3,
+                    inputHeight: Architecture.InputHeight,
+                    inputWidth: Architecture.InputWidth,
+                    stride: 1,
+                    padding: 1,
+                    activation: new ReLUActivation<T>()
+                ));
 
                 // Add Activation Layer
-                IActivationFunction<T> activation = i == Architecture.LayerSizes.Count - 2 
-                    ? new SoftmaxActivation<T>() 
-                    : new ReLUActivation<T>();
-                Layers.Add(new ActivationLayer<T>(new[] { outputSize }, activation));
+                Layers.Add(new ActivationLayer<T>([nextSize], (IActivationFunction<T>)new ReLUActivation<T>()));
+
+                // If not the last layer, add a Pooling Layer
+                if (i < Architecture.LayerSizes.Count - 2)
+                {
+                    Layers.Add(new PoolingLayer<T>(nextSize, nextSize, 2, 2, 2, PoolingType.Max));
+                }
             }
         }
+
+        // Add a Flatten Layer before the final Dense Layer
+        int lastLayerSize = Architecture.LayerSizes[Architecture.LayerSizes.Count - 2];
+        Layers.Add(new FlattenLayer<T>(new int[] { lastLayerSize }));
+
+        // Add the final Dense Layer
+        int finalOutputSize = Architecture.LayerSizes[Architecture.LayerSizes.Count - 1];
+        Layers.Add(new DenseLayer<T>(lastLayerSize, finalOutputSize));
+
+        // Add the final Activation Layer (typically Softmax for classification tasks)
+        // Using IActivationFunction<T> to resolve ambiguity
+        Layers.Add(new ActivationLayer<T>(new int[] { finalOutputSize }, (IActivationFunction<T>)new SoftmaxActivation<T>()));
     }
 
     public override Vector<T> Predict(Vector<T> input)
@@ -43,6 +68,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         {
             current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
         }
+
         return current;
     }
 

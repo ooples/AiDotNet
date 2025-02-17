@@ -28,23 +28,28 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 
     private NeuralNetwork<T> CreateDefaultNeuralNetwork()
     {
-        var defaultArchitecture = new NeuralNetworkArchitecture<T>
-        {
-            LayerSizes = new List<int> 
-            { 
-                _nnarimaOptions.LaggedPredictions + _nnarimaOptions.ExogenousVariables, 
-                10, // Hidden layer with 10 neurons
-                1   // Output layer with 1 neuron
-            },
-            ActivationFunctions = new List<IActivationFunction<T>>
-            {
-                new ReLUActivation<T>(),
-            },
-            VectorActivationFunctions = new List<IVectorActivationFunction<T>>
-            {
-                new SoftmaxActivation<T>(),
-            }
+        var layerSizes = new List<int> 
+        { 
+            _nnarimaOptions.LaggedPredictions + _nnarimaOptions.ExogenousVariables, 
+            10, // Hidden layer with 10 neurons
+            1   // Output layer with 1 neuron
         };
+
+        var activationFunctions = new List<IActivationFunction<T>>
+        {
+            new ReLUActivation<T>(),
+        };
+
+        var vectorActivationFunctions = new List<IVectorActivationFunction<T>>
+        {
+            new SoftmaxActivation<T>(),
+        };
+
+        var defaultArchitecture = new NeuralNetworkArchitecture<T>(
+            layerSizes,
+            activationFunctions,
+            vectorActivationFunctions
+        );
 
         return new NeuralNetwork<T>(defaultArchitecture);
     }

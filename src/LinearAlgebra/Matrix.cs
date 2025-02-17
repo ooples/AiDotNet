@@ -278,7 +278,7 @@ public class Matrix<T> : MatrixBase<T>
 
     public Vector<T> ToColumnVector()
     {
-        Vector<T> result = new Vector<T>(Rows * Columns);
+        Vector<T> result = new(Rows * Columns);
         int index = 0;
         for (int j = 0; j < Columns; j++)
         {
@@ -293,13 +293,32 @@ public class Matrix<T> : MatrixBase<T>
 
     public Vector<T> ToRowVector()
     {
-        Vector<T> result = new Vector<T>(Rows * Columns);
+        Vector<T> result = new(Rows * Columns);
         int index = 0;
         for (int i = 0; i < Rows; i++)
         {
             for (int j = 0; j < Columns; j++)
             {
                 result[index++] = this[i, j];
+            }
+        }
+
+        return result;
+    }
+
+    public Matrix<T> Add(Tensor<T> tensor)
+    {
+        if (tensor.Shape.Length != 2 || tensor.Shape[0] != Rows || tensor.Shape[1] != Columns)
+        {
+            throw new ArgumentException("Tensor dimensions must match matrix dimensions for addition.");
+        }
+
+        var result = new Matrix<T>(Rows, Columns);
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                result[i, j] = NumOps.Add(this[i, j], tensor[i, j]);
             }
         }
 

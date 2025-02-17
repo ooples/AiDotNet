@@ -339,8 +339,8 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
 
     public virtual byte[] Serialize()
     {
-        using MemoryStream ms = new MemoryStream();
-        using (BinaryWriter writer = new BinaryWriter(ms))
+        using MemoryStream ms = new();
+        using (BinaryWriter writer = new(ms))
         {
             // Write the type of the optimizer
             writer.Write(this.GetType()?.AssemblyQualifiedName ?? string.Empty);
@@ -358,8 +358,8 @@ public abstract class OptimizerBase<T> : IOptimizer<T>
 
     public virtual void Deserialize(byte[] data)
     {
-        using MemoryStream ms = new MemoryStream(data);
-        using BinaryReader reader = new BinaryReader(ms);
+        using MemoryStream ms = new(data);
+        using BinaryReader reader = new(ms);
 
         // Read and verify the type
         string typeName = reader.ReadString();
