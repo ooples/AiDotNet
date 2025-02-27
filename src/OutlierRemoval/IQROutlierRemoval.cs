@@ -1,63 +1,53 @@
 ﻿namespace AiDotNet.OutlierRemoval;
 
-public class IQROutlierRemoval : IOutlierRemoval
+public class IQROutlierRemoval<T> : IOutlierRemoval<T>
 {
-    public IQROutlierRemoval(IQuartile? quartile = null)
+    private readonly T _iqrMultiplier;
+    private readonly INumericOperations<T> _numOps;
+
+    public IQROutlierRemoval(T? iqrMultiplier = default)
     {
-        Quartile = quartile;
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _iqrMultiplier = iqrMultiplier ?? GetDefaultMultiplier();
     }
 
-    internal int[] DetermineIQR(double[] unfiltered)
+    public (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs)
     {
-        //initializes new type StandardQuartile of class IQuartile only if type is null else leaves the same.
-        var (q1Value, _, q3Value) = QuartileHelper.FindQuartiles(unfiltered, Quartile ?? new StandardQuartile());
-        var iQR = q3Value - q1Value;
-        var factor = 1.5 * iQR;
-        var minLimit = q1Value - factor;
-        var maxLimit = q3Value + factor;
+        var cleanedInputs = new List<Vector<T>>();
+        var cleanedOutputs = new List<T>();
 
-        return QuartileHelper.FindIndicesToRemove(unfiltered, minLimit, maxLimit);
-    }
-
-    internal override (double[], double[]) RemoveOutliers(double[] rawInputs, double[] rawOutputs)
-    {
-        //Create Deep Copy
-        var sortedInputs = rawInputs.ToArray();
-        var sortedOutputs = rawOutputs.ToArray();
-        //Sort Both Arrays according to Input's ascending order
-        Array.Sort(sortedInputs, sortedOutputs);
-        var ignoredIndices = DetermineIQR(sortedInputs);
-
-        return QuartileHelper.FilterArraysWithIndices(sortedInputs, sortedOutputs, ignoredIndices);
-    }
-
-    internal override (double[][], double[]) RemoveOutliers(double[][] rawInputs, double[] rawOutputs)
-    {
-        var length = rawInputs[0].Length;
-
-        var finalInputs = Array.Empty<double[]>();
-        var finalOutputs = Array.Empty<double>();
-        for (var i = 0; i < length; i++)
+        for (int i = 0; i < outputs.Length; i++)
         {
-            var (cleanedInputs, cleanedOutputs) = RemoveOutliers(rawInputs[i], rawOutputs);
-            finalInputs[i] = cleanedInputs;
-            finalOutputs = cleanedOutputs;
+            bool isOutlier = false;
+            for (int j = 0; j < inputs.Columns; j++)
+            {
+                var column = inputs.GetColumn(j);
+                var quartiles = new Quartile<T>(column);
+                var q1 = quartiles.Q1;
+                var q3 = quartiles.Q3;
+                var iqr = _numOps.Subtract(q3, q1);
+                var lowerBound = _numOps.Subtract(q1, _numOps.Multiply(_iqrMultiplier, iqr));
+                var upperBound = _numOps.Add(q3, _numOps.Multiply(_iqrMultiplier, iqr));
+
+                if (_numOps.LessThan(column[i], lowerBound) || _numOps.GreaterThan(column[i], upperBound))
+                {
+                    isOutlier = true;
+                    break;
+                }
+            }
+
+            if (!isOutlier)
+            {
+                cleanedInputs.Add(new Vector<T>(inputs.GetRow(i)));
+                cleanedOutputs.Add(outputs[i]);
+            }
         }
 
-        return (finalInputs, finalOutputs);
+        return (new Matrix<T>(cleanedInputs), new Vector<T>(cleanedOutputs));
     }
 
-    internal override (double[][], double[][]) RemoveOutliers(double[][] rawInputs, double[][] rawOutputs)
+    private T GetDefaultMultiplier()
     {
-        var finalInputs = Array.Empty<double[]>();
-        var finalOutputs = Array.Empty<double[]>();
-        for (var i = 0; i < rawInputs.Length; i++)
-        {
-            var (cleanedInputs, cleanedOutputs) = RemoveOutliers(rawInputs[i], rawOutputs[i]);
-            finalInputs[i] = cleanedInputs;
-            finalOutputs[i] = cleanedOutputs;
-        }
-
-        return (finalInputs, finalOutputs);
+        return _numOps.FromDouble(1.5);
     }
 }
