@@ -19,7 +19,6 @@ public class SimpleRegression<T> : RegressionBase<T>
         var xTx = x.Transpose().Multiply(x);
         var regularizedXTx = xTx.Add(Regularization.RegularizeMatrix(xTx));
         var xTy = x.Transpose().Multiply(y);
-
         var solution = SolveSystem(regularizedXTx, xTy);
 
         if (Options.UseIntercept)
