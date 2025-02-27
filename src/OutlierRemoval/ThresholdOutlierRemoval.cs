@@ -1,58 +1,47 @@
 ﻿namespace AiDotNet.OutlierRemoval;
 
-/// <summary>
-/// Removes outliers from the data using the threshold method. This method is not recommended for data sets with less than 15 data points.
-/// </summary>
-public class ThresholdOutlierRemoval : IOutlierRemoval
+public class ThresholdOutlierRemoval<T> : IOutlierRemoval<T>
 {
-    internal override (double[], double[]) RemoveOutliers(double[] rawInputs, double[] rawOutputs)
-    {
-        var sortedInputs = new List<double>(rawInputs);
-        var sortedOutputs = rawOutputs.ToArray();
-        var median = sortedInputs[sortedInputs.Count / 2];
-        var deviations = new List<double>(sortedInputs.Select(v => Math.Abs(v - median)).OrderBy(x => x));
-        var medianDeviation = deviations[deviations.Count / 2];
-        var threshold = 3 * medianDeviation;
+    private readonly T _threshold;
+    private readonly INumericOperations<T> _numOps;
 
-        var ignoredIndices = new List<int>();
-        for (var i = 0; i < rawInputs.Length; i++)
+    public ThresholdOutlierRemoval(T? threshold = default)
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _threshold = threshold ?? GetDefaultThreshold();
+    }
+
+    public (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs)
+    {
+        var cleanedInputs = new List<Vector<T>>();
+        var cleanedOutputs = new List<T>();
+
+        for (int j = 0; j < inputs.Columns; j++)
         {
-            if (Math.Abs(rawInputs[i] - median) > threshold)
+            var column = inputs.GetColumn(j);
+            var median = StatisticsHelper<T>.CalculateMedian(column);
+            var deviations = column.Select(x => _numOps.Abs(_numOps.Subtract(x, median))).OrderBy(x => x).ToList();
+            var medianDeviation = deviations[deviations.Count / 2];
+            var threshold = _numOps.Multiply(_threshold, medianDeviation);
+
+            for (int i = 0; i < inputs.Rows; i++)
             {
-                ignoredIndices.Add(i);
+                if (_numOps.LessThanOrEquals(_numOps.Abs(_numOps.Subtract(inputs[i, j], median)), threshold))
+                {
+                    if (j == 0) // Only add to cleaned data once per row
+                    {
+                        cleanedInputs.Add(inputs.GetRow(i));
+                        cleanedOutputs.Add(outputs[i]);
+                    }
+                }
             }
         }
 
-        return QuartileHelper.FilterArraysWithIndices(sortedInputs, sortedOutputs, ignoredIndices);
+        return (new Matrix<T>(cleanedInputs), new Vector<T>(cleanedOutputs));
     }
 
-    internal override (double[][], double[]) RemoveOutliers(double[][] rawInputs, double[] rawOutputs)
+    private T GetDefaultThreshold()
     {
-        var length = rawInputs[0].Length;
-
-        var finalInputs = Array.Empty<double[]>();
-        var finalOutputs = Array.Empty<double>();
-        for (var i = 0; i < length; i++)
-        {
-            var (cleanedInputs, cleanedOutputs) = RemoveOutliers(rawInputs[i], rawOutputs);
-            finalInputs[i] = cleanedInputs;
-            finalOutputs = cleanedOutputs;
-        }
-
-        return (finalInputs, finalOutputs);
-    }
-
-    internal override (double[][], double[][]) RemoveOutliers(double[][] rawInputs, double[][] rawOutputs)
-    {
-        var finalInputs = Array.Empty<double[]>();
-        var finalOutputs = Array.Empty<double[]>();
-        for (var i = 0; i < rawInputs.Length; i++)
-        {
-            var (cleanedInputs, cleanedOutputs) = RemoveOutliers(rawInputs[i], rawOutputs[i]);
-            finalInputs[i] = cleanedInputs;
-            finalOutputs[i] = cleanedOutputs;
-        }
-
-        return (finalInputs, finalOutputs);
+        return _numOps.FromDouble(3.0);
     }
 }
