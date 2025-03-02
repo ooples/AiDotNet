@@ -43,6 +43,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         // Initialize biases
         _biases = new Vector<T>(_outputDepth);
 
+
         InitializeParameters();
     }
 
@@ -63,6 +64,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         
         // Initialize biases
         _biases = new Vector<T>(_outputDepth);
+
 
         InitializeParameters();
     }

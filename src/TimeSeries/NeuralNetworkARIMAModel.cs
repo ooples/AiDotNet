@@ -35,7 +35,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Create layers directly
         var inputLayer = new InputLayer<T>(inputSize);
-    
+
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> linearActivation = new LinearActivation<T>();
     

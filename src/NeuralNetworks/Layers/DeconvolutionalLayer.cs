@@ -241,8 +241,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
                     {
                         _kernels[id, od, kh, kw] = parameters[index++];
                     }
-                }
-            }
+    }
+}
         }
     
         // Set bias parameters

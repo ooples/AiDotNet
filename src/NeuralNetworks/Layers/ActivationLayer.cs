@@ -39,30 +39,30 @@ public class ActivationLayer<T> : LayerBase<T>
     }
 
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
-    {
+        {
         return input.Transform((x, _) => ScalarActivation!.Activate(x));
     }
 
     private Tensor<T> ApplyVectorActivation(Tensor<T> input)
-    {
+            {
         return VectorActivation!.Activate(input);
-    }
+            }
 
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
         return _lastInput!.Transform((x, indices) => 
             NumOps.Multiply(ScalarActivation!.Derivative(x), outputGradient[indices]));
-    }
+        }
 
     private Tensor<T> BackwardVectorActivation(Tensor<T> outputGradient)
-    {
+                {
         return VectorActivation!.Derivative(_lastInput!) * outputGradient;
-    }
+            }
 
     public override void UpdateParameters(T learningRate)
     {
         // Activation layer has no parameters to update
-    }
+        }
 
     public override Vector<T> GetParameters()
     {

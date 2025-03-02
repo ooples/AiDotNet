@@ -360,8 +360,10 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         return (dxt, dprevH, dprevC, cellGrads);
     }
 
+    private readonly SigmoidActivation<T> _sigmoidActivation = new SigmoidActivation<T>();
+
     private (Tensor<T> f, Tensor<T> i, Tensor<T> c, Tensor<T> o, Tensor<T> newC, Tensor<T> newH) ForwardStep(
-        Tensor<T> xt, Tensor<T> prevH, Tensor<T> prevC)
+    Tensor<T> xt, Tensor<T> prevH, Tensor<T> prevC)
     {
         var f = Convolve(xt, _weightsFi).Add(Convolve(prevH, _weightsFh)).Add(_biasF).Transform((x, _) => _sigmoidActivation.Activate(x));
         var i = Convolve(xt, _weightsIi).Add(Convolve(prevH, _weightsIh)).Add(_biasI).Transform((x, _) => _sigmoidActivation.Activate(x));

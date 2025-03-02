@@ -461,8 +461,8 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
                     {
                         _pointwiseKernels[i, j, k, l] = parameters[index++];
                     }
-                }
-            }
+    }
+}
         }
     
         // Set bias parameters

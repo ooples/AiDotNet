@@ -14,6 +14,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private Vector<T>? _lastVariance;
     private Vector<T>? _gammaGradient;
     private Vector<T>? _betaGradient;
+    private bool _isTraining;
 
     public override bool SupportsTraining => true;
 
@@ -26,6 +27,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         _beta = new Vector<T>(featureSize);
         _runningMean = new Vector<T>(featureSize);
         _runningVariance = Vector<T>.CreateDefault(featureSize, NumOps.One);
+        _isTraining = true;
     }
 
     public override Tensor<T> Forward(Tensor<T> input)

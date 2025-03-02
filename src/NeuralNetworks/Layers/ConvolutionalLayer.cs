@@ -12,6 +12,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Vector<T> Biases { get; set; }
     private Tensor<T> LastInput { get; set; }
     private Tensor<T> LastOutput { get; set; }
+    private readonly Random _random;
 
     public override bool SupportsTraining => true;
 
@@ -31,6 +32,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Biases = new Vector<T>(OutputDepth);
         LastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         LastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        _random = new Random();
 
         InitializeWeights();
     }
@@ -51,6 +53,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Biases = new Vector<T>(OutputDepth);
         LastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         LastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        _random = new Random();
 
         InitializeWeights();
     }

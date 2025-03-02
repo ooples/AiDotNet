@@ -16,6 +16,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     {
         Architecture = architecture;
         Layers = [];
+        InitializeLayers();
         NumOps = MathHelper.GetNumericOperations<T>();
     }
 

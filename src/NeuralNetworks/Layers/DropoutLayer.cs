@@ -6,6 +6,7 @@ public class DropoutLayer<T> : LayerBase<T>
     private readonly T _scale;
     private Tensor<T>? _lastInput;
     private Tensor<T>? _dropoutMask;
+    private bool _isTraining;
 
     public override bool SupportsTraining => true;
 
@@ -17,6 +18,7 @@ public class DropoutLayer<T> : LayerBase<T>
 
         _dropoutRate = NumOps.FromDouble(dropoutRate);
         _scale = NumOps.FromDouble(1.0 / (1.0 - dropoutRate));
+        _isTraining = true;
     }
 
     public override Tensor<T> Forward(Tensor<T> input)

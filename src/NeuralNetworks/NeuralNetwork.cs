@@ -15,8 +15,15 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
         }
-        else
+
+        for (int i = 0; i < Architecture.LayerSizes.Count - 1; i++)
         {
+            if (Architecture.CustomLayers != null && i < Architecture.CustomLayers.Count)
+            {
+                Layers.Add(Architecture.CustomLayers[i]);
+            }
+            else
+            {
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralNetworkLayers(Architecture));
         }

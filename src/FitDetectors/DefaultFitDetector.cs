@@ -2,8 +2,11 @@
 
 public class DefaultFitDetector<T> : FitDetectorBase<T>
 {
+    private readonly INumericOperations<T> _numOps;
+
     public DefaultFitDetector()
     {
+        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
@@ -40,13 +43,13 @@ public class DefaultFitDetector<T> : FitDetectorBase<T>
             return FitType.HighVariance;
         if (_numOps.LessThan(training.R2, threshold05) && _numOps.LessThan(validation.R2, threshold05) && _numOps.LessThan(test.R2, threshold05))
             return FitType.HighBias;
-
+        
         return FitType.Unstable;
     }
 
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
-        return _numOps.Divide(_numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2),
+        return _numOps.Divide(_numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), 
             evaluationData.TestSet.PredictionStats.R2), _numOps.FromDouble(3));
     }
 

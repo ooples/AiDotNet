@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.RadialBasisFunctions;
+﻿using System;
+
+namespace AiDotNet.RadialBasisFunctions;
 
 public class MaternRBF<T> : IRadialBasisFunction<T>
 {

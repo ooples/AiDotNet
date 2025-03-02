@@ -1,3 +1,5 @@
+using AiDotNet.LinearAlgebra;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 public class UpsamplingLayer<T> : LayerBase<T>

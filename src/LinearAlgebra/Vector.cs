@@ -225,6 +225,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
 
         int maxIndex = 0;
         T maxValue = this[0];
+        var numOps = MathHelper.GetNumericOperations<T>();
 
         for (int i = 1; i < this.Length; i++)
         {
@@ -242,6 +243,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     {
         int m = this.Length;
         int n = other.Length;
+        var numOps = MathHelper.GetNumericOperations<T>();
         Matrix<T> result = new(m, n);
 
         for (int i = 0; i < m; i++)

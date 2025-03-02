@@ -33,6 +33,7 @@ public class DenseLayer<T> : LayerBase<T>
     private void InitializeParameters()
     {
         // Initialize weights and biases (e.g., using Xavier/Glorot initialization)
+        var random = new Random();
         var scale = Math.Sqrt(2.0 / (InputShape[0] + OutputShape[0]));
 
         for (int i = 0; i < _weights.Rows; i++)
