@@ -8,6 +8,8 @@ public class DropoutLayer<T> : LayerBase<T>
     private Tensor<T>? _dropoutMask;
     private bool _isTraining;
 
+    public override bool SupportsTraining => true;
+
     public DropoutLayer(double dropoutRate = 0.5)
         : base(Array.Empty<int>(), []) // Dropout layer doesn't change the shape of the input
     {
@@ -23,7 +25,7 @@ public class DropoutLayer<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        if (!_isTraining)
+        if (!IsTrainingMode)
             return input;
 
         _dropoutMask = new Tensor<T>(input.Shape);
@@ -51,7 +53,7 @@ public class DropoutLayer<T> : LayerBase<T>
         if (_lastInput == null || _dropoutMask == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        if (!_isTraining)
+        if (!IsTrainingMode)
             return outputGradient;
 
         var inputGradient = new Tensor<T>(_lastInput.Shape);
@@ -69,8 +71,16 @@ public class DropoutLayer<T> : LayerBase<T>
         // Dropout layer has no parameters to update
     }
 
-    public void SetTrainingMode(bool isTraining)
+    public override Vector<T> GetParameters()
     {
-        _isTraining = isTraining;
+        // Dropout layer has no trainable parameters
+        return new Vector<T>(0);
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _dropoutMask = null;
     }
 }

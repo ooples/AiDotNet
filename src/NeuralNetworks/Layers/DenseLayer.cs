@@ -8,19 +8,25 @@ public class DenseLayer<T> : LayerBase<T>
     private Vector<T>? _biasesGradient;
     private Tensor<T>? _lastInput;
 
+    public override int ParameterCount => (_weights.Rows * _weights.Columns) + _biases.Length;
+
+    public override bool SupportsTraining => true;
+
     public DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
         _weights = new Matrix<T>(outputSize, inputSize);
         _biases = new Vector<T>(outputSize);
+
         InitializeParameters();
     }
 
-    public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation)
-        : base([inputSize], [outputSize], vectorActivation)
+    public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivation = null)
+        : base([inputSize], [outputSize], vectorActivation ?? new ReLUActivation<T>())
     {
         _weights = new Matrix<T>(outputSize, inputSize);
         _biases = new Vector<T>(outputSize);
+
         InitializeParameters();
     }
 
@@ -34,10 +40,28 @@ public class DenseLayer<T> : LayerBase<T>
         {
             for (int j = 0; j < _weights.Columns; j++)
             {
-                _weights[i, j] = (T)Convert.ChangeType(random.NextDouble() * scale - scale / 2, typeof(T));
+                _weights[i, j] = NumOps.FromDouble(Random.NextDouble() * scale - scale / 2);
             }
+
             _biases[i] = NumOps.Zero; // Initialize biases to zero
         }
+    }
+
+    public void SetWeights(Matrix<T> weights)
+    {
+        if (weights == null)
+        {
+            throw new ArgumentNullException(nameof(weights));
+        }
+
+        // Validate dimensions
+        if (weights.Rows != OutputShape[0] || weights.Columns != InputShape[0])
+        {
+            throw new ArgumentException($"Weight matrix dimensions must be {OutputShape[0]}x{InputShape[0]}, but got {weights.Rows}x{weights.Columns}");
+        }
+
+        // Set the weights directly
+        _weights = weights;
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
@@ -97,5 +121,64 @@ public class DenseLayer<T> : LayerBase<T>
 
         _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
         _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _weights.Rows * _weights.Columns + _biases.Length;
+        var parameters = new Vector<T>(totalParams);
+    
+        int index = 0;
+    
+        // Copy weight parameters
+        for (int i = 0; i < _weights.Rows; i++)
+        {
+            for (int j = 0; j < _weights.Columns; j++)
+            {
+                parameters[index++] = _weights[i, j];
+            }
+        }
+    
+        // Copy bias parameters
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            parameters[index++] = _biases[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != _weights.Rows * _weights.Columns + _biases.Length)
+        {
+            throw new ArgumentException($"Expected {_weights.Rows * _weights.Columns + _biases.Length} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set weight parameters
+        for (int i = 0; i < _weights.Rows; i++)
+        {
+            for (int j = 0; j < _weights.Columns; j++)
+            {
+                _weights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set bias parameters
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            _biases[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _weightsGradient = null;
+        _biasesGradient = null;
     }
 }

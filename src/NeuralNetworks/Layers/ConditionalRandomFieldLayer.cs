@@ -16,6 +16,8 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     private readonly int _numClasses;
     private readonly int _sequenceLength;
 
+    public override bool SupportsTraining => true;
+
     public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IActivationFunction<T>? scalarActivation = null)
         : base([sequenceLength, numClasses], [sequenceLength, numClasses], scalarActivation ?? new LinearActivation<T>())
     {
@@ -285,5 +287,77 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
             _endScores[i] = NumOps.Subtract(_endScores[i], 
                 NumOps.Multiply(learningRate, _endScoresGradient[i]));
         }
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Flatten all parameters into a single vector
+        int totalParams = _numClasses * _numClasses + _numClasses * 2;
+        var parameters = new Vector<T>(totalParams);
+        
+        int index = 0;
+        
+        // Copy transition matrix parameters
+        for (int i = 0; i < _numClasses; i++)
+        {
+            for (int j = 0; j < _numClasses; j++)
+            {
+                parameters[index++] = _transitionMatrix[i, j];
+            }
+        }
+        
+        // Copy start scores
+        for (int i = 0; i < _numClasses; i++)
+        {
+            parameters[index++] = _startScores[i];
+        }
+        
+        // Copy end scores
+        for (int i = 0; i < _numClasses; i++)
+        {
+            parameters[index++] = _endScores[i];
+        }
+        
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _numClasses * _numClasses + _numClasses * 2;
+        
+        if (parameters.Length != totalParams)
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        
+        int index = 0;
+        
+        // Set transition matrix parameters
+        for (int i = 0; i < _numClasses; i++)
+        {
+            for (int j = 0; j < _numClasses; j++)
+            {
+                _transitionMatrix[i, j] = parameters[index++];
+            }
+        }
+        
+        // Set start scores
+        for (int i = 0; i < _numClasses; i++)
+        {
+            _startScores[i] = parameters[index++];
+        }
+        
+        // Set end scores
+        for (int i = 0; i < _numClasses; i++)
+        {
+            _endScores[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastOutput = null;
+        _transitionMatrixGradient = null;
+        _startScoresGradient = null;
+        _endScoresGradient = null;
     }
 }

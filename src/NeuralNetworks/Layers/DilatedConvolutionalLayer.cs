@@ -16,6 +16,8 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _kernelGradients;
     private Vector<T>? _biasGradients;
 
+    public override bool SupportsTraining => true;
+
     public DilatedConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, 
                                      int dilation, int stride = 1, int padding = 0, 
                                      IActivationFunction<T>? activation = null)
@@ -233,6 +235,78 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Reset gradients
+        _kernelGradients = null;
+        _biasGradients = null;
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _kernels.Length + _biases.Length;
+        var parameters = new Vector<T>(totalParams);
+    
+        int index = 0;
+    
+        // Copy kernel parameters
+        for (int od = 0; od < _outputDepth; od++)
+        {
+            for (int id = 0; id < _inputDepth; id++)
+            {
+                for (int kh = 0; kh < _kernelSize; kh++)
+                {
+                    for (int kw = 0; kw < _kernelSize; kw++)
+                    {
+                        parameters[index++] = _kernels[od, id, kh, kw];
+                    }
+                }
+            }
+        }
+    
+        // Copy bias parameters
+        for (int od = 0; od < _outputDepth; od++)
+        {
+            parameters[index++] = _biases[od];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != _kernels.Length + _biases.Length)
+        {
+            throw new ArgumentException($"Expected {_kernels.Length + _biases.Length} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set kernel parameters
+        for (int od = 0; od < _outputDepth; od++)
+        {
+            for (int id = 0; id < _inputDepth; id++)
+            {
+                for (int kh = 0; kh < _kernelSize; kh++)
+                {
+                    for (int kw = 0; kw < _kernelSize; kw++)
+                    {
+                        _kernels[od, id, kh, kw] = parameters[index++];
+                    }
+                }
+            }
+        }
+    
+        // Set bias parameters
+        for (int od = 0; od < _outputDepth; od++)
+        {
+            _biases[od] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
         _kernelGradients = null;
         _biasGradients = null;
     }

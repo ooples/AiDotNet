@@ -6,6 +6,8 @@ public class FlattenLayer<T> : LayerBase<T>
     private int _outputSize;
     private Tensor<T>? _lastInput;
 
+    public override bool SupportsTraining => false;
+
     public FlattenLayer(int[] inputShape)
         : base(inputShape, [inputShape.Aggregate(1, (a, b) => a * b)])
     {
@@ -80,5 +82,17 @@ public class FlattenLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // FlattenLayer has no parameters to update
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // FlattenLayer has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        _lastInput = null;
     }
 }

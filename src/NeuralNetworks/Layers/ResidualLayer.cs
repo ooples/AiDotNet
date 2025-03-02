@@ -5,6 +5,8 @@ public class ResidualLayer<T> : LayerBase<T>
     private readonly ILayer<T> _innerLayer;
     private Tensor<T>? _lastInput;
 
+    public override bool SupportsTraining => _innerLayer.SupportsTraining;
+
     public ResidualLayer(ILayer<T> innerLayer)
         : base(innerLayer.GetInputShape(), innerLayer.GetOutputShape())
     {
@@ -20,6 +22,7 @@ public class ResidualLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         var innerOutput = _innerLayer.Forward(input);
+
         return input.Add(innerOutput);
     }
 
@@ -35,5 +38,20 @@ public class ResidualLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _innerLayer.UpdateParameters(learningRate);
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Return the parameters of the inner layer
+        return _innerLayer.GetParameters();
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        _lastInput = null;
+    
+        // Reset the inner layer's state
+        _innerLayer.ResetState();
     }
 }

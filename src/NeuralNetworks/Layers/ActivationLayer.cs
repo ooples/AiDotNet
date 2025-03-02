@@ -3,21 +3,26 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class ActivationLayer<T> : LayerBase<T>
 {
     private Tensor<T>? _lastInput;
+    private readonly bool _useVectorActivation;
+
+    public override bool SupportsTraining => false;
 
     public ActivationLayer(int[] inputShape, IActivationFunction<T> activationFunction)
         : base(inputShape, inputShape, activationFunction)
     {
+        _useVectorActivation = false;
     }
 
     public ActivationLayer(int[] inputShape, IVectorActivationFunction<T> vectorActivationFunction)
         : base(inputShape, inputShape, vectorActivationFunction)
     {
+        _useVectorActivation = true;
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        return ApplyActivation(input);
+        return _useVectorActivation ? ApplyVectorActivation(input) : ApplyScalarActivation(input);
     }
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)
@@ -28,36 +33,45 @@ public class ActivationLayer<T> : LayerBase<T>
         if (_lastInput.Shape != outputGradient.Shape)
             throw new ArgumentException("Input and output gradient tensors must have the same shape.");
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-
-        if (UsingVectorActivation)
-        {
-            // Handle vector activation
-            for (int i = 0; i < _lastInput.Shape[0]; i++)
-            {
-                var inputVector = _lastInput.GetRow(i);
-                var gradientVector = outputGradient.GetRow(i);
-                var derivativeVector = ApplyActivationDerivative(inputVector, gradientVector);
-                inputGradient.SetRow(i, derivativeVector);
-            }
-        }
-        else
-        {
-            // Handle scalar activation
-            for (int i = 0; i < _lastInput.Shape[0]; i++)
-            {
-                for (int j = 0; j < _lastInput.Shape[1]; j++)
-                {
-                    inputGradient[i, j] = ApplyActivationDerivative(_lastInput[i, j], outputGradient[i, j]);
-                }
-            }
-        }
-
-        return inputGradient;
+        return _useVectorActivation 
+            ? BackwardVectorActivation(outputGradient) 
+            : BackwardScalarActivation(outputGradient);
     }
+
+    private Tensor<T> ApplyScalarActivation(Tensor<T> input)
+        {
+        return input.Transform((x, _) => ScalarActivation!.Activate(x));
+    }
+
+    private Tensor<T> ApplyVectorActivation(Tensor<T> input)
+            {
+        return VectorActivation!.Activate(input);
+            }
+
+    private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
+    {
+        return _lastInput!.Transform((x, indices) => 
+            NumOps.Multiply(ScalarActivation!.Derivative(x), outputGradient[indices]));
+        }
+
+    private Tensor<T> BackwardVectorActivation(Tensor<T> outputGradient)
+                {
+        return VectorActivation!.Derivative(_lastInput!) * outputGradient;
+            }
 
     public override void UpdateParameters(T learningRate)
     {
         // Activation layer has no parameters to update
+        }
+
+    public override Vector<T> GetParameters()
+    {
+        // Activation layers don't have parameters, so return an empty vector
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        _lastInput = null;
     }
 }

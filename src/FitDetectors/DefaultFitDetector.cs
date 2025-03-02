@@ -1,6 +1,6 @@
-﻿using AiDotNet.Models.Results;
+﻿namespace AiDotNet.FitDetectors;
 
-public class DefaultFitDetector<T> : IFitDetector<T>
+public class DefaultFitDetector<T> : FitDetectorBase<T>
 {
     private readonly INumericOperations<T> _numOps;
 
@@ -9,7 +9,7 @@ public class DefaultFitDetector<T> : IFitDetector<T>
         _numOps = MathHelper.GetNumericOperations<T>();
     }
 
-    public FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -23,7 +23,7 @@ public class DefaultFitDetector<T> : IFitDetector<T>
         };
     }
 
-    private FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         T threshold09 = _numOps.FromDouble(0.9);
         T threshold07 = _numOps.FromDouble(0.7);
@@ -47,7 +47,7 @@ public class DefaultFitDetector<T> : IFitDetector<T>
         return FitType.Unstable;
     }
 
-    private T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
         return _numOps.Divide(_numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), 
             evaluationData.TestSet.PredictionStats.R2), _numOps.FromDouble(3));

@@ -9,6 +9,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     private Matrix<T>? _weightsGradient;
     private Vector<T>? _biasesGradient;
 
+    public override bool SupportsTraining => true;
+
     public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
@@ -126,5 +128,65 @@ public class FullyConnectedLayer<T> : LayerBase<T>
 
         _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
         _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _weights.Rows * _weights.Columns + _biases.Length;
+        var parameters = new Vector<T>(totalParams);
+    
+        int index = 0;
+    
+        // Copy weights parameters
+        for (int i = 0; i < _weights.Rows; i++)
+        {
+            for (int j = 0; j < _weights.Columns; j++)
+            {
+                parameters[index++] = _weights[i, j];
+            }
+        }
+    
+        // Copy biases parameters
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            parameters[index++] = _biases[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != _weights.Rows * _weights.Columns + _biases.Length)
+        {
+            throw new ArgumentException($"Expected {_weights.Rows * _weights.Columns + _biases.Length} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set weights parameters
+        for (int i = 0; i < _weights.Rows; i++)
+        {
+            for (int j = 0; j < _weights.Columns; j++)
+            {
+                _weights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set biases parameters
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            _biases[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _weightsGradient = null;
+        _biasesGradient = null;
     }
 }

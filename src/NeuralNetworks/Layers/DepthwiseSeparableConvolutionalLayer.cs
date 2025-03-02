@@ -20,6 +20,8 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     private readonly int _stride;
     private readonly int _padding;
 
+    public override bool SupportsTraining => true;
+
     public DepthwiseSeparableConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth,
                                                 int stride = 1, int padding = 0, IActivationFunction<T>? activation = null)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
@@ -373,5 +375,111 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         {
             return ScalarActivation!.Activate(value);
         }
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
+        var parameters = new Vector<T>(totalParams);
+    
+        int index = 0;
+    
+        // Copy depthwise kernel parameters
+        for (int i = 0; i < _depthwiseKernels.Shape[0]; i++)
+        {
+            for (int j = 0; j < _depthwiseKernels.Shape[1]; j++)
+            {
+                for (int k = 0; k < _depthwiseKernels.Shape[2]; k++)
+                {
+                    for (int l = 0; l < _depthwiseKernels.Shape[3]; l++)
+                    {
+                        parameters[index++] = _depthwiseKernels[i, j, k, l];
+                    }
+                }
+            }
+        }
+    
+        // Copy pointwise kernel parameters
+        for (int i = 0; i < _pointwiseKernels.Shape[0]; i++)
+        {
+            for (int j = 0; j < _pointwiseKernels.Shape[1]; j++)
+            {
+                for (int k = 0; k < _pointwiseKernels.Shape[2]; k++)
+                {
+                    for (int l = 0; l < _pointwiseKernels.Shape[3]; l++)
+                    {
+                        parameters[index++] = _pointwiseKernels[i, j, k, l];
+                    }
+                }
+            }
+        }
+    
+        // Copy bias parameters
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            parameters[index++] = _biases[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
+    
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set depthwise kernel parameters
+        for (int i = 0; i < _depthwiseKernels.Shape[0]; i++)
+        {
+            for (int j = 0; j < _depthwiseKernels.Shape[1]; j++)
+            {
+                for (int k = 0; k < _depthwiseKernels.Shape[2]; k++)
+                {
+                    for (int l = 0; l < _depthwiseKernels.Shape[3]; l++)
+                    {
+                        _depthwiseKernels[i, j, k, l] = parameters[index++];
+                    }
+                }
+            }
+        }
+    
+        // Set pointwise kernel parameters
+        for (int i = 0; i < _pointwiseKernels.Shape[0]; i++)
+        {
+            for (int j = 0; j < _pointwiseKernels.Shape[1]; j++)
+            {
+                for (int k = 0; k < _pointwiseKernels.Shape[2]; k++)
+                {
+                    for (int l = 0; l < _pointwiseKernels.Shape[3]; l++)
+                    {
+                        _pointwiseKernels[i, j, k, l] = parameters[index++];
+                    }
+    }
+}
+        }
+    
+        // Set bias parameters
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            _biases[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastDepthwiseOutput = null;
+        _lastOutput = null;
+        _depthwiseKernelsGradient = null;
+        _pointwiseKernelsGradient = null;
+        _biasesGradient = null;
     }
 }

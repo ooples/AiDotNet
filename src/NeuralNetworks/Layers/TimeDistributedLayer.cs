@@ -6,6 +6,8 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
 
+    public override bool SupportsTraining => _innerLayer.SupportsTraining;
+
     public TimeDistributedLayer(LayerBase<T> innerLayer, IActivationFunction<T>? activationFunction = null)
         : base(CalculateInputShape(innerLayer), CalculateOutputShape(innerLayer), activationFunction ?? new ReLUActivation<T>())
     {
@@ -82,5 +84,21 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _innerLayer.UpdateParameters(learningRate);
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Return the parameters of the inner layer
+        return _innerLayer.GetParameters();
+    }
+
+    public override void ResetState()
+    {
+        // Reset the inner layer's state
+        _innerLayer.ResetState();
+    
+        // Clear cached values
+        _lastInput = null;
+        _lastOutput = null;
     }
 }

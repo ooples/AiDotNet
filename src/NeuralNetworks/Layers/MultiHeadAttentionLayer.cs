@@ -21,6 +21,8 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     private readonly int _headCount;
     private readonly int _headDimension;
 
+    public override bool SupportsTraining => true;
+
     public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IActivationFunction<T>? activationFunction = null)
         : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], activationFunction ?? new LinearActivation<T>())
     {
@@ -157,5 +159,134 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
         _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
         _outputWeights = _outputWeights.Subtract(_outputWeightsGradient.Multiply(learningRate));
         _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _queryWeights.Rows * _queryWeights.Columns +
+                          _keyWeights.Rows * _keyWeights.Columns +
+                          _valueWeights.Rows * _valueWeights.Columns +
+                          _outputWeights.Rows * _outputWeights.Columns +
+                          _outputBias.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy query weights
+        for (int i = 0; i < _queryWeights.Rows; i++)
+        {
+            for (int j = 0; j < _queryWeights.Columns; j++)
+            {
+                parameters[index++] = _queryWeights[i, j];
+            }
+        }
+    
+        // Copy key weights
+        for (int i = 0; i < _keyWeights.Rows; i++)
+        {
+            for (int j = 0; j < _keyWeights.Columns; j++)
+            {
+                parameters[index++] = _keyWeights[i, j];
+            }
+        }
+    
+        // Copy value weights
+        for (int i = 0; i < _valueWeights.Rows; i++)
+        {
+            for (int j = 0; j < _valueWeights.Columns; j++)
+            {
+                parameters[index++] = _valueWeights[i, j];
+            }
+        }
+    
+        // Copy output weights
+        for (int i = 0; i < _outputWeights.Rows; i++)
+        {
+            for (int j = 0; j < _outputWeights.Columns; j++)
+            {
+                parameters[index++] = _outputWeights[i, j];
+            }
+        }
+    
+        // Copy output bias
+        for (int i = 0; i < _outputBias.Length; i++)
+        {
+            parameters[index++] = _outputBias[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _queryWeights.Rows * _queryWeights.Columns +
+                          _keyWeights.Rows * _keyWeights.Columns +
+                          _valueWeights.Rows * _valueWeights.Columns +
+                          _outputWeights.Rows * _outputWeights.Columns +
+                          _outputBias.Length;
+    
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set query weights
+        for (int i = 0; i < _queryWeights.Rows; i++)
+        {
+            for (int j = 0; j < _queryWeights.Columns; j++)
+            {
+                _queryWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set key weights
+        for (int i = 0; i < _keyWeights.Rows; i++)
+        {
+            for (int j = 0; j < _keyWeights.Columns; j++)
+            {
+                _keyWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set value weights
+        for (int i = 0; i < _valueWeights.Rows; i++)
+        {
+            for (int j = 0; j < _valueWeights.Columns; j++)
+            {
+                _valueWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set output weights
+        for (int i = 0; i < _outputWeights.Rows; i++)
+        {
+            for (int j = 0; j < _outputWeights.Columns; j++)
+            {
+                _outputWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set output bias
+        for (int i = 0; i < _outputBias.Length; i++)
+        {
+            _outputBias[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _lastAttentionScores = null;
+    
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputWeightsGradient = null;
+        _outputBiasGradient = null;
     }
 }

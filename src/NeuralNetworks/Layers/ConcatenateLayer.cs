@@ -6,6 +6,8 @@ public class ConcatenateLayer<T> : LayerBase<T>
     private Tensor<T>[]? _lastInputs;
     private Tensor<T>? _lastOutput;
 
+    public override bool SupportsTraining => false;
+
     public ConcatenateLayer(int[][] inputShapes, int axis, IActivationFunction<T>? activationFunction = null)
         : base(inputShapes, CalculateOutputShape(inputShapes, axis), activationFunction ?? new IdentityActivation<T>())
     {
@@ -106,5 +108,17 @@ public class ConcatenateLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         throw new NotSupportedException("ConcatenateLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Concatenate layers don't have parameters, so return an empty vector
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        _lastInputs = null;
+        _lastOutput = null;
     }
 }

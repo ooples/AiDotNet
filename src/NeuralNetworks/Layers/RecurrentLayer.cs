@@ -12,6 +12,8 @@ public class RecurrentLayer<T> : LayerBase<T>
     private Matrix<T>? _hiddenWeightsGradient;
     private Vector<T>? _biasesGradient;
 
+    public override bool SupportsTraining => true;
+
     public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [hiddenSize], activationFunction ?? new TanhActivation<T>())
     {
@@ -187,5 +189,91 @@ public class RecurrentLayer<T> : LayerBase<T>
         _inputWeights = _inputWeights.Subtract(_inputWeightsGradient.Multiply(learningRate));
         _hiddenWeights = _hiddenWeights.Subtract(_hiddenWeightsGradient.Multiply(learningRate));
         _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _inputWeights.Rows * _inputWeights.Columns + 
+                          _hiddenWeights.Rows * _hiddenWeights.Columns + 
+                          _biases.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy input weights
+        for (int i = 0; i < _inputWeights.Rows; i++)
+        {
+            for (int j = 0; j < _inputWeights.Columns; j++)
+            {
+                parameters[index++] = _inputWeights[i, j];
+            }
+        }
+    
+        // Copy hidden weights
+        for (int i = 0; i < _hiddenWeights.Rows; i++)
+        {
+            for (int j = 0; j < _hiddenWeights.Columns; j++)
+            {
+                parameters[index++] = _hiddenWeights[i, j];
+            }
+        }
+    
+        // Copy biases
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            parameters[index++] = _biases[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _inputWeights.Rows * _inputWeights.Columns + 
+                          _hiddenWeights.Rows * _hiddenWeights.Columns + 
+                          _biases.Length;
+    
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set input weights
+        for (int i = 0; i < _inputWeights.Rows; i++)
+        {
+            for (int j = 0; j < _inputWeights.Columns; j++)
+            {
+                _inputWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set hidden weights
+        for (int i = 0; i < _hiddenWeights.Rows; i++)
+        {
+            for (int j = 0; j < _hiddenWeights.Columns; j++)
+            {
+                _hiddenWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set biases
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            _biases[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastHiddenState = null;
+        _lastOutput = null;
+        _inputWeightsGradient = null;
+        _hiddenWeightsGradient = null;
+        _biasesGradient = null;
     }
 }

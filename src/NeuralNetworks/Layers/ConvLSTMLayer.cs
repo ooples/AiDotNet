@@ -29,6 +29,10 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private readonly Dictionary<string, Tensor<T>> _momentums = [];
     private const double MomentumFactor = 0.9;
 
+    private readonly SigmoidActivation<T> _sigmoidActivation = new();
+
+    public override bool SupportsTraining => true;
+
     public ConvLSTMLayer(int[] inputShape, int kernelSize, int filters, int padding = 1, int strides = 1, IActivationFunction<T>? activationFunction = null)
         : base(inputShape, CalculateOutputShape(inputShape, kernelSize, filters, padding, strides), activationFunction ?? new TanhActivation<T>())
     {
@@ -435,5 +439,102 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             // Update parameter
             parameter[i] = NumOps.Subtract(parameter[i], momentum[i]);
         }
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = 0;
+    
+        // Input weights
+        totalParams += _weightsFi.Length;
+        totalParams += _weightsIi.Length;
+        totalParams += _weightsCi.Length;
+        totalParams += _weightsOi.Length;
+    
+        // Hidden weights
+        totalParams += _weightsFh.Length;
+        totalParams += _weightsIh.Length;
+        totalParams += _weightsCh.Length;
+        totalParams += _weightsOh.Length;
+    
+        // Biases
+        totalParams += _biasF.Length;
+        totalParams += _biasI.Length;
+        totalParams += _biasC.Length;
+        totalParams += _biasO.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy input weights
+        CopyTensorToVector(_weightsFi, parameters, ref index);
+        CopyTensorToVector(_weightsIi, parameters, ref index);
+        CopyTensorToVector(_weightsCi, parameters, ref index);
+        CopyTensorToVector(_weightsOi, parameters, ref index);
+    
+        // Copy hidden weights
+        CopyTensorToVector(_weightsFh, parameters, ref index);
+        CopyTensorToVector(_weightsIh, parameters, ref index);
+        CopyTensorToVector(_weightsCh, parameters, ref index);
+        CopyTensorToVector(_weightsOh, parameters, ref index);
+    
+        // Copy biases
+        CopyTensorToVector(_biasF, parameters, ref index);
+        CopyTensorToVector(_biasI, parameters, ref index);
+        CopyTensorToVector(_biasC, parameters, ref index);
+        CopyTensorToVector(_biasO, parameters, ref index);
+    
+        return parameters;
+    }
+
+    private void CopyTensorToVector(Tensor<T> tensor, Vector<T> vector, ref int startIndex)
+    {
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            vector[startIndex++] = tensor[i];
+        }
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int index = 0;
+    
+        // Set input weights
+        CopyVectorToTensor(parameters, _weightsFi, ref index);
+        CopyVectorToTensor(parameters, _weightsIi, ref index);
+        CopyVectorToTensor(parameters, _weightsCi, ref index);
+        CopyVectorToTensor(parameters, _weightsOi, ref index);
+    
+        // Set hidden weights
+        CopyVectorToTensor(parameters, _weightsFh, ref index);
+        CopyVectorToTensor(parameters, _weightsIh, ref index);
+        CopyVectorToTensor(parameters, _weightsCh, ref index);
+        CopyVectorToTensor(parameters, _weightsOh, ref index);
+    
+        // Set biases
+        CopyVectorToTensor(parameters, _biasF, ref index);
+        CopyVectorToTensor(parameters, _biasI, ref index);
+        CopyVectorToTensor(parameters, _biasC, ref index);
+        CopyVectorToTensor(parameters, _biasO, ref index);
+    }
+
+    private static void CopyVectorToTensor(Vector<T> vector, Tensor<T> tensor, ref int startIndex)
+    {
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = vector[startIndex++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        _lastInput = null;
+        _lastHiddenState = null;
+        _lastCellState = null;
+    
+        // Clear gradients
+        _gradients.Clear();
     }
 }

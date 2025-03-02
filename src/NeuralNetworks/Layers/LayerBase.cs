@@ -8,10 +8,41 @@ public abstract class LayerBase<T> : ILayer<T>
     protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
     protected Random Random => new();
     protected Vector<T> Parameters;
+    protected Vector<T>? ParameterGradients;
 
     protected int[] InputShape { get; private set; }
     protected int[][] InputShapes { get; private set; }
     protected int[] OutputShape { get; private set; }
+
+    protected bool IsTrainingMode = true;
+    
+    public abstract bool SupportsTraining { get; }
+    
+    public virtual void SetTrainingMode(bool isTraining)
+    {
+        if (SupportsTraining)
+        {
+            IsTrainingMode = isTraining;
+        }
+    }
+
+    public virtual Vector<T> GetParameterGradients()
+    {
+        if (ParameterGradients == null || ParameterGradients.Length != ParameterCount)
+        {
+            ParameterGradients = new Vector<T>(ParameterCount);
+        }
+
+        return ParameterGradients;
+    }
+    
+    public virtual void ClearGradients()
+    {
+        if (ParameterGradients != null)
+        {
+            ParameterGradients.Fill(NumOps.Zero);
+        }
+    }
 
     protected LayerBase(int[] inputShape, int[] outputShape)
     {
@@ -62,6 +93,31 @@ public abstract class LayerBase<T> : ILayer<T>
     public abstract Tensor<T> Forward(Tensor<T> input);
     public abstract Tensor<T> Backward(Tensor<T> outputGradient);
     public abstract void UpdateParameters(T learningRate);
+
+    public virtual IEnumerable<ActivationType> GetActivationTypes()
+    {
+        if (ScalarActivation != null)
+        {
+            yield return GetActivationTypeFromFunction(ScalarActivation);
+        }
+
+        if (VectorActivation != null)
+        {
+            yield return GetActivationTypeFromFunction(VectorActivation);
+        }
+    }
+
+    private static ActivationType GetActivationTypeFromFunction(object activationFunction)
+    {
+        return activationFunction switch
+        {
+            SoftmaxActivation<T> => ActivationType.Softmax,
+            SigmoidActivation<T> => ActivationType.Sigmoid,
+            ReLUActivation<T> => ActivationType.ReLU,
+            TanhActivation<T> => ActivationType.Tanh,
+            _ => ActivationType.Other
+        };
+    }
 
     public virtual Tensor<T> Forward(params Tensor<T>[] inputs)
     {
@@ -271,4 +327,18 @@ public abstract class LayerBase<T> : ILayer<T>
             Parameters[i] = NumOps.FromDouble(reader.ReadDouble());
         }
     }
+
+    public abstract Vector<T> GetParameters();
+
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
+        }
+
+        Parameters = parameters;
+    }
+
+    public abstract void ResetState();
 }

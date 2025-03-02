@@ -5,6 +5,9 @@ public class PoolingLayer<T> : LayerBase<T>
     public int PoolSize { get; }
     public int Stride { get; }
     public PoolingType Type { get; }
+
+    public override bool SupportsTraining => true;
+
     private Tensor<T>? _lastInput;
     private Tensor<int>? _maxIndices;
 
@@ -126,5 +129,18 @@ public class PoolingLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // Pooling layers don't have trainable parameters, so this method does nothing.
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // PoolingLayer has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        _lastInput = null;
+        _maxIndices = null;
     }
 }

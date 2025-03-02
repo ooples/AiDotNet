@@ -16,33 +16,60 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     private Matrix<T>? _valueWeightsGradient;
     private Vector<T>? _outputBiasGradient;
 
-    private readonly int _headCount;
-    private readonly int _headDimension;
+    private int _headCount;
+    private int _headDimension;
+    private int _embeddingDimension;
+    private int _sequenceLength;
 
-    public SelfAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IActivationFunction<T>? activationFunction = null)
-        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], activationFunction ?? new LinearActivation<T>())
+    public override bool SupportsTraining => true;
+
+    public SelfAttentionLayer(
+        int sequenceLength, 
+        int embeddingDimension, 
+        int headCount = 8, 
+        IActivationFunction<T>? activationFunction = null)
+        : base(
+            [sequenceLength, embeddingDimension], 
+            [sequenceLength, embeddingDimension], 
+            activationFunction ?? new LinearActivation<T>())
     {
-        _headCount = headCount;
-        _headDimension = embeddingDimension / headCount;
+        _queryWeights = Matrix<T>.Empty();
+        _keyWeights = Matrix<T>.Empty();
+        _valueWeights = Matrix<T>.Empty();
+        _outputBias = Vector<T>.Empty();
 
-        _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _keyWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _valueWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _outputBias = new Vector<T>(embeddingDimension);
-
-        InitializeParameters();
+        InitializeLayer(sequenceLength, embeddingDimension, headCount);
     }
 
-    public SelfAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction ?? new LinearActivation<T>())
+    public SelfAttentionLayer(
+        int sequenceLength, 
+        int embeddingDimension, 
+        int headCount = 8, 
+        IVectorActivationFunction<T>? vectorActivationFunction = null)
+        : base(
+            [sequenceLength, embeddingDimension], 
+            [sequenceLength, embeddingDimension], 
+            vectorActivationFunction ?? new LinearActivation<T>())
     {
+        _queryWeights = Matrix<T>.Empty();
+        _keyWeights = Matrix<T>.Empty();
+        _valueWeights = Matrix<T>.Empty();
+        _outputBias = Vector<T>.Empty();
+
+        InitializeLayer(sequenceLength, embeddingDimension, headCount);
+    }
+
+    private void InitializeLayer(int sequenceLength, int embeddingDimension, int headCount)
+    {
+        _sequenceLength = sequenceLength;
+        _embeddingDimension = embeddingDimension;
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
 
-        _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _keyWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _valueWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _outputBias = new Vector<T>(embeddingDimension);
+        if (embeddingDimension % headCount != 0)
+        {
+            throw new ArgumentException("Embedding dimension must be divisible by the number of heads.");
+        }
 
         InitializeParameters();
     }
@@ -169,5 +196,112 @@ public class SelfAttentionLayer<T> : LayerBase<T>
         _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
         _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
         _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _queryWeights.Rows * _queryWeights.Columns +
+                          _keyWeights.Rows * _keyWeights.Columns +
+                          _valueWeights.Rows * _valueWeights.Columns +
+                          _outputBias.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy query weights
+        for (int i = 0; i < _queryWeights.Rows; i++)
+        {
+            for (int j = 0; j < _queryWeights.Columns; j++)
+            {
+                parameters[index++] = _queryWeights[i, j];
+            }
+        }
+    
+        // Copy key weights
+        for (int i = 0; i < _keyWeights.Rows; i++)
+        {
+            for (int j = 0; j < _keyWeights.Columns; j++)
+            {
+                parameters[index++] = _keyWeights[i, j];
+            }
+        }
+    
+        // Copy value weights
+        for (int i = 0; i < _valueWeights.Rows; i++)
+        {
+            for (int j = 0; j < _valueWeights.Columns; j++)
+            {
+                parameters[index++] = _valueWeights[i, j];
+            }
+        }
+    
+        // Copy output bias
+        for (int i = 0; i < _outputBias.Length; i++)
+        {
+            parameters[index++] = _outputBias[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _queryWeights.Rows * _queryWeights.Columns +
+                          _keyWeights.Rows * _keyWeights.Columns +
+                          _valueWeights.Rows * _valueWeights.Columns +
+                          _outputBias.Length;
+    
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set query weights
+        for (int i = 0; i < _queryWeights.Rows; i++)
+        {
+            for (int j = 0; j < _queryWeights.Columns; j++)
+            {
+                _queryWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set key weights
+        for (int i = 0; i < _keyWeights.Rows; i++)
+        {
+            for (int j = 0; j < _keyWeights.Columns; j++)
+            {
+                _keyWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set value weights
+        for (int i = 0; i < _valueWeights.Rows; i++)
+        {
+            for (int j = 0; j < _valueWeights.Columns; j++)
+            {
+                _valueWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set output bias
+        for (int i = 0; i < _outputBias.Length; i++)
+        {
+            _outputBias[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _lastAttentionScores = null;
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputBiasGradient = null;
     }
 }

@@ -14,6 +14,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> LastOutput { get; set; }
     private readonly Random _random;
 
+    public override bool SupportsTraining => true;
+
     public ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride = 1, int padding = 0, 
                               IActivationFunction<T>? activation = null)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth), 
@@ -56,7 +58,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         InitializeWeights();
     }
 
-    public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0, IActivationFunction<T>? activation = null)
+    public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0, 
+        IActivationFunction<T>? activation = null)
     {
         if (inputShape.Length != 3)
         {
@@ -79,7 +82,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         );
     }
 
-    public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0, IVectorActivationFunction<T>? vectorActivation = null)
+    public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0, 
+        IVectorActivationFunction<T>? vectorActivation = null)
     {
         if (inputShape.Length != 3)
         {
@@ -189,7 +193,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
                 {
                     for (int l = 0; l < KernelSize; l++)
                         {
-                        Kernels[i, j, k, l] = NumOps.Multiply(scale, NumOps.FromDouble(_random.NextDouble() * 2 - 1));
+                        Kernels[i, j, k, l] = NumOps.Multiply(scale, NumOps.FromDouble(Random.NextDouble() * 2 - 1));
                     }
                 }
             }
@@ -332,5 +336,75 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             T update = NumOps.Multiply(learningRate, Biases[o]);
             Biases[o] = NumOps.Subtract(Biases[o], update);
         }
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = Kernels.Length + Biases.Length;
+        var parameters = new Vector<T>(totalParams);
+    
+        int index = 0;
+    
+        // Copy kernel parameters
+        for (int o = 0; o < OutputDepth; o++)
+        {
+            for (int i = 0; i < InputDepth; i++)
+            {
+                for (int ky = 0; ky < KernelSize; ky++)
+                {
+                    for (int kx = 0; kx < KernelSize; kx++)
+                    {
+                        parameters[index++] = Kernels[o, i, ky, kx];
+                    }
+                }
+            }
+        }
+    
+        // Copy bias parameters
+        for (int o = 0; o < OutputDepth; o++)
+        {
+            parameters[index++] = Biases[o];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != Kernels.Length + Biases.Length)
+        {
+            throw new ArgumentException($"Expected {Kernels.Length + Biases.Length} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set kernel parameters
+        for (int o = 0; o < OutputDepth; o++)
+        {
+            for (int i = 0; i < InputDepth; i++)
+            {
+                for (int ky = 0; ky < KernelSize; ky++)
+                {
+                    for (int kx = 0; kx < KernelSize; kx++)
+                    {
+                        Kernels[o, i, ky, kx] = parameters[index++];
+                    }
+                }
+            }
+        }
+    
+        // Set bias parameters
+        for (int o = 0; o < OutputDepth; o++)
+        {
+            Biases[o] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        LastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        LastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
     }
 }

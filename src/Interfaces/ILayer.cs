@@ -11,4 +11,12 @@ public interface ILayer<T>
     int ParameterCount { get; }
     void Serialize(BinaryWriter writer);
     void Deserialize(BinaryReader reader);
+    IEnumerable<ActivationType> GetActivationTypes();
+    Vector<T> GetParameters();
+    bool SupportsTraining { get; }
+    void SetTrainingMode(bool isTraining);
+    Vector<T> GetParameterGradients();
+    void ClearGradients();
+    void SetParameters(Vector<T> parameters);
+    void ResetState();
 }

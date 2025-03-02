@@ -16,6 +16,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private Vector<T>? _betaGradient;
     private bool _isTraining;
 
+    public override bool SupportsTraining => true;
+
     public BatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9)
         : base([featureSize], [featureSize])
     {
@@ -36,7 +38,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
 
         var output = new Tensor<T>(input.Shape);
 
-        if (_isTraining)
+        if (IsTrainingMode)
         {
             _lastMean = ComputeMean(input);
             _lastVariance = ComputeVariance(input, _lastMean);
@@ -192,8 +194,41 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         return runningStatistic.Multiply(_momentum).Add(batchStatistic.Multiply(NumOps.Subtract(NumOps.One, _momentum)));
     }
 
-    public void SetTrainingMode(bool isTraining)
+    public override Vector<T> GetParameters()
     {
-        _isTraining = isTraining;
+        // Concatenate gamma and beta parameters
+        int featureSize = InputShape[0];
+        var parameters = new Vector<T>(featureSize * 2);
+        
+        for (int i = 0; i < featureSize; i++)
+        {
+            parameters[i] = _gamma[i];
+            parameters[i + featureSize] = _beta[i];
+        }
+        
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int featureSize = InputShape[0];
+        if (parameters.Length != featureSize * 2)
+            throw new ArgumentException($"Expected {featureSize * 2} parameters, but got {parameters.Length}");
+        
+        for (int i = 0; i < featureSize; i++)
+        {
+            _gamma[i] = parameters[i];
+            _beta[i] = parameters[i + featureSize];
+        }
+    }
+
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastNormalized = null;
+        _lastMean = null;
+        _lastVariance = null;
+        _gammaGradient = null;
+        _betaGradient = null;
     }
 }

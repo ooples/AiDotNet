@@ -13,6 +13,8 @@ public class CapsuleLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
     private Tensor<T>? _lastCouplingCoefficients;
 
+    public override bool SupportsTraining => true;
+
     public CapsuleLayer(int inputCapsules, int inputDimension, int numCapsules, int capsuleDimension, int numRoutingIterations, IActivationFunction<T>? activationFunction = null)
         : base([inputCapsules, inputDimension], [numCapsules, capsuleDimension], activationFunction ?? new SquashActivation<T>())
     {
@@ -192,9 +194,59 @@ public class CapsuleLayer<T> : LayerBase<T>
         _bias = _bias.Subtract(_biasGradient.Multiply(learningRate));
     }
 
-    private Tensor<T> ApplySoftmax(Tensor<T> input)
+    private static Tensor<T> ApplySoftmax(Tensor<T> input)
     {
         var softmax = new SoftmaxActivation<T>();
         return softmax.Activate(input);
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Flatten the transformation matrix and concatenate with bias
+        int matrixSize = _transformationMatrix.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        var parameters = new Vector<T>(matrixSize + _bias.Length);
+        
+        // Copy transformation matrix parameters
+        for (int i = 0; i < matrixSize; i++)
+        {
+            parameters[i] = _transformationMatrix.GetFlatIndexValue(i);
+        }
+        
+        // Copy bias parameters
+        for (int i = 0; i < _bias.Length; i++)
+        {
+            parameters[matrixSize + i] = _bias[i];
+        }
+        
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int matrixSize = _transformationMatrix.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        
+        if (parameters.Length != matrixSize + _bias.Length)
+            throw new ArgumentException($"Expected {matrixSize + _bias.Length} parameters, but got {parameters.Length}");
+        
+        // Set transformation matrix parameters
+        for (int i = 0; i < matrixSize; i++)
+        {
+            _transformationMatrix.SetFlatIndex(i, parameters[i]);
+        }
+        
+        // Set bias parameters
+        for (int i = 0; i < _bias.Length; i++)
+        {
+            _bias[i] = parameters[matrixSize + i];
+        }
+    }
+
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastOutput = null;
+        _lastCouplingCoefficients = null;
+        _transformationMatrixGradient = null;
+        _biasGradient = null;
     }
 }

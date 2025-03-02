@@ -7,6 +7,8 @@ public class UpsamplingLayer<T> : LayerBase<T>
     private readonly int _scaleFactor;
     private Tensor<T>? _lastInput;
 
+    public override bool SupportsTraining => true;
+
     public UpsamplingLayer(int[] inputShape, int scaleFactor)
         : base(inputShape, CalculateOutputShape(inputShape, scaleFactor))
     {
@@ -15,12 +17,12 @@ public class UpsamplingLayer<T> : LayerBase<T>
 
     private static int[] CalculateOutputShape(int[] inputShape, int scaleFactor)
     {
-        return new[]
-        {
+        return
+        [
             inputShape[0],
             inputShape[1] * scaleFactor,
             inputShape[2] * scaleFactor
-        };
+        ];
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
@@ -33,7 +35,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
         int outputHeight = inputHeight * _scaleFactor;
         int outputWidth = inputWidth * _scaleFactor;
 
-        var output = new Tensor<T>(new[] { batchSize, channels, outputHeight, outputWidth });
+        var output = new Tensor<T>([batchSize, channels, outputHeight, outputWidth]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -97,5 +99,17 @@ public class UpsamplingLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // No parameters to update in this layer
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // This layer doesn't have any trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // Clear the cached input
+        _lastInput = null;
     }
 }

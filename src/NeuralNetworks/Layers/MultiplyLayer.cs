@@ -5,6 +5,8 @@ public class MultiplyLayer<T> : LayerBase<T>
     private Tensor<T>[]? _lastInputs;
     private Tensor<T>? _lastOutput;
 
+    public override bool SupportsTraining => true;
+
     public MultiplyLayer(int[][] inputShapes, IActivationFunction<T>? activationFunction = null)
         : base(inputShapes, inputShapes[0], activationFunction ?? new LinearActivation<T>())
     {
@@ -85,5 +87,18 @@ public class MultiplyLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // No parameters to update in this layer
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // MultiplyLayer has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        _lastInputs = null;
+        _lastOutput = null;
     }
 }

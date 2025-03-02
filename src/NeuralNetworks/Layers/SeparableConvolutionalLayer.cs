@@ -23,6 +23,8 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _pointwiseKernelsVelocity;
     private Vector<T>? _biasesVelocity;
 
+    public override bool SupportsTraining => true;
+
     public SeparableConvolutionalLayer(int[] inputShape, int outputDepth, int kernelSize, int stride = 1, int padding = 0, IActivationFunction<T>? scalarActivation = null)
         : base(inputShape, CalculateOutputShape(inputShape, outputDepth, kernelSize, stride, padding), scalarActivation ?? new IdentityActivation<T>())
     {
@@ -294,5 +296,79 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         _depthwiseKernelsGradient = null;
         _pointwiseKernelsGradient = null;
         _biasesGradient = null;
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy depthwise kernel parameters
+        for (int i = 0; i < _depthwiseKernels.Length; i++)
+        {
+            parameters[index++] = _depthwiseKernels[i];
+        }
+    
+        // Copy pointwise kernel parameters
+        for (int i = 0; i < _pointwiseKernels.Length; i++)
+        {
+            parameters[index++] = _pointwiseKernels[i];
+        }
+    
+        // Copy bias parameters
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            parameters[index++] = _biases[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
+    
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set depthwise kernel parameters
+        for (int i = 0; i < _depthwiseKernels.Length; i++)
+        {
+            _depthwiseKernels[i] = parameters[index++];
+        }
+    
+        // Set pointwise kernel parameters
+        for (int i = 0; i < _pointwiseKernels.Length; i++)
+        {
+            _pointwiseKernels[i] = parameters[index++];
+        }
+    
+        // Set bias parameters
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            _biases[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _depthwiseKernelsGradient = null;
+        _pointwiseKernelsGradient = null;
+        _biasesGradient = null;
+    
+        // Optionally reset velocity tensors
+        _depthwiseKernelsVelocity = null;
+        _pointwiseKernelsVelocity = null;
+        _biasesVelocity = null;
     }
 }

@@ -7,6 +7,8 @@ public class CroppingLayer<T> : LayerBase<T>
     private readonly int[] _cropLeft;
     private readonly int[] _cropRight;
 
+    public override bool SupportsTraining => false;
+
     public CroppingLayer(
         int[] inputShape,
         int[] cropTop,
@@ -102,5 +104,16 @@ public class CroppingLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // No parameters to update in a cropping layer
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Cropping layer has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // No state to reset in a cropping layer
     }
 }

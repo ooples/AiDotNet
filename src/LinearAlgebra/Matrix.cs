@@ -180,6 +180,41 @@ public class Matrix<T> : MatrixBase<T>
         return matrix;
     }
 
+    public static Matrix<T> CreateDefault(int rows, int columns, T defaultValue)
+    {
+        var matrix = new Matrix<T>(rows, columns);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                matrix[i, j] = defaultValue;
+            }
+        }
+
+        return matrix;
+    }
+
+    public static Matrix<T> CreateRandom(int rows, int columns, double min = -1.0, double max = 1.0)
+    {
+        if (min >= max)
+            throw new ArgumentException("Minimum value must be less than maximum value");
+        
+        var random = new Random();
+        var matrix = new Matrix<T>(rows, columns);
+    
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                // Generate random value between min and max
+                double randomValue = random.NextDouble() * (max - min) + min;
+                matrix[i, j] = NumOps.FromDouble(randomValue);
+            }
+        }
+    
+        return matrix;
+    }
+
     public static Matrix<T> BlockDiagonal(params Matrix<T>[] matrices)
     {
         int totalRows = matrices.Sum(m => m.Rows);
