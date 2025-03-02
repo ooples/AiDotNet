@@ -1,4 +1,3 @@
-
 namespace AiDotNet.NeuralNetworks;
 
 public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
@@ -8,7 +7,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         if (architecture.InputType != InputType.ThreeDimensional)
         {
             throw new ArgumentException("Convolutional Neural Network requires three-dimensional input.");
-    }
+        }
     }
 
     protected override void InitializeLayers()
@@ -23,20 +22,18 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultCNNLayers(Architecture));
-            }
+        }
     }
 
     public override Vector<T> Predict(Vector<T> input)
-            {
+    {
         // Convert the input Vector to a Tensor with the correct shape
         var inputShape = Architecture.GetInputShape();
         var totalSize = inputShape.Aggregate(1, (a, b) => a * b);
 
         if (input.Length != totalSize)
-                {
+        {
             throw new ArgumentException("Input vector length must match the product of input dimensions.");
-                }
-            }
         }
 
         var inputTensor = new Tensor<T>(inputShape, input);
@@ -51,7 +48,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     public Tensor<T> Forward(Tensor<T> input)
     {
         if (!input.Shape.SequenceEqual(Architecture.GetInputShape()))
-    {
+        {
             throw new ArgumentException("Input shape does not match the expected input shape.");
         }
 
@@ -60,7 +57,8 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             output = layer.Forward(output);
         }
-        return output;
+
+            return output;
         }
 
     public Tensor<T> Backward(Tensor<T> outputGradient)

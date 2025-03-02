@@ -5,8 +5,6 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     private readonly T _mean;
     private readonly T _standardDeviation;
     private Tensor<T>? _lastNoise;
-    private readonly Random _random;
-    private bool _isTraining;
 
     public override bool SupportsTraining => false;
 
@@ -18,18 +16,6 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     {
         _mean = NumOps.FromDouble(mean);
         _standardDeviation = NumOps.FromDouble(standardDeviation);
-        _random = new Random();
-        _isTraining = true;
-    }
-
-    public void SetTrainingMode(bool isTraining)
-    {
-        _isTraining = isTraining;
-    }
-
-    public bool IsTraining()
-    {
-        return _isTraining;
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
