@@ -2,11 +2,8 @@
 
 public class DefaultFitDetector<T> : FitDetectorBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
-
     public DefaultFitDetector()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)

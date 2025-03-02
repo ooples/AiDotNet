@@ -360,8 +360,6 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         return (dxt, dprevH, dprevC, cellGrads);
     }
 
-    private readonly SigmoidActivation<T> _sigmoidActivation = new SigmoidActivation<T>();
-
     private (Tensor<T> f, Tensor<T> i, Tensor<T> c, Tensor<T> o, Tensor<T> newC, Tensor<T> newH) ForwardStep(
     Tensor<T> xt, Tensor<T> prevH, Tensor<T> prevC)
     {
