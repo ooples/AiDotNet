@@ -22,6 +22,8 @@ public class HighwayLayer<T> : LayerBase<T>
     private readonly IVectorActivationFunction<T>? _vectorTransformActivation;
     private readonly IVectorActivationFunction<T>? _vectorGateActivation;
 
+    public override bool SupportsTraining => true;
+
     public HighwayLayer(int inputDimension, IActivationFunction<T>? transformActivation = null, IActivationFunction<T>? gateActivation = null)
         : base([inputDimension], [inputDimension], transformActivation ?? new TanhActivation<T>())
     {
@@ -164,5 +166,107 @@ public class HighwayLayer<T> : LayerBase<T>
         _transformBias = _transformBias.Subtract(_transformBiasGradient.Multiply(learningRate));
         _gateWeights = _gateWeights.Subtract(_gateWeightsGradient.Multiply(learningRate));
         _gateBias = _gateBias.Subtract(_gateBiasGradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _transformWeights.Rows * _transformWeights.Columns + 
+                          _transformBias.Length + 
+                          _gateWeights.Rows * _gateWeights.Columns + 
+                          _gateBias.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy transform weights parameters
+        for (int i = 0; i < _transformWeights.Rows; i++)
+        {
+            for (int j = 0; j < _transformWeights.Columns; j++)
+            {
+                parameters[index++] = _transformWeights[i, j];
+            }
+        }
+    
+        // Copy transform bias parameters
+        for (int i = 0; i < _transformBias.Length; i++)
+        {
+            parameters[index++] = _transformBias[i];
+        }
+    
+        // Copy gate weights parameters
+        for (int i = 0; i < _gateWeights.Rows; i++)
+        {
+            for (int j = 0; j < _gateWeights.Columns; j++)
+            {
+                parameters[index++] = _gateWeights[i, j];
+            }
+        }
+    
+        // Copy gate bias parameters
+        for (int i = 0; i < _gateBias.Length; i++)
+        {
+            parameters[index++] = _gateBias[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int expectedLength = _transformWeights.Rows * _transformWeights.Columns + 
+                             _transformBias.Length + 
+                             _gateWeights.Rows * _gateWeights.Columns + 
+                             _gateBias.Length;
+    
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set transform weights parameters
+        for (int i = 0; i < _transformWeights.Rows; i++)
+        {
+            for (int j = 0; j < _transformWeights.Columns; j++)
+            {
+                _transformWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set transform bias parameters
+        for (int i = 0; i < _transformBias.Length; i++)
+        {
+            _transformBias[i] = parameters[index++];
+        }
+    
+        // Set gate weights parameters
+        for (int i = 0; i < _gateWeights.Rows; i++)
+        {
+            for (int j = 0; j < _gateWeights.Columns; j++)
+            {
+                _gateWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set gate bias parameters
+        for (int i = 0; i < _gateBias.Length; i++)
+        {
+            _gateBias[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _lastTransformOutput = null;
+        _lastGateOutput = null;
+        _transformWeightsGradient = null;
+        _transformBiasGradient = null;
+        _gateWeightsGradient = null;
+        _gateBiasGradient = null;
     }
 }

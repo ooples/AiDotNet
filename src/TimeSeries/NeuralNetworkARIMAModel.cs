@@ -28,30 +28,33 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 
     private NeuralNetwork<T> CreateDefaultNeuralNetwork()
     {
-        var layerSizes = new List<int> 
-        { 
-            _nnarimaOptions.LaggedPredictions + _nnarimaOptions.ExogenousVariables, 
-            10, // Hidden layer with 10 neurons
-            1   // Output layer with 1 neuron
-        };
+        // Define input and output dimensions
+        int inputSize = _nnarimaOptions.LaggedPredictions + _nnarimaOptions.ExogenousVariables;
+        int hiddenSize = 10;
+        int outputSize = 1;
 
-        var activationFunctions = new List<IActivationFunction<T>>
-        {
-            new ReLUActivation<T>(),
-        };
-
-        var vectorActivationFunctions = new List<IVectorActivationFunction<T>>
-        {
-            new SoftmaxActivation<T>(),
-        };
+        // Create layers directly
+        var inputLayer = new InputLayer<T>(inputSize);
+    
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> linearActivation = new LinearActivation<T>();
+    
+        var hiddenLayer = new DenseLayer<T>(inputSize, hiddenSize, activationFunction: reluActivation);
+        var outputLayer = new DenseLayer<T>(hiddenSize, outputSize, activationFunction: linearActivation);
 
         var defaultArchitecture = new NeuralNetworkArchitecture<T>(
-            layerSizes,
-            activationFunctions,
-            vectorActivationFunctions
+            InputType.OneDimensional,           // Input type
+            NeuralNetworkTaskType.Regression,   // Task type
+            NetworkComplexity.Simple,           // Network complexity,
+            layers: new List<ILayer<T>>         // Default layers
+            {
+                inputLayer,
+                hiddenLayer,
+                outputLayer
+            }
         );
 
-        return new NeuralNetwork<T>(defaultArchitecture);
+        return new NeuralNetwork<T>(architecture: defaultArchitecture);
     }
 
     public override void Train(Matrix<T> x, Vector<T> y)

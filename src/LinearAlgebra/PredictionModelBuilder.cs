@@ -5,6 +5,7 @@ global using AiDotNet.Optimizers;
 global using AiDotNet.Normalizers;
 global using AiDotNet.OutlierRemoval;
 global using AiDotNet.DataProcessor;
+global using AiDotNet.FitDetectors;
 
 namespace AiDotNet.LinearAlgebra;
 

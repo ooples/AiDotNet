@@ -4,35 +4,21 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
 {
     public NeuralNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
     {
+        InitializeLayers();
     }
 
     protected override void InitializeLayers()
     {
-        if (Architecture.LayerSizes.Count < 2)
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            throw new InvalidOperationException("The network must have at least an input and an output layer.");
+            // Use the layers provided by the user
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
         }
-
-        for (int i = 0; i < Architecture.LayerSizes.Count - 1; i++)
+        else
         {
-            if (Architecture.CustomLayers != null && i < Architecture.CustomLayers.Count)
-            {
-                Layers.Add(Architecture.CustomLayers[i]);
-            }
-            else
-            {
-                int inputSize = Architecture.LayerSizes[i];
-                int outputSize = Architecture.LayerSizes[i + 1];
-
-                // Add Dense Layer
-                Layers.Add(new DenseLayer<T>(inputSize, outputSize));
-
-                // Add Activation Layer
-                IActivationFunction<T> activation = i == Architecture.LayerSizes.Count - 2 
-                    ? new SoftmaxActivation<T>() 
-                    : new ReLUActivation<T>();
-                Layers.Add(new ActivationLayer<T>(new[] { outputSize }, activation));
-            }
+            // Use default layer configuration if no layers are provided
+            Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralNetworkLayers(Architecture));
         }
     }
 

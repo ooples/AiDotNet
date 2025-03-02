@@ -12,6 +12,8 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     private Vector<T>? _gammaGradient;
     private Vector<T>? _betaGradient;
 
+    public override bool SupportsTraining => true;
+
     public LayerNormalizationLayer(int featureSize, double epsilon = 1e-5)
         : base([featureSize], [featureSize])
     {
@@ -116,5 +118,63 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
 
         _gamma = _gamma.Subtract(_gammaGradient.Multiply(learningRate));
         _beta = _beta.Subtract(_betaGradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _gamma.Length + _beta.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy gamma parameters
+        for (int i = 0; i < _gamma.Length; i++)
+        {
+            parameters[index++] = _gamma[i];
+        }
+    
+        // Copy beta parameters
+        for (int i = 0; i < _beta.Length; i++)
+        {
+            parameters[index++] = _beta[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _gamma.Length + _beta.Length;
+    
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set gamma parameters
+        for (int i = 0; i < _gamma.Length; i++)
+        {
+            _gamma[i] = parameters[index++];
+        }
+    
+        // Set beta parameters
+        for (int i = 0; i < _beta.Length; i++)
+        {
+            _beta[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastNormalized = null;
+        _lastMean = null;
+        _lastStd = null;
+        _gammaGradient = null;
+        _betaGradient = null;
     }
 }

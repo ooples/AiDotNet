@@ -56,4 +56,25 @@ public static class SerializationExtensions
             return reader.ReadBoolean();
         throw new ArgumentException($"Unsupported type: {type}");
     }
+
+    public static int[] ReadInt32Array(this BinaryReader reader)
+    {
+        int length = reader.ReadInt32();
+        int[] array = new int[length];
+        for (int i = 0; i < length; i++)
+        {
+            array[i] = reader.ReadInt32();
+        }
+
+        return array;
+    }
+
+    public static void WriteInt32Array(this BinaryWriter writer, int[] array)
+    {
+        writer.Write(array.Length);
+        foreach (int value in array)
+        {
+            writer.Write(value);
+        }
+    }
 }

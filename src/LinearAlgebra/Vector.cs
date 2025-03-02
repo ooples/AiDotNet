@@ -121,13 +121,12 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
 
     public T Norm()
     {
-        return MathHelper.GetNumericOperations<T>().Sqrt(this.DotProduct(this));
+        return NumOps.Sqrt(this.DotProduct(this));
     }
 
     public new Vector<T> Divide(T scalar)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return new Vector<T>(this.Select(x => numOps.Divide(x, scalar)));
+        return new Vector<T>(this.Select(x => NumOps.Divide(x, scalar)));
     }
 
     protected override VectorBase<T> CreateInstance(int size)
@@ -226,11 +225,10 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
 
         int maxIndex = 0;
         T maxValue = this[0];
-        var numOps = MathHelper.GetNumericOperations<T>();
 
         for (int i = 1; i < this.Length; i++)
         {
-            if (numOps.GreaterThan(this[i], maxValue))
+            if (NumOps.GreaterThan(this[i], maxValue))
             {
                 maxValue = this[i];
                 maxIndex = i;
@@ -244,14 +242,13 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     {
         int m = this.Length;
         int n = other.Length;
-        var numOps = MathHelper.GetNumericOperations<T>();
         Matrix<T> result = new(m, n);
 
         for (int i = 0; i < m; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                result[i, j] = numOps.Multiply(this[i], other[j]);
+                result[i, j] = NumOps.Multiply(this[i], other[j]);
             }
         }
 
@@ -293,6 +290,24 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
             vector[i] = NumOps.FromDouble(random.NextDouble());
         }
 
+        return vector;
+    }
+
+    public static Vector<T> CreateRandom(int size, double min = -1.0, double max = 1.0)
+    {
+        if (min >= max)
+            throw new ArgumentException("Minimum value must be less than maximum value");
+        
+        var random = new Random();
+        var vector = new Vector<T>(size);
+    
+        for (int i = 0; i < size; i++)
+        {
+            // Generate random value between min and max
+            double randomValue = random.NextDouble() * (max - min) + min;
+            vector[i] = NumOps.FromDouble(randomValue);
+        }
+    
         return vector;
     }
 
@@ -381,6 +396,14 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return NonZeroIndices().Count();
     }
 
+    public void Fill(T value)
+    {
+        for (int i = 0; i < Length; i++)
+        {
+            this[i] = value;
+        }
+    }
+
     public static Vector<T> Concatenate(params Vector<T>[] vectors)
     {
         int totalSize = vectors.Sum(v => v.Length);
@@ -394,6 +417,20 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
                 result[offset + i] = vector[i];
             }
             offset += vector.Length;
+        }
+
+        return result;
+    }
+
+    public static Vector<T> Concatenate(List<Vector<T>> vectors)
+    {
+        if (vectors.Count == 0)
+            return new Vector<T>(0);
+            
+        Vector<T> result = vectors[0];
+        for (int i = 1; i < vectors.Count; i++)
+        {
+            result = Vector<T>.Concatenate(result, vectors[i]);
         }
 
         return result;

@@ -21,6 +21,8 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
     private readonly int _outputHeight;
     private readonly int _outputWidth;
 
+    public override bool SupportsTraining => true;
+
     public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], activationFunction ?? new TanhActivation<T>())
     {
@@ -164,6 +166,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
                 grid[i, j, 1] = NumOps.FromDouble((double)i / (_outputHeight - 1) * 2 - 1);
             }
         }
+
         return grid;
     }
 
@@ -427,5 +430,106 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
         _localizationBias1 = _localizationBias1.Subtract(_localizationBias1Gradient.Multiply(learningRate));
         _localizationWeights2 = _localizationWeights2.Subtract(_localizationWeights2Gradient.Multiply(learningRate));
         _localizationBias2 = _localizationBias2.Subtract(_localizationBias2Gradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _localizationWeights1.Rows * _localizationWeights1.Columns +
+                          _localizationBias1.Length +
+                          _localizationWeights2.Rows * _localizationWeights2.Columns +
+                          _localizationBias2.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy localization weights1
+        for (int i = 0; i < _localizationWeights1.Rows; i++)
+        {
+            for (int j = 0; j < _localizationWeights1.Columns; j++)
+            {
+                parameters[index++] = _localizationWeights1[i, j];
+            }
+        }
+    
+        // Copy localization bias1
+        for (int i = 0; i < _localizationBias1.Length; i++)
+        {
+            parameters[index++] = _localizationBias1[i];
+        }
+    
+        // Copy localization weights2
+        for (int i = 0; i < _localizationWeights2.Rows; i++)
+        {
+            for (int j = 0; j < _localizationWeights2.Columns; j++)
+            {
+                parameters[index++] = _localizationWeights2[i, j];
+            }
+        }
+    
+        // Copy localization bias2
+        for (int i = 0; i < _localizationBias2.Length; i++)
+        {
+            parameters[index++] = _localizationBias2[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _localizationWeights1.Rows * _localizationWeights1.Columns +
+                          _localizationBias1.Length +
+                          _localizationWeights2.Rows * _localizationWeights2.Columns +
+                          _localizationBias2.Length;
+    
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set localization weights1
+        for (int i = 0; i < _localizationWeights1.Rows; i++)
+        {
+            for (int j = 0; j < _localizationWeights1.Columns; j++)
+            {
+                _localizationWeights1[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set localization bias1
+        for (int i = 0; i < _localizationBias1.Length; i++)
+        {
+            _localizationBias1[i] = parameters[index++];
+        }
+    
+        // Set localization weights2
+        for (int i = 0; i < _localizationWeights2.Rows; i++)
+        {
+            for (int j = 0; j < _localizationWeights2.Columns; j++)
+            {
+                _localizationWeights2[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set localization bias2
+        for (int i = 0; i < _localizationBias2.Length; i++)
+        {
+            _localizationBias2[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _lastTransformationMatrix = null;
+        _localizationWeights1Gradient = null;
+        _localizationBias1Gradient = null;
+        _localizationWeights2Gradient = null;
+        _localizationBias2Gradient = null;
     }
 }

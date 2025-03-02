@@ -1,4 +1,4 @@
-namespace AiDotNet.RadialBasisFunctions;
+﻿namespace AiDotNet.RadialBasisFunctions;
 
 public class ExponentialRBF<T> : IRadialBasisFunction<T>
 {
@@ -15,5 +15,19 @@ public class ExponentialRBF<T> : IRadialBasisFunction<T>
     {
         T negativeEpsilonR = _numOps.Multiply(_numOps.Negate(_epsilon), r);
         return _numOps.Exp(negativeEpsilonR);
+    }
+
+    public T ComputeDerivative(T r)
+    {
+        // Derivative with respect to r: -ε * exp(-ε*r)
+        T negativeEpsilon = _numOps.Negate(_epsilon);
+        return _numOps.Multiply(negativeEpsilon, Compute(r));
+    }
+
+    public T ComputeWidthDerivative(T r)
+    {
+        // Derivative with respect to ε: -r * exp(-ε*r)
+        T negativeR = _numOps.Negate(r);
+        return _numOps.Multiply(negativeR, Compute(r));
     }
 }

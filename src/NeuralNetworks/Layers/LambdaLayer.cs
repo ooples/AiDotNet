@@ -7,6 +7,8 @@ public class LambdaLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
 
+    public override bool SupportsTraining => _backwardFunction != null;
+
     public LambdaLayer(int[] inputShape, int[] outputShape, 
                        Func<Tensor<T>, Tensor<T>> forwardFunction, 
                        Func<Tensor<T>, Tensor<T>, Tensor<T>>? backwardFunction = null,
@@ -108,5 +110,18 @@ public class LambdaLayer<T> : LayerBase<T>
     private Tensor<T> ApplyVectorActivationDerivative(Tensor<T> gradient, Tensor<T> output)
     {
         return gradient.ElementwiseMultiply(VectorActivation!.Derivative(output));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // LambdaLayer typically has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        _lastInput = null;
+        _lastOutput = null;
     }
 }

@@ -19,6 +19,8 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     private readonly T _momentumFactor;
     private readonly T _weightDecay;
 
+    public override bool SupportsTraining => true;
+
     public SubpixelConvolutionalLayer(int inputDepth, int outputDepth, int upscaleFactor, int kernelSize, int inputHeight, int inputWidth,
                                       IActivationFunction<T>? activation = null)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
@@ -302,5 +304,47 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         // Clear gradients after update
         _kernelGradients = null;
         _biasGradients = null;
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int kernelParamCount = _kernels.Length;
+        int biasParamCount = _biases.Length;
+        int totalParamCount = kernelParamCount + biasParamCount;
+    
+        // Create a vector to hold all parameters
+        var parameters = new Vector<T>(totalParamCount);
+    
+        // Copy kernel parameters
+        int index = 0;
+        for (int i = 0; i < _kernels.Length; i++)
+        {
+            parameters[index++] = _kernels[i];
+        }
+    
+        // Copy bias parameters
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            parameters[index++] = _biases[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values
+        _lastInput = null;
+        _lastOutput = null;
+        _kernelGradients = null;
+        _biasGradients = null;
+    
+        // Reset momentum if using momentum
+        _kernelMomentum = null;
+        _biasMomentum = null;
+    
+        // Reinitialize weights
+        InitializeWeights();
     }
 }

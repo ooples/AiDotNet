@@ -31,6 +31,14 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
             : GetFitnessScore(dataSet);
     }
 
+    public T CalculateFitnessScore(DataSetStats<T> dataSet)
+    {
+        if (dataSet == null)
+            throw new ArgumentNullException(nameof(dataSet));
+
+        return GetFitnessScore(dataSet);
+    }
+
     protected abstract T GetFitnessScore(DataSetStats<T> dataSet);
 
     public bool IsHigherScoreBetter => _isHigherScoreBetter;

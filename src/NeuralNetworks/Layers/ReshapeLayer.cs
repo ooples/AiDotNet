@@ -6,6 +6,8 @@ public class ReshapeLayer<T> : LayerBase<T>
     private int[] _outputShape;
     private Tensor<T>? _lastInput;
 
+    public override bool SupportsTraining => true;
+
     public ReshapeLayer(int[] inputShape, int[] outputShape)
         : base(inputShape, outputShape)
     {
@@ -23,7 +25,7 @@ public class ReshapeLayer<T> : LayerBase<T>
         _lastInput = input;
         int batchSize = input.Shape[0];
 
-        var output = new Tensor<T>(new[] { batchSize }.Concat(_outputShape).ToArray());
+        var output = new Tensor<T>([batchSize, .. _outputShape]);
 
         for (int i = 0; i < batchSize; i++)
         {
@@ -112,5 +114,17 @@ public class ReshapeLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // ReshapeLayer has no parameters to update
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // ReshapeLayer has no trainable parameters, so return an empty vector
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        _lastInput = null;
     }
 }

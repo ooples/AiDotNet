@@ -5,6 +5,8 @@ public class AddLayer<T> : LayerBase<T>
     private Tensor<T>[]? _lastInputs;
     private Tensor<T>? _lastOutput;
 
+    public override bool SupportsTraining => false;
+
     public AddLayer(int[][] inputShapes, IActivationFunction<T>? activationFunction = null)
         : base(inputShapes, inputShapes[0], activationFunction ?? new LinearActivation<T>())
     {
@@ -91,5 +93,17 @@ public class AddLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // No parameters to update in this layer
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Add layers don't have parameters, so return an empty vector
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        _lastInputs = null;
+        _lastOutput = null;
     }
 }

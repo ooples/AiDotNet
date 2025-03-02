@@ -184,6 +184,20 @@ public static class MathHelper
         return numOps.Divide(Sin(piX), piX);
     }
 
+    public static T Modulo<T>(T x, T y)
+    {
+        var numOps = GetNumericOperations<T>();
+        if (numOps.Equals(y, numOps.Zero))
+        {
+            throw new DivideByZeroException("Cannot perform modulo operation with zero divisor.");
+        }
+
+        T quotient = numOps.Divide(x, y);
+        T flooredQuotient = numOps.FromDouble(Math.Floor(Convert.ToDouble(quotient)));
+
+        return numOps.Subtract(x, numOps.Multiply(y, flooredQuotient));
+    }
+
     public static bool IsInteger<T>(T value)
     {
         // If the value is equal to its rounded value, it's an integer

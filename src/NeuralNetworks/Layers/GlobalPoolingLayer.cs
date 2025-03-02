@@ -6,6 +6,8 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
 
+    public override bool SupportsTraining => false;
+
     public GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IActivationFunction<T>? activationFunction = null)
         : base(inputShape, CalculateOutputShape(inputShape), activationFunction ?? new LinearActivation<T>())
     {
@@ -135,5 +137,18 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // No parameters to update in a pooling layer
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // GlobalPoolingLayer has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
     }
 }

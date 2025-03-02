@@ -5,6 +5,8 @@ public class PaddingLayer<T> : LayerBase<T>
     private readonly int[] _padding;
     private Tensor<T>? _lastInput;
 
+    public override bool SupportsTraining => true;
+
     public PaddingLayer(int[] inputShape, int[] padding, IActivationFunction<T>? activationFunction = null)
         : base(inputShape, CalculateOutputShape(inputShape, padding), activationFunction ?? new IdentityActivation<T>())
     {
@@ -83,5 +85,17 @@ public class PaddingLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // No parameters to update in a padding layer
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // PaddingLayer has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        _lastInput = null;
     }
 }

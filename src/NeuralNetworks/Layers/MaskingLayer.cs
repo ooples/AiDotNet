@@ -6,6 +6,8 @@ public class MaskingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastMask;
 
+    public override bool SupportsTraining => false;
+
     public MaskingLayer(int[] inputShape, double maskValue = 0) : base(inputShape, inputShape)
     {
         _maskValue = NumOps.FromDouble(maskValue);
@@ -64,5 +66,18 @@ public class MaskingLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // No parameters to update in this layer
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // MaskingLayer has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        _lastInput = null;
+        _lastMask = null;
     }
 }

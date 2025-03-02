@@ -6,6 +6,8 @@ public class EmbeddingLayer<T> : LayerBase<T>
     private Matrix<T>? _embeddingGradient;
     private Tensor<T>? _lastInput;
 
+    public override bool SupportsTraining => true;
+
     public EmbeddingLayer(int vocabularySize, int embeddingDimension)
         : base([1], [embeddingDimension])
     {
@@ -82,5 +84,51 @@ public class EmbeddingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         _embeddingMatrix = _embeddingMatrix.Subtract(_embeddingGradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _embeddingMatrix.Rows * _embeddingMatrix.Columns;
+        var parameters = new Vector<T>(totalParams);
+    
+        int index = 0;
+    
+        // Copy embedding matrix parameters
+        for (int i = 0; i < _embeddingMatrix.Rows; i++)
+        {
+            for (int j = 0; j < _embeddingMatrix.Columns; j++)
+            {
+                parameters[index++] = _embeddingMatrix[i, j];
+            }
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != _embeddingMatrix.Rows * _embeddingMatrix.Columns)
+        {
+            throw new ArgumentException($"Expected {_embeddingMatrix.Rows * _embeddingMatrix.Columns} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set embedding matrix parameters
+        for (int i = 0; i < _embeddingMatrix.Rows; i++)
+        {
+            for (int j = 0; j < _embeddingMatrix.Columns; j++)
+            {
+                _embeddingMatrix[i, j] = parameters[index++];
+            }
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _embeddingGradient = null;
     }
 }

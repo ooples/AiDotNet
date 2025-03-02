@@ -16,6 +16,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     private Vector<T>? _linearBiasGradient;
     private Vector<T>? _gateBiasGradient;
 
+    public override bool SupportsTraining => true;
+
     public GatedLinearUnitLayer(int inputDimension, int outputDimension, IActivationFunction<T>? gateActivation = null)
         : base([inputDimension], [outputDimension], gateActivation ?? new SigmoidActivation<T>())
     {
@@ -111,5 +113,105 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         _gateWeights = _gateWeights.Subtract(_gateWeightsGradient.Multiply(learningRate));
         _linearBias = _linearBias.Subtract(_linearBiasGradient.Multiply(learningRate));
         _gateBias = _gateBias.Subtract(_gateBiasGradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _linearWeights.Rows * _linearWeights.Columns + 
+                          _gateWeights.Rows * _gateWeights.Columns + 
+                          _linearBias.Length + _gateBias.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+    
+        int index = 0;
+    
+        // Copy linear weights parameters
+        for (int i = 0; i < _linearWeights.Rows; i++)
+        {
+            for (int j = 0; j < _linearWeights.Columns; j++)
+            {
+                parameters[index++] = _linearWeights[i, j];
+            }
+        }
+    
+        // Copy gate weights parameters
+        for (int i = 0; i < _gateWeights.Rows; i++)
+        {
+            for (int j = 0; j < _gateWeights.Columns; j++)
+            {
+                parameters[index++] = _gateWeights[i, j];
+            }
+        }
+    
+        // Copy linear bias parameters
+        for (int i = 0; i < _linearBias.Length; i++)
+        {
+            parameters[index++] = _linearBias[i];
+        }
+    
+        // Copy gate bias parameters
+        for (int i = 0; i < _gateBias.Length; i++)
+        {
+            parameters[index++] = _gateBias[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int expectedLength = _linearWeights.Rows * _linearWeights.Columns + 
+                             _gateWeights.Rows * _gateWeights.Columns + 
+                             _linearBias.Length + _gateBias.Length;
+    
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set linear weights parameters
+        for (int i = 0; i < _linearWeights.Rows; i++)
+        {
+            for (int j = 0; j < _linearWeights.Columns; j++)
+            {
+                _linearWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set gate weights parameters
+        for (int i = 0; i < _gateWeights.Rows; i++)
+        {
+            for (int j = 0; j < _gateWeights.Columns; j++)
+            {
+                _gateWeights[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set linear bias parameters
+        for (int i = 0; i < _linearBias.Length; i++)
+        {
+            _linearBias[i] = parameters[index++];
+        }
+    
+        // Set gate bias parameters
+        for (int i = 0; i < _gateBias.Length; i++)
+        {
+            _gateBias[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastLinearOutput = null;
+        _lastGateOutput = null;
+        _linearWeightsGradient = null;
+        _gateWeightsGradient = null;
+        _linearBiasGradient = null;
+        _gateBiasGradient = null;
     }
 }

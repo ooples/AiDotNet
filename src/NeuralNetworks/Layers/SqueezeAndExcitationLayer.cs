@@ -23,6 +23,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
 
     private readonly int _reducedChannels;
 
+    public override bool SupportsTraining => true;
+
     public SqueezeAndExcitationLayer(int channels, int reductionRatio, 
         IActivationFunction<T>? firstActivation = null, 
         IActivationFunction<T>? secondActivation = null)
@@ -314,5 +316,105 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         _bias1 = _bias1.Subtract(_bias1Gradient.Multiply(learningRate));
         _weights2 = _weights2.Subtract(_weights2Gradient.Multiply(learningRate));
         _bias2 = _bias2.Subtract(_bias2Gradient.Multiply(learningRate));
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _weights1.Rows * _weights1.Columns +
+                          _bias1.Length +
+                          _weights2.Rows * _weights2.Columns +
+                          _bias2.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy weights1
+        for (int i = 0; i < _weights1.Rows; i++)
+        {
+            for (int j = 0; j < _weights1.Columns; j++)
+            {
+                parameters[index++] = _weights1[i, j];
+            }
+        }
+    
+        // Copy bias1
+        for (int i = 0; i < _bias1.Length; i++)
+        {
+            parameters[index++] = _bias1[i];
+        }
+    
+        // Copy weights2
+        for (int i = 0; i < _weights2.Rows; i++)
+        {
+            for (int j = 0; j < _weights2.Columns; j++)
+            {
+                parameters[index++] = _weights2[i, j];
+            }
+        }
+    
+        // Copy bias2
+        for (int i = 0; i < _bias2.Length; i++)
+        {
+            parameters[index++] = _bias2[i];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _weights1.Rows * _weights1.Columns +
+                          _bias1.Length +
+                          _weights2.Rows * _weights2.Columns +
+                          _bias2.Length;
+    
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set weights1
+        for (int i = 0; i < _weights1.Rows; i++)
+        {
+            for (int j = 0; j < _weights1.Columns; j++)
+            {
+                _weights1[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set bias1
+        for (int i = 0; i < _bias1.Length; i++)
+        {
+            _bias1[i] = parameters[index++];
+        }
+    
+        // Set weights2
+        for (int i = 0; i < _weights2.Rows; i++)
+        {
+            for (int j = 0; j < _weights2.Columns; j++)
+            {
+                _weights2[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set bias2
+        for (int i = 0; i < _bias2.Length; i++)
+        {
+            _bias2[i] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _weights1Gradient = null;
+        _bias1Gradient = null;
+        _weights2Gradient = null;
+        _bias2Gradient = null;
     }
 }

@@ -6,4 +6,6 @@ public interface INeuralNetwork<T>
     void UpdateParameters(Vector<T> parameters);
     void Serialize(BinaryWriter writer);
     void Deserialize(BinaryReader reader);
+    Vector<T> GetParameters();
+    void SetTrainingMode(bool isTrainingMode);
 }

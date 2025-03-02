@@ -1,6 +1,6 @@
 namespace AiDotNet.LinearAlgebra;
 
-public class Tensor<T>
+public class Tensor<T> : IEnumerable<T>
 {
     private readonly Vector<T> _data;
     private readonly int[] _dimensions;
@@ -24,6 +24,16 @@ public class Tensor<T>
         if (data.Length != totalSize)
             throw new ArgumentException("Data vector length must match the product of dimensions.");
         _data = data;
+    }
+
+    public IEnumerator<T> GetEnumerator()
+    {
+        return _data.GetEnumerator();
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
     }
 
     public T this[params int[] indices]
@@ -160,6 +170,130 @@ public class Tensor<T>
         _data[flatIndex] = value;
     }
 
+    /// <summary>
+    /// Gets the complex value from a tensor at the specified index.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="tensor">The tensor.</param>
+    /// <param name="index">The index.</param>
+    /// <returns>The complex value at the specified index.</returns>
+    public static Complex<T> GetComplex(Tensor<T> tensor, int index)
+    {
+        var value = tensor[index];
+            
+        // If the value is already a Complex<T>, return it
+        if (value is Complex<T> complex)
+        {
+            return complex;
+        }
+            
+        // Otherwise, create a new Complex<T> with the value as the real part
+        // and zero as the imaginary part
+        return new Complex<T>(value, NumOps.Zero);
+    }
+
+    public static Tensor<T> CreateRandom(params int[] dimensions)
+    {
+        if (dimensions == null || dimensions.Length == 0)
+            throw new ArgumentException("Dimensions cannot be null or empty.", nameof(dimensions));
+
+        var tensor = new Tensor<T>(dimensions);
+        var random = new Random();
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Flatten the tensor into a 1D array for easier iteration
+        var flattenedSize = dimensions.Aggregate(1, (a, b) => a * b);
+        for (int i = 0; i < flattenedSize; i++)
+        {
+            // Generate a random value between 0 and 1
+            var randomValue = numOps.FromDouble(random.NextDouble());
+        
+            // Calculate the multi-dimensional index
+            var index = new int[dimensions.Length];
+            var remaining = i;
+            for (int j = dimensions.Length - 1; j >= 0; j--)
+            {
+                index[j] = remaining % dimensions[j];
+                remaining /= dimensions[j];
+            }
+
+            // Set the random value in the tensor using the indexer
+            tensor[index] = randomValue;
+        }
+
+        return tensor;
+    }
+
+    public Tensor<T> SubTensor(params int[] indices)
+    {
+        if (indices.Length > Shape.Length)
+            throw new ArgumentException("Number of indices exceeds tensor dimensions.");
+
+        int[] newShape = new int[Shape.Length - indices.Length];
+        for (int i = 0; i < newShape.Length; i++)
+        {
+            newShape[i] = Shape[indices.Length + i];
+        }
+
+        Tensor<T> subTensor = new Tensor<T>(newShape);
+
+        int[] currentIndices = new int[Shape.Length];
+        Array.Copy(indices, currentIndices, indices.Length);
+
+        CopySubTensorData(this, subTensor, currentIndices, indices.Length);
+
+        return subTensor;
+    }
+
+    private void CopySubTensorData(Tensor<T> source, Tensor<T> destination, int[] currentIndices, int fixedDimensions)
+    {
+        if (fixedDimensions == source.Shape.Length)
+        {
+            destination[new int[0]] = source[currentIndices];
+            return;
+        }
+
+        for (int i = 0; i < source.Shape[fixedDimensions]; i++)
+        {
+            currentIndices[fixedDimensions] = i;
+            CopySubTensorData(source, destination, currentIndices, fixedDimensions + 1);
+        }
+    }
+
+    public static Tensor<T> Empty()
+    {
+        return new Tensor<T>([]);
+    }
+
+    public Tensor<T> Slice(int startRow, int startCol, int endRow, int endCol)
+    {
+        if (this.Rank != 2)
+        {
+            throw new InvalidOperationException("This Slice method is only applicable for 2D tensors.");
+        }
+
+        if (startRow < 0 || startCol < 0 || endRow > this.Shape[0] || endCol > this.Shape[1] || startRow >= endRow || startCol >= endCol)
+        {
+            throw new ArgumentException("Invalid slice parameters.");
+        }
+
+        int newRows = endRow - startRow;
+        int newCols = endCol - startCol;
+        int[] newShape = new int[] { newRows, newCols };
+
+        Tensor<T> result = new Tensor<T>(newShape);
+
+        for (int i = 0; i < newRows; i++)
+        {
+            for (int j = 0; j < newCols; j++)
+            {
+                result[i, j] = this[startRow + i, startCol + j];
+            }
+        }
+
+        return result;
+    }
+
     public Tensor<T> Slice(int index)
     {
         if (index < 0 || index >= Shape[0])
@@ -216,6 +350,143 @@ public class Tensor<T>
 
         SliceRecursive(0);
         return result;
+    }
+
+    public Tensor<T> MeanOverAxis(int axis)
+    {
+        if (axis < 0 || axis >= Rank)
+            throw new ArgumentOutOfRangeException(nameof(axis));
+
+        var newShape = Shape.ToList();
+        newShape.RemoveAt(axis);
+        var result = new Tensor<T>([.. newShape]);
+        int axisSize = Shape[axis];
+
+        // Iterate over all elements, grouping by the non-axis dimensions
+        for (int i = 0; i < _data.Length; i += axisSize)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < axisSize; j++)
+            {
+                sum = NumOps.Add(sum, _data[i + j]);
+            }
+
+            result._data[i / axisSize] = NumOps.Divide(sum, NumOps.FromDouble(axisSize));
+        }
+
+        return result;
+    }
+
+    public Tensor<T> MaxOverAxis(int axis)
+    {
+        if (axis < 0 || axis >= Rank)
+            throw new ArgumentOutOfRangeException(nameof(axis));
+
+        var newShape = Shape.ToList();
+        newShape.RemoveAt(axis);
+        var result = new Tensor<T>([.. newShape]);
+        int axisSize = Shape[axis];
+
+        // Iterate over all elements, grouping by the non-axis dimensions
+        for (int i = 0; i < _data.Length; i += axisSize)
+        {
+            T max = _data[i];
+            for (int j = 1; j < axisSize; j++)
+            {
+                if (NumOps.GreaterThan(_data[i + j], max))
+                    max = _data[i + j];
+            }
+
+            result._data[i / axisSize] = max;
+        }
+
+        return result;
+    }
+
+    public Tensor<T> SumOverAxis(int axis)
+    {
+        if (axis < 0 || axis >= Rank)
+            throw new ArgumentOutOfRangeException(nameof(axis));
+
+        var newShape = Shape.ToList();
+        newShape.RemoveAt(axis);
+        var result = new Tensor<T>([.. newShape]);
+        int axisSize = Shape[axis];
+
+        // Iterate over all elements, grouping by the non-axis dimensions
+        for (int i = 0; i < _data.Length; i += axisSize)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < axisSize; j++)
+            {
+                sum = NumOps.Add(sum, _data[i + j]);
+            }
+
+            result._data[i / axisSize] = sum;
+        }
+
+        return result;
+    }
+
+    public void SetSubTensor(int[] indices, Tensor<T> subTensor)
+    {
+        if (indices.Length != subTensor.Rank)
+            throw new ArgumentException("Number of indices must match the rank of the sub-tensor.");
+
+        int[] currentIndices = new int[Rank];
+        Array.Copy(indices, currentIndices, indices.Length);
+
+        SetSubTensorRecursive(subTensor, currentIndices, 0);
+    }
+
+    private void SetSubTensorRecursive(Tensor<T> subTensor, int[] indices, int dimension)
+    {
+        if (dimension == subTensor.Rank)
+        {
+            this[indices] = subTensor._data[0];
+            return;
+        }
+
+        for (int i = 0; i < subTensor.Shape[dimension]; i++)
+        {
+            indices[indices.Length - subTensor.Rank + dimension] = i;
+            SetSubTensorRecursive(subTensor, indices, dimension + 1);
+        }
+    }
+
+    public T DotProduct(Tensor<T> other)
+    {
+        if (!Shape.SequenceEqual(other.Shape))
+            throw new ArgumentException("Tensors must have the same shape for dot product.");
+
+        T result = NumOps.Zero;
+        for (int i = 0; i < _data.Length; i++)
+        {
+            result = NumOps.Add(result, NumOps.Multiply(_data[i], other._data[i]));
+        }
+
+        return result;
+    }
+
+    public Tensor<T> Scale(T factor)
+    {
+        var result = new Tensor<T>(this.Shape);
+    
+        // Apply scaling to each element in the tensor
+        for (int i = 0; i < this.Length; i++)
+        {
+            result[i] = NumOps.Multiply(this[i], factor);
+        }
+    
+        return result;
+    }
+
+    public void ScaleInPlace(T factor)
+    {
+        for (int i = 0; i < this.Length; i++)
+        {
+            this[i] = NumOps.Multiply(this[i], factor);
+        }
     }
 
     public static Tensor<T> Stack(Tensor<T>[] tensors, int axis = 0)
@@ -578,6 +849,21 @@ public class Tensor<T>
         }
 
         return result;
+    }
+
+    public Tensor<T> MatrixMultiply(Tensor<T> other)
+    {
+        if (this.Rank != 2 || other.Rank != 2)
+        {
+            throw new ArgumentException("MatMul is only defined for 2D tensors (matrices).");
+        }
+
+        if (this.Shape[1] != other.Shape[0])
+        {
+            throw new ArgumentException("Incompatible matrix dimensions for multiplication.");
+        }
+
+        return this.Multiply(other);
     }
 
     public Tensor<T> Multiply(Tensor<T> other)
@@ -943,7 +1229,21 @@ public class Tensor<T>
         return NumOps.Divide(sum, NumOps.FromDouble(_data.Length));
     }
 
-    private int GetFlatIndex(int[] indices)
+    public T GetFlatIndexValue(int flatIndex)
+    {
+        int[] indices = new int[Rank];
+        GetIndicesFromFlatIndex(flatIndex, _dimensions, indices);
+        return this[indices];
+    }
+
+    public void SetFlatIndexValue(int flatIndex, T value)
+    {
+        int[] indices = new int[Rank];
+        GetIndicesFromFlatIndex(flatIndex, _dimensions, indices);
+        this[indices] = value;
+    }
+
+    public int GetFlatIndex(int[] indices)
     {
         if (indices.Length != Rank)
             throw new ArgumentException("Number of indices must match tensor rank.");

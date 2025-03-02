@@ -17,6 +17,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     private readonly int _kernelSize;
     private readonly int _stride;
 
+    public override bool SupportsTraining => true;
+
     public LocallyConnectedLayer(
         int inputHeight, 
         int inputWidth, 
@@ -234,5 +236,88 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             T update = NumOps.Multiply(learningRate, _biasGradients[oc]);
             _biases[oc] = NumOps.Subtract(_biases[oc], update);
         }
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _weights.Length + _biases.Length;
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy weights parameters
+        for (int h = 0; h < _outputHeight; h++)
+        {
+            for (int w = 0; w < _outputWidth; w++)
+            {
+                for (int oc = 0; oc < _outputChannels; oc++)
+                {
+                    for (int kh = 0; kh < _kernelSize; kh++)
+                    {
+                        for (int kw = 0; kw < _kernelSize; kw++)
+                        {
+                            for (int ic = 0; ic < _inputChannels; ic++)
+                            {
+                                parameters[index++] = _weights[h, w, oc, kh, kw, ic];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    
+        // Copy bias parameters
+        for (int oc = 0; oc < _outputChannels; oc++)
+        {
+            parameters[index++] = _biases[oc];
+        }
+    
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _weights.Length + _biases.Length;
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+    
+        int index = 0;
+    
+        // Set weights parameters
+        for (int h = 0; h < _outputHeight; h++)
+        {
+            for (int w = 0; w < _outputWidth; w++)
+            {
+                for (int oc = 0; oc < _outputChannels; oc++)
+                {
+                    for (int kh = 0; kh < _kernelSize; kh++)
+                    {
+                        for (int kw = 0; kw < _kernelSize; kw++)
+                        {
+                            for (int ic = 0; ic < _inputChannels; ic++)
+                            {
+                                _weights[h, w, oc, kh, kw, ic] = parameters[index++];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    
+        // Set bias parameters
+        for (int oc = 0; oc < _outputChannels; oc++)
+        {
+            _biases[oc] = parameters[index++];
+        }
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _weightGradients = null;
+        _biasGradients = null;
     }
 }
