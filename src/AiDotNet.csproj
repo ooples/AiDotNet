@@ -50,6 +50,8 @@
 	  <Folder Include="Evaluation\" />
 	  <Folder Include="Caching\" />
 	  <Folder Include="GaussianProcesses\" />
+	  <Folder Include="Exceptions\" />
+	  <Folder Include="Validation\" />
 	  <Folder Include="WindowFunctions\" />
 	  <Folder Include="WaveletFunctions\" />
 	</ItemGroup>
