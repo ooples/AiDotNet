@@ -1,14 +1,36 @@
 namespace AiDotNet.NeuralNetworks;
 
+/// <summary>
+/// Represents a Transformer neural network architecture, which is particularly effective for 
+/// sequence-based tasks like natural language processing.
+/// </summary>
+/// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
 public class Transformer<T> : NeuralNetworkBase<T>
 {
-    private readonly TransformerArchitecture<T> TransformerArchitecture;
+    /// <summary>
+    /// The configuration settings for this Transformer network.
+    /// </summary>
+    private readonly TransformerArchitecture<T> _transformerArchitecture;
 
+    /// <summary>
+    /// Creates a new Transformer neural network with the specified architecture.
+    /// </summary>
+    /// <param name="architecture">
+    /// The architecture configuration that defines how this Transformer will be structured.
+    /// This includes settings like embedding size, number of attention heads, and feed-forward dimensions.
+    /// </param>
     public Transformer(TransformerArchitecture<T> architecture) : base(architecture)
     {
-        TransformerArchitecture = architecture;
+        _transformerArchitecture = architecture;
     }
 
+    /// <summary>
+    /// Sets up the layers of the Transformer network based on the provided architecture.
+    /// </summary>
+    /// <remarks>
+    /// This method either uses custom layers provided by the user or creates default Transformer layers.
+    /// A typical Transformer consists of attention mechanisms, normalization layers, and feed-forward networks.
+    /// </remarks>
     protected override void InitializeLayers()
     {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
@@ -20,10 +42,22 @@ public class Transformer<T> : NeuralNetworkBase<T>
         else
         {
             // Use default transformer layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultTransformerLayers(TransformerArchitecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultTransformerLayers(_transformerArchitecture));
         }
     }
 
+    /// <summary>
+    /// Ensures that custom layers provided for the Transformer meet the minimum requirements.
+    /// </summary>
+    /// <param name="layers">The list of layers to validate.</param>
+    /// <remarks>
+    /// A valid Transformer must include at least one attention layer and one normalization layer.
+    /// Attention layers allow the model to focus on different parts of the input sequence.
+    /// Normalization layers help stabilize training by normalizing the activations.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the custom layers don't include required layer types.
+    /// </exception>
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
         base.ValidateCustomLayers(layers);
@@ -54,6 +88,15 @@ public class Transformer<T> : NeuralNetworkBase<T>
         }
     }
 
+    /// <summary>
+    /// Processes an input vector through the Transformer network to produce a prediction.
+    /// </summary>
+    /// <param name="input">The input vector to process.</param>
+    /// <returns>The output vector after passing through all layers of the Transformer.</returns>
+    /// <remarks>
+    /// This method passes the input sequentially through each layer of the Transformer.
+    /// In a typical language model, this input might represent a tokenized text sequence.
+    /// </remarks>
     public override Vector<T> Predict(Vector<T> input)
     {
         var current = input;
@@ -65,6 +108,14 @@ public class Transformer<T> : NeuralNetworkBase<T>
         return current;
     }
 
+    /// <summary>
+    /// Updates the parameters of all layers in the Transformer network.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters for the network.</param>
+    /// <remarks>
+    /// This method distributes the parameters to each layer based on their parameter counts.
+    /// It's typically used during training when applying gradient updates.
+    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int startIndex = 0;
@@ -80,6 +131,17 @@ public class Transformer<T> : NeuralNetworkBase<T>
         }
     }
 
+    /// <summary>
+    /// Saves the Transformer network structure and parameters to a binary stream.
+    /// </summary>
+    /// <param name="writer">The binary writer to save the network to.</param>
+    /// <remarks>
+    /// This method saves the type information and parameters of each layer,
+    /// allowing the network to be reconstructed later using the Deserialize method.
+    /// Serialization is useful for saving trained models to disk or transferring them between applications.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when serialization encounters issues with layer information.</exception>
     public override void Serialize(BinaryWriter writer)
     {
         if (writer == null)
@@ -100,6 +162,16 @@ public class Transformer<T> : NeuralNetworkBase<T>
         }
     }
 
+    /// <summary>
+    /// Loads a Transformer network structure and parameters from a binary stream.
+    /// </summary>
+    /// <param name="reader">The binary reader to load the network from.</param>
+    /// <remarks>
+    /// This method reconstructs the network by reading the type information and parameters of each layer.
+    /// It's used to load previously saved models for inference or continued training.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization encounters issues with layer information.</exception>
     public override void Deserialize(BinaryReader reader)
     {
         if (reader == null)

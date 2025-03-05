@@ -1,46 +1,46 @@
 namespace AiDotNet.Exceptions;
 
 /// <summary>
-/// Exception thrown when input data dimensions are invalid for a specific algorithm or operation.
+/// Exception thrown when input data contains invalid values such as NaN or infinity.
 /// </summary>
-public class InvalidInputDimensionException : AiDotNetException
+public class InvalidDataValueException : AiDotNetException
 {
     /// <summary>
-    /// The component where the dimension mismatch occurred.
+    /// The component where the invalid data was detected.
     /// </summary>
     public string Component { get; }
 
     /// <summary>
-    /// The operation being performed when the mismatch was detected.
+    /// The operation being performed when the invalid data was detected.
     /// </summary>
     public string Operation { get; }
 
     /// <summary>
-    /// Creates a new instance of the InvalidInputDimensionException class.
+    /// Creates a new instance of the InvalidDataValueException class.
     /// </summary>
-    public InvalidInputDimensionException() : base() 
+    public InvalidDataValueException() : base() 
     {
         Component = "Unknown";
         Operation = "Unknown";
     }
 
     /// <summary>
-    /// Creates a new instance of the InvalidInputDimensionException class with a specified error message.
+    /// Creates a new instance of the InvalidDataValueException class with a specified error message.
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
-    public InvalidInputDimensionException(string message) : base(message) 
+    public InvalidDataValueException(string message) : base(message) 
     {
         Component = "Unknown";
         Operation = "Unknown";
     }
 
     /// <summary>
-    /// Creates a new instance of the InvalidInputDimensionException class with a specified error message
+    /// Creates a new instance of the InvalidDataValueException class with a specified error message
     /// and a reference to the inner exception that is the cause of this exception.
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that is the cause of the current exception.</param>
-    public InvalidInputDimensionException(string message, Exception innerException) 
+    public InvalidDataValueException(string message, Exception innerException) 
         : base(message, innerException) 
     {
         Component = "Unknown";
@@ -48,13 +48,13 @@ public class InvalidInputDimensionException : AiDotNetException
     }
 
     /// <summary>
-    /// Creates a new instance of the InvalidInputDimensionException class with a specified error message
+    /// Creates a new instance of the InvalidDataValueException class with a specified error message
     /// and context information about where the exception occurred.
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
-    /// <param name="component">The component where the dimension mismatch occurred.</param>
-    /// <param name="operation">The operation being performed when the mismatch was detected.</param>
-    public InvalidInputDimensionException(string message, string component, string operation)
+    /// <param name="component">The component where the invalid data was detected.</param>
+    /// <param name="operation">The operation being performed when the invalid data was detected.</param>
+    public InvalidDataValueException(string message, string component, string operation)
         : base(FormatMessage(message, component, operation))
     {
         Component = component;
@@ -62,14 +62,14 @@ public class InvalidInputDimensionException : AiDotNetException
     }
 
     /// <summary>
-    /// Creates a new instance of the InvalidInputDimensionException class with a specified error message,
+    /// Creates a new instance of the InvalidDataValueException class with a specified error message,
     /// context information, and a reference to the inner exception.
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
-    /// <param name="component">The component where the dimension mismatch occurred.</param>
-    /// <param name="operation">The operation being performed when the mismatch was detected.</param>
+    /// <param name="component">The component where the invalid data was detected.</param>
+    /// <param name="operation">The operation being performed when the invalid data was detected.</param>
     /// <param name="innerException">The exception that is the cause of the current exception.</param>
-    public InvalidInputDimensionException(string message, string component, string operation, Exception innerException)
+    public InvalidDataValueException(string message, string component, string operation, Exception innerException)
         : base(FormatMessage(message, component, operation), innerException)
     {
         Component = component;
@@ -78,6 +78,6 @@ public class InvalidInputDimensionException : AiDotNetException
 
     private static string FormatMessage(string message, string component, string operation)
     {
-        return $"Dimension error in {component} during {operation}: {message}";
+        return $"Invalid data value in {component} during {operation}: {message}";
     }
 }

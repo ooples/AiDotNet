@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Helpers;
+﻿using System.Diagnostics;
+
+namespace AiDotNet.Helpers;
 
 public static class ValidationHelper<T>
 {
@@ -7,6 +9,65 @@ public static class ValidationHelper<T>
     public static void ValidateInputData(Matrix<T> x, Vector<T> y)
     {
         ValidateMatrixVectorPair(x, y, "Input");
+    }
+
+    /// <summary>
+    /// Gets information about the calling method.
+    /// </summary>
+    /// <param name="skipFrames">Number of frames to skip in the stack trace.</param>
+    /// <returns>A tuple containing the component name and operation name.</returns>
+    public static (string component, string operation) GetCallerInfo(int skipFrames = 2)
+    {
+        try
+        {
+            // Skip the specified number of frames to get to the actual client code
+            var stackTrace = new StackTrace(skipFrames, false);
+            var frame = stackTrace.GetFrame(0);
+            
+            if (frame != null)
+            {
+                var method = frame.GetMethod();
+                if (method != null)
+                {
+                    string operation = method.Name;
+                    string component = method.DeclaringType?.Name ?? "Unknown";
+
+                    return (component, operation);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Fallback if stack trace inspection fails
+        }
+        
+        // Default values if we can't determine the caller
+        return ("Unknown", "Validation");
+    }
+
+    /// <summary>
+    /// Resolves component and operation names, using caller info if either is empty.
+    /// </summary>
+    /// <param name="component">The component name, or empty to use caller info.</param>
+    /// <param name="operation">The operation name, or empty to use caller info.</param>
+    /// <param name="skipFrames">Number of frames to skip in the stack trace.</param>
+    /// <returns>A tuple containing the resolved component and operation names.</returns>
+    public static (string component, string operation) ResolveCallerInfo(string component = "", string operation = "", int skipFrames = 3)
+    {
+        // Only get caller info if needed
+        if (string.IsNullOrEmpty(component) || string.IsNullOrEmpty(operation))
+        {
+            var callerInfo = GetCallerInfo(skipFrames);
+            
+            // Only use caller info for empty parameters
+            if (string.IsNullOrEmpty(component))
+                component = callerInfo.component;
+                
+            if (string.IsNullOrEmpty(operation))
+                operation = callerInfo.operation;
+        }
+        
+        return (component, operation);
     }
 
     public static void ValidateInputData(OptimizationInputData<T> inputData)

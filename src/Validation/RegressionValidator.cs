@@ -11,17 +11,22 @@ public static class RegressionValidator
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <param name="x">The input feature matrix to validate.</param>
     /// <param name="expectedColumns">The expected number of columns.</param>
-    /// <param name="regressionType">The name of the regression algorithm for error messages.</param>
+    /// <param name="component">Optional. The component performing the validation.</param>
+    /// <param name="operation">Optional. The operation being performed.</param>
     /// <exception cref="InvalidInputDimensionException">
     /// Thrown when the input matrix doesn't have the expected number of columns.
     /// </exception>
-    public static void ValidateFeatureCount<T>(Matrix<T> x, int expectedColumns, string regressionType)
+    public static void ValidateFeatureCount<T>(Matrix<T> x, int expectedColumns, string component = "", string operation = "")
     {
+        var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
+        
         if (x.Columns != expectedColumns)
         {
             throw new InvalidInputDimensionException(
-                $"{regressionType} expects exactly {expectedColumns} feature column(s). " +
-                $"Input matrix has {x.Columns} columns.");
+                $"{resolvedComponent} expects exactly {expectedColumns} feature column(s). " +
+                $"Input matrix has {x.Columns} columns.",
+                resolvedComponent,
+                resolvedOperation);
         }
     }
 
@@ -31,16 +36,22 @@ public static class RegressionValidator
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <param name="x">The input feature matrix.</param>
     /// <param name="y">The target values vector.</param>
+    /// <param name="component">Optional. The component performing the validation.</param>
+    /// <param name="operation">Optional. The operation being performed.</param>
     /// <exception cref="InvalidInputDimensionException">
     /// Thrown when the number of rows in the input matrix doesn't match the length of the target vector.
     /// </exception>
-    public static void ValidateInputOutputDimensions<T>(Matrix<T> x, Vector<T> y)
+    public static void ValidateInputOutputDimensions<T>(Matrix<T> x, Vector<T> y, string component = "", string operation = "")
     {
+        var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
+        
         if (x.Rows != y.Length)
         {
             throw new InvalidInputDimensionException(
                 $"The number of samples in the input matrix ({x.Rows}) " +
-                $"must match the number of target values ({y.Length}).");
+                $"must match the number of target values ({y.Length}).",
+                resolvedComponent,
+                resolvedOperation);
         }
     }
 
@@ -50,11 +61,14 @@ public static class RegressionValidator
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <param name="x">The input feature matrix.</param>
     /// <param name="y">The target values vector.</param>
+    /// <param name="component">Optional. The component performing the validation.</param>
+    /// <param name="operation">Optional. The operation being performed.</param>
     /// <exception cref="InvalidDataException">
     /// Thrown when the input data contains NaN or infinity values.
     /// </exception>
-    public static void ValidateDataValues<T>(Matrix<T> x, Vector<T> y)
+    public static void ValidateDataValues<T>(Matrix<T> x, Vector<T> y, string component = "", string operation = "")
     {
+        var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Check for NaN or infinity in x
@@ -64,8 +78,10 @@ public static class RegressionValidator
             {
                 if (numOps.IsNaN(x[i, j]) || numOps.IsInfinity(x[i, j]))
                 {
-                    throw new InvalidDataException(
-                        $"Input matrix contains NaN or infinity at position ({i}, {j}).");
+                    throw new InvalidDataValueException(
+                        $"Input matrix contains NaN or infinity at position ({i}, {j}).",
+                        resolvedComponent,
+                        resolvedOperation);
                 }
             }
         }
@@ -75,8 +91,10 @@ public static class RegressionValidator
         {
             if (numOps.IsNaN(y[i]) || numOps.IsInfinity(y[i]))
             {
-                throw new InvalidDataException(
-                    $"Target vector contains NaN or infinity at position {i}.");
+                throw new InvalidDataValueException(
+                    $"Target vector contains NaN or infinity at position {i}.",
+                    resolvedComponent,
+                    resolvedOperation);
             }
         }
     }

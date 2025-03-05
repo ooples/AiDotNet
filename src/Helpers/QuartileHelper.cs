@@ -11,8 +11,8 @@
 
         internal static (double[], double[]) FilterArraysWithIndices(IEnumerable<double> rawInputs, IEnumerable<double> rawOutputs, IEnumerable<int> ignoredIndices)
         {
-            return (rawInputs.Where((val, idx) => !ignoredIndices.Contains(idx)).ToArray(),
-                rawOutputs.Where((val, idx) => !ignoredIndices.Contains(idx)).ToArray());
+            return ([.. rawInputs.Where((val, idx) => !ignoredIndices.Contains(idx))],
+                [.. rawOutputs.Where((val, idx) => !ignoredIndices.Contains(idx))]);
         }
 
         internal static int[] FindIndicesToRemove(double[] unfiltered, double minLimit, double maxLimit)

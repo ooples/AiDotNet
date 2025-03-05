@@ -156,7 +156,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
         {
             string? layerTypeName = layer.GetType().FullName;
-            SerializationValidator.ValidateLayerTypeName(layerTypeName, nameof(ConvolutionalNeuralNetwork<T>));
+            SerializationValidator.ValidateLayerTypeName(layerTypeName);
             writer.Write(layerTypeName!);
             layer.Serialize(writer);
         }
@@ -182,7 +182,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         for (int i = 0; i < layerCount; i++)
         {
             string layerTypeName = reader.ReadString();
-            SerializationValidator.ValidateLayerTypeName(layerTypeName, nameof(ConvolutionalNeuralNetwork<T>));
+            SerializationValidator.ValidateLayerTypeName(layerTypeName);
 
             Type? layerType = Type.GetType(layerTypeName);
             SerializationValidator.ValidateLayerTypeExists(layerTypeName, layerType, nameof(ConvolutionalNeuralNetwork<T>));
