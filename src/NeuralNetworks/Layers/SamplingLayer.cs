@@ -314,7 +314,7 @@ public class SamplingLayer<T> : LayerBase<T>
         SetStrategies();
     }
 
-    public override IEnumerable<ActivationType> GetActivationTypes()
+    public override IEnumerable<ActivationFunction> GetActivationTypes()
     {
         // Sampling layers don't have activation functions
         return [];

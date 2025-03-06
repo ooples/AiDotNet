@@ -94,7 +94,7 @@ public abstract class LayerBase<T> : ILayer<T>
     public abstract Tensor<T> Backward(Tensor<T> outputGradient);
     public abstract void UpdateParameters(T learningRate);
 
-    public virtual IEnumerable<ActivationType> GetActivationTypes()
+    public virtual IEnumerable<ActivationFunction> GetActivationTypes()
     {
         if (ScalarActivation != null)
         {
@@ -107,15 +107,15 @@ public abstract class LayerBase<T> : ILayer<T>
         }
     }
 
-    private static ActivationType GetActivationTypeFromFunction(object activationFunction)
+    private static ActivationFunction GetActivationTypeFromFunction(object activationFunction)
     {
         return activationFunction switch
         {
-            SoftmaxActivation<T> => ActivationType.Softmax,
-            SigmoidActivation<T> => ActivationType.Sigmoid,
-            ReLUActivation<T> => ActivationType.ReLU,
-            TanhActivation<T> => ActivationType.Tanh,
-            _ => ActivationType.Other
+            SoftmaxActivation<T> => ActivationFunction.Softmax,
+            SigmoidActivation<T> => ActivationFunction.Sigmoid,
+            ReLUActivation<T> => ActivationFunction.ReLU,
+            TanhActivation<T> => ActivationFunction.Tanh,
+            _ => ActivationFunction.Identity
         };
     }
 

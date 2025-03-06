@@ -1,13 +1,48 @@
-﻿using AiDotNet.Enums.AlgorithmTypes;
+﻿namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
-namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
-
+/// <summary>
+/// Implements the Hodrick-Prescott filter for decomposing time series data into trend and cyclical components.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// For Beginners: The Hodrick-Prescott filter is a mathematical tool that helps separate a time series 
+/// (like stock prices or economic data over time) into two parts:
+/// 1. A smooth trend component that shows the long-term direction
+/// 2. A cyclical component that shows short-term fluctuations around the trend
+/// 
+/// Think of it like separating a bumpy road (your data) into the general path (trend) 
+/// and the bumps along the way (cycles).
+/// </remarks>
 public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
+    /// <summary>
+    /// The smoothing parameter that controls the balance between smoothness of the trend and fit to the data.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners: Think of lambda as a "smoothness knob" - higher values make the trend smoother 
+    /// but potentially less accurate, while lower values make the trend follow the data more closely.
+    /// Common values: 1600 for quarterly data, 100 for yearly data, 14400 for monthly data.
+    /// </remarks>
     private readonly T _lambda;
+
+    /// <summary>
+    /// Optional matrix decomposition method used for solving the linear system in the matrix method.
+    /// </summary>
     private readonly IMatrixDecomposition<T>? _decomposition;
+
+    /// <summary>
+    /// The algorithm type to use for the Hodrick-Prescott decomposition.
+    /// </summary>
     private readonly HodrickPrescottAlgorithmType _algorithm;
 
+    /// <summary>
+    /// Initializes a new instance of the Hodrick-Prescott decomposition.
+    /// </summary>
+    /// <param name="timeSeries">The time series data to decompose.</param>
+    /// <param name="lambda">The smoothing parameter (default: 1600, suitable for quarterly data).</param>
+    /// <param name="decomposition">Optional matrix decomposition method for solving linear systems.</param>
+    /// <param name="algorithm">The algorithm type to use for decomposition (default: MatrixMethod).</param>
+    /// <exception cref="ArgumentException">Thrown when lambda is not positive.</exception>
     public HodrickPrescottDecomposition(Vector<T> timeSeries, double lambda = 1600, IMatrixDecomposition<T>? decomposition = null, 
         HodrickPrescottAlgorithmType algorithm = HodrickPrescottAlgorithmType.MatrixMethod) 
         : base(timeSeries)
@@ -23,6 +58,9 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         Decompose();
     }
 
+    /// <summary>
+    /// Performs the time series decomposition using the selected algorithm.
+    /// </summary>
     protected override void Decompose()
     {
         switch (_algorithm)
@@ -50,6 +88,14 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         }
     }
 
+    /// <summary>
+    /// Decomposes the time series using a Kalman filter approach.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners: A Kalman filter is like a GPS system for your data - it continuously 
+    /// updates its estimate of where the trend is, based on new observations and previous estimates.
+    /// It's especially good at handling noisy data.
+    /// </remarks>
     private void DecomposeKalmanFilterMethod()
     {
         int n = TimeSeries.Length;
@@ -102,6 +148,14 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         AddComponent(DecompositionComponentType.Cycle, cycle);
     }
 
+    /// <summary>
+    /// Decomposes the time series using wavelet transform.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners: Wavelet decomposition is like breaking down a song into different instruments.
+    /// It separates your data into different frequency components, allowing you to keep the low-frequency
+    /// parts (trend) and filter out high-frequency parts (cycles/noise).
+    /// </remarks>
     private void DecomposeWaveletMethod()
     {
         int n = TimeSeries.Length;
@@ -135,6 +189,17 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         AddComponent(DecompositionComponentType.Cycle, cycle);
     }
 
+    /// <summary>
+    /// Performs a discrete wavelet transform on the input data.
+    /// </summary>
+    /// <param name="data">The input time series data.</param>
+    /// <param name="levels">The number of decomposition levels.</param>
+    /// <returns>The wavelet coefficients.</returns>
+    /// <remarks>
+    /// For Beginners: This method transforms your data into a different representation where
+    /// different scales (frequencies) of patterns are separated. It's like breaking down a complex
+    /// sound wave into its component frequencies.
+    /// </remarks>
     private Vector<T> DiscreteWaveletTransform(Vector<T> data, int levels)
     {
         int n = data.Length;
@@ -157,6 +222,17 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         return coeffs;
     }
 
+    /// <summary>
+    /// Performs an inverse discrete wavelet transform to reconstruct the original signal.
+    /// </summary>
+    /// <param name="coeffs">The wavelet coefficients.</param>
+    /// <param name="levels">The number of decomposition levels.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// For Beginners: This method takes the wavelet coefficients (which represent different frequency components)
+    /// and recombines them to create a time series. It's like mixing different instrument tracks back
+    /// together to form a complete song.
+    /// </remarks>
     private Vector<T> InverseDiscreteWaveletTransform(Vector<T> coeffs, int levels)
     {
         int n = coeffs.Length;
@@ -179,6 +255,16 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         return data;
     }
 
+    /// <summary>
+    /// Decomposes the time series using frequency domain analysis with Fast Fourier Transform.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners: This method transforms your time series data from the time domain (values over time)
+    /// to the frequency domain (showing which frequencies are present in your data). It then filters out
+    /// high-frequency components (which represent rapid changes or noise) and keeps low-frequency components
+    /// (which represent the trend). Think of it like adjusting the bass and treble on a music system - 
+    /// we're keeping the "bass" (trend) and reducing the "treble" (cycles/noise).
+    /// </remarks>
     private void DecomposeFrequencyDomainMethod()
     {
         int n = TimeSeries.Length;
@@ -212,6 +298,16 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         AddComponent(DecompositionComponentType.Cycle, cycle);
     }
 
+    /// <summary>
+    /// Decomposes the time series using a state space modeling approach.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners: A state space model represents your data as a system with hidden states that evolve over time.
+    /// In this case, we track three states: the current trend level (mu), the trend growth rate (beta), 
+    /// and the cyclical component (c). As we process each data point, we update these states to best explain 
+    /// the observed data. It's like tracking a moving object by continuously updating your estimate of its 
+    /// position, velocity, and acceleration.
+    /// </remarks>
     private void DecomposeStateSpaceMethod()
     {
         int n = TimeSeries.Length;
@@ -243,6 +339,16 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         AddComponent(DecompositionComponentType.Cycle, cycle);
     }
 
+    /// <summary>
+    /// Decomposes the time series using the standard matrix-based Hodrick-Prescott filter.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners: This is the classic implementation of the Hodrick-Prescott filter. It works by setting up
+    /// a mathematical problem that balances two goals: (1) making the trend close to the original data, and
+    /// (2) making the trend smooth. This problem is solved using matrix operations, which is like solving
+    /// a system of equations all at once. The result gives us the optimal trend component that balances
+    /// these two goals according to the lambda parameter.
+    /// </remarks>
     private void DecomposeMatrixMethod()
     {
         int n = TimeSeries.Length;
@@ -259,6 +365,16 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         AddComponent(DecompositionComponentType.Cycle, cycle);
     }
 
+    /// <summary>
+    /// Decomposes the time series using an iterative approach to the Hodrick-Prescott filter.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners: Instead of solving the entire problem at once (as in the matrix method),
+    /// this approach gradually improves the trend estimate through repeated passes over the data.
+    /// In each iteration, we update each point in the trend based on its neighbors and the original data.
+    /// It's like smoothing a curve by repeatedly running your hand over it until it reaches the desired smoothness.
+    /// This method can be more efficient for very large datasets.
+    /// </remarks>
     private void DecomposeIterativeMethod()
     {
         int n = TimeSeries.Length;
@@ -295,6 +411,17 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         AddComponent(DecompositionComponentType.Cycle, cycle);
     }
 
+    /// <summary>
+    /// Constructs a second difference matrix used in the matrix-based Hodrick-Prescott filter.
+    /// </summary>
+    /// <param name="n">The size of the time series.</param>
+    /// <returns>A matrix that represents the second difference operator.</returns>
+    /// <remarks>
+    /// For Beginners: This matrix is used to measure how "wiggly" or non-smooth the trend is.
+    /// Each row of this matrix computes the difference between adjacent differences in the trend,
+    /// which is a way to measure curvature or acceleration in the trend. The Hodrick-Prescott filter
+    /// uses this matrix to penalize trends that change direction too quickly or too often.
+    /// </remarks>
     private Matrix<T> ConstructSecondDifferenceMatrix(int n)
     {
         Matrix<T> D = new Matrix<T>(n - 2, n);

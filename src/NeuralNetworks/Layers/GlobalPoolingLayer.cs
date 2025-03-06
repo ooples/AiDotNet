@@ -9,13 +9,13 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     public override bool SupportsTraining => false;
 
     public GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IActivationFunction<T>? activationFunction = null)
-        : base(inputShape, CalculateOutputShape(inputShape), activationFunction ?? new LinearActivation<T>())
+        : base(inputShape, CalculateOutputShape(inputShape), activationFunction ?? new IdentityActivation<T>())
     {
         _poolingType = poolingType;
     }
 
     public GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base(inputShape, CalculateOutputShape(inputShape), vectorActivationFunction ?? new LinearActivation<T>())
+        : base(inputShape, CalculateOutputShape(inputShape), vectorActivationFunction ?? new IdentityActivation<T>())
     {
         _poolingType = poolingType;
     }

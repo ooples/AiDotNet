@@ -24,7 +24,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IActivationFunction<T>? activationFunction = null)
-        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], activationFunction ?? new LinearActivation<T>())
+        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], activationFunction ?? new IdentityActivation<T>())
     {
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
@@ -39,7 +39,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     }
 
     public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction ?? new LinearActivation<T>())
+        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction ?? new IdentityActivation<T>())
     {
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;

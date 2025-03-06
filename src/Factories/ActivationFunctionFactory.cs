@@ -9,7 +9,7 @@ public static class ActivationFunctionFactory<T>
             ActivationFunction.ReLU => new ReLUActivation<T>(),
             //ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
             //ActivationFunction.Tanh => new TanhActivation<T>(),
-            //ActivationFunction.Linear => new LinearActivation<T>(),
+            //ActivationFunction.Linear => new IdentityActivation<T>(),
             //ActivationFunction.LeakyReLU => new LeakyReLUActivation<T>(),
             //ActivationFunction.ELU => new ELUActivation<T>(),
             //ActivationFunction.SELU => new SELUActivation<T>(),

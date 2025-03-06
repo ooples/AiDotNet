@@ -43,6 +43,6 @@ public static class LayerFactory<T>
     //            options.KernelSize, 
     //            options.Stride, 
     //            options.Padding, 
-    //            (IActivationFunction<T>)new LinearActivation<T>());
+    //            (IActivationFunction<T>)new IdentityActivation<T>());
     //}
 }

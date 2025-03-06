@@ -1,13 +1,42 @@
-using AiDotNet.Enums.AlgorithmTypes;
-
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
+/// <summary>
+/// Implements Singular Spectrum Analysis (SSA) for time series decomposition.
+/// </summary>
+/// <remarks>
+/// <para>
+/// For Beginners: SSA is a technique that helps break down a time series (sequence of data points) into 
+/// meaningful components like trends, seasonal patterns, and noise. Think of it like separating the 
+/// ingredients of a mixed smoothie - you can identify the fruits, yogurt, and other components that were 
+/// blended together.
+/// </para>
+/// <para>
+/// SSA works by transforming your time series into a matrix, analyzing patterns using mathematical 
+/// techniques, and then reconstructing the important components.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly int _windowSize;
     private readonly int _numberOfComponents;
     private readonly SSAAlgorithmType _algorithmType;
 
+    /// <summary>
+    /// Initializes a new instance of the SSA decomposition algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: The window size determines how much historical data is considered when looking for patterns.
+    /// A larger window can capture longer-term patterns but requires more data. The number of components 
+    /// controls how many different patterns you want to extract from your data.
+    /// </para>
+    /// </remarks>
+    /// <param name="timeSeries">The time series data to decompose.</param>
+    /// <param name="windowSize">The window size for the trajectory matrix. Must be positive and not greater than half the time series length.</param>
+    /// <param name="numberOfComponents">The number of components to extract. Must be positive and not greater than the window size.</param>
+    /// <param name="algorithmType">The SSA algorithm variant to use. Defaults to Basic.</param>
+    /// <exception cref="ArgumentException">Thrown when window size or number of components are invalid.</exception>
     public SSADecomposition(Vector<T> timeSeries, int windowSize, int numberOfComponents, SSAAlgorithmType algorithmType = SSAAlgorithmType.Basic)
         : base(timeSeries)
     {
@@ -27,6 +56,13 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         Decompose();
     }
 
+    /// <summary>
+    /// Performs the time series decomposition using the selected SSA algorithm.
+    /// </summary>
+    /// <remarks>
+    /// This method orchestrates the entire decomposition process by selecting the appropriate
+    /// algorithm, grouping components, and reconstructing the time series.
+    /// </remarks>
     protected override void Decompose()
     {
         Matrix<T> trajectoryMatrix;
@@ -56,12 +92,36 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         AssignComponents(reconstructedComponents);
     }
 
+    /// <summary>
+    /// Performs Singular Value Decomposition on the trajectory matrix.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: SVD is a mathematical technique that breaks down a complex matrix into simpler parts.
+    /// It's like factoring a number (e.g., 12 = 3 × 4), but for matrices. This helps identify the most 
+    /// important patterns in your data.
+    /// </para>
+    /// </remarks>
+    /// <param name="trajectoryMatrix">The trajectory matrix to decompose.</param>
+    /// <returns>The U, S, and V components of the SVD.</returns>
     private (Matrix<T> U, Vector<T> S, Matrix<T> V) PerformSVD(Matrix<T> trajectoryMatrix)
     {
         var svdDecomposition = new SvdDecomposition<T>(trajectoryMatrix);
         return (svdDecomposition.U, svdDecomposition.S, svdDecomposition.Vt);
     }
 
+    /// <summary>
+    /// Performs Sequential SSA using an iterative approach.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: Sequential SSA extracts patterns one by one, starting with the strongest pattern.
+    /// After finding each pattern, it removes that pattern from the data before looking for the next one.
+    /// This is like identifying the loudest instrument in an orchestra, removing its sound, then identifying
+    /// the next loudest, and so on.
+    /// </para>
+    /// </remarks>
+    /// <returns>The U, S, and V components of the decomposition.</returns>
     private (Matrix<T> U, Vector<T> S, Matrix<T> V) PerformSequentialSSA()
     {
         int N = TimeSeries.Length;
@@ -102,6 +162,18 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         return (U, S, V);
     }
 
+    /// <summary>
+    /// Performs Toeplitz SSA using the autocovariance matrix.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: Toeplitz SSA is a variation that uses a special matrix structure to find patterns.
+    /// It focuses on how data points relate to each other at different time lags. This approach can be 
+    /// more efficient for certain types of time series data, especially when the patterns are consistent
+    /// over time.
+    /// </para>
+    /// </remarks>
+    /// <returns>The U, S, and V components of the decomposition.</returns>
     private (Matrix<T> U, Vector<T> S, Matrix<T> V) PerformToeplitzSSA()
     {
         int N = TimeSeries.Length;
@@ -145,6 +217,14 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         return (U, S, V);
     }
 
+    /// <summary>
+    /// Assigns the reconstructed components to their respective types (trend, seasonal, residual).
+    /// </summary>
+    /// <remarks>
+    /// By convention, the first component is typically assigned as the trend, the second as seasonal (if available),
+    /// and the remaining components are combined into the residual.
+    /// </remarks>
+    /// <param name="reconstructedComponents">The array of reconstructed components.</param>
     private void AssignComponents(Vector<T>[] reconstructedComponents)
     {
         AddComponent(DecompositionComponentType.Trend, reconstructedComponents[0]);
@@ -166,6 +246,18 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         }
     }
 
+    /// <summary>
+    /// Creates a trajectory matrix from the time series data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A trajectory matrix is a way to reorganize your time series data into a matrix format.
+    /// Imagine taking a sliding window of size _windowSize and moving it through your data one step at a time.
+    /// Each position of this window becomes a column in the matrix. This transformation helps us identify
+    /// patterns that might not be obvious in the original data.
+    /// </para>
+    /// </remarks>
+    /// <returns>A matrix where each column represents a segment of the original time series.</returns>
     private Matrix<T> CreateTrajectoryMatrix()
     {
         int K = TimeSeries.Length - _windowSize + 1;
@@ -182,6 +274,25 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         return trajectoryMatrix;
     }
 
+    /// <summary>
+    /// Groups the decomposed components based on the SVD results.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: After breaking down our data using SVD (Singular Value Decomposition), 
+    /// this method reconstructs each individual component. Think of it like reassembling specific 
+    /// instruments from an orchestra recording - we're recreating each instrument's contribution 
+    /// to the overall sound.
+    /// </para>
+    /// <para>
+    /// The mathematical operation used here (outer product) combines the patterns found in the U and V 
+    /// matrices, weighted by their importance (S values).
+    /// </para>
+    /// </remarks>
+    /// <param name="U">The left singular vectors from SVD.</param>
+    /// <param name="S">The singular values from SVD.</param>
+    /// <param name="V">The right singular vectors from SVD.</param>
+    /// <returns>An array of matrices, each representing a component in the trajectory matrix space.</returns>
     private Matrix<T>[] GroupComponents(Matrix<T> U, Vector<T> S, Matrix<T> V)
     {
         var groupedComponents = new Matrix<T>[_numberOfComponents];
@@ -196,6 +307,23 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         return groupedComponents;
     }
 
+    /// <summary>
+    /// Reconstructs the time series components from the grouped components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This method converts the matrix components back into time series format.
+    /// Since we transformed our original time series into a matrix earlier, we now need to reverse
+    /// that process to get meaningful time series components.
+    /// </para>
+    /// <para>
+    /// The process involves a technique called "diagonal averaging" where we average values along 
+    /// diagonals of the matrix. Imagine the matrix as a grid - we take all values that are the same 
+    /// "distance" from the top-left corner and average them together.
+    /// </para>
+    /// </remarks>
+    /// <param name="groupedComponents">The grouped components in matrix form.</param>
+    /// <returns>An array of vectors, each representing a reconstructed component of the original time series.</returns>
     private Vector<T>[] ReconstructComponents(Matrix<T>[] groupedComponents)
     {
         var reconstructedComponents = new Vector<T>[_numberOfComponents];

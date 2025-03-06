@@ -22,7 +22,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     public MemoryWriteLayer(int inputDimension, int memoryDimension, IActivationFunction<T>? activationFunction = null)
-        : base([inputDimension], [memoryDimension], activationFunction ?? new LinearActivation<T>())
+        : base([inputDimension], [memoryDimension], activationFunction ?? new IdentityActivation<T>())
     {
         _queryWeights = new Matrix<T>(inputDimension, memoryDimension);
         _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
@@ -34,7 +34,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     }
 
     public MemoryWriteLayer(int inputDimension, int memoryDimension, IVectorActivationFunction<T>? activationFunction = null)
-        : base([inputDimension], [memoryDimension], activationFunction ?? new LinearActivation<T>())
+        : base([inputDimension], [memoryDimension], activationFunction ?? new IdentityActivation<T>())
     {
         _queryWeights = new Matrix<T>(inputDimension, memoryDimension);
         _keyWeights = new Matrix<T>(inputDimension, memoryDimension);

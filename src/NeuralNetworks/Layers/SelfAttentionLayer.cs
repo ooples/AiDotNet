@@ -31,7 +31,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>
         : base(
             [sequenceLength, embeddingDimension], 
             [sequenceLength, embeddingDimension], 
-            activationFunction ?? new LinearActivation<T>())
+            activationFunction ?? new IdentityActivation<T>())
     {
         _queryWeights = Matrix<T>.Empty();
         _keyWeights = Matrix<T>.Empty();
@@ -49,7 +49,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>
         : base(
             [sequenceLength, embeddingDimension], 
             [sequenceLength, embeddingDimension], 
-            vectorActivationFunction ?? new LinearActivation<T>())
+            vectorActivationFunction ?? new IdentityActivation<T>())
     {
         _queryWeights = Matrix<T>.Empty();
         _keyWeights = Matrix<T>.Empty();

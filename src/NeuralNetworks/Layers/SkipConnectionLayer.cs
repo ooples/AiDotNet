@@ -8,13 +8,13 @@ public class SkipConnectionLayer<T> : LayerBase<T>
     public override bool SupportsTraining => _innerLayer?.SupportsTraining ?? true;
 
     public SkipConnectionLayer(ILayer<T>? innerLayer = null, IVectorActivationFunction<T>? vectorActivation = null)
-        : base(innerLayer?.GetInputShape() ?? [], innerLayer?.GetOutputShape() ?? [], vectorActivation ?? new LinearActivation<T>())
+        : base(innerLayer?.GetInputShape() ?? [], innerLayer?.GetOutputShape() ?? [], vectorActivation ?? new IdentityActivation<T>())
     {
         _innerLayer = innerLayer;
     }
 
     public SkipConnectionLayer(ILayer<T>? innerLayer = null, IActivationFunction<T>? scalarActivation = null)
-        : base(innerLayer?.GetInputShape() ?? [], innerLayer?.GetOutputShape() ?? [], scalarActivation ?? new LinearActivation<T>())
+        : base(innerLayer?.GetInputShape() ?? [], innerLayer?.GetOutputShape() ?? [], scalarActivation ?? new IdentityActivation<T>())
     {
         _innerLayer = innerLayer;
     }

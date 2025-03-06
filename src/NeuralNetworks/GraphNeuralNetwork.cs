@@ -106,7 +106,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
             FinalDenseLayerVectorActivation ?? new ReLUActivation<T>());
         // No separate activation layer needed since activation is included in the dense layer
         var outputLayer = new DenseLayer<T>(concatenated.Shape[1] / 2, meanPooled.Shape[1], 
-            FinalActivationLayerVectorActivation ?? new LinearActivation<T>());
+            FinalActivationLayerVectorActivation ?? new IdentityActivation<T>());
         var activation = new ReLUActivation<T>();
 
         var hidden = denseLayer.Forward(concatenated);

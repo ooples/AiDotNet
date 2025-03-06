@@ -125,7 +125,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         Strides = reader.ReadInt32();
     }
 
-    public override IEnumerable<ActivationType> GetActivationTypes()
+    public override IEnumerable<ActivationFunction> GetActivationTypes()
     {
         // Max pooling doesn't have an activation function
         return [];

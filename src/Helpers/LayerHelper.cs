@@ -152,7 +152,7 @@ public static class LayerHelper<T>
         yield return new GlobalPoolingLayer<T>(
             inputShape: [currentDepth, currentHeight, currentWidth],
             poolingType: PoolingType.Average,
-            activationFunction: new LinearActivation<T>()
+            activationFunction: new IdentityActivation<T>()
         );
 
         // Final dense layer
@@ -173,11 +173,11 @@ public static class LayerHelper<T>
                 inputWidth: width,
                 stride: 1,
                 padding: 0,
-                activation: new LinearActivation<T>()
+                activation: new IdentityActivation<T>()
             );
         }
 
-        yield return new SkipConnectionLayer<T>(skipInnerLayer, new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new SkipConnectionLayer<T>(skipInnerLayer, new IdentityActivation<T>() as IActivationFunction<T>);
 
         yield return new ConvolutionalLayer<T>(
             inputDepth: inputDepth,
@@ -201,8 +201,8 @@ public static class LayerHelper<T>
             activation: new ReLUActivation<T>()
         );
 
-        // Use LinearActivation for the AddLayer
-        yield return new AddLayer<T>([[outputDepth, height, width]], new LinearActivation<T>() as IActivationFunction<T>);
+        // Use IdentityActivation for the AddLayer
+        yield return new AddLayer<T>([[outputDepth, height, width]], new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Keep ReLU activation after addition
         yield return new ActivationLayer<T>([outputDepth, height, width], new ReLUActivation<T>() as IActivationFunction<T>);
@@ -263,7 +263,7 @@ public static class LayerHelper<T>
             else
             {
                 // Use linear activation for the encoded layer
-                yield return new ActivationLayer<T>([outputSize], new LinearActivation<T>() as IActivationFunction<T>);
+                yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
             }
 
             inputSize = outputSize;
@@ -395,7 +395,7 @@ public static class LayerHelper<T>
         }
 
         // Output layer (Q-values for each action)
-        yield return new DenseLayer<T>(defaultHiddenSize, actionSpace, new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(defaultHiddenSize, actionSpace, new IdentityActivation<T>() as IActivationFunction<T>);
         // No activation for the output layer as Q-values can be any real number
     }
 
@@ -417,17 +417,17 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(inputSize, controllerSize, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Memory interface
-        yield return new DenseLayer<T>(controllerSize, interfaceSize, new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(controllerSize, interfaceSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Output layer
-        yield return new DenseLayer<T>(controllerSize + readHeads * memoryWordSize, outputSize, new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(controllerSize + readHeads * memoryWordSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
         yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
     public static IEnumerable<ILayer<T>> CreateDefaultESNLayers(int inputSize, int outputSize, int reservoirSize, double spectralRadius = 0.9, double sparsity = 0.1)
     {
         // Input to Reservoir connections (fixed random weights)
-        yield return new DenseLayer<T>(inputSize, reservoirSize, new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(inputSize, reservoirSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Reservoir (recurrent connections, fixed random weights)
         yield return new ReservoirLayer<T>(reservoirSize, reservoirSize, spectralRadius: spectralRadius, connectionProbability: sparsity);
@@ -436,10 +436,10 @@ public static class LayerHelper<T>
         yield return new ActivationLayer<T>([reservoirSize], new TanhActivation<T>() as IVectorActivationFunction<T>);
 
         // Output layer (Reservoir to output, trainable)
-        yield return new DenseLayer<T>(reservoirSize, outputSize, new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(reservoirSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Output activation (optional, depends on the problem)
-        yield return new ActivationLayer<T>([outputSize], new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     public static IEnumerable<ILayer<T>> CreateDefaultVAELayers(NeuralNetworkArchitecture<T> architecture, int latentSize)
@@ -465,7 +465,7 @@ public static class LayerHelper<T>
 
         // Latent space layers
         int encoderOutputSize = latentSize * 2; // For mean and log variance
-        yield return new DenseLayer<T>(inputSize, encoderOutputSize, new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(inputSize, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Mean and LogVariance layers
         yield return new MeanLayer<T>([encoderOutputSize], axis: 0);
@@ -531,7 +531,7 @@ public static class LayerHelper<T>
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: modelDimension,
                 headCount: numHeads,
-                activationFunction: new LinearActivation<T>());
+                activationFunction: new IdentityActivation<T>());
             
             // Add normalization
             yield return new LayerNormalizationLayer<T>(modelDimension);
@@ -544,7 +544,7 @@ public static class LayerHelper<T>
         
             // Feed-forward network
             yield return new DenseLayer<T>(modelDimension, feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new DenseLayer<T>(feedForwardDimension, modelDimension, new LinearActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(feedForwardDimension, modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
         
             // Add normalization
             yield return new LayerNormalizationLayer<T>(modelDimension);
@@ -566,7 +566,7 @@ public static class LayerHelper<T>
                     sequenceLength: maxSequenceLength,
                     embeddingDimension: modelDimension,
                     headCount: numHeads,
-                    activationFunction: new LinearActivation<T>());
+                    activationFunction: new IdentityActivation<T>());
                 
                 // Add normalization
                 yield return new LayerNormalizationLayer<T>(modelDimension);
@@ -582,7 +582,7 @@ public static class LayerHelper<T>
                     sequenceLength: maxSequenceLength,
                     embeddingDimension: modelDimension,
                     headCount: numHeads,
-                    activationFunction: new LinearActivation<T>());
+                    activationFunction: new IdentityActivation<T>());
                 
                 // Add normalization
                 yield return new LayerNormalizationLayer<T>(modelDimension);
@@ -595,7 +595,7 @@ public static class LayerHelper<T>
             
                 // Feed-forward network
                 yield return new DenseLayer<T>(modelDimension, feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>);
-                yield return new DenseLayer<T>(feedForwardDimension, modelDimension, new LinearActivation<T>() as IActivationFunction<T>);
+                yield return new DenseLayer<T>(feedForwardDimension, modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
             
                 // Add normalization
                 yield return new LayerNormalizationLayer<T>(modelDimension);
@@ -609,7 +609,7 @@ public static class LayerHelper<T>
         }
     
         // Add the final projection layer
-        yield return new DenseLayer<T>(modelDimension, outputSize, new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(modelDimension, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
     
         // Add the final activation layer based on task type
         switch (taskType)
@@ -623,7 +623,7 @@ public static class LayerHelper<T>
                 break;
             
             case NeuralNetworkTaskType.Regression:
-                yield return new ActivationLayer<T>([outputSize], new LinearActivation<T>() as IActivationFunction<T>);
+                yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
                 break;
             
             case NeuralNetworkTaskType.TextGeneration:
@@ -634,7 +634,7 @@ public static class LayerHelper<T>
                         [outputSize],
                         input => input.Scale(NumOps.FromDouble(1.0 / temperature)),
                         (input, gradient) => gradient.Scale(NumOps.FromDouble(temperature)),
-                        new LinearActivation<T>() as IActivationFunction<T>);
+                        new IdentityActivation<T>() as IActivationFunction<T>);
                 }
 
                 yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
@@ -717,7 +717,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(
                 layerSizes[layerSizes.Count - 1], 
                 outputSize, 
-                new LinearActivation<T>() as IActivationFunction<T>
+                new IdentityActivation<T>() as IActivationFunction<T>
             );
         
             // Add appropriate activation based on task type
@@ -732,7 +732,7 @@ public static class LayerHelper<T>
             else
             {
                 // For regression or other tasks, use linear activation
-                yield return new ActivationLayer<T>([outputSize], new LinearActivation<T>() as IActivationFunction<T>);
+                yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
             }
         }
     }
@@ -755,7 +755,7 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenLayerSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
     
         // Output activation (optional, depends on the problem)
-        yield return new ActivationLayer<T>([outputSize], new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     public static IEnumerable<ILayer<T>> CreateDefaultGNNLayers(NeuralNetworkArchitecture<T> architecture)
@@ -799,7 +799,7 @@ public static class LayerHelper<T>
         yield return new GraphConvolutionalLayer<T>(
             inputFeatures: secondHiddenSize,
             outputFeatures: outputSize,
-            activationFunction: new LinearActivation<T>()
+            activationFunction: new IdentityActivation<T>()
         );
 
         // Add final activation based on task type
@@ -814,7 +814,7 @@ public static class LayerHelper<T>
         else
         {
             // For regression tasks
-            yield return new ActivationLayer<T>([outputSize], new LinearActivation<T>() as IVectorActivationFunction<T>);
+            yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IVectorActivationFunction<T>);
         }
     }
 
@@ -911,14 +911,14 @@ public static class LayerHelper<T>
             else
             {
                 // For regression or other sequence tasks, use linear activation
-                timeDistributedActivation = new LinearActivation<T>();
+                timeDistributedActivation = new IdentityActivation<T>();
             }
             
             yield return new TimeDistributedLayer<T>(
                 new DenseLayer<T>(
                     hiddenSize, 
                     outputSize, 
-                    new LinearActivation<T>() as IActivationFunction<T>
+                    new IdentityActivation<T>() as IActivationFunction<T>
                 ), timeDistributedActivation
             );
         }
@@ -928,7 +928,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(
                 hiddenSize, 
                 outputSize, 
-                new LinearActivation<T>() as IActivationFunction<T>
+                new IdentityActivation<T>() as IActivationFunction<T>
             );
         }
     
@@ -955,7 +955,7 @@ public static class LayerHelper<T>
         else
         {
             // For regression tasks
-            yield return new ActivationLayer<T>([outputSize], new LinearActivation<T>() as IVectorActivationFunction<T>);
+            yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IVectorActivationFunction<T>);
         }
     }
 
@@ -980,7 +980,7 @@ public static class LayerHelper<T>
         yield return new TemporalMemoryLayer<T>(columnCount, cellsPerColumn);
 
         // Output Layer
-        yield return new DenseLayer<T>(columnCount * cellsPerColumn, outputSize, new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(columnCount * cellsPerColumn, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
         yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
@@ -1048,7 +1048,7 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(
             inputSize: hiddenSize, 
             outputSize: outputSize,
-            activationFunction: new LinearActivation<T>()
+            activationFunction: new IdentityActivation<T>()
         );
 
         // Add the final Activation Layer (typically Softmax for classification tasks)
@@ -1142,7 +1142,7 @@ public static class LayerHelper<T>
         else
         {
             // For regression tasks
-            yield return new ActivationLayer<T>(new[] { outputSize }, new LinearActivation<T>() as IVectorActivationFunction<T>);
+            yield return new ActivationLayer<T>(new[] { outputSize }, new IdentityActivation<T>() as IVectorActivationFunction<T>);
         }
     }
 
@@ -1199,7 +1199,7 @@ public static class LayerHelper<T>
         }
         else
         {
-            yield return new ActivationLayer<T>([outputSize], new LinearActivation<T>() as IVectorActivationFunction<T>);
+            yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IVectorActivationFunction<T>);
         }
     }
 
@@ -1244,7 +1244,7 @@ public static class LayerHelper<T>
     
         // Output layer - linear projection before final task-specific activation
         yield return new DenseLayer<T>(controllerSize + memoryVectorSize, outputSize, 
-            new LinearActivation<T>() as IActivationFunction<T>);
+            new IdentityActivation<T>() as IActivationFunction<T>);
     
         // Final activation based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
@@ -1257,7 +1257,7 @@ public static class LayerHelper<T>
         }
         else
         {
-            yield return new ActivationLayer<T>(new[] { outputSize }, new LinearActivation<T>() as IVectorActivationFunction<T>);
+            yield return new ActivationLayer<T>(new[] { outputSize }, new IdentityActivation<T>() as IVectorActivationFunction<T>);
         }
     }
 
@@ -1410,7 +1410,7 @@ public static class LayerHelper<T>
             leakingRate);
 
         // Output layer
-        yield return new DenseLayer<T>(reservoirSize, outputSize, new LinearActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(reservoirSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Add the final Activation Layer based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
@@ -1423,7 +1423,7 @@ public static class LayerHelper<T>
         }
         else // Regression
         {
-            yield return new ActivationLayer<T>([outputSize], new LinearActivation<T>() as IActivationFunction<T>);
+            yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
         }
 
         // Add the final Activation Layer (typically Softmax for classification tasks)
@@ -1491,7 +1491,7 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(
             inputSize: currentInputSize, 
             outputSize: outputSize,
-            activationFunction: new LinearActivation<T>()
+            activationFunction: new IdentityActivation<T>()
         );
 
         // Add the final Activation Layer based on task type
@@ -1505,7 +1505,7 @@ public static class LayerHelper<T>
         }
         else // Regression or default
         {
-            yield return new ActivationLayer<T>([outputSize], new LinearActivation<T>() as IActivationFunction<T>);
+            yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
         }
     }
 }

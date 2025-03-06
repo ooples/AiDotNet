@@ -186,7 +186,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
         {
             // Check if the layer has an activation function typically used in output layers
             var activationTypes = layer.GetActivationTypes();
-            return activationTypes.Any(type => type == ActivationType.Softmax || type == ActivationType.Sigmoid);
+            return activationTypes.Any(type => type == ActivationFunction.Softmax || type == ActivationFunction.Sigmoid);
         }
 
         // If none of the above, it's not a valid output layer

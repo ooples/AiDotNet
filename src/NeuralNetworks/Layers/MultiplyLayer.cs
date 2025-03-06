@@ -8,13 +8,13 @@ public class MultiplyLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     public MultiplyLayer(int[][] inputShapes, IActivationFunction<T>? activationFunction = null)
-        : base(inputShapes, inputShapes[0], activationFunction ?? new LinearActivation<T>())
+        : base(inputShapes, inputShapes[0], activationFunction ?? new IdentityActivation<T>())
     {
         ValidateInputShapes(inputShapes);
     }
 
     public MultiplyLayer(int[][] inputShapes, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base(inputShapes, inputShapes[0], vectorActivationFunction ?? new LinearActivation<T>())
+        : base(inputShapes, inputShapes[0], vectorActivationFunction ?? new IdentityActivation<T>())
     {
         ValidateInputShapes(inputShapes);
     }

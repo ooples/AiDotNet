@@ -1,5 +1,17 @@
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
+/// <summary>
+/// Implements the Beveridge-Nelson decomposition method for time series analysis.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., double, float)</typeparam>
+/// <remarks>
+/// For Beginners: The Beveridge-Nelson decomposition separates a time series into two components:
+/// 1. A permanent component (trend) - the long-term path the data would follow if there were no temporary fluctuations
+/// 2. A temporary component (cycle) - short-term fluctuations that eventually fade away
+/// 
+/// This is useful for understanding which changes in your data (like stock prices or economic indicators)
+/// are likely to persist versus which are temporary fluctuations.
+/// </remarks>
 public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly BeveridgeNelsonAlgorithmType _algorithm;
@@ -7,6 +19,20 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     private readonly int _forecastHorizon;
     private readonly Matrix<T> _multivariateSeries;
 
+    /// <summary>
+    /// Initializes a new instance of the Beveridge-Nelson decomposition.
+    /// </summary>
+    /// <param name="timeSeries">The time series data to decompose</param>
+    /// <param name="algorithm">The algorithm type to use for decomposition</param>
+    /// <param name="arimaOptions">Options for the ARIMA model if using ARIMA-based decomposition</param>
+    /// <param name="forecastHorizon">Number of periods to forecast for trend calculation</param>
+    /// <param name="multivariateSeries">Additional time series data for multivariate decomposition</param>
+    /// <remarks>
+    /// For Beginners: This constructor sets up the decomposition with your time series data.
+    /// - Standard algorithm: Simple approach that works well for most cases
+    /// - ARIMA algorithm: More advanced approach that can handle more complex patterns
+    /// - Multivariate algorithm: Used when you have multiple related time series
+    /// </remarks>
     public BeveridgeNelsonDecomposition(Vector<T> timeSeries, 
         BeveridgeNelsonAlgorithmType algorithm = BeveridgeNelsonAlgorithmType.Standard,
         ARIMAOptions<T>? arimaOptions = null,
@@ -20,6 +46,12 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         _multivariateSeries = multivariateSeries ?? new Matrix<T>(TimeSeries.Length, 1);
     }
 
+    /// <summary>
+    /// Performs the decomposition based on the selected algorithm.
+    /// </summary>
+    /// <remarks>
+    /// This method selects and executes the appropriate decomposition algorithm.
+    /// </remarks>
     protected override void Decompose()
     {
         switch (_algorithm)
@@ -38,6 +70,14 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         }
     }
 
+    /// <summary>
+    /// Performs the standard Beveridge-Nelson decomposition.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners: This method uses a straightforward approach to separate your data into:
+    /// - Trend: The long-term direction your data is moving
+    /// - Cycle: Short-term ups and downs around the trend
+    /// </remarks>
     private void DecomposeStandard()
     {
         // Implement standard Beveridge-Nelson decomposition
@@ -48,6 +88,17 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         AddComponent(DecompositionComponentType.Cycle, cycle);
     }
 
+    /// <summary>
+    /// Performs the ARIMA-based Beveridge-Nelson decomposition.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners: This method uses a more sophisticated statistical model (ARIMA) to:
+    /// 1. Learn patterns in your data (like how values depend on previous values)
+    /// 2. Use these patterns to separate the permanent trend from temporary fluctuations
+    /// 
+    /// ARIMA stands for "AutoRegressive Integrated Moving Average" - it's a powerful
+    /// forecasting method that can capture complex patterns in time series data.
+    /// </remarks>
     private void DecomposeARIMA()
     {
         // Implement ARIMA-based Beveridge-Nelson decomposition
@@ -61,6 +112,18 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         AddComponent(DecompositionComponentType.Cycle, cycle);
     }
 
+    /// <summary>
+    /// Performs the multivariate Beveridge-Nelson decomposition.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners: This method is used when you have multiple related time series.
+    /// For example, if you're analyzing both unemployment rates and GDP growth,
+    /// this method can find connections between them and provide a more accurate
+    /// decomposition by considering how they influence each other.
+    /// 
+    /// It uses a Vector AutoRegression (VAR) model, which is like ARIMA but for
+    /// multiple time series at once.
+    /// </remarks>
     private void DecomposeMultivariate()
     {
         int n = _multivariateSeries.Rows;
@@ -102,6 +165,17 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates the long-run impact matrix for multivariate decomposition.
+    /// </summary>
+    /// <param name="varModel">The trained Vector AutoRegression model</param>
+    /// <param name="varOptions">Options used for the VAR model</param>
+    /// <returns>The long-run impact matrix</returns>
+    /// <remarks>
+    /// For Beginners: This matrix shows how changes in one variable permanently affect
+    /// all variables in the system. For example, how a permanent change in interest rates
+    /// might affect GDP, inflation, and unemployment in the long run.
+    /// </remarks>
     private Matrix<T> CalculateLongRunImpactMatrix(VectorAutoRegressionModel<T> varModel, VARModelOptions<T> varOptions)
     {
         int m = _multivariateSeries.Columns;
@@ -122,6 +196,19 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         return identity.Subtract(coeffSum).Inverse();
     }
 
+    /// <summary>
+    /// Calculates the trend component using the standard Beveridge-Nelson method.
+    /// </summary>
+    /// <returns>A vector containing the trend component of the time series</returns>
+    /// <remarks>
+    /// For Beginners: This method extracts the long-term trend from your data by:
+    /// 1. Finding how your data changes from one point to the next (differences)
+    /// 2. Calculating the average change and how these changes relate to each other over time
+    /// 3. Using this information to separate what's likely to be permanent (trend) from what's temporary
+    /// 
+    /// The trend represents the "permanent" part of your data - the path it would follow
+    /// if there were no temporary fluctuations.
+    /// </remarks>
     private Vector<T> CalculateStandardTrend()
     {
         int n = TimeSeries.Length;
@@ -170,12 +257,41 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         return trend;
     }
 
+    /// <summary>
+    /// Calculates the cyclical component using the standard Beveridge-Nelson method.
+    /// </summary>
+    /// <param name="trend">The previously calculated trend component</param>
+    /// <returns>A vector containing the cyclical component of the time series</returns>
+    /// <remarks>
+    /// For Beginners: This method extracts the temporary ups and downs in your data.
+    /// It simply subtracts the trend (long-term path) from your original data,
+    /// leaving only the short-term fluctuations that tend to disappear over time.
+    /// 
+    /// These fluctuations are called the "cycle" because they often show patterns
+    /// of ups and downs around the trend line.
+    /// </remarks>
     private Vector<T> CalculateStandardCycle(Vector<T> trend)
     {
         // Calculate cycle as the difference between the time series and the trend
         return TimeSeries.Subtract(trend);
     }
 
+    /// <summary>
+    /// Calculates the trend component using an ARIMA model-based Beveridge-Nelson method.
+    /// </summary>
+    /// <param name="model">The trained ARIMA model</param>
+    /// <returns>A vector containing the trend component of the time series</returns>
+    /// <remarks>
+    /// For Beginners: This method uses a statistical model called ARIMA to find patterns in your data.
+    /// ARIMA (AutoRegressive Integrated Moving Average) is like a smart pattern-finder that:
+    /// 
+    /// 1. Looks at how past values influence current values (AutoRegressive part)
+    /// 2. Handles data that needs to be "differenced" to become stable (Integrated part)
+    /// 3. Considers how past random fluctuations affect current values (Moving Average part)
+    /// 
+    /// Using these patterns, the method calculates what your data would look like in the
+    /// very long run - this becomes your trend component.
+    /// </remarks>
     private Vector<T> CalculateARIMATrend(ARIMAModel<T> model)
     {
         int n = TimeSeries.Length;
@@ -225,6 +341,19 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         return trend;
     }
 
+    /// <summary>
+    /// Calculates the cyclical component using the ARIMA-based Beveridge-Nelson method.
+    /// </summary>
+    /// <param name="trend">The previously calculated trend component</param>
+    /// <returns>A vector containing the cyclical component of the time series</returns>
+    /// <remarks>
+    /// For Beginners: After finding the long-term trend using the ARIMA model,
+    /// this method simply subtracts that trend from your original data.
+    /// 
+    /// What remains is the cyclical component - the temporary ups and downs
+    /// that don't persist in the long run. These might represent short-term
+    /// economic cycles, seasonal patterns, or other temporary influences on your data.
+    /// </remarks>
     private Vector<T> CalculateARIMACycle(Vector<T> trend)
     {
         // Calculate cycle as the difference between the time series and the trend

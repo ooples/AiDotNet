@@ -20,7 +20,7 @@ public class MemoryReadLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     public MemoryReadLayer(int inputDimension, int memoryDimension, int outputDimension, IActivationFunction<T>? activationFunction = null)
-        : base([inputDimension], [outputDimension], activationFunction ?? new LinearActivation<T>())
+        : base([inputDimension], [outputDimension], activationFunction ?? new IdentityActivation<T>())
     {
         _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
         _valueWeights = new Matrix<T>(memoryDimension, outputDimension);
@@ -31,7 +31,7 @@ public class MemoryReadLayer<T> : LayerBase<T>
     }
 
     public MemoryReadLayer(int inputDimension, int memoryDimension, int outputDimension, IVectorActivationFunction<T>? activationFunction = null)
-        : base([inputDimension], [outputDimension], activationFunction ?? new LinearActivation<T>())
+        : base([inputDimension], [outputDimension], activationFunction ?? new IdentityActivation<T>())
     {
         _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
         _valueWeights = new Matrix<T>(memoryDimension, outputDimension);

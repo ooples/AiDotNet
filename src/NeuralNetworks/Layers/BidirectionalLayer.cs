@@ -27,7 +27,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
         LayerBase<T> innerLayer, 
         bool mergeMode = true, 
         IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), vectorActivationFunction ?? new LinearActivation<T>())
+        : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), vectorActivationFunction ?? new IdentityActivation<T>())
     {
         _forwardLayer = innerLayer;
         _backwardLayer = innerLayer.Copy();

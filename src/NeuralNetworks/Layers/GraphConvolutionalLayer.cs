@@ -15,7 +15,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
-        : base([inputFeatures], [outputFeatures], activationFunction ?? new LinearActivation<T>())
+        : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
@@ -24,7 +24,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     }
 
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base([inputFeatures], [outputFeatures], vectorActivationFunction ?? new LinearActivation<T>())
+        : base([inputFeatures], [outputFeatures], vectorActivationFunction ?? new IdentityActivation<T>())
     {
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);

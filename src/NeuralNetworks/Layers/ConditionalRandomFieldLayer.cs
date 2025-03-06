@@ -19,7 +19,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IActivationFunction<T>? scalarActivation = null)
-        : base([sequenceLength, numClasses], [sequenceLength, numClasses], scalarActivation ?? new LinearActivation<T>())
+        : base([sequenceLength, numClasses], [sequenceLength, numClasses], scalarActivation ?? new IdentityActivation<T>())
     {
         _numClasses = numClasses;
         _sequenceLength = sequenceLength;
@@ -31,7 +31,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     }
 
     public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IVectorActivationFunction<T>? vectorActivation = null)
-        : base([sequenceLength, numClasses], [sequenceLength, numClasses], vectorActivation ?? new LinearActivation<T>())
+        : base([sequenceLength, numClasses], [sequenceLength, numClasses], vectorActivation ?? new IdentityActivation<T>())
     {
         _numClasses = numClasses;
         _sequenceLength = sequenceLength;
