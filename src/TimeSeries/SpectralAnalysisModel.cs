@@ -1,4 +1,3 @@
-
 namespace AiDotNet.TimeSeries;
 
 public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>

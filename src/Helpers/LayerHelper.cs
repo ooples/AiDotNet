@@ -1,11 +1,41 @@
-using System.Runtime.InteropServices;
-
 namespace AiDotNet.Helpers;
 
+/// <summary>
+/// Provides helper methods for creating various neural network layer configurations.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+/// <remarks>
+/// This class contains factory methods that create pre-configured sets of neural network layers
+/// for common architectures like standard feed-forward networks, CNNs, ResNets, and more.
+/// </remarks>
 public static class LayerHelper<T>
 {
+    /// <summary>
+    /// Provides operations for the numeric type T.
+    /// </summary>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>
+    /// Creates a standard feed-forward neural network with configurable hidden layers.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenLayerCount">Number of hidden layers (default: 1).</param>
+    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 64).</param>
+    /// <param name="outputSize">Number of output neurons (default: 1).</param>
+    /// <returns>A collection of layers forming a feed-forward neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A feed-forward neural network is the simplest type of neural network where
+    /// information flows in one direction from input to output. Think of it as an assembly line
+    /// where each layer processes the data and passes it to the next layer.
+    /// </para>
+    /// <para>
+    /// This method creates:
+    /// - An input layer that takes your data
+    /// - One or more hidden layers that learn patterns in your data
+    /// - An output layer that produces the final prediction
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultLayers(
         NeuralNetworkArchitecture<T> architecture, 
         int hiddenLayerCount = 1, 
@@ -29,6 +59,31 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenLayerSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a Convolutional Neural Network (CNN) with configurable layers.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="convLayerCount">Number of convolutional layers (default: 2).</param>
+    /// <param name="filterCount">Number of filters in each convolutional layer (default: 32).</param>
+    /// <param name="kernelSize">Size of the convolutional kernel (default: 3).</param>
+    /// <param name="denseLayerCount">Number of dense layers after convolutional layers (default: 1).</param>
+    /// <param name="denseLayerSize">Number of neurons in each dense layer (default: 64).</param>
+    /// <param name="outputSize">Number of output neurons (default: 1).</param>
+    /// <returns>A collection of layers forming a CNN.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Convolutional Neural Network (CNN) is specialized for processing grid-like data,
+    /// such as images. Instead of connecting every input to every neuron (which would be inefficient for images),
+    /// CNNs use filters that scan across the image to detect features like edges, textures, and shapes.
+    /// </para>
+    /// <para>
+    /// Key components in this CNN:
+    /// - Convolutional layers: Detect features in the input using filters
+    /// - Pooling layers: Reduce the size of the data while keeping important information
+    /// - Flatten layer: Converts the multi-dimensional data to a flat vector
+    /// - Dense layers: Process the extracted features to make predictions
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCNNLayers(
         NeuralNetworkArchitecture<T> architecture,
         int convLayerCount = 2,
@@ -86,6 +141,13 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(denseLayerSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Validates the parameters used for creating neural network layers.
+    /// </summary>
+    /// <param name="layerCount">Number of layers to validate.</param>
+    /// <param name="layerSize">Size of layers to validate.</param>
+    /// <param name="outputSize">Output size to validate.</param>
+    /// <exception cref="ArgumentException">Thrown when any parameter is less than 1.</exception>
     private static void ValidateLayerParameters(int layerCount, int layerSize, int outputSize)
     {
         if (layerCount < 1)
@@ -96,6 +158,32 @@ public static class LayerHelper<T>
             throw new ArgumentException("Output size must be at least 1.", nameof(outputSize));
     }
 
+    /// <summary>
+    /// Creates a Residual Neural Network (ResNet) with configurable blocks.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="blockCount">Number of residual blocks (default: 3).</param>
+    /// <param name="blockSize">Number of convolutional layers in each block (default: 2).</param>
+    /// <returns>A collection of layers forming a ResNet.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Residual Network (ResNet) is designed to solve the "vanishing gradient problem" 
+    /// that occurs when training very deep networks. It does this by adding "skip connections" that 
+    /// allow information to bypass some layers.
+    /// </para>
+    /// <para>
+    /// Think of it like this: In a traditional network, each layer must learn everything from scratch.
+    /// In a ResNet, each layer only needs to learn the "difference" (or residual) between its input and 
+    /// the desired output, which is often easier to learn.
+    /// </para>
+    /// <para>
+    /// Key components:
+    /// - Initial convolutional layer: Processes the raw input
+    /// - Residual blocks: Groups of layers with skip connections
+    /// - Global pooling: Reduces the spatial dimensions to a single value per feature map
+    /// - Final dense layer: Makes the prediction based on the extracted features
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultResNetLayers(NeuralNetworkArchitecture<T> architecture, int blockCount = 3, int blockSize = 2)
     {
         ValidateLayerParameters(blockCount, blockSize, architecture.OutputSize);
@@ -159,6 +247,23 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(currentDepth, architecture.OutputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a residual block for ResNet-style architectures.
+    /// </summary>
+    /// <param name="inputDepth">The number of input channels.</param>
+    /// <param name="outputDepth">The number of output channels.</param>
+    /// <param name="height">The height of the input feature map.</param>
+    /// <param name="width">The width of the input feature map.</param>
+    /// <param name="isFirstInBlock">Whether this is the first residual block in a series.</param>
+    /// <returns>A collection of layers that form a residual block.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A residual block is a special structure in neural networks that allows information to 
+    /// "skip" over some layers. This helps solve the "vanishing gradient problem" in deep networks, making 
+    /// them easier to train. Think of it like a highway bypass that lets some traffic go directly from 
+    /// point A to point C without going through point B.
+    /// </para>
+    /// </remarks>
     private static IEnumerable<ILayer<T>> CreateResidualBlock(int inputDepth, int outputDepth, int height, int width, bool isFirstInBlock)
     {
         // Create the skip connection with the appropriate inner layer
@@ -208,6 +313,19 @@ public static class LayerHelper<T>
         yield return new ActivationLayer<T>([outputDepth, height, width], new ReLUActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a default set of attention-based layers for transformer-style architectures.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <returns>A collection of layers forming an attention-based neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: Attention mechanisms allow neural networks to focus on specific parts of the input 
+    /// that are most relevant for a given task. Similar to how humans pay attention to specific details 
+    /// in a conversation, these layers help the network "pay attention" to important parts of the data.
+    /// Transformers use this mechanism to process sequences (like text) very effectively.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultAttentionLayers(NeuralNetworkArchitecture<T> architecture)
     {
         var inputShape = architecture.GetInputShape();
@@ -237,6 +355,19 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingSize, architecture.OutputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a default autoencoder neural network architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <returns>A collection of layers forming an autoencoder neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: An autoencoder is a type of neural network that learns to compress data into a 
+    /// smaller representation and then reconstruct it back to the original form. Think of it like 
+    /// learning to create a thumbnail of an image and then expanding it back to full size. The network 
+    /// has two main parts: an encoder that compresses the data and a decoder that reconstructs it.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultAutoEncoderLayers(NeuralNetworkArchitecture<T> architecture)
     {
         var inputShape = architecture.GetInputShape();
@@ -289,6 +420,24 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Creates a default capsule network architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <returns>A collection of layers forming a capsule network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A capsule network is an advanced type of neural network that tries to better 
+    /// understand spatial relationships in data. Unlike traditional networks that just detect features, 
+    /// capsule networks also track the position, orientation, and size of features. Think of it like 
+    /// the difference between recognizing a face by just its parts (eyes, nose, mouth) versus understanding 
+    /// how those parts relate to each other in 3D space.
+    /// </para>
+    /// <para>
+    /// The network consists of special "capsule" layers that group neurons together to represent entities 
+    /// and their properties, allowing the network to better understand complex structures in data.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCapsuleNetworkLayers(NeuralNetworkArchitecture<T> architecture)
     {
         if (architecture.CalculatedInputSize == 0)
@@ -343,6 +492,19 @@ public static class LayerHelper<T>
         );
     }
 
+    /// <summary>
+    /// Creates a default Deep Belief Network (DBN) with pre-configured layers.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <returns>A collection of layers forming a Deep Belief Network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Deep Belief Network is a type of neural network that learns to recognize patterns 
+    /// in data by building multiple layers that each specialize in finding specific features. It works by 
+    /// training each layer one at a time (called "pre-training"), which helps the network learn more 
+    /// effectively, especially when you don't have a lot of labeled training data.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultDeepBeliefNetworkLayers(NeuralNetworkArchitecture<T> architecture)
     {
         var rbmLayers = new List<RestrictedBoltzmannMachine<T>>();
@@ -376,6 +538,19 @@ public static class LayerHelper<T>
         architecture.RbmLayers = rbmLayers;
     }
 
+    /// <summary>
+    /// Creates a default Deep Q-Network (DQN) with pre-configured layers for reinforcement learning.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <returns>A collection of layers forming a Deep Q-Network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Deep Q-Network is a type of neural network used in reinforcement learning, 
+    /// which is how computers learn to make decisions by trying different actions and receiving rewards. 
+    /// Think of it like teaching a dog new tricks with treats. The network learns which actions 
+    /// (like moving left or right in a game) will lead to the highest rewards over time.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultDeepQNetworkLayers(NeuralNetworkArchitecture<T> architecture)
     {
         int inputSize = architecture.CalculatedInputSize;
@@ -399,6 +574,24 @@ public static class LayerHelper<T>
         // No activation for the output layer as Q-values can be any real number
     }
 
+    /// <summary>
+    /// Creates a default Differentiable Neural Computer (DNC) with pre-configured layers.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="controllerSize">The size of the controller network.</param>
+    /// <param name="memoryWordSize">The size of each memory word.</param>
+    /// <param name="readHeads">The number of read heads.</param>
+    /// <param name="interfaceSize">The size of the interface between controller and memory.</param>
+    /// <returns>A collection of layers forming a Differentiable Neural Computer.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Differentiable Neural Computer (DNC) is like a neural network with a built-in 
+    /// memory system. Traditional neural networks process information and then forget it, but a DNC 
+    /// can store information in its "memory" and retrieve it later when needed. This makes DNCs good 
+    /// at tasks that require remembering information over time, like answering questions about a story 
+    /// or navigating through complex environments.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultDNCLayers(NeuralNetworkArchitecture<T> architecture, int controllerSize, int memoryWordSize, int readHeads, int interfaceSize)
     {
         var inputShape = architecture.GetInputShape();
@@ -424,6 +617,24 @@ public static class LayerHelper<T>
         yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a default Echo State Network (ESN) with pre-configured layers.
+    /// </summary>
+    /// <param name="inputSize">The size of the input layer.</param>
+    /// <param name="outputSize">The size of the output layer.</param>
+    /// <param name="reservoirSize">The size of the reservoir (hidden layer).</param>
+    /// <param name="spectralRadius">Controls the stability of the reservoir dynamics (default: 0.9).</param>
+    /// <param name="sparsity">The connection sparsity in the reservoir (default: 0.1).</param>
+    /// <returns>A collection of layers forming an Echo State Network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: An Echo State Network is a special type of recurrent neural network where most 
+    /// of the connections between neurons are fixed (not trained). Only the connections from the hidden 
+    /// layer to the output are trained. Think of it like having a pool of water (the reservoir) that 
+    /// you disturb with input signals, and then you learn to read the ripple patterns to predict outputs. 
+    /// This makes ESNs very fast to train compared to other recurrent networks.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultESNLayers(int inputSize, int outputSize, int reservoirSize, double spectralRadius = 0.9, double sparsity = 0.1)
     {
         // Input to Reservoir connections (fixed random weights)
@@ -442,6 +653,25 @@ public static class LayerHelper<T>
         yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a default Variational Autoencoder (VAE) with pre-configured layers.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="latentSize">The size of the latent space dimension.</param>
+    /// <returns>A collection of layers forming a Variational Autoencoder.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Variational Autoencoder (VAE) is a type of neural network that learns to 
+    /// compress data into a smaller representation (encoding) and then reconstruct it back (decoding). 
+    /// What makes VAEs special is that they create a "fuzzy" compressed representation rather than 
+    /// an exact one, which helps the network learn meaningful patterns in your data. This makes VAEs 
+    /// excellent for generating new data similar to your training examples.
+    /// </para>
+    /// <para>
+    /// The latent space is the compressed representation where your data exists in a simplified form.
+    /// Think of it as a "creative space" where the network understands the essential features of your data.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultVAELayers(NeuralNetworkArchitecture<T> architecture, int latentSize)
     {
         var inputShape = architecture.GetInputShape();
@@ -489,6 +719,27 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(inputSize, inputShape[0], new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a default Transformer neural network with pre-configured encoder and decoder layers.
+    /// </summary>
+    /// <param name="architecture">The transformer architecture configuration.</param>
+    /// <returns>A collection of layers forming a Transformer neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Transformer is a powerful type of neural network especially good at processing 
+    /// sequences like text or time series data. Unlike older networks, Transformers can look at all parts 
+    /// of the input at once (using "attention") rather than processing it step by step. This makes them 
+    /// excellent for tasks like translation, text generation, and understanding language.
+    /// </para>
+    /// <para>
+    /// Key concepts:
+    /// - Attention: Allows the model to focus on relevant parts of the input regardless of position
+    /// - Multi-head attention: Lets the model focus on different aspects of the input simultaneously
+    /// - Encoder: Processes the input sequence
+    /// - Decoder: Generates the output sequence
+    /// - Positional encoding: Helps the model understand the order of elements in a sequence
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTransformerLayers(
         TransformerArchitecture<T> architecture)
     {
@@ -650,22 +901,45 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Creates default layers for a Spiking Neural Network (SNN).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="neuronType">The type of spiking neuron to use.</param>
+    /// <param name="tau">The membrane time constant that controls how quickly neurons respond to inputs.</param>
+    /// <param name="refractoryPeriod">The period after firing during which a neuron cannot fire again.</param>
+    /// <param name="useLayerNormalization">Whether to use layer normalization to stabilize training.</param>
+    /// <param name="useOutputConversion">Whether to convert spike outputs to continuous values.</param>
+    /// <returns>A collection of layers forming a Spiking Neural Network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: Spiking Neural Networks (SNNs) are a type of neural network that more closely 
+    /// mimics how real neurons in the brain work. Unlike traditional neural networks that use continuous 
+    /// values, SNNs use "spikes" (binary on/off signals) to communicate between neurons. This makes them 
+    /// more biologically realistic and potentially more energy-efficient for certain tasks.
+    /// </para>
+    /// <para>
+    /// The tau parameter controls how quickly a neuron "forgets" previous inputs - larger values make 
+    /// the neuron remember inputs for longer. The refractory period is like a "rest time" after a neuron 
+    /// fires, during which it cannot fire again, similar to how real neurons behave.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultSpikingLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire,
-        double tau = 10.0,
-        double refractoryPeriod = 2.0,
-        bool useLayerNormalization = false,
-        bool useOutputConversion = true)
+            NeuralNetworkArchitecture<T> architecture,
+            SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire,
+            double tau = 10.0,
+            double refractoryPeriod = 2.0,
+            bool useLayerNormalization = false,
+            bool useOutputConversion = true)
     {
         // Get input and output dimensions
         var inputShape = architecture.GetInputShape();
-    
+
         if (inputShape == null || inputShape.Length == 0)
         {
             throw new InvalidOperationException("Input shape must be specified for Spiking Neural Network.");
         }
-    
+
         // Determine layer sizes based on architecture
         int inputSize = architecture.CalculatedInputSize;
         int outputSize = architecture.OutputSize > 0 
@@ -688,13 +962,13 @@ public static class LayerHelper<T>
             // Default architecture with two hidden layers
             layerSizes = new List<int> { inputSize, 128, 64, outputSize };
         }
-    
+
         // Create layers
         for (int i = 0; i < layerSizes.Count - 1; i++)
         {
             int currentSize = layerSizes[i];
             int nextSize = layerSizes[i + 1];
-        
+    
             // Add spiking layer
             yield return new SpikingLayer<T>(
                 inputSize: currentSize,
@@ -703,14 +977,14 @@ public static class LayerHelper<T>
                 tau: tau,
                 refractoryPeriod: refractoryPeriod
             );
-        
+    
             // Add normalization layer to stabilize spiking activity
             if (useLayerNormalization)
             {
                 yield return new LayerNormalizationLayer<T>(nextSize);
             }
         }
-    
+
         // Add output layer - typically a dense layer to convert spikes to continuous values
         if (useOutputConversion)
         {
@@ -719,7 +993,7 @@ public static class LayerHelper<T>
                 outputSize, 
                 new IdentityActivation<T>() as IActivationFunction<T>
             );
-        
+    
             // Add appropriate activation based on task type
             if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
             {
@@ -737,6 +1011,25 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Creates default layers for an Extreme Learning Machine (ELM) neural network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenLayerSize">The size of the hidden layer.</param>
+    /// <returns>A collection of layers forming an Extreme Learning Machine.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: An Extreme Learning Machine (ELM) is a simplified neural network where only the 
+    /// output layer weights are trained. The hidden layer weights are randomly initialized and never updated. 
+    /// This makes ELMs very fast to train compared to traditional neural networks, while still providing 
+    /// good performance for many tasks. Think of it as a "shortcut" approach to neural network training.
+    /// </para>
+    /// <para>
+    /// ELMs work by projecting the input data into a higher-dimensional space using random weights, 
+    /// then finding the best output weights to solve the problem. They're particularly useful when you 
+    /// need a quick solution and don't have time for extensive training.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultELMLayers(NeuralNetworkArchitecture<T> architecture, int hiddenLayerSize)
     {
         // Determine layer sizes based on architecture
@@ -747,17 +1040,36 @@ public static class LayerHelper<T>
 
         // Random projection layer (input to hidden)
         yield return new DenseLayer<T>(inputSize, hiddenLayerSize, new IdentityActivation<T>() as IActivationFunction<T>);
-    
+
         // Activation for hidden layer
         yield return new ActivationLayer<T>([hiddenLayerSize], new SigmoidActivation<T>() as IActivationFunction<T>);
-    
+
         // Output layer (hidden to output)
         yield return new DenseLayer<T>(hiddenLayerSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
-    
+
         // Output activation (optional, depends on the problem)
         yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates default layers for a Graph Neural Network (GNN).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <returns>A collection of layers forming a Graph Neural Network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: Graph Neural Networks (GNNs) are specialized neural networks designed to work with 
+    /// graph-structured data, where information is represented as nodes (points) connected by edges (lines). 
+    /// Examples include social networks, molecular structures, or road networks.
+    /// </para>
+    /// <para>
+    /// Unlike standard neural networks that process individual data points independently, GNNs can 
+    /// understand relationships between data points. They work by passing information between connected 
+    /// nodes, allowing each node to "learn" from its neighbors. This makes GNNs powerful for tasks where 
+    /// relationships between entities matter, such as recommending friends on social media, predicting 
+    /// protein interactions, or analyzing traffic patterns.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultGNNLayers(NeuralNetworkArchitecture<T> architecture)
     {
         // Check if we have the minimum required network dimensions
@@ -769,7 +1081,7 @@ public static class LayerHelper<T>
         // Define network structure with sensible defaults
         int inputSize = architecture.CalculatedInputSize;
         int outputSize = architecture.OutputSize;
-    
+
         // Define default GNN architecture - typically 2-3 graph convolutional layers
         // with decreasing sizes is a good starting point for many graph problems
         int firstHiddenSize = 64;
@@ -781,17 +1093,17 @@ public static class LayerHelper<T>
             outputFeatures: firstHiddenSize,
             activationFunction: new ReLUActivation<T>()
         );
-    
+
         // Add dropout for regularization (common in GNNs)
         yield return new DropoutLayer<T>(0.2);
-    
+
         // Create second graph convolution layer
         yield return new GraphConvolutionalLayer<T>(
             inputFeatures: firstHiddenSize,
             outputFeatures: secondHiddenSize,
             activationFunction: new ReLUActivation<T>()
         );
-    
+
         // Add dropout for regularization
         yield return new DropoutLayer<T>(0.2);
 
@@ -818,6 +1130,24 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Creates a default Gated Recurrent Unit (GRU) neural network layer configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <returns>A collection of layers configured for GRU-based processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A GRU (Gated Recurrent Unit) is a type of recurrent neural network that's 
+    /// especially good at learning patterns in sequences of data, like text or time series. 
+    /// It's similar to LSTM but with a simpler structure, making it faster to train while 
+    /// still capturing long-term dependencies in data.
+    /// </para>
+    /// <para>
+    /// This method automatically configures appropriate GRU layers based on your task type,
+    /// with sensible defaults for hidden layer sizes and activation functions.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid input or output dimensions.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultGRULayers(NeuralNetworkArchitecture<T> architecture)
     {
         // Check if we have the minimum required network dimensions
@@ -893,12 +1223,11 @@ public static class LayerHelper<T>
         }
     
         // For sequence-to-sequence tasks, we might need a time-distributed dense layer
-                // For sequence-to-sequence tasks, we might need a time-distributed dense layer
         if (architecture.TaskType == NeuralNetworkTaskType.SequenceToSequence)
         {
             // Choose appropriate activation based on task subtype
             IActivationFunction<T> timeDistributedActivation;
-            
+        
             // Determine the appropriate activation function based on the specific task
             if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
             {
@@ -913,7 +1242,7 @@ public static class LayerHelper<T>
                 // For regression or other sequence tasks, use linear activation
                 timeDistributedActivation = new IdentityActivation<T>();
             }
-            
+        
             yield return new TimeDistributedLayer<T>(
                 new DenseLayer<T>(
                     hiddenSize, 
@@ -959,6 +1288,29 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Creates a default Hierarchical Temporal Memory (HTM) neural network layer configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="columnCount">The number of columns in the HTM network.</param>
+    /// <param name="cellsPerColumn">The number of cells per column.</param>
+    /// <param name="sparsityThreshold">The sparsity threshold for the spatial pooler.</param>
+    /// <returns>A collection of layers configured for HTM processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: Hierarchical Temporal Memory (HTM) is a machine learning technology that 
+    /// mimics certain structural and algorithmic properties of the neocortex (the part of the brain 
+    /// responsible for higher-order thinking). HTM is particularly good at learning patterns in 
+    /// sequential data and making predictions.
+    /// </para>
+    /// <para>
+    /// Key HTM concepts:
+    /// - Columns: Vertical arrangements of cells that work together
+    /// - Cells: The basic processing units (like neurons)
+    /// - Sparsity: Only a small percentage of cells are active at any time, which helps with learning
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid input or output dimensions.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultHTMLayers(NeuralNetworkArchitecture<T> architecture, int columnCount, int cellsPerColumn, double sparsityThreshold)
     {
         var inputShape = architecture.GetInputShape();
@@ -984,10 +1336,30 @@ public static class LayerHelper<T>
         yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a default Memory Network layer configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="memorySize">The size of the memory component (number of memory slots).</param>
+    /// <param name="embeddingSize">The dimension of the embedding vectors.</param>
+    /// <returns>A collection of layers configured for a Memory Network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Memory Network is a type of neural network that has an explicit memory component.
+    /// Think of it like a notebook that the network can write to and read from while processing information.
+    /// This makes it particularly good at tasks that require remembering context from earlier in a sequence,
+    /// such as answering questions about a story or maintaining a conversation.
+    /// </para>
+    /// <para>
+    /// The memory size parameter controls how many "pages" are in the notebook, while the embedding size
+    /// determines how detailed each "note" can be.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid input or output dimensions.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultMemoryNetworkLayers(
-        NeuralNetworkArchitecture<T> architecture, 
-        int memorySize, 
-        int embeddingSize)
+            NeuralNetworkArchitecture<T> architecture, 
+            int memorySize, 
+            int embeddingSize)
     {
         var inputShape = architecture.GetInputShape();
     
@@ -1055,6 +1427,23 @@ public static class LayerHelper<T>
         yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a default Recurrent Neural Network (RNN) layer configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <returns>A collection of layers configured for RNN-based processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Recurrent Neural Network (RNN) is designed to work with sequential data
+    /// by maintaining a form of "memory" of previous inputs. Unlike standard neural networks,
+    /// RNNs can use their internal state to process sequences of inputs, making them ideal for
+    /// tasks like text analysis, speech recognition, or time series prediction.
+    /// </para>
+    /// <para>
+    /// This method automatically configures appropriate RNN layers with sensible defaults,
+    /// including hidden layer sizes and activation functions.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultRNNLayers(NeuralNetworkArchitecture<T> architecture)
     {
         // Get input and output dimensions from the architecture
@@ -1103,6 +1492,28 @@ public static class LayerHelper<T>
         yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a default Radial Basis Function (RBF) neural network layer configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="hiddenSize">The size of the hidden layer. If set to 0 or negative, a default size will be calculated.</param>
+    /// <param name="rbfFunction">The radial basis function to use. If null, a default Gaussian RBF will be used.</param>
+    /// <returns>A collection of layers configured for RBF network processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Radial Basis Function (RBF) Network is a special type of neural network that uses
+    /// "distance" to make predictions. Instead of gradually learning patterns through weights like standard
+    /// neural networks, RBF networks measure how similar or different an input is from known examples.
+    /// </para>
+    /// <para>
+    /// Think of it like this: if you want to identify a fruit, you might compare how similar it looks to
+    /// fruits you already know. An RBF network works in a similar way - it has "reference points" and
+    /// measures how close new data is to these points.
+    /// </para>
+    /// <para>
+    /// RBF networks are particularly good at function approximation, pattern recognition, and time series prediction.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultRBFNetworkLayers(
         NeuralNetworkArchitecture<T> architecture,
         int hiddenSize = 0,
@@ -1133,22 +1544,39 @@ public static class LayerHelper<T>
         // Add the final Activation Layer based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
         {
-            yield return new ActivationLayer<T>(new[] { outputSize }, new SigmoidActivation<T>() as IVectorActivationFunction<T>);
+            yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IVectorActivationFunction<T>);
         }
         else if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
         {
-            yield return new ActivationLayer<T>(new[] { outputSize }, new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
         }
         else
         {
             // For regression tasks
-            yield return new ActivationLayer<T>(new[] { outputSize }, new IdentityActivation<T>() as IVectorActivationFunction<T>);
+            yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IVectorActivationFunction<T>);
         }
     }
 
+    /// <summary>
+    /// Creates a default configuration of layers for a Quantum Neural Network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="numQubits">The number of qubits to use in quantum layers (default: 4).</param>
+    /// <returns>A collection of layers configured for a Quantum Neural Network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Quantum Neural Network combines quantum computing concepts with neural networks.
+    /// Think of qubits as special units that can exist in multiple states at once (unlike regular bits
+    /// that are either 0 or 1). This gives quantum networks potential advantages for certain problems.
+    /// The numQubits parameter controls how many of these special quantum units are used in each
+    /// quantum layer.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when numQubits is not positive.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultQuantumNetworkLayers(
-        NeuralNetworkArchitecture<T> architecture, 
-        int numQubits = 4)
+            NeuralNetworkArchitecture<T> architecture, 
+            int numQubits = 4)
     {
         if (architecture == null)
             throw new ArgumentNullException(nameof(architecture));
@@ -1203,6 +1631,28 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Creates a default configuration of layers for a Neural Turing Machine (NTM).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="memorySize">The number of memory locations (default: 128).</param>
+    /// <param name="memoryVectorSize">The size of each memory vector (default: 20).</param>
+    /// <param name="controllerSize">The size of the controller network (default: 100).</param>
+    /// <returns>A collection of layers configured for a Neural Turing Machine.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Neural Turing Machine (NTM) is a type of neural network that has an external 
+    /// memory component, similar to how computers have RAM. The network learns to read from and write to 
+    /// this memory, which helps it solve tasks that require remembering information over long periods.
+    /// </para>
+    /// <para>
+    /// - memorySize: How many "slots" are in the memory (like pages in a notebook)
+    /// - memoryVectorSize: How much information each memory slot can hold
+    /// - controllerSize: How complex the "brain" of the network is that decides what to read/write
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when memory parameters are not positive.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultNTMLayers(
         NeuralNetworkArchitecture<T> architecture,
         int memorySize = 128,
@@ -1261,6 +1711,22 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Creates a default configuration of layers for a standard neural network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <returns>A collection of layers configured for a standard neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This method creates the basic building blocks (layers) of a neural network.
+    /// Think of layers as a series of connected processing units that transform your input data
+    /// step by step until it produces the desired output. The complexity parameter in the architecture
+    /// determines how many layers and neurons your network will have - Simple networks have fewer layers
+    /// while Deep networks have more layers for handling more complex problems.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when input size or output size is not positive.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultNeuralNetworkLayers(NeuralNetworkArchitecture<T> architecture)
     {
         // Validate input
@@ -1292,20 +1758,20 @@ public static class LayerHelper<T>
                 // One hidden layer with size between input and output
                 hiddenLayerSizes.Add((inputSize + outputSize) / 2);
                 break;
-            
+        
             case NetworkComplexity.Medium:
                 // Two hidden layers
                 hiddenLayerSizes.Add(inputSize * 2);
                 hiddenLayerSizes.Add(inputSize);
                 break;
-            
+        
             case NetworkComplexity.Deep:
                 // Three hidden layers
                 hiddenLayerSizes.Add(inputSize * 2);
                 hiddenLayerSizes.Add(inputSize * 2);
                 hiddenLayerSizes.Add(inputSize);
                 break;
-            
+        
             default:
                 // Default to one hidden layer
                 hiddenLayerSizes.Add(inputSize);
@@ -1315,16 +1781,16 @@ public static class LayerHelper<T>
         // Create input layer to first hidden layer
         int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
         yield return new DenseLayer<T>(inputSize, firstHiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ActivationLayer<T>(new[] { firstHiddenLayerSize }, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ActivationLayer<T>([firstHiddenLayerSize], new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Create hidden layers
         for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
         {
             int currentLayerSize = hiddenLayerSizes[i];
             int nextLayerSize = hiddenLayerSizes[i + 1];
-        
+    
             yield return new DenseLayer<T>(currentLayerSize, nextLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new ActivationLayer<T>(new[] { nextLayerSize }, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ActivationLayer<T>([nextLayerSize], new ReLUActivation<T>() as IActivationFunction<T>);
         }
 
         // Create last hidden layer to output layer
@@ -1338,11 +1804,38 @@ public static class LayerHelper<T>
             // If no hidden layers, connect input directly to output
             yield return new DenseLayer<T>(inputSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
         }
-    
+
         // Final activation layer for output
         yield return new ActivationLayer<T>(new[] { outputSize }, new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a default configuration of layers for a Liquid State Machine (LSM) neural network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="reservoirSize">The size of the reservoir (number of neurons in the reservoir layer). Default is 100.</param>
+    /// <param name="connectionProbability">The probability of connection between neurons in the reservoir. Default is 0.1 (10%).</param>
+    /// <param name="spectralRadius">Controls the stability of the reservoir dynamics. Default is 0.9.</param>
+    /// <param name="inputScaling">Scaling factor for input connections. Default is 1.0.</param>
+    /// <param name="leakingRate">Controls how quickly the reservoir responds to new inputs. Default is 1.0.</param>
+    /// <returns>A collection of layers configured for a Liquid State Machine.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: A Liquid State Machine is a special type of neural network inspired by how 
+    /// the brain processes information. The key component is the "reservoir" - imagine it as a pool 
+    /// of randomly connected neurons that create complex patterns when input is fed into them.
+    /// 
+    /// - The reservoirSize is how many neurons are in this pool
+    /// - The connectionProbability determines how densely connected these neurons are
+    /// - The spectralRadius affects how stable the patterns in the reservoir are
+    /// - The inputScaling controls how strongly the input affects the reservoir
+    /// - The leakingRate determines how quickly the reservoir responds to new information
+    /// 
+    /// LSMs are particularly good at processing time-dependent data like speech or video.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when input shape is not specified or input/output size is not positive.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultLSMLayers(
         NeuralNetworkArchitecture<T> architecture,
         int reservoirSize = 100,
@@ -1430,66 +1923,117 @@ public static class LayerHelper<T>
         yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates a default configuration of layers for a Long Short-Term Memory (LSTM) neural network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <returns>A collection of layers configured for an LSTM neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: LSTM (Long Short-Term Memory) networks are a special kind of neural network
+    /// designed to remember information for long periods of time. Think of them like a person with
+    /// a good memory who can recall things from the past to make decisions in the present.
+    /// </para>
+    /// <para>
+    /// LSTMs are particularly useful for:
+    /// - Text prediction (like autocomplete on your phone)
+    /// - Speech recognition
+    /// - Time series forecasting (like stock prices or weather)
+    /// - Any task where the order of data matters
+    /// </para>
+    /// <para>
+    /// Key terms explained:
+    /// - Hidden Size: How much information the network can remember at once (bigger = more memory)
+    /// - Layers: How many processing steps the data goes through (more layers = more complex patterns)
+    /// - Activation Function: How neurons decide whether to fire (like Tanh or Sigmoid)
+    /// - Recurrent Activation: Special activation function used for the memory gates
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when input shape is not specified or input/output size is not positive.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultLSTMNetworkLayers(NeuralNetworkArchitecture<T> architecture)
     {
+        // Validate input
+        if (architecture == null)
+        {
+            throw new ArgumentNullException(nameof(architecture));
+        }
+
+        // Get input shape and output size
         var inputShape = architecture.GetInputShape();
+    
+        if (inputShape == null || inputShape.Length == 0)
+        {
+            throw new InvalidOperationException("Input shape must be specified for LSTM network.");
+        }
+    
         int inputSize = inputShape[0];
         int outputSize = architecture.OutputSize;
     
+        if (inputSize <= 0)
+        {
+            throw new InvalidOperationException("Input size must be greater than zero.");
+        }
+
+        if (outputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size must be greater than zero.");
+        }
+
         // Calculate hidden layer sizes based on network complexity
-        int hiddenSize;
-        int numLayers;
+        int _hiddenSize;  // Size of hidden state in LSTM cells
+        int _numLayers;   // Number of stacked LSTM layers
     
         switch (architecture.Complexity)
         {
             case NetworkComplexity.Simple:
-                hiddenSize = Math.Max(32, inputSize);
-                numLayers = 1;
+                _hiddenSize = Math.Max(32, inputSize);
+                _numLayers = 1;
                 break;
             case NetworkComplexity.Medium:
-                hiddenSize = Math.Max(64, inputSize * 2);
-                numLayers = 2;
+                _hiddenSize = Math.Max(64, inputSize * 2);
+                _numLayers = 2;
                 break;
             case NetworkComplexity.Deep:
-                hiddenSize = Math.Max(128, inputSize * 3);
-                numLayers = 3;
+                _hiddenSize = Math.Max(128, inputSize * 3);
+                _numLayers = 3;
                 break;
             default:
-                hiddenSize = Math.Max(64, inputSize);
-                numLayers = 2;
+                _hiddenSize = Math.Max(64, inputSize);
+                _numLayers = 2;
                 break;
         }
 
-        // Input layer
+        // Input layer - receives the raw input data
         yield return new InputLayer<T>(inputSize);
     
-        // LSTM layers
-        int currentInputSize = inputSize;
+        // LSTM layers - process sequential information with memory capabilities
+        int _currentInputSize = inputSize;
     
-        for (int i = 0; i < numLayers; i++)
+        for (int i = 0; i < _numLayers; i++)
         {
             // For deeper networks, gradually decrease the hidden size
-            int layerHiddenSize = i == numLayers - 1 ? 
-                Math.Max(outputSize, hiddenSize / 2) : 
-                hiddenSize;
-            
+            int _layerHiddenSize = i == _numLayers - 1 ? 
+                Math.Max(outputSize, _hiddenSize / 2) : 
+                _hiddenSize;
+        
             // Add LSTM Layer
             yield return new LSTMLayer<T>(
-                inputSize: currentInputSize,
-                hiddenSize: layerHiddenSize,
+                inputSize: _currentInputSize,
+                hiddenSize: _layerHiddenSize,
                 activation: new TanhActivation<T>() as IActivationFunction<T>,
                 recurrentActivation: new SigmoidActivation<T>()
             );
-        
+    
             // Add Activation Layer after LSTM
-            yield return new ActivationLayer<T>([layerHiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
-        
-            currentInputSize = layerHiddenSize;
+            yield return new ActivationLayer<T>([_layerHiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
+    
+            _currentInputSize = _layerHiddenSize;
         }
 
-        // Add the final Dense Layer
+        // Add the final Dense Layer - transforms LSTM output to desired output size
         yield return new DenseLayer<T>(
-            inputSize: currentInputSize, 
+            inputSize: _currentInputSize, 
             outputSize: outputSize,
             activationFunction: new IdentityActivation<T>()
         );
@@ -1497,14 +2041,17 @@ public static class LayerHelper<T>
         // Add the final Activation Layer based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
         {
+            // For multi-class classification (choosing one class from many)
             yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
         }
         else if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
         {
+            // For binary classification (yes/no decisions)
             yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IActivationFunction<T>);
         }
         else // Regression or default
         {
+            // For regression (predicting continuous values)
             yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
         }
     }
