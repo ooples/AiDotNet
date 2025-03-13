@@ -14,6 +14,16 @@ public class DefaultFitDetector<T> : FitDetectorBase<T>
     /// <summary>
     /// Initializes a new instance of the DefaultFitDetector class.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor creates a new default fit detector with standard settings.
+    /// </para>
+    /// <para>
+    /// Unlike other fit detectors that may require configuration options, the DefaultFitDetector uses 
+    /// predefined thresholds and logic to assess model fit, making it a good starting point for 
+    /// beginners or for quick model evaluation.
+    /// </para>
+    /// </remarks>
     public DefaultFitDetector()
     {
     }
@@ -114,13 +124,24 @@ public class DefaultFitDetector<T> : FitDetectorBase<T>
     /// <param name="fitType">The type of fit detected in the model</param>
     /// <returns>A list of recommendations as strings</returns>
     /// <remarks>
-    /// This method provides actionable advice based on the specific issues detected:
-    /// 
-    /// - For overfitting: Suggests techniques to prevent the model from memorizing training data
-    /// - For underfitting: Suggests ways to increase the model's capacity to learn patterns
-    /// - For high variance: Suggests methods to make the model more stable
-    /// - For high bias: Suggests approaches to capture more complexity in the data
-    /// - For unstable models: Suggests diagnostics and alternative modeling approaches
+    /// <para>
+    /// <b>For Beginners:</b> This private method provides actionable advice based on the specific issues 
+    /// detected in your model.
+    /// </para>
+    /// <para>
+    /// Different types of fit issues require different approaches:
+    /// <list type="bullet">
+    /// <item><description>Overfitting: The model is too complex and needs to be simplified</description></item>
+    /// <item><description>Underfitting: The model is too simple and needs more complexity</description></item>
+    /// <item><description>High Variance: The model's performance varies too much across different data</description></item>
+    /// <item><description>High Bias: The model is too simple to capture the complexity of the data</description></item>
+    /// <item><description>Unstable: The model's performance is inconsistent and needs further investigation</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// The recommendations are designed to be practical and actionable, focusing on common techniques 
+    /// that can address each type of issue.
+    /// </para>
     /// </remarks>
     private List<string> GenerateRecommendations(FitType fitType)
     {

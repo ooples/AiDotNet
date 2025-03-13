@@ -895,44 +895,6 @@ public static class NeuralNetworkHelper<T>
         return derivative;
     }
 
-    public static T SmoothL1Loss(Vector<T> predicted, Vector<T> actual)
-    {
-        T loss = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T diff = NumOps.Abs(NumOps.Subtract(predicted[i], actual[i]));
-            if (NumOps.LessThan(diff, NumOps.One))
-            {
-                loss = NumOps.Add(loss, NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Power(diff, NumOps.FromDouble(2))));
-            }
-            else
-            {
-                loss = NumOps.Add(loss, NumOps.Subtract(diff, NumOps.FromDouble(0.5)));
-            }
-        }
-
-        return loss;
-    }
-
-    public static Vector<T> SmoothL1LossDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T diff = NumOps.Subtract(predicted[i], actual[i]);
-            if (NumOps.LessThan(NumOps.Abs(diff), NumOps.One))
-            {
-                derivative[i] = diff;
-            }
-            else
-            {
-                derivative[i] = NumOps.SignOrZero(diff);
-            }
-        }
-
-        return derivative;
-    }
-
     public static T ElasticNetLoss(Vector<T> predicted, Vector<T> actual, T l1Ratio, T alpha)
     {
         T mseLoss = MeanSquaredError(predicted, actual);

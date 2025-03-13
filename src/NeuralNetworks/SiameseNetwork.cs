@@ -1,3 +1,5 @@
+global using AiDotNet.NeuralNetworks.Layers;
+
 namespace AiDotNet.NeuralNetworks;
 
 public class SiameseNetwork<T> : NeuralNetworkBase<T>

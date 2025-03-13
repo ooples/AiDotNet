@@ -1,17 +1,56 @@
-using AiDotNet.Helpers;
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.FitDetectors;
 
+/// <summary>
+/// A detector that evaluates whether a model's errors have consistent variance across all predictions.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
+/// <remarks>
+/// <para>
+/// For Beginners: Heteroscedasticity is a statistical term that means "uneven spread" of errors. 
+/// In a good model, the errors (differences between predictions and actual values) should be 
+/// roughly the same size regardless of what you're predicting. If errors get much larger or smaller 
+/// for certain predictions (like having more accurate predictions for small values but less accurate 
+/// for large values), that's called heteroscedasticity, and it can make your model less reliable.
+/// 
+/// This detector helps you identify if your model has this problem and suggests ways to fix it.
+/// </para>
+/// </remarks>
 public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
 {
+    /// <summary>
+    /// Configuration options that control how the detector evaluates heteroscedasticity.
+    /// </summary>
     private readonly HeteroscedasticityFitDetectorOptions _options;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HeteroscedasticityFitDetector{T}"/> class.
+    /// </summary>
+    /// <param name="options">Optional configuration settings for the detector. If not provided, default settings will be used.</param>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: When you create this detector, you can customize how it works by providing options.
+    /// If you don't provide any options, it will use reasonable default settings.
+    /// </para>
+    /// </remarks>
     public HeteroscedasticityFitDetector(HeteroscedasticityFitDetectorOptions? options = null)
     {
         _options = options ?? new HeteroscedasticityFitDetectorOptions();
     }
 
+    /// <summary>
+    /// Analyzes model performance data to determine if the model has consistent error variance.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model performance metrics.</param>
+    /// <returns>A result object containing the fit type, confidence level, and recommendations.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This method examines your model's predictions and actual values to see if the errors 
+    /// are consistent across all predictions. It runs statistical tests (Breusch-Pagan and White tests) 
+    /// to check for heteroscedasticity. The result tells you if your model has consistent errors (good fit), 
+    /// somewhat inconsistent errors (moderate fit), or very inconsistent errors (unstable fit), along with 
+    /// specific recommendations to improve your model.
+    /// </para>
+    /// </remarks>
     public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
@@ -31,6 +70,18 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
         };
     }
 
+    /// <summary>
+    /// Determines the type of fit based on statistical tests for heteroscedasticity.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model performance metrics.</param>
+    /// <returns>A classification of the model fit quality (GoodFit, Moderate, or Unstable).</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This method runs two statistical tests (Breusch-Pagan and White tests) to check if your 
+    /// model's errors are consistent. If both tests show consistent errors, it returns "GoodFit". If both tests 
+    /// show very inconsistent errors, it returns "Unstable". If the results are somewhere in between, it returns "Moderate".
+    /// </para>
+    /// </remarks>
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         var breuschPaganTestStatistic = CalculateBreuschPaganTestStatistic(evaluationData);
@@ -52,6 +103,19 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates how confident the detector is in its assessment of the model fit.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model performance metrics.</param>
+    /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This method determines how sure the detector is about its assessment of your model. 
+    /// It looks at the results of the statistical tests and calculates a confidence score between 0 and 1. 
+    /// A higher score (closer to 1) means the detector is very confident in its assessment, while a lower 
+    /// score means it's less certain.
+    /// </para>
+    /// </remarks>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
         var breuschPaganTestStatistic = CalculateBreuschPaganTestStatistic(evaluationData);
@@ -64,6 +128,22 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
         return _numOps.Subtract(_numOps.One, _numOps.LessThan(_numOps.One, normalizedTestStatistic) ? _numOps.One : normalizedTestStatistic);
     }
 
+    /// <summary>
+    /// Calculates the Breusch-Pagan test statistic to detect heteroscedasticity.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model performance metrics.</param>
+    /// <returns>The Breusch-Pagan test statistic value.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: The Breusch-Pagan test is a statistical test that checks if the errors in your model 
+    /// have consistent variance. This method calculates a test statistic - a single number that summarizes 
+    /// the test result. Higher values suggest your model has inconsistent errors (heteroscedasticity), 
+    /// which is generally not desirable.
+    /// 
+    /// The test works by checking if the squared errors from your model can be predicted using your input features.
+    /// If they can, it suggests the error size depends on the input values, indicating heteroscedasticity.
+    /// </para>
+    /// </remarks>
     private T CalculateBreuschPaganTestStatistic(ModelEvaluationData<T> evaluationData)
     {
         var X = evaluationData.ModelStats.FeatureMatrix;
@@ -90,6 +170,26 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
         return _numOps.Multiply(_numOps.FromDouble(X.Rows), predictionStats.R2);
     }
 
+    /// <summary>
+    /// Calculates the White test statistic to detect heteroscedasticity.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model performance metrics.</param>
+    /// <returns>The White test statistic value.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: The White test is another statistical test (similar to Breusch-Pagan) that checks 
+    /// if your model's errors have consistent variance. It's more general than the Breusch-Pagan test 
+    /// because it doesn't assume the errors follow a normal distribution.
+    /// 
+    /// This test works by creating an "augmented" version of your input data that includes the original 
+    /// features, their squares, and their cross-products (interactions between features). Then it checks 
+    /// if these augmented features can predict the squared errors from your model. If they can, it suggests 
+    /// the error size depends on the input values, indicating heteroscedasticity.
+    /// 
+    /// Higher values of the test statistic suggest your model has inconsistent errors, which is generally 
+    /// not desirable for reliable predictions.
+    /// </para>
+    /// </remarks>
     private T CalculateWhiteTestStatistic(ModelEvaluationData<T> evaluationData)
     {
         var X = evaluationData.ModelStats.FeatureMatrix;
@@ -107,7 +207,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
             augmentedX.SetColumn(column++, X.GetColumn(i));
             augmentedX.SetColumn(column++, X.GetColumn(i).Select(x => _numOps.Multiply(x, x)));
             for (int j = i + 1; j < X.Columns; j++)
-                {
+            {
                 augmentedX.SetColumn(column++, new Vector<T>(X.GetColumn(i).Zip(X.GetColumn(j), (a, b) => _numOps.Multiply(a, b))));
             }
         }
@@ -127,6 +227,27 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
         return _numOps.Multiply(_numOps.FromDouble(X.Rows), predictionStats.R2);
     }
 
+    /// <summary>
+    /// Generates specific recommendations based on the detected fit type of the model.
+    /// </summary>
+    /// <param name="fitType">The classification of model fit quality (GoodFit, Moderate, or Unstable).</param>
+    /// <param name="evaluationData">Data containing model performance metrics.</param>
+    /// <returns>A list of recommendations for improving or maintaining model quality.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This method creates a list of practical suggestions based on how well your model's 
+    /// errors are distributed. If your model has inconsistent errors (heteroscedasticity), it will suggest 
+    /// specific techniques to fix the problem, like transforming your data or using different regression methods.
+    /// 
+    /// The recommendations are tailored to three scenarios:
+    /// - Unstable fit: Your model has significant heteroscedasticity problems that need addressing
+    /// - Moderate fit: Your model has some heteroscedasticity that might benefit from investigation
+    /// - Good fit: Your model has consistent errors (homoscedasticity), which is desirable
+    /// 
+    /// The method also includes the actual test statistics so you can see the numerical evidence behind 
+    /// the recommendations.
+    /// </para>
+    /// </remarks>
     protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
     {
         var recommendations = new List<string>();
@@ -164,10 +285,4 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
 
         return recommendations;
     }
-}
-
-public class HeteroscedasticityFitDetectorOptions
-{
-    public double HeteroscedasticityThreshold { get; set; } = 0.05; // p-value threshold for heteroscedasticity
-    public double HomoscedasticityThreshold { get; set; } = 0.1; // p-value threshold for homoscedasticity
 }

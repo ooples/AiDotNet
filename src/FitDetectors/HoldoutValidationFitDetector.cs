@@ -1,17 +1,61 @@
-using AiDotNet.Models.Options;
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.FitDetectors;
 
+/// <summary>
+/// A detector that evaluates model fit quality using holdout validation techniques.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// For Beginners: This class helps you determine if your machine learning model is performing well
+/// by comparing how it performs on different subsets of your data:
+/// - Training data: The data used to build the model
+/// - Validation data: A separate set of data used to tune the model
+/// - Test data: A final set of data used to evaluate the model's performance
+/// 
+/// By comparing performance across these sets, the detector can identify common problems like:
+/// - Overfitting: When your model performs very well on training data but poorly on new data
+/// - Underfitting: When your model performs poorly on all data sets
+/// - High variance: When your model's performance varies significantly between different data sets
+/// </para>
+/// </remarks>
 public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
 {
+    /// <summary>
+    /// Configuration options for the holdout validation fit detector.
+    /// </summary>
     private readonly HoldoutValidationFitDetectorOptions _options;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HoldoutValidationFitDetector{T}"/> class.
+    /// </summary>
+    /// <param name="options">Optional configuration settings for the detector. If null, default settings are used.</param>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This constructor creates a new detector with either custom settings you provide
+    /// or default settings if you don't specify any. These settings control thresholds for determining
+    /// if your model is overfitting, underfitting, etc.
+    /// </para>
+    /// </remarks>
     public HoldoutValidationFitDetector(HoldoutValidationFitDetectorOptions? options = null)
     {
         _options = options ?? new HoldoutValidationFitDetectorOptions();
     }
 
+    /// <summary>
+    /// Analyzes model performance data to detect the quality of fit.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model performance metrics across training, validation, and test sets.</param>
+    /// <returns>A result object containing the fit type, confidence level, and recommendations.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This is the main method you'll use to evaluate your model. It:
+    /// 1. Determines what type of fit your model has (good, overfit, underfit, etc.)
+    /// 2. Calculates how confident it is in this assessment
+    /// 3. Generates practical recommendations to improve your model
+    /// 
+    /// The result gives you actionable insights about your model's performance.
+    /// </para>
+    /// </remarks>
     public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
@@ -28,6 +72,32 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
         };
     }
 
+    /// <summary>
+    /// Determines the type of fit based on model performance metrics.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model performance metrics.</param>
+    /// <returns>The classified fit type of the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This method examines how your model performs on different data sets and
+    /// classifies it into one of several categories:
+    /// 
+    /// - Overfit: Your model has "memorized" the training data rather than learning general patterns.
+    ///   It performs much better on training data than on new data.
+    ///   
+    /// - Underfit: Your model is too simple to capture the patterns in your data.
+    ///   It performs poorly on all data sets.
+    ///   
+    /// - High Variance: Your model's performance varies significantly between different data sets,
+    ///   suggesting it's sensitive to which data points it sees.
+    ///   
+    /// - Good Fit: Your model generalizes well, performing consistently across different data sets.
+    ///   
+    /// - Unstable: Your model doesn't fit into the other categories but has performance issues.
+    /// 
+    /// The method uses thresholds (set in the options) to make these determinations.
+    /// </para>
+    /// </remarks>
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         var trainingMSE = evaluationData.TrainingSet.ErrorStats.MSE;
@@ -61,6 +131,28 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates the confidence level in the fit type determination.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model performance metrics.</param>
+    /// <returns>A value between 0 and 1 representing the confidence level.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This method calculates how confident the detector is in its assessment of your model.
+    /// The confidence is based on how consistent your model's performance is between the validation
+    /// and test sets.
+    /// 
+    /// If your model performs very similarly on both sets (measured by R� values), the confidence will be high.
+    /// If there's a big difference in performance between these sets, the confidence will be lower.
+    /// 
+    /// The confidence value ranges from 0 to 1:
+    /// - 1.0 means complete confidence (identical performance on validation and test sets)
+    /// - 0.0 means no confidence (completely different performance)
+    /// 
+    /// R� (R-squared) is a statistical measure that represents how well your model's predictions match
+    /// the actual values. It ranges from 0 to 1, where 1 means perfect predictions.
+    /// </para>
+    /// </remarks>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
         var validationR2 = evaluationData.ValidationSet.PredictionStats.R2;
@@ -73,6 +165,50 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
         return _numOps.GreaterThan(confidence, _numOps.Zero) ? confidence : _numOps.Zero;
     }
 
+    /// <summary>
+    /// Generates practical recommendations for improving the model based on its fit type.
+    /// </summary>
+    /// <param name="fitType">The determined fit type of the model.</param>
+    /// <param name="evaluationData">Data containing model performance metrics.</param>
+    /// <returns>A list of string recommendations for model improvement.</returns>
+    /// <remarks>
+    /// <para>
+    /// For Beginners: This method creates a list of practical suggestions to help you improve your model
+    /// based on how it's currently performing. The recommendations are tailored to the specific issues
+    /// detected in your model:
+    /// 
+    /// - Good Fit: If your model is performing well, you'll get suggestions for deployment or fine-tuning.
+    /// 
+    /// - Overfitting: If your model is "memorizing" the training data instead of learning general patterns,
+    ///   you'll get suggestions like:
+    ///   * Increasing regularization (adding penalties to prevent the model from becoming too complex)
+    ///   * Reducing model complexity (using a simpler model with fewer parameters)
+    ///   * Collecting more training data (to help the model learn more general patterns)
+    /// 
+    /// - Underfitting: If your model is too simple to capture the patterns in your data,
+    ///   you'll get suggestions like:
+    ///   * Increasing model complexity (using a more sophisticated model)
+    ///   * Adding more relevant features (giving the model more useful information)
+    ///   * Reducing regularization (allowing the model to become more complex)
+    /// 
+    /// - High Variance: If your model's performance varies significantly between different data sets,
+    ///   you'll get suggestions like:
+    ///   * Increasing training data (to provide more examples for learning)
+    ///   * Using ensemble methods (combining multiple models to improve stability)
+    ///   * Applying cross-validation (testing the model on multiple data subsets)
+    /// 
+    /// - Unstable: If your model has inconsistent performance,
+    ///   you'll get suggestions like:
+    ///   * Investigating data quality (checking for errors or inconsistencies)
+    ///   * Trying different model architectures (testing alternative model designs)
+    ///   * Using better feature selection (choosing more relevant input variables)
+    /// 
+    /// The method also includes the R� values for validation and test sets to help you
+    /// understand the model's current performance. R� (R-squared) is a measure of how well
+    /// your model's predictions match the actual values, with values closer to 1.0 indicating
+    /// better performance.
+    /// </para>
+    /// </remarks>
     protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
     {
         var recommendations = new List<string>();

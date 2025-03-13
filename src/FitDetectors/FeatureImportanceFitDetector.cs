@@ -1,19 +1,85 @@
-using AiDotNet.Models.Options;
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.FitDetectors;
 
+/// <summary>
+/// A fit detector that analyzes feature importances and correlations to assess model fit.
+/// </summary>
+/// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> Feature importance measures how much each input variable (feature) contributes 
+/// to a model's predictions. This detector uses permutation importance, which works by randomly shuffling 
+/// each feature and measuring how much the model's performance degrades as a result.
+/// </para>
+/// <para>
+/// By analyzing both feature importances and correlations between features, this detector can identify 
+/// issues like overfitting (relying too heavily on specific features) or underfitting (not effectively 
+/// using the available features).
+/// </para>
+/// </remarks>
 public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
 {
+    /// <summary>
+    /// Configuration options for the feature importance fit detector.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> These settings control how the detector interprets feature importances 
+    /// and correlations, including thresholds for determining different types of model fit.
+    /// </remarks>
     private readonly FeatureImportanceFitDetectorOptions _options;
+    
+    /// <summary>
+    /// Random number generator used for feature permutation.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is used to randomly shuffle feature values when calculating 
+    /// permutation importance. Using a fixed seed ensures reproducible results.
+    /// </remarks>
     private readonly Random _random;
 
+    /// <summary>
+    /// Initializes a new instance of the FeatureImportanceFitDetector class.
+    /// </summary>
+    /// <param name="options">Optional configuration options. If not provided, default options are used.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor creates a new feature importance fit detector with either 
+    /// custom options or default settings.
+    /// </para>
+    /// <para>
+    /// The default settings typically include:
+    /// <list type="bullet">
+    /// <item><description>Thresholds for high and low feature importance</description></item>
+    /// <item><description>Thresholds for high and low variance in feature importances</description></item>
+    /// <item><description>Threshold for determining feature correlation</description></item>
+    /// <item><description>Random seed for reproducible permutation importance calculations</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     public FeatureImportanceFitDetector(FeatureImportanceFitDetectorOptions? options = null)
     {
         _options = options ?? new FeatureImportanceFitDetectorOptions();
         _random = new Random(_options.RandomSeed);
     }
 
+    /// <summary>
+    /// Detects the fit type of a model based on feature importance analysis.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model predictions and actual values.</param>
+    /// <returns>A result object containing the detected fit type, confidence level, and recommendations.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method analyzes your model's feature importances and feature correlations 
+    /// to determine if it's underfitting, overfitting, or has a good fit.
+    /// </para>
+    /// <para>
+    /// The result includes:
+    /// <list type="bullet">
+    /// <item><description>FitType: Whether the model is underfitting, overfitting, has a good fit, or is unstable</description></item>
+    /// <item><description>ConfidenceLevel: How confident the detector is in its assessment</description></item>
+    /// <item><description>Recommendations: Suggestions for improving the model based on the detected fit type</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
@@ -28,6 +94,34 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
         };
     }
 
+    /// <summary>
+    /// Determines the fit type based on feature importance analysis.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model predictions and actual values.</param>
+    /// <returns>The detected fit type based on feature importance analysis.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method calculates feature importances and correlations, then analyzes 
+    /// these metrics to determine what type of fit your model has.
+    /// </para>
+    /// <para>
+    /// The method looks at:
+    /// <list type="bullet">
+    /// <item><description>Average feature importance: How much features contribute to predictions on average</description></item>
+    /// <item><description>Standard deviation of feature importances: How much variation there is in feature contributions</description></item>
+    /// <item><description>Feature correlations: How related different features are to each other</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Based on these metrics, it categorizes the model as having:
+    /// <list type="bullet">
+    /// <item><description>Good Fit: High average importance with low variance (features contribute consistently)</description></item>
+    /// <item><description>Overfit: High average importance with high variance (model relies too heavily on specific features)</description></item>
+    /// <item><description>Underfit: Low average importance or mostly uncorrelated features (model doesn't effectively use features)</description></item>
+    /// <item><description>Unstable: Any other pattern that doesn't fit the above categories</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         var featureImportances = CalculateFeatureImportances(evaluationData);
@@ -56,6 +150,29 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates the confidence level of the feature importance-based fit detection.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model predictions and actual values.</param>
+    /// <returns>A value indicating the confidence level of the detection.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method determines how confident the detector is in its assessment 
+    /// of your model's fit. The confidence is based on feature importances and correlations.
+    /// </para>
+    /// <para>
+    /// The method calculates three factors:
+    /// <list type="bullet">
+    /// <item><description>Importance factor: How high the average feature importance is relative to the threshold</description></item>
+    /// <item><description>Variance factor: How low the standard deviation of feature importances is</description></item>
+    /// <item><description>Correlation factor: How uncorrelated the features are (1 minus average absolute correlation)</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// These factors are multiplied together to produce a confidence score between 0 and 1, with higher 
+    /// values indicating greater confidence in the fit assessment.
+    /// </para>
+    /// </remarks>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
         var featureImportances = CalculateFeatureImportances(evaluationData);
@@ -70,6 +187,31 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
         return _numOps.Multiply(_numOps.Multiply(importanceFactor, varianceFactor), correlationFactor);
     }
 
+    /// <summary>
+    /// Generates recommendations based on the detected fit type and feature importance analysis.
+    /// </summary>
+    /// <param name="fitType">The detected fit type.</param>
+    /// <param name="evaluationData">Data containing model predictions and actual values.</param>
+    /// <returns>A list of recommendations for improving the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method provides practical suggestions for addressing the specific 
+    /// type of fit issue detected in your model based on feature importance analysis.
+    /// </para>
+    /// <para>
+    /// Different types of fit issues require different approaches:
+    /// <list type="bullet">
+    /// <item><description>Good Fit: The model is using features effectively and may only need fine-tuning</description></item>
+    /// <item><description>Overfit: The model is relying too heavily on specific features and needs to be more balanced</description></item>
+    /// <item><description>Underfit: The model is not effectively using the available features and needs to be more complex</description></item>
+    /// <item><description>Unstable: The model's use of features is inconsistent and needs further investigation</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// The recommendations also include information about the top 3 most important features to help you 
+    /// understand which variables are driving your model's predictions.
+    /// </para>
+    /// </remarks>
     protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
     {
         var recommendations = new List<string>();
@@ -115,6 +257,35 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
         return recommendations;
     }
 
+        /// <summary>
+    /// Calculates feature importances using permutation importance.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model predictions and actual values.</param>
+    /// <returns>A vector of importance values for each feature.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This private method calculates how important each feature is to your model's 
+    /// predictions using a technique called permutation importance.
+    /// </para>
+    /// <para>
+    /// The process works as follows:
+    /// <list type="number">
+    /// <item><description>Calculate the model's baseline error on the original data</description></item>
+    /// <item><description>For each feature:
+    ///   <list type="bullet">
+    ///     <item><description>Randomly shuffle (permute) the values of that feature</description></item>
+    ///     <item><description>Recalculate the model's predictions with the shuffled feature</description></item>
+    ///     <item><description>Calculate the new error with the shuffled feature</description></item>
+    ///     <item><description>The importance is the difference between the new error and the baseline error</description></item>
+    ///   </list>
+    /// </description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Features that cause a large increase in error when shuffled are considered more important, as 
+    /// this indicates the model relies heavily on that feature for accurate predictions.
+    /// </para>
+    /// </remarks>
     private Vector<T> CalculateFeatureImportances(ModelEvaluationData<T> evaluationData)
     {
         var baselineError = CalculateError(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
@@ -135,11 +306,56 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
         return featureImportances;
     }
 
+    /// <summary>
+    /// Calculates the error between actual and predicted values.
+    /// </summary>
+    /// <param name="actual">Vector of actual values.</param>
+    /// <param name="predicted">Vector of predicted values.</param>
+    /// <returns>The mean squared error between actual and predicted values.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This private method calculates how far off the model's predictions are 
+    /// from the actual values using mean squared error (MSE).
+    /// </para>
+    /// <para>
+    /// Mean squared error is calculated by:
+    /// <list type="number">
+    /// <item><description>Taking the difference between each predicted value and the corresponding actual value</description></item>
+    /// <item><description>Squaring each difference</description></item>
+    /// <item><description>Calculating the average of all squared differences</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Lower MSE values indicate better model performance (predictions closer to actual values).
+    /// </para>
+    /// </remarks>
     private T CalculateError(Vector<T> actual, Vector<T> predicted)
     {
         return StatisticsHelper<T>.CalculateMeanSquaredError(actual, predicted);
     }
 
+    /// <summary>
+    /// Randomly shuffles (permutes) the values in a feature vector.
+    /// </summary>
+    /// <param name="feature">The feature vector to permute.</param>
+    /// <returns>A new vector with the same values in random order.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This private method takes a feature vector and randomly rearranges its values.
+    /// </para>
+    /// <para>
+    /// The method uses the Fisher-Yates shuffle algorithm, which:
+    /// <list type="number">
+    /// <item><description>Starts from the last element</description></item>
+    /// <item><description>Swaps it with a randomly selected element from the whole array (including itself)</description></item>
+    /// <item><description>Moves to the previous element and repeats until the entire array is processed</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// This shuffling breaks any relationship between the feature and the target variable, which is 
+    /// essential for calculating permutation importance.
+    /// </para>
+    /// </remarks>
     private Vector<T> PermuteFeature(Vector<T> feature)
     {
         var permutedFeature = feature.Copy();
@@ -156,6 +372,28 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
         return permutedFeature;
     }
 
+    /// <summary>
+    /// Calculates the correlation matrix for all features.
+    /// </summary>
+    /// <param name="features">Matrix of feature values.</param>
+    /// <returns>A matrix of correlation coefficients between all pairs of features.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This private method calculates how related each pair of features is to each other 
+    /// using Pearson correlation.
+    /// </para>
+    /// <para>
+    /// Pearson correlation measures the linear relationship between two variables, with values ranging from -1 to 1:
+    /// <list type="bullet">
+    /// <item><description>1: Perfect positive correlation (as one variable increases, the other increases proportionally)</description></item>
+    /// <item><description>0: No correlation (variables are independent)</description></item>
+    /// <item><description>-1: Perfect negative correlation (as one variable increases, the other decreases proportionally)</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// The resulting matrix is symmetric, with the correlation of each feature with itself (diagonal elements) being 1.
+    /// </para>
+    /// </remarks>
     private Matrix<T> CalculateFeatureCorrelations(Matrix<T> features)
     {
         int numFeatures = features.Columns;
@@ -174,6 +412,25 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
         return correlations;
     }
 
+    /// <summary>
+    /// Determines if most features are uncorrelated with each other.
+    /// </summary>
+    /// <param name="correlations">Matrix of correlation coefficients between all pairs of features.</param>
+    /// <returns>True if most feature pairs have correlation below the threshold, false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This private method checks if your features are mostly independent of each other.
+    /// </para>
+    /// <para>
+    /// The method counts how many pairs of features have correlation coefficients below the threshold 
+    /// (indicating weak or no relationship), then calculates what percentage of all possible pairs 
+    /// this represents.
+    /// </para>
+    /// <para>
+    /// If this percentage exceeds the uncorrelated ratio threshold (e.g., 80%), the features are 
+    /// considered mostly uncorrelated, which can be a sign of underfitting in some cases.
+    /// </para>
+    /// </remarks>
     private bool AreFeaturesMostlyUncorrelated(Matrix<T> correlations)
     {
         int numFeatures = correlations.Rows;
@@ -194,6 +451,29 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
         return (double)uncorrelatedCount / totalPairs > _options.UncorrelatedRatioThreshold;
     }
 
+    /// <summary>
+    /// Calculates the average absolute correlation across all feature pairs.
+    /// </summary>
+    /// <param name="correlations">Matrix of correlation coefficients between all pairs of features.</param>
+    /// <returns>The average of the absolute values of all correlation coefficients.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This private method calculates how strongly related your features are to each other 
+    /// on average, ignoring whether the relationships are positive or negative.
+    /// </para>
+    /// <para>
+    /// The method:
+    /// <list type="number">
+    /// <item><description>Takes the absolute value of each correlation coefficient (making negative correlations positive)</description></item>
+    /// <item><description>Sums these absolute values for all pairs of different features</description></item>
+    /// <item><description>Divides by the number of pairs to get the average</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// A high average absolute correlation indicates that many features contain redundant information, 
+    /// which can affect model performance and interpretation.
+    /// </para>
+    /// </remarks>
     private T AverageAbsoluteCorrelation(Matrix<T> correlations)
     {
         int numFeatures = correlations.Rows;
