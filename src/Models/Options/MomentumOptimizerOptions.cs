@@ -4,9 +4,6 @@ public class MomentumOptimizerOptions : GradientBasedOptimizerOptions
 {
     public new double InitialLearningRate { get; set; } = 0.01;
     public new double InitialMomentum { get; set; } = 0.9;
-    public double Tolerance { get; set; } = 1e-6;
-
-    public new bool UseAdaptiveLearningRate { get; set; } = true;
     public new double MinLearningRate { get; set; } = 1e-5;
     public new double MaxLearningRate { get; set; } = 0.1;
     public double LearningRateIncreaseFactor { get; set; } = 1.05;

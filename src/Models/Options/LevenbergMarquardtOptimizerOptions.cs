@@ -8,6 +8,5 @@ public class LevenbergMarquardtOptimizerOptions<T> : GradientBasedOptimizerOptio
     public double MinDampingFactor { get; set; } = 1e-8;
     public double MaxDampingFactor { get; set; } = 1e8;
     public bool UseAdaptiveDampingFactor { get; set; } = true;
-    public double Tolerance { get; set; } = 1e-6;
     public IMatrixDecomposition<T>? CustomDecomposition { get; set; }
 }

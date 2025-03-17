@@ -7,7 +7,6 @@ public class ProximalGradientDescentOptimizerOptions : GradientBasedOptimizerOpt
     public int InnerIterations { get; set; } = 10;
     public new double InitialLearningRate { get; set; } = 0.01;
     public new int MaxIterations { get; set; } = 1000;
-    public double Tolerance { get; set; } = 1e-6;
     public new bool UseAdaptiveLearningRate { get; set; } = true;
     public double LearningRateIncreaseFactor { get; set; } = 1.05;
     public double LearningRateDecreaseFactor { get; set; } = 0.95;

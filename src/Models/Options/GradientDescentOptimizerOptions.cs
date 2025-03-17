@@ -2,7 +2,6 @@
 
 public class GradientDescentOptimizerOptions : GradientBasedOptimizerOptions
 {
-    public double Tolerance { get; set; } = 1e-6;
 
     private RegularizationOptions _regularizationOptions;
 

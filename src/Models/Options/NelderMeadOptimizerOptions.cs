@@ -18,5 +18,4 @@ public class NelderMeadOptimizerOptions : OptimizationAlgorithmOptions
 
     public bool UseAdaptiveParameters { get; set; } = false;
     public double AdaptationRate { get; set; } = 0.1;
-    public double Tolerance { get; set; } = 1e-6;
 }

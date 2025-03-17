@@ -12,7 +12,6 @@ public class TrustRegionOptimizerOptions : GradientBasedOptimizerOptions
     public double ContractionFactor { get; set; } = 0.5;
     public bool UseAdaptiveTrustRegionRadius { get; set; } = true;
     public double AdaptationRate { get; set; } = 0.1;
-    public double Tolerance { get; set; } = 1e-6;
     public int MaxCGIterations { get; set; } = 100;
     public double CGTolerance { get; set; } = 1e-6;
 }

@@ -3,9 +3,9 @@
 public class NormalOptimizer<T> : OptimizerBase<T>
 {
     private readonly Random _random = new();
-    private OptimizationAlgorithmOptions _normalOptions;
+    private GeneticAlgorithmOptimizerOptions _normalOptions;
 
-    public NormalOptimizer(OptimizationAlgorithmOptions? options = null, PredictionStatsOptions? predictionOptions = null,
+    public NormalOptimizer(GeneticAlgorithmOptimizerOptions? options = null, PredictionStatsOptions? predictionOptions = null,
         ModelStatsOptions? modelOptions = null,
         IModelEvaluator<T>? modelEvaluator = null,
         IFitDetector<T>? fitDetector = null,
@@ -100,24 +100,25 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
-            Options.MutationRate *= 0.95; // Decrease mutation rate if improving
+            _normalOptions.MutationRate *= 0.95; // Decrease mutation rate if improving
         }
         else
         {
-            Options.MutationRate *= 1.05; // Increase mutation rate if not improving
+            _normalOptions.MutationRate *= 1.05; // Increase mutation rate if not improving
         }
-        Options.MutationRate = MathHelper.Clamp(Options.MutationRate, Options.MinMutationRate, Options.MaxMutationRate);
+
+        _normalOptions.MutationRate = MathHelper.Clamp(_normalOptions.MutationRate, _normalOptions.MinMutationRate, _normalOptions.MaxMutationRate);
     }
 
     private void UpdatePopulationSize(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
-            Options.PopulationSize = Math.Max(Options.MinPopulationSize, Options.PopulationSize - 1);
+            _normalOptions.PopulationSize = Math.Max(_normalOptions.MinPopulationSize, _normalOptions.PopulationSize - 1);
         }
         else
         {
-            Options.PopulationSize = Math.Min(Options.PopulationSize + 1, Options.MaxPopulationSize);
+            _normalOptions.PopulationSize = Math.Min(_normalOptions.PopulationSize + 1, _normalOptions.MaxPopulationSize);
         }
     }
 
@@ -125,13 +126,14 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
-            Options.CrossoverRate *= 1.02; // Increase crossover rate if improving
+            _normalOptions.CrossoverRate *= 1.02; // Increase crossover rate if improving
         }
         else
         {
-            Options.CrossoverRate *= 0.98; // Decrease crossover rate if not improving
+            _normalOptions.CrossoverRate *= 0.98; // Decrease crossover rate if not improving
         }
-        Options.CrossoverRate = MathHelper.Clamp(Options.CrossoverRate, Options.MinCrossoverRate, Options.MaxCrossoverRate);
+
+        _normalOptions.CrossoverRate = MathHelper.Clamp(_normalOptions.CrossoverRate, _normalOptions.MinCrossoverRate, _normalOptions.MaxCrossoverRate);
     }
 
     private ISymbolicModel<T> CreateRandomSolution(int totalFeatures)
@@ -164,9 +166,9 @@ public class NormalOptimizer<T> : OptimizerBase<T>
 
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
-        if (options is OptimizationAlgorithmOptions normalOptions)
+        if (options is GeneticAlgorithmOptimizerOptions geneticOptions)
         {
-            _normalOptions = normalOptions;
+            _normalOptions = geneticOptions;
         }
         else
         {
@@ -204,7 +206,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
 
             // Deserialize NormalOptimizerOptions
             string optionsJson = reader.ReadString();
-            _normalOptions = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions>(optionsJson)
+            _normalOptions = JsonConvert.DeserializeObject<GeneticAlgorithmOptimizerOptions>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
         }
     }
