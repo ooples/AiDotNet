@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: PReLU is an improved version of the popular ReLU activation function.
+/// <b>For Beginners:</b> PReLU is an improved version of the popular ReLU activation function.
 /// 
 /// While ReLU completely blocks negative values (turning them to zero), PReLU allows
 /// a small portion of negative values to pass through, controlled by a parameter called "alpha".
@@ -34,7 +34,7 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
     /// <param name="alpha">The scaling factor for negative inputs. Default is 0.01.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: The alpha parameter determines how much of negative inputs should "leak through".
+    /// <b>For Beginners:</b> The alpha parameter determines how much of negative inputs should "leak through".
     /// 
     /// - A value of 0 makes PReLU behave exactly like regular ReLU (no leakage)
     /// - A small value like 0.01 (default) allows a small portion of negative values to pass
@@ -61,7 +61,7 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
     /// <returns>The activated output value using the PReLU function.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms a single number using the PReLU formula:
+    /// <b>For Beginners:</b> This method transforms a single number using the PReLU formula:
     /// 
     /// - If the input is positive (> 0): the output is the same as the input
     /// - If the input is negative (≤ 0): the output is alpha * input
@@ -87,7 +87,7 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value at the input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how much the PReLU function's output changes when we
+    /// <b>For Beginners:</b> The derivative tells us how much the PReLU function's output changes when we
     /// slightly change the input. This is essential for training neural networks.
     /// 
     /// For PReLU, the derivative is very simple:
@@ -120,7 +120,7 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
     /// <param name="newAlpha">The new alpha value to use.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method allows you to change the alpha parameter after creating the PReLU function.
+    /// <b>For Beginners:</b> This method allows you to change the alpha parameter after creating the PReLU function.
     /// 
     /// This can be useful when:
     /// - You want to experiment with different alpha values to see which works best

@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Cubic B-spline interpolation creates a smooth curve that passes through or near all provided data points.
 /// It's particularly useful for creating natural-looking curves with continuous first and second derivatives.
 /// 
-/// For Beginners: B-splines are a special type of smooth curve used in computer graphics and data analysis.
+/// <b>For Beginners:</b> B-splines are a special type of smooth curve used in computer graphics and data analysis.
 /// Unlike simpler interpolation methods, B-splines create exceptionally smooth curves that don't have
 /// sudden changes in direction. Think of them as drawing a smooth line through your points using a
 /// flexible ruler that naturally creates gentle curves.
@@ -29,7 +29,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// The knot vector that defines the B-spline curve.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Knots are special points that help define how the curve behaves.
+    /// <b>For Beginners:</b> Knots are special points that help define how the curve behaves.
     /// They're like invisible control points that determine where the curve bends.
     /// </remarks>
     private readonly Vector<T> _knots;
@@ -48,7 +48,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// The degree of the B-spline curve (default is 3 for cubic).
     /// </summary>
     /// <remarks>
-    /// For Beginners: The degree determines how smooth the curve is. A degree of 3 (cubic)
+    /// <b>For Beginners:</b> The degree determines how smooth the curve is. A degree of 3 (cubic)
     /// creates a curve that's smooth in both direction and curvature.
     /// </remarks>
     private readonly int _degree;
@@ -62,7 +62,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// Creates a new cubic B-spline interpolation from the given data points.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This constructor takes your data points (x and y values) and sets up
+    /// <b>For Beginners:</b> This constructor takes your data points (x and y values) and sets up
     /// everything needed to create a smooth curve through those points. Once created,
     /// you can use the Interpolate method to find y-values for any x-value along the curve.
     /// </remarks>
@@ -91,7 +91,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// Calculates the interpolated y-value for a given x-value using the B-spline curve.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is the main method you'll use after creating the interpolation.
+    /// <b>For Beginners:</b> This is the main method you'll use after creating the interpolation.
     /// Give it any x-value within your data range, and it will return the corresponding
     /// y-value on the smooth curve. It's like asking "if I have this x-value, what would
     /// the y-value be on the smooth curve that passes through my data points?"
@@ -123,7 +123,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// This method creates the knot vector that defines how the B-spline curve is constructed.
     /// It uses a "not-a-knot" condition at the endpoints for natural boundary behavior.
     /// 
-    /// For Beginners: Knots are special points that help control the shape of the curve.
+    /// <b>For Beginners:</b> Knots are special points that help control the shape of the curve.
     /// This method creates extra knots beyond your data points to ensure the curve behaves
     /// naturally at the edges. Think of it as setting up the "rules" for how the curve
     /// should flow through your points.
@@ -159,7 +159,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// This method sets up and solves a system of equations to find the coefficients
     /// that make the B-spline curve pass through the provided data points.
     /// 
-    /// For Beginners: This method does the mathematical heavy lifting to create the curve.
+    /// <b>For Beginners:</b> This method does the mathematical heavy lifting to create the curve.
     /// It solves a set of equations to find the values needed to make the curve pass through
     /// your data points. These coefficients are like the "recipe" for creating the curve.
     /// </remarks>
@@ -193,7 +193,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// This method uses binary search to efficiently find which segment of the
     /// B-spline curve contains the given x-value.
     /// 
-    /// For Beginners: A B-spline curve is made up of multiple segments. This method
+    /// <b>For Beginners:</b> A B-spline curve is made up of multiple segments. This method
     /// figures out which segment contains your x-value. It's like finding which
     /// chapter of a book contains a specific page number, but using an efficient
     /// search method that quickly narrows down the location.
@@ -227,7 +227,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// This method implements the De Boor algorithm to calculate the B-spline basis functions
     /// at a given point x within the knot span i.
     /// 
-    /// For Beginners: Basis functions are like building blocks that determine the shape of the curve
+    /// <b>For Beginners:</b> Basis functions are like building blocks that determine the shape of the curve
     /// at each point. Think of them as "influence weights" that control how much each control point
     /// affects the final curve at a specific location. This method calculates these weights using
     /// a special algorithm called De Boor's algorithm, which is a standard approach for B-splines.

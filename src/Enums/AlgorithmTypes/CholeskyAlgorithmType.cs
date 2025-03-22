@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Cholesky decomposition is a way to break down a special type of matrix (called a 
+/// <b>For Beginners:</b> Cholesky decomposition is a way to break down a special type of matrix (called a 
 /// symmetric positive-definite matrix) into simpler parts that make calculations faster and more stable.
 /// 
 /// In simple terms, it's like factoring a number (e.g., 12 = 3 × 4), but for matrices. The Cholesky 
@@ -29,7 +29,7 @@ public enum CholeskyAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Crout method computes the Cholesky decomposition by working through the matrix 
+    /// <b>For Beginners:</b> The Crout method computes the Cholesky decomposition by working through the matrix 
     /// one column at a time.
     /// 
     /// Imagine building a pyramid brick by brick, where you complete each column from bottom to top before 
@@ -46,7 +46,7 @@ public enum CholeskyAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Banachiewicz method computes the Cholesky decomposition by working through the 
+    /// <b>For Beginners:</b> The Banachiewicz method computes the Cholesky decomposition by working through the 
     /// matrix one element at a time in a specific order.
     /// 
     /// Unlike the Crout method which works column by column, Banachiewicz calculates each element using 
@@ -64,7 +64,7 @@ public enum CholeskyAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The LDL method is a variation of Cholesky decomposition that breaks the matrix into 
+    /// <b>For Beginners:</b> The LDL method is a variation of Cholesky decomposition that breaks the matrix into 
     /// three parts: a lower triangular matrix (L), a diagonal matrix (D), and the transpose of L.
     /// 
     /// Think of it as organizing a company into departments (L), identifying the key decision-makers in 
@@ -82,7 +82,7 @@ public enum CholeskyAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Block Cholesky method divides the original large matrix into smaller "blocks" 
+    /// <b>For Beginners:</b> The Block Cholesky method divides the original large matrix into smaller "blocks" 
     /// or sub-matrices, and then performs Cholesky decomposition on these blocks.
     /// 
     /// Imagine breaking a large jigsaw puzzle into smaller, more manageable sections, solving each section, 

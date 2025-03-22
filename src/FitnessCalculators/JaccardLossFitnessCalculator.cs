@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on tasks where
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on tasks where
 /// you need to identify regions or categories, especially when you care about the overlap between
 /// your predictions and the actual answers.
 /// 
@@ -41,7 +41,7 @@ public class JaccardLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Jaccard Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Jaccard Loss
     /// to evaluate your model's performance, which is especially good for tasks where you
     /// need to measure how well your predictions overlap with the actual answers.
     /// 
@@ -70,7 +70,7 @@ public class JaccardLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated Jaccard Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Jaccard Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Jaccard Loss.
     /// 
     /// It works by:
     /// 1. Taking the predictions your model made

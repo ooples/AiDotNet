@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Takagi factorization is a special type of matrix decomposition that works specifically 
+/// <b>For Beginners:</b> Takagi factorization is a special type of matrix decomposition that works specifically 
 /// with complex symmetric matrices. A complex symmetric matrix is a square matrix that equals its own 
 /// transpose, even when the elements are complex numbers.
 /// 
@@ -32,7 +32,7 @@ public enum TakagiAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Jacobi algorithm works by applying a series of simple transformations 
+    /// <b>For Beginners:</b> The Jacobi algorithm works by applying a series of simple transformations 
     /// (called Jacobi rotations) to gradually convert the matrix into the desired form.
     /// 
     /// Imagine trying to flatten a bumpy surface by repeatedly smoothing out the biggest bump 
@@ -56,7 +56,7 @@ public enum TakagiAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The QR algorithm is a powerful method that uses QR decomposition 
+    /// <b>For Beginners:</b> The QR algorithm is a powerful method that uses QR decomposition 
     /// (breaking a matrix into an orthogonal matrix Q and an upper triangular matrix R) 
     /// repeatedly to find the factorization.
     /// 
@@ -81,7 +81,7 @@ public enum TakagiAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Eigendecomposition is a way to break down a matrix using special vectors 
+    /// <b>For Beginners:</b> Eigendecomposition is a way to break down a matrix using special vectors 
     /// (eigenvectors) and values (eigenvalues) that have unique properties.
     /// 
     /// For Takagi factorization, this method:
@@ -105,7 +105,7 @@ public enum TakagiAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Power Iteration is a simple but effective method that finds the most important 
+    /// <b>For Beginners:</b> Power Iteration is a simple but effective method that finds the most important 
     /// components of the factorization first.
     /// 
     /// Imagine trying to find the tallest mountain by always walking uphill:
@@ -130,7 +130,7 @@ public enum TakagiAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Lanczos Iteration is an advanced technique that builds a much smaller matrix 
+    /// <b>For Beginners:</b> The Lanczos Iteration is an advanced technique that builds a much smaller matrix 
     /// that captures the essential properties of the original large matrix.
     /// 
     /// Think of it like creating a small, accurate model of a large system:

@@ -8,7 +8,7 @@
 /// many numerical algorithms. This decomposition is often used as a preprocessing step for
 /// eigenvalue calculations and solving linear systems.
 /// 
-/// For beginners: Think of Hessenberg decomposition as a way to simplify a matrix by making
+/// <b>For Beginners:</b> Think of Hessenberg decomposition as a way to simplify a matrix by making
 /// most elements below the diagonal equal to zero, which makes further calculations much faster.
 /// </remarks>
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
@@ -81,7 +81,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// Householder reflections are a way to zero out multiple elements of a matrix at once.
     /// 
-    /// For beginners: A Householder reflection is like holding up a mirror to a vector
+    /// <b>For Beginners:</b> A Householder reflection is like holding up a mirror to a vector
     /// in such a way that it reflects to align with a target direction. This method:
     /// 1. Takes each column of the matrix
     /// 2. Creates a reflection that zeros out all elements below the first subdiagonal
@@ -117,7 +117,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// Givens rotations are a way to zero out one element at a time by rotating in a plane.
     /// 
-    /// For beginners: A Givens rotation is like turning a 2D coordinate system to make
+    /// <b>For Beginners:</b> A Givens rotation is like turning a 2D coordinate system to make
     /// one coordinate zero. This method:
     /// 1. For each column, starts from the bottom row
     /// 2. Applies rotations to zero out elements one by one, moving upward
@@ -150,7 +150,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// Elementary transformations modify one row at a time by adding multiples of other rows.
     /// 
-    /// For beginners: This method is similar to Gaussian elimination that you might have
+    /// <b>For Beginners:</b> This method is similar to Gaussian elimination that you might have
     /// learned in basic linear algebra. It works by:
     /// 1. Taking each column from left to right
     /// 2. For each element below the first subdiagonal, calculating a factor
@@ -191,7 +191,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// The implicit QR algorithm combines Hessenberg reduction with QR iteration.
     /// 
-    /// For beginners: This advanced method:
+    /// <b>For Beginners:</b> This advanced method:
     /// 1. Starts with an initial approximation
     /// 2. Iteratively refines the matrix using Givens rotations
     /// 3. Continues until the matrix converges to Hessenberg form
@@ -231,7 +231,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// The Lanczos algorithm is an iterative method that is particularly efficient for large, sparse matrices.
     /// 
-    /// For beginners: This method:
+    /// <b>For Beginners:</b> This method:
     /// 1. Starts with a single vector
     /// 2. Repeatedly multiplies by the original matrix to generate new vectors
     /// 3. Orthogonalizes these vectors to create a basis
@@ -277,7 +277,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// This method solves the linear system by using the special structure of the Hessenberg matrix.
     /// 
-    /// For beginners: Solving a linear system means finding values for x that satisfy the equation Ax = b.
+    /// <b>For Beginners:</b> Solving a linear system means finding values for x that satisfy the equation Ax = b.
     /// This method:
     /// 1. First performs forward substitution (working from top to bottom) to solve an intermediate system
     /// 2. Then performs backward substitution (working from bottom to top) to find the final solution
@@ -324,7 +324,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// Matrix inversion finds a matrix A⁻¹ such that A × A⁻¹ = I (identity matrix).
     /// 
-    /// For beginners: The inverse of a matrix is like the reciprocal of a number.
+    /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number.
     /// Just as 5 × (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix.
     /// 
     /// This method uses the MatrixHelper class to efficiently compute the inverse

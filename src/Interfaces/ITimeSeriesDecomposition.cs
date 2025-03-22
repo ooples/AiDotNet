@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// Time series decomposition breaks down a sequence of data points into underlying patterns
 /// such as trend, seasonality, and residual components.
 /// 
-/// For Beginners: Time series decomposition is like taking apart a complex signal (like sales data
+/// <b>For Beginners:</b> Time series decomposition is like taking apart a complex signal (like sales data
 /// over time) into simpler pieces that are easier to understand. Imagine your store's sales
 /// throughout the year - decomposition helps you separate:
 /// 
@@ -26,7 +26,7 @@ public interface ITimeSeriesDecomposition<T>
     /// <remarks>
     /// This property provides access to the input data used for the decomposition.
     /// 
-    /// For Beginners: This is simply your original data - the sequence of values over time
+    /// <b>For Beginners:</b> This is simply your original data - the sequence of values over time
     /// that you wanted to analyze. For example, if you're analyzing daily temperature readings,
     /// this would be your complete list of temperature values in chronological order.
     /// </remarks>
@@ -38,7 +38,7 @@ public interface ITimeSeriesDecomposition<T>
     /// <remarks>
     /// This method returns all the extracted components from the time series.
     /// 
-    /// For Beginners: This gives you all the pieces that make up your data, organized by type.
+    /// <b>For Beginners:</b> This gives you all the pieces that make up your data, organized by type.
     /// Common components include:
     /// 
     /// - Trend: The long-term direction (going up, down, or staying flat)
@@ -57,7 +57,7 @@ public interface ITimeSeriesDecomposition<T>
     /// <remarks>
     /// This method retrieves a single component by its type.
     /// 
-    /// For Beginners: This lets you look at just one specific pattern in your data. For example,
+    /// <b>For Beginners:</b> This lets you look at just one specific pattern in your data. For example,
     /// if you only want to see the seasonal pattern in your sales data (like how much sales
     /// increase during holidays), you would use this method to get just that piece.
     /// 
@@ -74,7 +74,7 @@ public interface ITimeSeriesDecomposition<T>
     /// <remarks>
     /// This method determines whether a particular component was extracted during decomposition.
     /// 
-    /// For Beginners: Not all decomposition methods extract all possible components. This method
+    /// <b>For Beginners:</b> Not all decomposition methods extract all possible components. This method
     /// lets you check if a specific component is available before trying to use it.
     /// 
     /// For example, some simple decomposition methods might not separate cyclical patterns

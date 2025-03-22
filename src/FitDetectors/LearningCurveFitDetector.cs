@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps determine if your machine learning model is a good fit for your data
+/// <b>For Beginners:</b> This class helps determine if your machine learning model is a good fit for your data
 /// by looking at "learning curves." Learning curves show how your model's performance improves as it
 /// sees more training examples.
 /// 
@@ -30,7 +30,7 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector. If not provided, default settings will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the constructor that creates a new detector object. You can customize how it works by providing options,
+    /// <b>For Beginners:</b> This is the constructor that creates a new detector object. You can customize how it works by providing options,
     /// or just use the default settings if you're not sure what to change.
     /// </para>
     /// </remarks>
@@ -46,7 +46,7 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the detected fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method you'll use to check if your model is working well.
+    /// <b>For Beginners:</b> This is the main method you'll use to check if your model is working well.
     /// It examines how your model performed during training and tells you:
     /// 1. What type of fit your model has (good, overfit, underfit, etc.)
     /// 2. How confident the detector is about this assessment
@@ -76,7 +76,7 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>The detected fit type (Overfit, Underfit, GoodFit, or Unstable).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method looks at the trends in your model's performance during training to determine if there are any problems.
+    /// <b>For Beginners:</b> This method looks at the trends in your model's performance during training to determine if there are any problems.
     /// 
     /// It analyzes the "slopes" of your learning curves, which show how quickly your model is improving:
     /// - If both training and validation curves have flattened out (near-zero slopes), your model has a good fit
@@ -128,7 +128,7 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>A value between 0 and 1 representing the confidence level.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how confident we are in our assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how confident we are in our assessment of your model.
     /// 
     /// The confidence is based on how consistent your learning curves are:
     /// - If your learning curves have low variance (don't jump up and down a lot), confidence will be high (closer to 1)
@@ -158,7 +158,7 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>The slope of the best-fit line through the learning curve.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how quickly your model's performance is changing over time.
+    /// <b>For Beginners:</b> This method calculates how quickly your model's performance is changing over time.
     /// 
     /// It uses a technique called "linear regression" to find the best straight line that fits your learning curve:
     /// - A positive slope means your model's performance is improving
@@ -196,7 +196,7 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>The variance of the learning curve values.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method measures how spread out or scattered the points in your learning curve are.
+    /// <b>For Beginners:</b> This method measures how spread out or scattered the points in your learning curve are.
     /// 
     /// Variance is calculated in these steps:
     /// 1. Find the average (mean) of all points in your learning curve

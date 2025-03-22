@@ -10,7 +10,7 @@
 /// to measure the similarity between data points.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Multiquadric kernel is particularly useful for spatial data and regression problems.
 /// </para>
 /// <para>
@@ -37,7 +37,7 @@ public class MultiquadricKernel<T> : IKernelFunction<T>
     /// The shape parameter that controls the behavior of the kernel function.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The '_c' parameter (sometimes called the "shape parameter") controls
+    /// <b>For Beginners:</b> The '_c' parameter (sometimes called the "shape parameter") controls
     /// how the kernel responds to distance between points.
     /// 
     /// Think of it as a "sensitivity adjustment":
@@ -54,7 +54,7 @@ public class MultiquadricKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -66,7 +66,7 @@ public class MultiquadricKernel<T> : IKernelFunction<T>
     /// <param name="c">The shape parameter that controls the kernel's behavior. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Multiquadric kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Multiquadric kernel for use. You can optionally
     /// provide a value for the shape parameter that controls how the kernel behaves.
     /// </para>
     /// <para>
@@ -97,7 +97,7 @@ public class MultiquadricKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Multiquadric kernel formula.
     /// </para>
     /// <para>

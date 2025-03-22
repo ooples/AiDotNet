@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Catmull-Rom splines create smooth curves that pass through all the provided data points,
 /// making them useful for animation paths, curve drawing, and data visualization.
 /// 
-/// For Beginners: Think of this as drawing a smooth curve through a set of dots. Unlike simpler
+/// <b>For Beginners:</b> Think of this as drawing a smooth curve through a set of dots. Unlike simpler
 /// methods that might create sharp corners or jagged lines, Catmull-Rom splines create naturally
 /// flowing curves that pass exactly through each point while maintaining smoothness.
 /// 
@@ -32,7 +32,7 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// The tension parameter that controls the curvature of the spline.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of tension as controlling how "tight" or "loose" the curve is.
+    /// <b>For Beginners:</b> Think of tension as controlling how "tight" or "loose" the curve is.
     /// Lower values (closer to 0) create looser curves that may swing wide between points.
     /// Higher values create tighter curves that stay closer to straight lines between points.
     /// The default value of 0.5 provides a balanced curve for most applications.
@@ -43,7 +43,7 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a utility that helps perform math operations (like addition
+    /// <b>For Beginners:</b> This is a utility that helps perform math operations (like addition
     /// and multiplication) on different types of numbers. You don't need to interact with
     /// this directly.
     /// </remarks>
@@ -56,7 +56,7 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// This constructor validates the input data and initializes the necessary components
     /// for performing Catmull-Rom spline interpolation.
     /// 
-    /// For Beginners: This sets up everything needed to create smooth curves through your points:
+    /// <b>For Beginners:</b> This sets up everything needed to create smooth curves through your points:
     /// 1. It checks that you have enough points (at least 4)
     /// 2. It stores your x and y coordinates
     /// 3. It sets up the tension parameter that controls how curvy the result will be
@@ -90,7 +90,7 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// This method finds the segment containing the target x-coordinate and calculates
     /// the corresponding y-value using Catmull-Rom spline interpolation.
     /// 
-    /// For Beginners: This is the main method you'll use. Give it an x-value, and it will:
+    /// <b>For Beginners:</b> This is the main method you'll use. Give it an x-value, and it will:
     /// 1. Find which segment of your data contains this x-value
     /// 2. Use the four points surrounding this segment (two on each side)
     /// 3. Calculate a smooth curve through these points
@@ -129,7 +129,7 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This method locates which segment of the data contains the target x-coordinate.
     /// 
-    /// For Beginners: This helper method finds which segment of your data contains the x-value
+    /// <b>For Beginners:</b> This helper method finds which segment of your data contains the x-value
     /// you're interested in. For example, if you have points at x = [0, 10, 20, 30] and you
     /// want to interpolate at x = 15, this method will tell you that 15 is in the segment
     /// between index 1 (value 10) and index 2 (value 20).
@@ -154,7 +154,7 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This method implements the core Catmull-Rom spline formula to calculate a point on the curve.
     /// 
-    /// For Beginners: This is where the mathematical "magic" happens to create a smooth curve.
+    /// <b>For Beginners:</b> This is where the mathematical "magic" happens to create a smooth curve.
     /// The method takes four points and a position parameter (t) between 0 and 1, and calculates
     /// the exact y-value on the smooth curve at that position.
     /// 

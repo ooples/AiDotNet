@@ -5,7 +5,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float)</typeparam>
 /// <remarks>
-/// For Beginners: The Beveridge-Nelson decomposition separates a time series into two components:
+/// <b>For Beginners:</b> The Beveridge-Nelson decomposition separates a time series into two components:
 /// 1. A permanent component (trend) - the long-term path the data would follow if there were no temporary fluctuations
 /// 2. A temporary component (cycle) - short-term fluctuations that eventually fade away
 /// 
@@ -28,7 +28,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="forecastHorizon">Number of periods to forecast for trend calculation</param>
     /// <param name="multivariateSeries">Additional time series data for multivariate decomposition</param>
     /// <remarks>
-    /// For Beginners: This constructor sets up the decomposition with your time series data.
+    /// <b>For Beginners:</b> This constructor sets up the decomposition with your time series data.
     /// - Standard algorithm: Simple approach that works well for most cases
     /// - ARIMA algorithm: More advanced approach that can handle more complex patterns
     /// - Multivariate algorithm: Used when you have multiple related time series
@@ -74,7 +74,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Performs the standard Beveridge-Nelson decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method uses a straightforward approach to separate your data into:
+    /// <b>For Beginners:</b> This method uses a straightforward approach to separate your data into:
     /// - Trend: The long-term direction your data is moving
     /// - Cycle: Short-term ups and downs around the trend
     /// </remarks>
@@ -92,7 +92,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Performs the ARIMA-based Beveridge-Nelson decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method uses a more sophisticated statistical model (ARIMA) to:
+    /// <b>For Beginners:</b> This method uses a more sophisticated statistical model (ARIMA) to:
     /// 1. Learn patterns in your data (like how values depend on previous values)
     /// 2. Use these patterns to separate the permanent trend from temporary fluctuations
     /// 
@@ -116,7 +116,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Performs the multivariate Beveridge-Nelson decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method is used when you have multiple related time series.
+    /// <b>For Beginners:</b> This method is used when you have multiple related time series.
     /// For example, if you're analyzing both unemployment rates and GDP growth,
     /// this method can find connections between them and provide a more accurate
     /// decomposition by considering how they influence each other.
@@ -172,7 +172,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="varOptions">Options used for the VAR model</param>
     /// <returns>The long-run impact matrix</returns>
     /// <remarks>
-    /// For Beginners: This matrix shows how changes in one variable permanently affect
+    /// <b>For Beginners:</b> This matrix shows how changes in one variable permanently affect
     /// all variables in the system. For example, how a permanent change in interest rates
     /// might affect GDP, inflation, and unemployment in the long run.
     /// </remarks>
@@ -201,7 +201,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <returns>A vector containing the trend component of the time series</returns>
     /// <remarks>
-    /// For Beginners: This method extracts the long-term trend from your data by:
+    /// <b>For Beginners:</b> This method extracts the long-term trend from your data by:
     /// 1. Finding how your data changes from one point to the next (differences)
     /// 2. Calculating the average change and how these changes relate to each other over time
     /// 3. Using this information to separate what's likely to be permanent (trend) from what's temporary
@@ -263,7 +263,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="trend">The previously calculated trend component</param>
     /// <returns>A vector containing the cyclical component of the time series</returns>
     /// <remarks>
-    /// For Beginners: This method extracts the temporary ups and downs in your data.
+    /// <b>For Beginners:</b> This method extracts the temporary ups and downs in your data.
     /// It simply subtracts the trend (long-term path) from your original data,
     /// leaving only the short-term fluctuations that tend to disappear over time.
     /// 
@@ -282,7 +282,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="model">The trained ARIMA model</param>
     /// <returns>A vector containing the trend component of the time series</returns>
     /// <remarks>
-    /// For Beginners: This method uses a statistical model called ARIMA to find patterns in your data.
+    /// <b>For Beginners:</b> This method uses a statistical model called ARIMA to find patterns in your data.
     /// ARIMA (AutoRegressive Integrated Moving Average) is like a smart pattern-finder that:
     /// 
     /// 1. Looks at how past values influence current values (AutoRegressive part)
@@ -347,7 +347,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="trend">The previously calculated trend component</param>
     /// <returns>A vector containing the cyclical component of the time series</returns>
     /// <remarks>
-    /// For Beginners: After finding the long-term trend using the ARIMA model,
+    /// <b>For Beginners:</b> After finding the long-term trend using the ARIMA model,
     /// this method simply subtracts that trend from your original data.
     /// 
     /// What remains is the cyclical component - the temporary ups and downs

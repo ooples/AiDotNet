@@ -6,7 +6,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The X-11 method is a statistical technique that helps understand patterns in data that changes over time.
+/// <b>For Beginners:</b> The X-11 method is a statistical technique that helps understand patterns in data that changes over time.
 /// It separates your data into three main parts:
 /// - Trend: The long-term direction of your data (going up, down, or staying flat over time)
 /// - Seasonal: Regular patterns that repeat at fixed intervals (like higher sales during holidays)
@@ -21,7 +21,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// The number of observations in one complete seasonal cycle.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is how often patterns repeat in your data. For monthly data, it's 12 (for 12 months in a year).
+    /// <b>For Beginners:</b> This is how often patterns repeat in your data. For monthly data, it's 12 (for 12 months in a year).
     /// For quarterly data, it's 4. For daily data with weekly patterns, it's 7.
     /// </remarks>
     private readonly int _seasonalPeriod;
@@ -30,7 +30,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// The window size used for the moving average calculation of the trend component.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This determines how many data points are used to calculate each trend value.
+    /// <b>For Beginners:</b> This determines how many data points are used to calculate each trend value.
     /// Larger values create smoother trends by averaging over more data points.
     /// </remarks>
     private readonly int _trendCycleMovingAverageWindow;
@@ -48,7 +48,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="trendCycleMovingAverageWindow">The window size for trend estimation (default: 13).</param>
     /// <param name="algorithmType">The type of X-11 algorithm to use (default: Standard).</param>
     /// <remarks>
-    /// For Beginners: This constructor sets up the decomposition process with your data and some options.
+    /// <b>For Beginners:</b> This constructor sets up the decomposition process with your data and some options.
     /// - timeSeries: Your data points ordered by time
     /// - seasonalPeriod: How often patterns repeat (12 for monthly data, 4 for quarterly, etc.)
     /// - trendCycleMovingAverageWindow: Controls how smooth the trend line will be
@@ -100,7 +100,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// Performs standard additive X-11 decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method assumes your data components add together (trend + seasonal + irregular = original data).
+    /// <b>For Beginners:</b> This method assumes your data components add together (trend + seasonal + irregular = original data).
     /// It's suitable when seasonal patterns have consistent amplitude regardless of the trend level.
     /// </remarks>
     private void DecomposeStandard()
@@ -133,7 +133,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// Performs multiplicative X-11 decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method assumes your data components multiply together (trend × seasonal × irregular = original data).
+    /// <b>For Beginners:</b> This method assumes your data components multiply together (trend × seasonal × irregular = original data).
     /// It's suitable when seasonal patterns have amplitude that changes proportionally with the trend level.
     /// For example, if sales increase over time, the seasonal peaks and valleys also get larger.
     /// </remarks>
@@ -181,7 +181,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="seasonalIrregular">The combined seasonal and irregular components.</param>
     /// <returns>The estimated seasonal factors.</returns>
     /// <remarks>
-    /// For Beginners: This method finds the repeating patterns in your data by grouping values that occur
+    /// <b>For Beginners:</b> This method finds the repeating patterns in your data by grouping values that occur
     /// at the same point in each cycle (like all Januaries, all Februaries, etc. for monthly data).
     /// It then calculates the average pattern and ensures it averages to 1.0 (no net effect).
     /// </remarks>
@@ -228,7 +228,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>A smoothed version of the input time series.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Henderson moving average is a special type of smoothing technique that helps
+    /// <b>For Beginners:</b> The Henderson moving average is a special type of smoothing technique that helps
     /// identify the underlying trend in your data by removing short-term fluctuations. It works by
     /// calculating a weighted average of nearby points, giving more importance to closer points.
     /// This is like looking at your data through a "smoothing lens" that helps you see the big picture.
@@ -271,7 +271,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>An array of weights for the Henderson moving average.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: These weights determine how much importance each data point gets when calculating
+    /// <b>For Beginners:</b> These weights determine how much importance each data point gets when calculating
     /// the trend. The formula looks complicated, but it's designed to create a smooth curve that
     /// follows the main direction of your data while ignoring random ups and downs.
     /// </para>
@@ -306,7 +306,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method handles time series where components multiply together rather than add.
+    /// <b>For Beginners:</b> This method handles time series where components multiply together rather than add.
     /// By taking the logarithm of the data, we convert multiplication into addition, which makes the math easier.
     /// After processing, we convert back using the exponential function.
     /// 
@@ -365,7 +365,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>A new vector with the exponential function applied to each element.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This function reverses the logarithm operation. If we took the log of our data earlier,
+    /// <b>For Beginners:</b> This function reverses the logarithm operation. If we took the log of our data earlier,
     /// we need to use this function to convert back to the original scale.
     /// </para>
     /// </remarks>
@@ -379,7 +379,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: In multiplicative decomposition, the trend, seasonal, and irregular components
+    /// <b>For Beginners:</b> In multiplicative decomposition, the trend, seasonal, and irregular components
     /// should multiply together to give us back our original data. This method makes small adjustments
     /// to ensure this is true, distributing any differences equally among all three components.
     /// </para>
@@ -434,7 +434,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>A vector containing the centered moving average.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A centered moving average helps smooth out your data by replacing each point
+    /// <b>For Beginners:</b> A centered moving average helps smooth out your data by replacing each point
     /// with the average of itself and nearby points. This helps reveal the underlying trend by
     /// reducing the impact of random fluctuations and seasonal patterns.
     /// 
@@ -475,7 +475,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>The estimated seasonal factors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the repeating patterns in your data by grouping values that occur
+    /// <b>For Beginners:</b> This method finds the repeating patterns in your data by grouping values that occur
     /// at the same point in each cycle (like all Januaries, all Februaries, etc. for monthly data).
     /// 
     /// For example, if you have monthly data for 3 years, this method will:

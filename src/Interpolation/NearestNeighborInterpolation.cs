@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double, decimal).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Interpolation is a way to estimate values between known data points. Imagine you have
+/// <b>For Beginners:</b> Interpolation is a way to estimate values between known data points. Imagine you have
 /// a set of (x,y) points on a graph, and you want to find the y-value for an x that isn't in your original data.
 /// Nearest neighbor interpolation simply finds the closest x-value in your data and returns its corresponding y-value.
 /// </para>
@@ -39,7 +39,7 @@ public class NearestNeighborInterpolation<T> : IInterpolation<T>
     /// <param name="y">The y-coordinates (values) of the known data points.</param>
     /// <exception cref="ArgumentException">Thrown when input vectors have different lengths.</exception>
     /// <remarks>
-    /// For Beginners: This constructor takes two vectors (arrays) of equal length:
+    /// <b>For Beginners:</b> This constructor takes two vectors (arrays) of equal length:
     /// - The x vector contains the input values (like time points, positions, etc.)
     /// - The y vector contains the corresponding output values
     /// 
@@ -64,7 +64,7 @@ public class NearestNeighborInterpolation<T> : IInterpolation<T>
     /// <param name="x">The x-value for which to estimate the corresponding y-value.</param>
     /// <returns>The y-value of the nearest known data point.</returns>
     /// <remarks>
-    /// For Beginners: This method takes an x-value and returns the y-value of the closest point in our data.
+    /// <b>For Beginners:</b> This method takes an x-value and returns the y-value of the closest point in our data.
     /// For example, if we have data points at x = [1, 3, 5] with values y = [10, 30, 50],
     /// and we ask for x = 2.7, the method will return 30 because 3 is the closest x-value to 2.7.
     /// </remarks>

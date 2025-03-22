@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: When working with operations like convolutions, filtering, or sampling, 
+/// <b>For Beginners:</b> When working with operations like convolutions, filtering, or sampling, 
 /// you often need to access data points outside the boundaries of your dataset. 
 /// 
 /// For example, if you have an image and want to apply a filter to every pixel, what happens 
@@ -23,7 +23,7 @@ public enum BoundaryHandlingMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: With Periodic boundary handling, the data is treated as if it wraps around 
+    /// <b>For Beginners:</b> With Periodic boundary handling, the data is treated as if it wraps around 
     /// from one edge to the opposite edge, like a loop.
     /// 
     /// Imagine a photo where walking off the right edge makes you reappear at the left edge, 
@@ -44,7 +44,7 @@ public enum BoundaryHandlingMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: With Symmetric boundary handling, the data is reflected at the edges, 
+    /// <b>For Beginners:</b> With Symmetric boundary handling, the data is reflected at the edges, 
     /// as if there were mirrors placed at the boundaries.
     /// 
     /// Imagine standing between two mirrors and seeing your reflection repeated - the data 
@@ -65,7 +65,7 @@ public enum BoundaryHandlingMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: With ZeroPadding, any attempt to access data beyond the boundaries 
+    /// <b>For Beginners:</b> With ZeroPadding, any attempt to access data beyond the boundaries 
     /// returns a zero value.
     /// 
     /// Imagine your data is surrounded by an infinite sea of zeros in all directions.

@@ -8,26 +8,58 @@ public class TimeDistributedLayer<T> : LayerBase<T>
 
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
-    public TimeDistributedLayer(LayerBase<T> innerLayer, IActivationFunction<T>? activationFunction = null)
-        : base(CalculateInputShape(innerLayer), CalculateOutputShape(innerLayer), activationFunction ?? new ReLUActivation<T>())
+    public TimeDistributedLayer(LayerBase<T> innerLayer, IActivationFunction<T>? activationFunction = null, int[]? inputShape = null)
+        : base(CalculateInputShape(innerLayer, inputShape), CalculateOutputShape(innerLayer, inputShape), activationFunction ?? new ReLUActivation<T>())
     {
         _innerLayer = innerLayer;
     }
 
-    public TimeDistributedLayer(LayerBase<T> innerLayer, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base(CalculateInputShape(innerLayer), CalculateOutputShape(innerLayer), vectorActivationFunction ?? new ReLUActivation<T>())
+    public TimeDistributedLayer(LayerBase<T> innerLayer, IVectorActivationFunction<T>? vectorActivationFunction = null, int[]? inputShape = null)
+        : base(CalculateInputShape(innerLayer, inputShape), CalculateOutputShape(innerLayer, inputShape), vectorActivationFunction ?? new ReLUActivation<T>())
     {
         _innerLayer = innerLayer;
     }
 
-    private static int[] CalculateInputShape(LayerBase<T> innerLayer)
+    private static int[] CalculateInputShape(LayerBase<T> innerLayer, int[]? inputShape)
     {
-        return [-1, .. innerLayer.GetInputShape()];
+        int[] result;
+        if (inputShape != null && inputShape.Length >= 2)
+        {
+            result = new int[inputShape.Length];
+            result[0] = -1;
+            Array.Copy(inputShape, 1, result, 1, inputShape.Length - 1);
+
+            return result;
+        }
+
+        int[] innerShape = innerLayer.GetInputShape();
+        result = new int[innerShape.Length + 1];
+        result[0] = -1;
+        Array.Copy(innerShape, 0, result, 1, innerShape.Length);
+
+        return result;
     }
 
-    private static int[] CalculateOutputShape(LayerBase<T> innerLayer)
+    private static int[] CalculateOutputShape(LayerBase<T> innerLayer, int[]? inputShape)
     {
-        return [-1, .. innerLayer.GetOutputShape()];
+        int[] result;
+        if (inputShape != null && inputShape.Length >= 2)
+        {
+            int[] innerOutputShape = innerLayer.GetOutputShape();
+            result = new int[innerOutputShape.Length + 1];
+            result[0] = -1;
+            result[1] = inputShape[1];
+            Array.Copy(innerOutputShape, 1, result, 2, innerOutputShape.Length - 1);
+
+            return result;
+        }
+
+        int[] innerShape = innerLayer.GetOutputShape();
+        result = new int[innerShape.Length + 1];
+        result[0] = -1;
+        Array.Copy(innerShape, 0, result, 1, innerShape.Length);
+
+        return result;
     }
 
     public override Tensor<T> Forward(Tensor<T> input)

@@ -6,7 +6,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The LogSoftmin function is similar to LogSoftmax, but focuses on the smallest values 
+/// <b>For Beginners:</b> The LogSoftmin function is similar to LogSoftmax, but focuses on the smallest values 
 /// instead of the largest values in a vector.
 /// 
 /// It works in two steps:
@@ -29,7 +29,7 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
     /// <returns>False, as LogSoftmin requires a vector of values to operate.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This returns false because LogSoftmin needs to compare all values in a collection
+    /// <b>For Beginners:</b> This returns false because LogSoftmin needs to compare all values in a collection
     /// to determine which ones are smallest. It can't process just one number at a time.
     /// </para>
     /// </remarks>
@@ -42,7 +42,7 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector with LogSoftmin applied.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes a collection of numbers and transforms them using the LogSoftmin function.
+    /// <b>For Beginners:</b> This method takes a collection of numbers and transforms them using the LogSoftmin function.
     /// 
     /// The implementation uses a numerically stable approach:
     /// 1. First, it finds the minimum value in the input
@@ -71,7 +71,7 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
     /// <returns>A Jacobian matrix representing the derivative of LogSoftmin.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative helps us understand how the output changes when we slightly change the input.
+    /// <b>For Beginners:</b> The derivative helps us understand how the output changes when we slightly change the input.
     /// For LogSoftmin, this is complex because changing one input value affects all outputs.
     /// 
     /// This method calculates a special matrix called a "Jacobian matrix" that shows how each 

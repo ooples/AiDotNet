@@ -8,7 +8,7 @@ namespace AiDotNet.Interfaces;
 /// and analyze each component with a resolution matched to its scale. They are particularly
 /// useful for analyzing signals with discontinuities or sharp changes.
 /// 
-/// For Beginners: Think of wavelets as special tools for breaking down complex signals (like audio,
+/// <b>For Beginners:</b> Think of wavelets as special tools for breaking down complex signals (like audio,
 /// images, or any sequence of measurements) into simpler pieces that are easier to analyze.
 /// 
 /// Imagine you're trying to understand a song:
@@ -33,7 +33,7 @@ public interface IWaveletFunction<T>
     /// <remarks>
     /// This method evaluates the wavelet function at a given input value.
     /// 
-    /// For Beginners: This is like asking "what's the value of this wavelet at this specific point?"
+    /// <b>For Beginners:</b> This is like asking "what's the value of this wavelet at this specific point?"
     /// 
     /// Different wavelet functions have different shapes. Some common ones include:
     /// - Haar wavelets (simple step functions)
@@ -53,7 +53,7 @@ public interface IWaveletFunction<T>
     /// This method applies the wavelet transform to break down the input signal into two components:
     /// an approximation (low-frequency component) and detail (high-frequency component).
     /// 
-    /// For Beginners: This method splits your data into two parts:
+    /// <b>For Beginners:</b> This method splits your data into two parts:
     /// 
     /// 1. Approximation: The "big picture" or smooth trends in your data
     /// 2. Detail: The fine details, rapid changes, or "texture" in your data
@@ -79,7 +79,7 @@ public interface IWaveletFunction<T>
     /// Scaling coefficients define the scaling function (also called father wavelet) that is used
     /// to create the approximation component in wavelet decomposition.
     /// 
-    /// For Beginners: These coefficients are like a recipe for creating the "big picture" part
+    /// <b>For Beginners:</b> These coefficients are like a recipe for creating the "big picture" part
     /// of your data during wavelet analysis.
     /// 
     /// Think of them as weights that determine how neighboring data points should be combined
@@ -103,7 +103,7 @@ public interface IWaveletFunction<T>
     /// Wavelet coefficients define the wavelet function (also called mother wavelet) that is used
     /// to create the detail component in wavelet decomposition.
     /// 
-    /// For Beginners: These coefficients are like a recipe for extracting the "fine details"
+    /// <b>For Beginners:</b> These coefficients are like a recipe for extracting the "fine details"
     /// part of your data during wavelet analysis.
     /// 
     /// While scaling coefficients help create a smoothed version of your signal, wavelet coefficients

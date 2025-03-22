@@ -7,7 +7,7 @@
 /// This interface provides functionality to transform data into a standardized range
 /// (normalization) and to reverse this transformation (denormalization).
 /// 
-/// For Beginners: Normalization is like converting different measurements to the same scale.
+/// <b>For Beginners:</b> Normalization is like converting different measurements to the same scale.
 /// 
 /// What is normalization?
 /// - Normalization transforms your data values to a standard range (usually between 0 and 1 or -1 and 1)
@@ -41,7 +41,7 @@ public interface INormalizer<T>
     /// This method transforms the input vector to a normalized scale and returns both
     /// the normalized vector and the parameters used for normalization.
     /// 
-    /// For Beginners: This converts a list of numbers to a standard scale.
+    /// <b>For Beginners:</b> This converts a list of numbers to a standard scale.
     /// 
     /// For example:
     /// - If your vector contains ages (5, 18, 35, 62, 80), normalization might convert these to
@@ -66,7 +66,7 @@ public interface INormalizer<T>
     /// This method transforms each column of the input matrix to a normalized scale and returns
     /// both the normalized matrix and the parameters used for normalization of each column.
     /// 
-    /// For Beginners: This converts a table of numbers to a standard scale.
+    /// <b>For Beginners:</b> This converts a table of numbers to a standard scale.
     /// 
     /// For example:
     /// - If your matrix contains data about houses (columns for size, bedrooms, age, price),
@@ -92,7 +92,7 @@ public interface INormalizer<T>
     /// This method transforms a normalized vector back to its original scale using the
     /// normalization parameters that were generated during the normalization process.
     /// 
-    /// For Beginners: This converts normalized values back to their original scale.
+    /// <b>For Beginners:</b> This converts normalized values back to their original scale.
     /// 
     /// For example:
     /// - If normalization converted ages (5, 18, 35, 62, 80) to (0.0, 0.17, 0.4, 0.76, 1.0)
@@ -114,7 +114,7 @@ public interface INormalizer<T>
     /// This method adjusts the coefficients of a model trained on normalized data so they can
     /// be used directly with non-normalized input data.
     /// 
-    /// For Beginners: This converts the model's internal numbers to work with your original data.
+    /// <b>For Beginners:</b> This converts the model's internal numbers to work with your original data.
     /// 
     /// When you train a model on normalized data:
     /// - The model learns coefficients (weights) that work with normalized values
@@ -144,7 +144,7 @@ public interface INormalizer<T>
     /// This method computes the Y-intercept for a model trained on normalized data so it can
     /// be used with non-normalized input data.
     /// 
-    /// For Beginners: This calculates the starting point (base value) for your model's predictions.
+    /// <b>For Beginners:</b> This calculates the starting point (base value) for your model's predictions.
     /// 
     /// In a linear model like house price prediction:
     /// - Coefficients tell you how much each feature contributes (e.g., $100 per square foot)

@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// patterns occurring at multiple scales.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Rational Quadratic kernel is like a "smooth similarity detector" that works well for data
 /// with both small and large-scale patterns.
 /// </para>
@@ -41,7 +41,7 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
     /// The scale parameter that controls the behavior of the kernel.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The parameter c controls how quickly the similarity decreases as points get farther apart.
+    /// <b>For Beginners:</b> The parameter c controls how quickly the similarity decreases as points get farther apart.
     /// 
     /// Think of it like this:
     /// - Small c values (e.g., 0.1): Similarity drops quickly with distance (focuses on local patterns)
@@ -55,7 +55,7 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -67,7 +67,7 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
     /// <param name="c">The scale parameter that controls how quickly similarity decreases with distance. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Rational Quadratic kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Rational Quadratic kernel for use. You can optionally
     /// provide a value for the c parameter:
     /// </para>
     /// <para>
@@ -100,7 +100,7 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Rational Quadratic kernel formula.
     /// </para>
     /// <para>

@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps you evaluate how well your model is performing on multi-class classification tasks
+/// <b>For Beginners:</b> This calculator helps you evaluate how well your model is performing on multi-class classification tasks
 /// (problems where you're predicting one of several possible categories, like "dog/cat/bird" or "red/green/blue/yellow").
 /// 
 /// Categorical Cross-Entropy Loss measures how well your model's predicted probabilities match the actual categories.
@@ -32,7 +32,7 @@ public class CategoricalCrossEntropyLossFitnessCalculator<T> : FitnessCalculator
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Categorical Cross-Entropy Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Categorical Cross-Entropy Loss
     /// to evaluate your model's performance on multi-class classification tasks.
     /// 
     /// The "dataSetType" parameter lets you choose which data to evaluate:
@@ -56,7 +56,7 @@ public class CategoricalCrossEntropyLossFitnessCalculator<T> : FitnessCalculator
     /// <returns>The Categorical Cross-Entropy Loss value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model's predictions match the actual categories
+    /// <b>For Beginners:</b> This method calculates how well your model's predictions match the actual categories
     /// using the Categorical Cross-Entropy Loss formula.
     /// 
     /// The method works by:

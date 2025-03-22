@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing by measuring
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing by measuring
 /// the proportion of variance in your target variable that is explained by your model.
 /// 
 /// R-Squared (R²), also called the coefficient of determination, is:
@@ -53,7 +53,7 @@ public class RSquaredFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use R-Squared (R²)
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use R-Squared (R²)
     /// to evaluate your model's performance.
     /// 
     /// Parameter:
@@ -85,7 +85,7 @@ public class RSquaredFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated R² score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using R-Squared (R²).
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using R-Squared (R²).
     /// 
     /// R² measures how much of the variation in your data is explained by your model:
     /// - R² = 1 means your model perfectly explains all the variation (100%)

@@ -11,7 +11,7 @@
 /// circular or cylindrical data patterns.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Bessel kernel is a specialized similarity measure that works well for certain types of data,
 /// especially data with circular or radial patterns (like sound waves, vibrations, or heat distribution
 /// in circular objects). It's named after Friedrich Bessel, a mathematician who studied these special
@@ -28,7 +28,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// The order of the Bessel function to use in the kernel calculation.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The order parameter determines which specific Bessel function to use.
+    /// <b>For Beginners:</b> The order parameter determines which specific Bessel function to use.
     /// Different orders capture different types of oscillatory patterns in your data.
     /// Order 0 (the default) is the most commonly used and works well for many applications.
     /// </remarks>
@@ -38,7 +38,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// The scaling parameter that controls the width of the kernel.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of sigma as a "zoom level" for your similarity measurement.
+    /// <b>For Beginners:</b> Think of sigma as a "zoom level" for your similarity measurement.
     /// A smaller sigma makes the kernel more sensitive to small differences between data points,
     /// while a larger sigma makes the kernel more tolerant of differences.
     /// </remarks>
@@ -56,7 +56,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// <param name="sigma">The scaling parameter that controls the width of the kernel. Default is 1.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Bessel kernel with your chosen settings.
+    /// <b>For Beginners:</b> This constructor sets up the Bessel kernel with your chosen settings.
     /// If you don't specify any settings, it will use default values that work well for many problems.
     /// </para>
     /// <para>
@@ -79,7 +79,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Bessel kernel formula.
     /// </para>
     /// <para>
@@ -109,7 +109,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// <returns>The value of the Bessel function J_order(x).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates a special mathematical function called the "Bessel function"
+    /// <b>For Beginners:</b> This method calculates a special mathematical function called the "Bessel function"
     /// which is used in the kernel calculation. Bessel functions are solutions to a specific type of
     /// differential equation that appears in many physics problems involving waves and vibrations.
     /// </para>
@@ -165,7 +165,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// <returns>The value of the Bessel function calculated using series expansion.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates the Bessel function using a mathematical technique called
+    /// <b>For Beginners:</b> This method calculates the Bessel function using a mathematical technique called
     /// "series expansion," which is like breaking down a complex calculation into a sum of simpler terms.
     /// </para>
     /// <para>
@@ -212,7 +212,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// <returns>The value of the Bessel function calculated using asymptotic expansion.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates the Bessel function using a mathematical technique called
+    /// <b>For Beginners:</b> This method calculates the Bessel function using a mathematical technique called
     /// "asymptotic expansion," which is a special approximation that works well for large input values.
     /// </para>
     /// <para>

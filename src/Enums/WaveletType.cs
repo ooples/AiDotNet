@@ -4,7 +4,7 @@
 /// Defines the different types of biorthogonal wavelets that can be used for signal processing and analysis.
 /// </summary>
 /// <remarks>
-/// For Beginners: Wavelets are mathematical functions that cut up data into different frequency components.
+/// <b>For Beginners:</b> Wavelets are mathematical functions that cut up data into different frequency components.
 /// 
 /// Think of wavelets like special lenses that let you look at your data in different ways:
 /// - They can zoom in to see fine details (high frequencies)
@@ -25,7 +25,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 1.1 wavelet - the simplest biorthogonal wavelet with one vanishing moment in both decomposition and reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is the simplest biorthogonal wavelet.
+    /// <b>For Beginners:</b> This is the simplest biorthogonal wavelet.
     /// 
     /// The "1.1" means it has one vanishing moment in both decomposition and reconstruction.
     /// A vanishing moment determines how well the wavelet can represent polynomial behavior.
@@ -41,7 +41,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 1.3 wavelet - has one vanishing moment for decomposition and three for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has one vanishing moment for decomposition and three for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has one vanishing moment for decomposition and three for reconstruction.
     /// 
     /// The increased reconstruction moments (3) means it can better represent complex patterns
     /// during the reconstruction phase while keeping the decomposition simple.
@@ -56,7 +56,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 2.2 wavelet - has two vanishing moments in both decomposition and reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has two vanishing moments in both decomposition and reconstruction.
+    /// <b>For Beginners:</b> This wavelet has two vanishing moments in both decomposition and reconstruction.
     /// 
     /// With two vanishing moments, this wavelet can accurately represent linear trends in your data.
     /// 
@@ -71,7 +71,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 2.4 wavelet - has two vanishing moments for decomposition and four for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has two vanishing moments for decomposition and four for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has two vanishing moments for decomposition and four for reconstruction.
     /// 
     /// The higher number of reconstruction moments (4) allows it to better capture complex patterns
     /// during reconstruction while maintaining a relatively simple decomposition.
@@ -86,7 +86,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 2.6 wavelet - has two vanishing moments for decomposition and six for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has two vanishing moments for decomposition and six for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has two vanishing moments for decomposition and six for reconstruction.
     /// 
     /// With six vanishing moments in reconstruction, this wavelet can represent more complex patterns
     /// during the reconstruction phase while keeping decomposition relatively simple.
@@ -101,7 +101,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 2.8 wavelet - has two vanishing moments for decomposition and eight for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has two vanishing moments for decomposition and eight for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has two vanishing moments for decomposition and eight for reconstruction.
     /// 
     /// The high number of reconstruction moments (8) makes this wavelet excellent at preserving
     /// complex details during reconstruction while maintaining a simpler decomposition.
@@ -117,7 +117,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 3.1 wavelet - has three vanishing moments for decomposition and one for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has three vanishing moments for decomposition and one for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has three vanishing moments for decomposition and one for reconstruction.
     /// 
     /// Unlike previous wavelets, this one has more complexity in decomposition than reconstruction.
     /// This makes it good at analyzing complex patterns but with simpler reconstruction.
@@ -133,7 +133,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 3.3 wavelet - has three vanishing moments in both decomposition and reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has three vanishing moments in both decomposition and reconstruction.
+    /// <b>For Beginners:</b> This wavelet has three vanishing moments in both decomposition and reconstruction.
     /// 
     /// With three vanishing moments on both sides, this wavelet can accurately represent quadratic
     /// trends in your data during both analysis and synthesis.
@@ -149,7 +149,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 3.5 wavelet - has three vanishing moments for decomposition and five for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has three vanishing moments for decomposition and five for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has three vanishing moments for decomposition and five for reconstruction.
     /// 
     /// This combination provides good analysis of complex patterns with even better reconstruction quality.
     /// 
@@ -164,7 +164,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 3.7 wavelet - has three vanishing moments for decomposition and seven for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has three vanishing moments for decomposition and seven for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has three vanishing moments for decomposition and seven for reconstruction.
     /// 
     /// The high number of reconstruction moments (7) combined with good decomposition properties
     /// makes this wavelet excellent for detailed analysis with high-quality reconstruction.
@@ -180,7 +180,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 3.9 wavelet - has three vanishing moments for decomposition and nine for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has three vanishing moments for decomposition and nine for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has three vanishing moments for decomposition and nine for reconstruction.
     /// 
     /// With nine vanishing moments in reconstruction, this wavelet excels at preserving very complex
     /// patterns during reconstruction while maintaining good analysis capabilities.
@@ -196,7 +196,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 4.4 wavelet - has four vanishing moments in both decomposition and reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has four vanishing moments in both decomposition and reconstruction.
+    /// <b>For Beginners:</b> This wavelet has four vanishing moments in both decomposition and reconstruction.
     /// 
     /// With four vanishing moments on both sides, this wavelet can accurately represent cubic
     /// trends in your data during both analysis and synthesis.
@@ -213,7 +213,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 4.6 wavelet - has four vanishing moments for decomposition and six for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has four vanishing moments for decomposition and six for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has four vanishing moments for decomposition and six for reconstruction.
     /// 
     /// This combination provides excellent analysis of complex patterns with even better reconstruction quality.
     /// 
@@ -228,7 +228,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 4.8 wavelet - has four vanishing moments for decomposition and eight for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has four vanishing moments for decomposition and eight for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has four vanishing moments for decomposition and eight for reconstruction.
     /// 
     /// The high number of moments on both sides makes this a very powerful wavelet for complex signals.
     /// 
@@ -243,7 +243,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 5.5 wavelet - has five vanishing moments in both decomposition and reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has five vanishing moments in both decomposition and reconstruction.
+    /// <b>For Beginners:</b> This wavelet has five vanishing moments in both decomposition and reconstruction.
     /// 
     /// With five vanishing moments on both sides, this wavelet can accurately represent quartic
     /// (4th degree polynomial) trends in your data during both analysis and synthesis.
@@ -260,7 +260,7 @@ public enum WaveletType
     /// Reverse Biorthogonal 6.8 wavelet - has six vanishing moments for decomposition and eight for reconstruction.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This wavelet has six vanishing moments for decomposition and eight for reconstruction.
+    /// <b>For Beginners:</b> This wavelet has six vanishing moments for decomposition and eight for reconstruction.
     /// 
     /// This is one of the most complex biorthogonal wavelets, capable of representing very sophisticated
     /// patterns in both decomposition and reconstruction.

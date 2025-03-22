@@ -10,7 +10,7 @@
 /// that Sparsemax can assign exactly zero probability to low-scoring classes, creating sparse outputs.
 /// </para>
 /// <para>
-/// For Beginners: Sparsemax is an advanced activation function used primarily in the output layer of 
+/// <b>For Beginners:</b> Sparsemax is an advanced activation function used primarily in the output layer of 
 /// neural networks for classification tasks. While Softmax always gives some probability to every possible 
 /// class (even if very small), Sparsemax can assign exactly zero probability to unlikely classes.
 /// 
@@ -34,7 +34,7 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// all elements in a vector together to compute the probability distribution.
     /// </para>
     /// <para>
-    /// For Beginners: This method returning false means that Sparsemax cannot work on just one number at a time.
+    /// <b>For Beginners:</b> This method returning false means that Sparsemax cannot work on just one number at a time.
     /// It needs to see all the values together (like all scores for different classes) to determine
     /// which ones should get non-zero probabilities.
     /// </para>
@@ -53,7 +53,7 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// while shifting the remaining elements to ensure they sum to 1.
     /// </para>
     /// <para>
-    /// For Beginners: This method transforms a vector of numbers (like scores for different classes) into 
+    /// <b>For Beginners:</b> This method transforms a vector of numbers (like scores for different classes) into 
     /// probabilities that add up to 1. Here's how it works:
     /// 
     /// 1. Sort all the input values from highest to lowest
@@ -109,7 +109,7 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// For Sparsemax, the Jacobian has a specific structure based on which outputs are non-zero.
     /// </para>
     /// <para>
-    /// For Beginners: The derivative of Sparsemax is more complex than simpler activation functions because
+    /// <b>For Beginners:</b> The derivative of Sparsemax is more complex than simpler activation functions because
     /// changing one input can affect multiple outputs. This method returns a "Jacobian matrix" which shows
     /// how each output value changes when each input value changes.
     /// 

@@ -5,7 +5,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: SEATS is an advanced method for breaking down time series data into different components:
+/// <b>For Beginners:</b> SEATS is an advanced method for breaking down time series data into different components:
 /// trend (long-term direction), seasonal patterns (regular fluctuations), and irregular components (random noise).
 /// It uses statistical models to identify these patterns in your data.
 /// </para>
@@ -28,7 +28,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="forecastHorizon">The number of periods to forecast.</param>
     /// <param name="algorithm">The algorithm variant to use for decomposition.</param>
     /// <remarks>
-    /// For Beginners: When creating a SEATS decomposition:
+    /// <b>For Beginners:</b> When creating a SEATS decomposition:
     /// - timeSeries: Your data points arranged in time order
     /// - sarimaOptions: Settings for the statistical model (you can use default settings)
     /// - forecastHorizon: How many future periods you want to predict (e.g., 12 for a year of monthly data)
@@ -69,7 +69,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Performs standard SEATS decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method fits a statistical model to your data and then
+    /// <b>For Beginners:</b> This method fits a statistical model to your data and then
     /// separates it into trend (long-term direction), seasonal patterns, and random noise.
     /// </remarks>
     private void DecomposeStandard()
@@ -93,7 +93,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Performs canonical SEATS decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The canonical method is a specific approach that ensures the components
+    /// <b>For Beginners:</b> The canonical method is a specific approach that ensures the components
     /// are as independent from each other as possible. This means the trend, seasonal, and
     /// irregular components have minimal correlation with each other.
     /// </remarks>
@@ -118,7 +118,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Performs Burman's variant of SEATS decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Burman's method is an alternative approach to decomposition that uses
+    /// <b>For Beginners:</b> Burman's method is an alternative approach to decomposition that uses
     /// special filters designed to better separate the components in certain types of data.
     /// It can be more effective for some complex time series.
     /// </remarks>
@@ -218,7 +218,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A canonical trend filter helps identify the long-term direction or pattern in your data
+    /// <b>For Beginners:</b> A canonical trend filter helps identify the long-term direction or pattern in your data
     /// by removing short-term fluctuations. It's like looking at the general path of a hiking trail
     /// while ignoring small ups and downs along the way.
     /// </para>
@@ -254,7 +254,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A canonical seasonal filter helps identify repeating patterns in your data
+    /// <b>For Beginners:</b> A canonical seasonal filter helps identify repeating patterns in your data
     /// that occur at regular intervals (like daily, weekly, or yearly patterns). It's like identifying
     /// that ice cream sales always go up in summer and down in winter, year after year.
     /// </para>
@@ -297,7 +297,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Burman trend filter is an advanced technique to extract the underlying trend
+    /// <b>For Beginners:</b> The Burman trend filter is an advanced technique to extract the underlying trend
     /// from your time series data. It's particularly good at handling complex data where simpler methods
     /// might fail. Think of it as a sophisticated camera lens that can focus on just the main subject
     /// while blurring out all the background noise.
@@ -339,7 +339,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Spectral density is a way to measure how much of each frequency component
+    /// <b>For Beginners:</b> Spectral density is a way to measure how much of each frequency component
     /// contributes to your data. At frequency zero, we're looking at the very long-term component
     /// (like the overall average level). This helps us understand the strength of the trend in your data.
     /// </para>
@@ -370,7 +370,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how strong each seasonal pattern is in your data.
+    /// <b>For Beginners:</b> This method calculates how strong each seasonal pattern is in your data.
     /// For example, if you have monthly data, it measures the strength of patterns that repeat
     /// every month, every two months, etc. This helps identify which seasonal patterns are most important.
     /// </para>
@@ -397,7 +397,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method measures how much a specific pattern (at a particular frequency)
+    /// <b>For Beginners:</b> This method measures how much a specific pattern (at a particular frequency)
     /// contributes to your data. Think of it like analyzing the ingredients in a recipe - 
     /// this tells you how much of each ingredient (frequency) is present in your data "dish".
     /// </para>
@@ -442,7 +442,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Numerical integration is a way to calculate the area under a curve
+    /// <b>For Beginners:</b> Numerical integration is a way to calculate the area under a curve
     /// when we can't solve it with a formula. We divide the area into many small rectangles,
     /// calculate the area of each, and add them up to get an approximate total area.
     /// </para>
@@ -471,7 +471,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Burman seasonal filter helps identify and extract repeating patterns
+    /// <b>For Beginners:</b> A Burman seasonal filter helps identify and extract repeating patterns
     /// in your data (like weekly, monthly, or yearly cycles). It's like having a special lens
     /// that only shows you the seasonal patterns while filtering out other components.
     /// </para>
@@ -520,7 +520,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Spectral density for seasonal components measures how strongly
+    /// <b>For Beginners:</b> Spectral density for seasonal components measures how strongly
     /// each seasonal pattern (like weekly or monthly cycles) appears in your data.
     /// It's like analyzing which musical notes are loudest in a song, but for time patterns
     /// instead of sound.
@@ -569,7 +569,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Applying a filter to a signal is like using a special lens on a camera.
+    /// <b>For Beginners:</b> Applying a filter to a signal is like using a special lens on a camera.
     /// The filter (lens) highlights certain features while reducing others. In time series,
     /// we use filters to extract specific patterns like trends or seasonal components.
     /// Convolution is the mathematical operation that combines the signal with the filter.
@@ -625,7 +625,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The trend component represents the long-term direction of your data.
+    /// <b>For Beginners:</b> The trend component represents the long-term direction of your data.
     /// Think of it as the general path your data follows when you ignore short-term fluctuations
     /// and seasonal patterns. For example, if your sales are generally increasing over years
     /// despite seasonal ups and downs, that upward direction is the trend.
@@ -655,7 +655,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The seasonal component represents repeating patterns in your data that occur at 
+    /// <b>For Beginners:</b> The seasonal component represents repeating patterns in your data that occur at 
     /// regular intervals (like sales increasing during holidays every year). This method isolates these 
     /// recurring patterns from your data, similar to identifying which notes repeat in a musical composition.
     /// </para>
@@ -691,7 +691,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The irregular component (sometimes called "residual" or "noise") represents the 
+    /// <b>For Beginners:</b> The irregular component (sometimes called "residual" or "noise") represents the 
     /// random fluctuations in your data that can't be explained by trends or seasonal patterns. 
     /// Think of it like the static on a radio - it's the unpredictable part that remains after 
     /// accounting for all predictable patterns.

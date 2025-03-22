@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Akima interpolation creates a smooth curve that passes through all data points while minimizing
 /// unwanted oscillations that can occur with other interpolation methods.
 /// 
-/// For Beginners: Akima interpolation is like drawing a smooth line through a set of points.
+/// <b>For Beginners:</b> Akima interpolation is like drawing a smooth line through a set of points.
 /// Unlike simpler methods, it creates curves that look more natural, especially when your data
 /// has sudden changes or sharp turns. It's particularly good at avoiding artificial "wiggles"
 /// that other methods might create between your data points.
@@ -34,7 +34,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// The first-order polynomial coefficients for each interval.
     /// </summary>
     /// <remarks>
-    /// For Beginners: These are values that help determine the slope of the curve at each point.
+    /// <b>For Beginners:</b> These are values that help determine the slope of the curve at each point.
     /// </remarks>
     private readonly Vector<T> _b;
     
@@ -42,7 +42,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// The second-order polynomial coefficients for each interval.
     /// </summary>
     /// <remarks>
-    /// For Beginners: These values help control how the curve bends between points.
+    /// <b>For Beginners:</b> These values help control how the curve bends between points.
     /// </remarks>
     private readonly Vector<T> _c;
     
@@ -50,7 +50,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// The third-order polynomial coefficients for each interval.
     /// </summary>
     /// <remarks>
-    /// For Beginners: These values help fine-tune the shape of the curve between points.
+    /// <b>For Beginners:</b> These values help fine-tune the shape of the curve between points.
     /// </remarks>
     private readonly Vector<T> _d;
     
@@ -66,7 +66,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// This constructor validates the input data, initializes the necessary arrays,
     /// and calculates the coefficients needed for interpolation.
     /// 
-    /// For Beginners: This sets up everything needed to perform Akima interpolation:
+    /// <b>For Beginners:</b> This sets up everything needed to perform Akima interpolation:
     /// 1. It checks that your data is valid (same number of x and y values, at least 5 points)
     /// 2. It stores your data points
     /// 3. It prepares the mathematical values needed to create smooth curves between your points
@@ -107,7 +107,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// This method finds which interval the x-coordinate falls into and then calculates
     /// the interpolated y-value using the pre-computed polynomial coefficients.
     /// 
-    /// For Beginners: This is the main method you'll use. Give it an x-value, and it will:
+    /// <b>For Beginners:</b> This is the main method you'll use. Give it an x-value, and it will:
     /// 1. Find which segment of your data the x-value falls into
     /// 2. Use the smooth curve formula to calculate the corresponding y-value
     /// 
@@ -137,7 +137,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// This method implements the Akima algorithm to calculate the coefficients that define
     /// the piecewise polynomial function used for interpolation.
     /// 
-    /// For Beginners: This method does the mathematical heavy lifting that makes Akima interpolation work.
+    /// <b>For Beginners:</b> This method does the mathematical heavy lifting that makes Akima interpolation work.
     /// It calculates:
     /// 1. The slopes between adjacent points
     /// 2. Special weights that help determine how to draw the curve
@@ -197,7 +197,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// the x-coordinate falls into. If the x-coordinate is outside the range of the data,
     /// it returns the first or last interval as appropriate.
     /// 
-    /// For Beginners: This method figures out which segment of your data contains the x-value
+    /// <b>For Beginners:</b> This method figures out which segment of your data contains the x-value
     /// you're interested in. It uses a smart search technique (binary search) that's much faster
     /// than checking each segment one by one, especially when you have lots of data points.
     /// 

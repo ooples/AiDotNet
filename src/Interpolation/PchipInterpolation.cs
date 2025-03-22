@@ -11,7 +11,7 @@ namespace AiDotNet.Interpolation;
 /// direction of increase or decrease between points).
 /// </para>
 /// <para>
-/// For Beginners: PCHIP is a method that creates a smooth curve through your data points.
+/// <b>For Beginners:</b> PCHIP is a method that creates a smooth curve through your data points.
 /// Unlike some other methods, it avoids creating artificial "wiggles" in the curve,
 /// making it particularly useful for scientific data where you want to maintain the
 /// general shape and trends of your original data.
@@ -49,7 +49,7 @@ public class PchipInterpolation<T> : IInterpolation<T>
     /// </exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor takes your data points (x and y values) and prepares
+    /// <b>For Beginners:</b> This constructor takes your data points (x and y values) and prepares
     /// the interpolation algorithm. It checks that your data is valid (same number of x and y values,
     /// and at least 2 points) and then calculates the slopes needed for the interpolation.
     /// </para>
@@ -76,7 +76,7 @@ public class PchipInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the y-value on the smooth curve for any x-value you provide.
+    /// <b>For Beginners:</b> This method finds the y-value on the smooth curve for any x-value you provide.
     /// </para>
     /// <para>
     /// It works by:
@@ -115,7 +115,7 @@ public class PchipInterpolation<T> : IInterpolation<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method determines how steep the curve should be at each data point.
+    /// <b>For Beginners:</b> This method determines how steep the curve should be at each data point.
     /// </para>
     /// <para>
     /// The slopes are calculated in two steps:
@@ -192,7 +192,7 @@ public class PchipInterpolation<T> : IInterpolation<T>
     /// <returns>The weighted harmonic mean.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method combines two slope values in a special way that gives
+    /// <b>For Beginners:</b> This method combines two slope values in a special way that gives
     /// more importance to the smaller value.
     /// </para>
     /// <para>
@@ -224,7 +224,7 @@ public class PchipInterpolation<T> : IInterpolation<T>
     /// <returns>The index of the lower bound of the interval where the x-value belongs.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method determines which segment of your data the x-value falls into.
+    /// <b>For Beginners:</b> This method determines which segment of your data the x-value falls into.
     /// </para>
     /// <para>
     /// Imagine your data points as dots connected by line segments:

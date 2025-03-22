@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// Tree-based models make predictions by following a series of decision rules organized in a tree-like structure.
 /// These models can be used for both classification (predicting categories) and regression (predicting numeric values).
 /// 
-/// For Beginners: Tree-based models work like a flowchart of yes/no questions to make predictions.
+/// <b>For Beginners:</b> Tree-based models work like a flowchart of yes/no questions to make predictions.
 /// Imagine you're trying to predict if someone will like a movie:
 /// 
 /// 1. Is it an action movie? If yes, go to question 2. If no, go to question 3.
@@ -30,7 +30,7 @@ public interface ITreeBasedModel<T> : IFullModel<T>
     /// For single decision tree models, this value is 1. For ensemble methods like Random Forests
     /// or Gradient Boosted Trees, this represents the number of trees in the ensemble.
     /// 
-    /// For Beginners: Think of this as "how many different flowcharts is the model using to make its decision?"
+    /// <b>For Beginners:</b> Think of this as "how many different flowcharts is the model using to make its decision?"
     /// 
     /// - If NumberOfTrees = 1: The model is using a single decision tree (like the movie example above)
     /// - If NumberOfTrees > 1: The model is using multiple trees and combining their predictions
@@ -46,7 +46,7 @@ public interface ITreeBasedModel<T> : IFullModel<T>
     /// <remarks>
     /// The depth of a tree is the maximum number of decisions that must be made to reach a prediction.
     /// 
-    /// For Beginners: This tells you how many questions the model can ask before making a prediction.
+    /// <b>For Beginners:</b> This tells you how many questions the model can ask before making a prediction.
     /// 
     /// For example, if MaxDepth = 3:
     /// - The model can ask at most 3 questions before making a prediction
@@ -70,7 +70,7 @@ public interface ITreeBasedModel<T> : IFullModel<T>
     /// Feature importance indicates how much each input variable contributes to the model's predictions.
     /// Higher values indicate more important features.
     /// 
-    /// For Beginners: This tells you which of your input variables are most helpful for making predictions.
+    /// <b>For Beginners:</b> This tells you which of your input variables are most helpful for making predictions.
     /// 
     /// For example, if you're predicting house prices:
     /// - FeatureImportances[0] = 0.7 for "square footage"

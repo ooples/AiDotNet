@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on regression tasks
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on regression tasks
 /// (where you're predicting continuous values like prices, temperatures, etc.) while being less
 /// sensitive to outliers than some other methods.
 /// 
@@ -42,7 +42,7 @@ public class LogCoshLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Log-Cosh Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Log-Cosh Loss
     /// to evaluate your model's performance, which is especially good for regression problems
     /// where you want a balance between sensitivity to errors and robustness against outliers.
     /// 
@@ -71,7 +71,7 @@ public class LogCoshLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated Log-Cosh Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Log-Cosh Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Log-Cosh Loss.
     /// 
     /// It works by:
     /// 1. Taking the predictions your model made

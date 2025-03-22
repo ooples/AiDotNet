@@ -7,7 +7,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <typeparam name="T">The numeric type used in the matrix</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: A tridiagonal matrix is a special type of matrix where non-zero elements
+/// <b>For Beginners:</b> A tridiagonal matrix is a special type of matrix where non-zero elements
 /// can only appear on the main diagonal and the diagonals directly above and below it.
 /// This decomposition transforms a complex matrix into this simpler form, making many
 /// calculations much faster and more efficient.
@@ -27,7 +27,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An orthogonal matrix has the special property that when multiplied by its
+    /// <b>For Beginners:</b> An orthogonal matrix has the special property that when multiplied by its
     /// transpose, it gives the identity matrix (like multiplying a number by its reciprocal gives 1).
     /// This property makes orthogonal matrices very useful in many calculations.
     /// </para>
@@ -81,7 +81,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Householder algorithm uses special reflections (like mirrors) to
+    /// <b>For Beginners:</b> The Householder algorithm uses special reflections (like mirrors) to
     /// transform the matrix step by step into a tridiagonal form. It's one of the most stable
     /// and widely used methods for this type of decomposition.
     /// </para>
@@ -118,7 +118,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Givens algorithm uses a series of rotations to gradually transform
+    /// <b>For Beginners:</b> The Givens algorithm uses a series of rotations to gradually transform
     /// the matrix into tridiagonal form. Think of it like rotating parts of the matrix to
     /// move unwanted values to zero, one element at a time.
     /// </para>
@@ -181,7 +181,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Lanczos algorithm is an iterative method that builds the tridiagonal
+    /// <b>For Beginners:</b> The Lanczos algorithm is an iterative method that builds the tridiagonal
     /// matrix step by step. It's particularly efficient for large, sparse matrices (matrices with
     /// lots of zeros). Think of it like summarizing a large dataset by capturing only its most
     /// important patterns.
@@ -243,7 +243,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the values of x in the equation Ax = b.
+    /// <b>For Beginners:</b> This method finds the values of x in the equation Ax = b.
     /// Think of it like solving for x in the equation 3x = 6 (where x = 2),
     /// but with matrices instead of simple numbers. Using the decomposition makes
     /// this process much more efficient than directly solving the original system.
@@ -265,7 +265,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method efficiently solves equations where T is a tridiagonal matrix
+    /// <b>For Beginners:</b> This method efficiently solves equations where T is a tridiagonal matrix
     /// (a matrix with non-zero values only on the main diagonal and the diagonals directly above and below it).
     /// It uses a technique called the Thomas algorithm, which is much faster than general equation-solving
     /// methods. Think of it like taking a shortcut when solving a maze because you know a special property
@@ -305,7 +305,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The inverse of matrix A</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The inverse of a matrix is like the reciprocal of a number. Just as 1/3 is the
+    /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/3 is the
     /// reciprocal of 3 (because 3 × 1/3 = 1), the inverse of a matrix A is another matrix that,
     /// when multiplied by A, gives the identity matrix (the matrix equivalent of the number 1).
     /// Finding the inverse is useful for solving multiple systems of equations with the same coefficient matrix.
@@ -326,7 +326,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The inverse of the tridiagonal matrix T</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the inverse of the tridiagonal matrix by solving
+    /// <b>For Beginners:</b> This method finds the inverse of the tridiagonal matrix by solving
     /// multiple equation systems. Each column of the inverse is found by solving the system
     /// Tx = e_j, where e_j is a vector with 1 in position j and 0 elsewhere. This approach
     /// is more efficient than general matrix inversion methods because it takes advantage of
@@ -353,7 +353,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the orthogonal matrix Q and the tridiagonal matrix T</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method gives you access to the two key components of the tridiagonal
+    /// <b>For Beginners:</b> This method gives you access to the two key components of the tridiagonal
     /// decomposition: the orthogonal matrix Q and the tridiagonal matrix T. These matrices can be
     /// used for various calculations like solving equations, finding eigenvalues, or further
     /// analysis of the original matrix A.

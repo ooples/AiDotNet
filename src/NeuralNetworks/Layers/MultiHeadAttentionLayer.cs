@@ -6,7 +6,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for computations (typically float or double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Multi-head attention is like having multiple "experts" look at the same information
+/// <b>For Beginners:</b> Multi-head attention is like having multiple "experts" look at the same information
 /// from different perspectives. Each "head" focuses on different parts of the input, allowing the model
 /// to capture various relationships in the data simultaneously. This is similar to how you might ask
 /// several friends for advice on a decision - each person might notice different important factors.
@@ -83,7 +83,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// The number of attention heads in this layer.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of this as the number of "experts" or different perspectives
+    /// <b>For Beginners:</b> Think of this as the number of "experts" or different perspectives
     /// that will analyze the same input data.
     /// </remarks>
     private readonly int _headCount;
@@ -107,7 +107,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// <param name="activationFunction">The activation function to apply (defaults to identity function if null).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the attention mechanism with:
+    /// <b>For Beginners:</b> This constructor sets up the attention mechanism with:
     /// - sequenceLength: How many items are in your sequence (like words in a sentence)
     /// - embeddingDimension: How much information is stored about each item
     /// - headCount: How many different "perspectives" or "experts" will analyze the data
@@ -190,7 +190,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// <returns>The output tensor after applying multi-head attention.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The forward pass is where the layer processes the input data. 
+    /// <b>For Beginners:</b> The forward pass is where the layer processes the input data. 
     /// Here's what happens:
     /// 1. The input is transformed into three different representations: queries, keys, and values
     /// 2. These are split into multiple "heads" (different perspectives)
@@ -239,7 +239,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// <returns>The gradient to be passed to the previous layer.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The backward pass is how neural networks learn. Think of it like figuring out 
+    /// <b>For Beginners:</b> The backward pass is how neural networks learn. Think of it like figuring out 
     /// which parts of a recipe need adjustment after tasting the final dish:
     /// 
     /// 1. We first check how our output differs from what was expected (the gradient)
@@ -297,7 +297,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// <param name="learningRate">The learning rate that controls how much to adjust the parameters.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method is like adjusting a recipe based on feedback. The learning rate 
+    /// <b>For Beginners:</b> This method is like adjusting a recipe based on feedback. The learning rate 
     /// is how bold we are with our changes - a higher rate means bigger adjustments, while a lower 
     /// rate means more cautious, smaller adjustments. The gradients tell us which direction to adjust 
     /// each parameter to improve the network's performance.
@@ -321,7 +321,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// <returns>A vector containing all parameters of the layer.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method collects all the layer's adjustable values (weights and biases) 
+    /// <b>For Beginners:</b> This method collects all the layer's adjustable values (weights and biases) 
     /// into a single list. Think of it like taking inventory of all the ingredients in a recipe.
     /// This is useful for saving the model's state or for optimization algorithms that need to 
     /// work with all parameters at once.
@@ -390,7 +390,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// <param name="parameters">A vector containing all parameters to set in the layer.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method does the opposite of GetParameters - it takes a list of values 
+    /// <b>For Beginners:</b> This method does the opposite of GetParameters - it takes a list of values 
     /// and distributes them back into the layer's weights and biases. It's like restocking all the 
     /// ingredients in your kitchen from a single shopping bag, putting each item in its proper place.
     /// This is useful when loading a saved model or when optimization algorithms have computed 
@@ -466,7 +466,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// any temporary data without losing the layer's learned parameters.
     /// </para>
     /// <para>
-    /// For Beginners: Think of this like clearing your scratch paper after solving a math problem.
+    /// <b>For Beginners:</b> Think of this like clearing your scratch paper after solving a math problem.
     /// You're keeping all the knowledge you've gained (the weights), but you're getting rid of
     /// all the intermediate calculations (cached values) to make room for new work.
     /// 

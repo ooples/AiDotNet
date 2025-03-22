@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps you evaluate how well your model is performing on tasks where you need to 
+/// <b>For Beginners:</b> This calculator helps you evaluate how well your model is performing on tasks where you need to 
 /// identify specific regions or areas in data, especially in images.
 /// 
 /// Dice Loss (named after Lee R. Dice who created the Dice coefficient) measures the overlap between 
@@ -35,7 +35,7 @@ public class DiceLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Dice Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Dice Loss
     /// to evaluate your model's performance on segmentation tasks.
     /// 
     /// The "dataSetType" parameter lets you choose which data to evaluate:
@@ -59,7 +59,7 @@ public class DiceLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The Dice Loss value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model's predicted regions match the actual regions.
+    /// <b>For Beginners:</b> This method calculates how well your model's predicted regions match the actual regions.
     /// 
     /// The method works by:
     /// 1. Taking the predicted regions from your model (e.g., "these pixels are part of a tumor")

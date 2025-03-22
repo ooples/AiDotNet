@@ -4,7 +4,7 @@
 /// Specifies the type of regularization to apply to a machine learning model.
 /// </summary>
 /// <remarks>
-/// For Beginners: Regularization is like adding training wheels to your AI model.
+/// <b>For Beginners:</b> Regularization is like adding training wheels to your AI model.
 /// 
 /// When models learn too much from their training data, they might become too specialized
 /// (this is called "overfitting"). Regularization helps prevent this by encouraging the model
@@ -24,7 +24,7 @@ public enum RegularizationType
     /// No regularization is applied to the model.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This option turns off regularization completely.
+    /// <b>For Beginners:</b> This option turns off regularization completely.
     /// 
     /// Use this when:
     /// - You have lots of training data compared to model complexity
@@ -40,7 +40,7 @@ public enum RegularizationType
     /// L1 regularization (also known as Lasso regularization) that encourages sparsity in the model parameters.
     /// </summary>
     /// <remarks>
-    /// For Beginners: L1 regularization encourages the model to completely ignore less important features.
+    /// <b>For Beginners:</b> L1 regularization encourages the model to completely ignore less important features.
     /// 
     /// It works by penalizing the absolute size of the model's parameters, which often results in
     /// many parameters becoming exactly zero.
@@ -61,7 +61,7 @@ public enum RegularizationType
     /// L2 regularization (also known as Ridge regularization) that discourages large parameter values.
     /// </summary>
     /// <remarks>
-    /// For Beginners: L2 regularization encourages the model to use all features, but keep their influence small.
+    /// <b>For Beginners:</b> L2 regularization encourages the model to use all features, but keep their influence small.
     /// 
     /// It works by penalizing the squared size of the model's parameters, which results in
     /// all parameters becoming smaller but rarely exactly zero.
@@ -82,7 +82,7 @@ public enum RegularizationType
     /// A combination of L1 and L2 regularization that balances their properties.
     /// </summary>
     /// <remarks>
-    /// For Beginners: ElasticNet combines the best of both L1 and L2 regularization.
+    /// <b>For Beginners:</b> ElasticNet combines the best of both L1 and L2 regularization.
     /// 
     /// It works by applying both types of penalties at the same time, with adjustable weights
     /// to control how much of each to use.

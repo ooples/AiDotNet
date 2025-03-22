@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: X-11 is a statistical method used to remove seasonal patterns from time series data.
+/// <b>For Beginners:</b> X-11 is a statistical method used to remove seasonal patterns from time series data.
 /// 
 /// Imagine you run an ice cream shop and want to understand your true business growth. Your sales naturally 
 /// spike in summer and drop in winter due to seasonal effects. The X-11 algorithm helps separate:
@@ -29,7 +29,7 @@ public enum X11AlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Standard X-11 approach uses an iterative process to gradually separate 
+    /// <b>For Beginners:</b> The Standard X-11 approach uses an iterative process to gradually separate 
     /// a time series into its components.
     /// 
     /// It works like this:
@@ -55,7 +55,7 @@ public enum X11AlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Multiplicative Adjustment approach assumes that seasonal patterns 
+    /// <b>For Beginners:</b> The Multiplicative Adjustment approach assumes that seasonal patterns 
     /// grow or shrink proportionally with the overall level of the series.
     /// 
     /// For example, if your ice cream sales are generally $10,000 per month but increase by 50% in summer, 
@@ -80,7 +80,7 @@ public enum X11AlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Log-Additive Adjustment is a hybrid approach that combines benefits of both 
+    /// <b>For Beginners:</b> The Log-Additive Adjustment is a hybrid approach that combines benefits of both 
     /// additive and multiplicative methods.
     /// 
     /// It works like this:

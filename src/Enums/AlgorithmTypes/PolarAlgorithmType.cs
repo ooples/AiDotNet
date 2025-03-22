@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Polar decomposition is a way to break down a matrix into two simpler parts - 
+/// <b>For Beginners:</b> Polar decomposition is a way to break down a matrix into two simpler parts - 
 /// one that represents pure rotation/reflection (an orthogonal matrix) and one that represents pure stretching 
 /// (a positive semi-definite Hermitian matrix).
 /// 
@@ -42,7 +42,7 @@ public enum PolarAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: SVD (Singular Value Decomposition) is a powerful technique that breaks down any matrix 
+    /// <b>For Beginners:</b> SVD (Singular Value Decomposition) is a powerful technique that breaks down any matrix 
     /// into three component matrices. When used for polar decomposition, we can derive the rotation and 
     /// stretching parts from these components.
     /// 
@@ -72,7 +72,7 @@ public enum PolarAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Newton-Schulz method is an iterative approach that starts with an initial guess and 
+    /// <b>For Beginners:</b> The Newton-Schulz method is an iterative approach that starts with an initial guess and 
     /// repeatedly improves it until it converges to the correct polar decomposition.
     /// 
     /// Think of it like homing in on a target: you make an educated guess, see how far off you are, adjust your 
@@ -102,7 +102,7 @@ public enum PolarAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Halley's iteration is an advanced iterative method that converges even faster than 
+    /// <b>For Beginners:</b> Halley's iteration is an advanced iterative method that converges even faster than 
     /// Newton-Schulz, making it useful for high-precision requirements.
     /// 
     /// If Newton-Schulz is like homing in on a target by adjusting your aim based on where your last shot landed, 
@@ -133,7 +133,7 @@ public enum PolarAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: QR iteration uses a technique called QR decomposition repeatedly to converge to the 
+    /// <b>For Beginners:</b> QR iteration uses a technique called QR decomposition repeatedly to converge to the 
     /// polar decomposition.
     /// 
     /// QR decomposition breaks a matrix into a product of Q (an orthogonal matrix) and R (an upper triangular matrix). 
@@ -166,7 +166,7 @@ public enum PolarAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Scaling and Squaring method is a clever approach that first scales the matrix to make 
+    /// <b>For Beginners:</b> The Scaling and Squaring method is a clever approach that first scales the matrix to make 
     /// it easier to work with, then applies a series of "squaring" operations to efficiently compute the result.
     /// 
     /// Think of it like calculating a long journey: Instead of measuring every mile directly, you might first 

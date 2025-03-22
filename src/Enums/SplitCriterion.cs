@@ -4,7 +4,7 @@ namespace AiDotNet.Enums;
 /// Specifies the criterion used to determine the best way to split data in decision trees and other tree-based models.
 /// </summary>
 /// <remarks>
-/// For Beginners: Split criteria are like the "rules" that help decision trees decide how to divide data.
+/// <b>For Beginners:</b> Split criteria are like the "rules" that help decision trees decide how to divide data.
 /// 
 /// Imagine you're organizing books on shelves. You could sort them by:
 /// - Size (big books vs. small books)
@@ -24,7 +24,7 @@ public enum SplitCriterion
     /// Selects splits that maximize the reduction in variance of the target variable.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This criterion tries to group similar values together.
+    /// <b>For Beginners:</b> This criterion tries to group similar values together.
     /// 
     /// Variance measures how spread out numbers are. High variance means the numbers are all over the place,
     /// while low variance means they're clustered together.
@@ -45,7 +45,7 @@ public enum SplitCriterion
     /// Selects splits that minimize the mean squared error between the actual and predicted values.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This criterion focuses on reducing the squared difference between predictions and actual values.
+    /// <b>For Beginners:</b> This criterion focuses on reducing the squared difference between predictions and actual values.
     /// 
     /// Mean Squared Error (MSE) works by:
     /// 1. Taking the difference between each actual value and the predicted value
@@ -66,7 +66,7 @@ public enum SplitCriterion
     /// Selects splits that minimize the mean absolute error between the actual and predicted values.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This criterion focuses on reducing the absolute (positive) difference between predictions and actual values.
+    /// <b>For Beginners:</b> This criterion focuses on reducing the absolute (positive) difference between predictions and actual values.
     /// 
     /// Mean Absolute Error (MAE) works by:
     /// 1. Taking the difference between each actual value and the predicted value
@@ -87,7 +87,7 @@ public enum SplitCriterion
     /// Selects splits using Friedman's improvement to MSE, which accounts for the potential improvement from further splits.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is an advanced version of MSE that looks ahead to future possibilities.
+    /// <b>For Beginners:</b> This is an advanced version of MSE that looks ahead to future possibilities.
     /// 
     /// Named after statistician Jerome Friedman, this criterion:
     /// - Uses the standard MSE calculation but with an additional factor

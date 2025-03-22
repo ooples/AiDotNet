@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This is a foundation class that all fitness calculators build upon.
+/// <b>For Beginners:</b> This is a foundation class that all fitness calculators build upon.
 /// 
 /// Think of a fitness calculator like a judge in a competition:
 /// - It looks at how your AI model performed (its predictions vs. the actual answers)
@@ -27,7 +27,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This tells us whether bigger numbers mean better performance.
+    /// <b>For Beginners:</b> This tells us whether bigger numbers mean better performance.
     /// 
     /// For example:
     /// - For accuracy: Higher is better (100% accuracy is perfect)
@@ -43,7 +43,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is a toolkit that helps perform math operations 
+    /// <b>For Beginners:</b> This is a toolkit that helps perform math operations 
     /// regardless of whether we're using integers, decimals, doubles, etc.
     /// 
     /// It allows the calculator to work with different numeric types without 
@@ -57,7 +57,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This tells the calculator which set of data to use when evaluating your model.
+    /// <b>For Beginners:</b> This tells the calculator which set of data to use when evaluating your model.
     /// 
     /// There are typically three types of data:
     /// - Training data: Used to teach the model (like study materials)
@@ -76,7 +76,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This sets up the basic properties of the fitness calculator.
+    /// <b>For Beginners:</b> This sets up the basic properties of the fitness calculator.
     /// 
     /// Parameters:
     /// - isHigherScoreBetter: Tells the system whether bigger numbers mean better performance
@@ -105,7 +105,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// <exception cref="ArgumentException">Thrown when an unsupported DataSetType is specified.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing based on its predictions.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing based on its predictions.
     /// 
     /// It works by:
     /// 1. Taking the evaluation data that contains both predictions and actual values
@@ -147,7 +147,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// <exception cref="ArgumentNullException">Thrown when dataSet is null.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is an alternative way to calculate your model's performance
+    /// <b>For Beginners:</b> This is an alternative way to calculate your model's performance
     /// when you already have a specific dataset you want to use.
     /// 
     /// Instead of providing all the evaluation data and letting the calculator choose
@@ -174,7 +174,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// <returns>The calculated fitness score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is a placeholder method that each specific calculator must fill in.
+    /// <b>For Beginners:</b> This is a placeholder method that each specific calculator must fill in.
     /// 
     /// Think of it like a template that says "here's where you put your specific scoring logic."
     /// Each calculator that extends this base class will provide its own implementation of this method,
@@ -193,7 +193,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This property tells you whether bigger numbers mean better performance for this calculator.
+    /// <b>For Beginners:</b> This property tells you whether bigger numbers mean better performance for this calculator.
     /// 
     /// For example:
     /// - For accuracy: IsHigherScoreBetter is true (100% accuracy is better than 90%)
@@ -212,7 +212,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// <returns>True if the new score is better than the current best score; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method compares two scores and tells you which one is better.
+    /// <b>For Beginners:</b> This method compares two scores and tells you which one is better.
     /// 
     /// It takes into account whether higher scores are better or lower scores are better:
     /// - If higher scores are better (like accuracy), it returns true when the new score is higher

@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on regression tasks
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on regression tasks
 /// (where you're predicting continuous values like prices, temperatures, etc.) by measuring the average
 /// of the squared differences between predictions and actual values.
 /// 
@@ -47,7 +47,7 @@ public class MeanSquaredErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Mean Squared Error (MSE)
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Mean Squared Error (MSE)
     /// to evaluate your model's performance, which is especially good for regression problems
     /// where you want to penalize larger errors more heavily than smaller ones.
     /// 
@@ -77,7 +77,7 @@ public class MeanSquaredErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated MSE score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Mean Squared Error.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Mean Squared Error.
     /// 
     /// It works by:
     /// 1. Taking the predictions your model made

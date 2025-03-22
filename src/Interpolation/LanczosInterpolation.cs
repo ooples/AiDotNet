@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Lanczos interpolation is a high-quality resampling technique that uses a windowed sinc function
 /// to create smooth interpolations between data points. It's commonly used in image and signal processing.
 /// 
-/// For Beginners: Lanczos interpolation is like a sophisticated way of estimating values between known points.
+/// <b>For Beginners:</b> Lanczos interpolation is like a sophisticated way of estimating values between known points.
 /// Imagine you have several dots on a graph and want to draw a smooth curve through them. Lanczos uses a special
 /// mathematical approach that creates a natural-looking curve while preserving important details in your data.
 /// It's particularly good at maintaining sharp edges while still creating smooth transitions, which is why
@@ -30,7 +30,7 @@ public class LanczosInterpolation<T> : IInterpolation<T>
     /// The 'a' parameter that controls the size of the Lanczos window.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This parameter determines how many neighboring points influence each interpolated value.
+    /// <b>For Beginners:</b> This parameter determines how many neighboring points influence each interpolated value.
     /// A larger value creates smoother results but may lose some detail, while a smaller value preserves
     /// more detail but might create less smooth transitions.
     /// </remarks>
@@ -47,7 +47,7 @@ public class LanczosInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This constructor initializes the interpolator with your data points and the Lanczos window size.
     /// 
-    /// For Beginners: When you create a Lanczos interpolator, you provide the x-coordinates and
+    /// <b>For Beginners:</b> When you create a Lanczos interpolator, you provide the x-coordinates and
     /// corresponding y-values of your known data points. You can also specify the 'a' parameter,
     /// which controls how smooth versus detailed your interpolation will be. The default value of 3
     /// works well for most purposes, but you can adjust it based on your needs.
@@ -76,7 +76,7 @@ public class LanczosInterpolation<T> : IInterpolation<T>
     /// This method calculates the y-value at any x-coordinate using a weighted sum of nearby known points,
     /// where the weights are determined by the Lanczos kernel function.
     /// 
-    /// For Beginners: Once you've set up the interpolator with your known points, this method
+    /// <b>For Beginners:</b> Once you've set up the interpolator with your known points, this method
     /// lets you estimate the y-value at any x-coordinate. It works by looking at all your known points,
     /// giving more importance to points that are closer to your target x-coordinate, and less importance
     /// to points that are farther away. The special Lanczos formula used for weighting creates a smooth
@@ -108,7 +108,7 @@ public class LanczosInterpolation<T> : IInterpolation<T>
     /// The Lanczos kernel is a mathematical function that determines how much influence
     /// a known point has on an interpolated value based on the distance between them.
     /// 
-    /// For Beginners: This function calculates a weight or importance value for each known point
+    /// <b>For Beginners:</b> This function calculates a weight or importance value for each known point
     /// based on how far it is from the point you're trying to estimate. Points that are very close
     /// get a high weight (close to 1), while points that are far away get a weight of 0 (no influence).
     /// The Lanczos kernel creates a special pattern of weights that produces smooth, high-quality

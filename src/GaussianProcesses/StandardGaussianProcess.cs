@@ -6,7 +6,7 @@ namespace AiDotNet.GaussianProcesses;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: A Gaussian Process is a flexible machine learning method that can make predictions
+/// <b>For Beginners:</b> A Gaussian Process is a flexible machine learning method that can make predictions
 /// with uncertainty estimates.
 /// 
 /// Think of it like drawing a line through data points, but instead of just one line, it gives you
@@ -62,7 +62,7 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// <param name="decompositionType">The matrix decomposition method to use for calculations.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: The constructor sets up your Gaussian Process model with the essential components it needs.
+    /// <b>For Beginners:</b> The constructor sets up your Gaussian Process model with the essential components it needs.
     /// 
     /// The kernel function is particularly important - it defines how the model measures similarity between data points.
     /// Different kernels capture different types of patterns:
@@ -91,7 +91,7 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// <param name="y">The target values corresponding to each row in X.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method "teaches" your model using your training data.
+    /// <b>For Beginners:</b> This method "teaches" your model using your training data.
     /// 
     /// Unlike many machine learning models that learn specific parameters during training,
     /// Gaussian Processes actually store the entire training dataset. This is because they
@@ -119,7 +119,7 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// <returns>A tuple containing the predicted mean value and variance (uncertainty).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method makes predictions for new data points and tells you how confident it is.
+    /// <b>For Beginners:</b> This method makes predictions for new data points and tells you how confident it is.
     /// 
     /// The prediction process works by:
     /// 1. Calculating how similar the new point is to each training point
@@ -159,7 +159,7 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// <param name="kernel">The new kernel function to use.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method lets you change how the model measures similarity between data points.
+    /// <b>For Beginners:</b> This method lets you change how the model measures similarity between data points.
     /// 
     /// The kernel function is like the "lens" through which your model views the data. Different
     /// kernels can help the model see different types of patterns:
@@ -191,7 +191,7 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// <returns>A matrix where each element [i,j] represents the kernel value between the i-th point in X1 and the j-th point in X2.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a "similarity table" between data points.
+    /// <b>For Beginners:</b> This method creates a "similarity table" between data points.
     /// 
     /// The kernel matrix is a table where each cell shows how similar two data points are to each other,
     /// according to the kernel function. For example, with an RBF kernel:
@@ -227,7 +227,7 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// <returns>A vector where each element is the kernel value between the corresponding row in X and the point x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how similar a new data point is to each of our training data points.
+    /// <b>For Beginners:</b> This method calculates how similar a new data point is to each of our training data points.
     /// 
     /// When making a prediction for a new point, we need to know how it relates to our training data.
     /// This method creates a vector of similarity scores between the new point and each training point.

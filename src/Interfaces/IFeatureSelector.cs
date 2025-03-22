@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: Feature selection is like choosing which ingredients actually matter for your recipe.
+/// <b>For Beginners:</b> Feature selection is like choosing which ingredients actually matter for your recipe.
 /// 
 /// In machine learning, "features" are the individual measurable properties of what you're observing.
 /// For example, if you're predicting house prices, features might include:
@@ -36,7 +36,7 @@ public interface IFeatureSelector<T>
     /// <param name="allFeaturesMatrix">The complete matrix of features where each row represents a sample and each column represents a feature.</param>
     /// <returns>A matrix containing only the selected features, with the same number of rows but potentially fewer columns.</returns>
     /// <remarks>
-    /// For Beginners: This method analyzes your data and keeps only the columns (features) that matter most.
+    /// <b>For Beginners:</b> This method analyzes your data and keeps only the columns (features) that matter most.
     /// 
     /// Imagine you have a spreadsheet with 100 columns of data about houses, but only 10 of those
     /// columns actually help predict the house price. This method would identify and keep just those

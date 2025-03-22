@@ -6,7 +6,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Activation functions are mathematical operations that determine the output
+/// <b>For Beginners:</b> Activation functions are mathematical operations that determine the output
 /// of a neural network node. They introduce non-linearity into the network, allowing it to
 /// learn complex patterns. Think of them as decision-makers that determine how strongly a
 /// neuron "fires" based on its inputs.
@@ -40,7 +40,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     /// <returns>The activated output value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms a single number using the activation function.
+    /// <b>For Beginners:</b> This method transforms a single number using the activation function.
     /// The default implementation is the identity function (returns the input unchanged).
     /// Derived classes will override this with specific activation functions like sigmoid or ReLU.
     /// </para>
@@ -57,7 +57,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     /// <returns>The derivative value at the input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative measures how much the activation function's output changes
+    /// <b>For Beginners:</b> The derivative measures how much the activation function's output changes
     /// when its input changes slightly. This is essential for training neural networks through
     /// backpropagation. The default implementation returns 1, meaning the output changes at the
     /// same rate as the input.
@@ -85,7 +85,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     /// <returns>A diagonal matrix containing derivatives for each input element.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This creates a special matrix where the diagonal contains the derivatives
+    /// <b>For Beginners:</b> This creates a special matrix where the diagonal contains the derivatives
     /// for each input value. This matrix is used during backpropagation to efficiently calculate
     /// how errors propagate through the network.
     /// </para>
@@ -102,7 +102,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     /// <returns>A new tensor with the activation function applied to each element.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A tensor is a multi-dimensional array that can represent complex data
+    /// <b>For Beginners:</b> A tensor is a multi-dimensional array that can represent complex data
     /// structures like images (3D tensors) or video (4D tensors). This method applies the
     /// activation function to every single value in the tensor.
     /// </para>

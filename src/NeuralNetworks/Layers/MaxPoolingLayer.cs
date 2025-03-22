@@ -6,7 +6,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </summary>
 /// <typeparam name="T">The numeric type used for computations (typically float or double).</typeparam>
 /// <remarks>
-/// For Beginners: A max pooling layer helps reduce the size of data flowing through a neural network
+/// <b>For Beginners:</b> A max pooling layer helps reduce the size of data flowing through a neural network
 /// while keeping the most important information. It works by dividing the input into small windows
 /// (determined by the pool size) and keeping only the largest value from each window.
 /// 
@@ -24,7 +24,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// Gets the size of the pooling window.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This determines how large of an area we look at when selecting the maximum value.
+    /// <b>For Beginners:</b> This determines how large of an area we look at when selecting the maximum value.
     /// For example, a pool size of 2 means we look at 2×2 squares of the input.
     /// </remarks>
     public int PoolSize { get; private set; }
@@ -33,7 +33,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// Gets the step size when moving the pooling window across the input.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This controls how much we move our window each time.
+    /// <b>For Beginners:</b> This controls how much we move our window each time.
     /// For example, a stride of 2 means we move the window 2 pixels at a time,
     /// which reduces the output size to half of the input size (assuming pool size is also 2).
     /// </remarks>
@@ -43,7 +43,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// Indicates whether this layer supports training operations.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This property tells the neural network system whether this layer
+    /// <b>For Beginners:</b> This property tells the neural network system whether this layer
     /// can be trained (adjusted) during the learning process. Max pooling layers don't have
     /// parameters to train, but they do support the training process by allowing gradients
     /// to flow backward through them.
@@ -54,7 +54,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// Stores the indices of the maximum values found during the forward pass.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This keeps track of which input value was the maximum in each pooling window.
+    /// <b>For Beginners:</b> This keeps track of which input value was the maximum in each pooling window.
     /// We need this information during the backward pass to know where to send the gradients.
     /// </remarks>
     private Tensor<int> _maxIndices;
@@ -66,7 +66,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <param name="poolSize">The size of the pooling window.</param>
     /// <param name="strides">The step size when moving the pooling window.</param>
     /// <remarks>
-    /// For Beginners: This constructor sets up the max pooling layer with your chosen settings.
+    /// <b>For Beginners:</b> This constructor sets up the max pooling layer with your chosen settings.
     /// It calculates what the output shape will be based on your input shape, pool size, and strides.
     /// </remarks>
     public MaxPoolingLayer(int[] inputShape, int poolSize, int strides) 
@@ -85,7 +85,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <param name="strides">The step size when moving the pooling window.</param>
     /// <returns>The calculated output shape.</returns>
     /// <remarks>
-    /// For Beginners: This method figures out how big the output will be after max pooling.
+    /// <b>For Beginners:</b> This method figures out how big the output will be after max pooling.
     /// The formula used is a standard way to calculate how many complete windows fit into the input,
     /// taking into account the stride (step size).
     /// </remarks>
@@ -104,7 +104,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <returns>The output tensor after max pooling.</returns>
     /// <exception cref="ArgumentException">Thrown when the input tensor doesn't have 3 dimensions.</exception>
     /// <remarks>
-    /// For Beginners: This is where the actual max pooling happens. For each small window in the input:
+    /// <b>For Beginners:</b> This is where the actual max pooling happens. For each small window in the input:
     /// 1. We look at all values in that window
     /// 2. We find the largest value
     /// 3. We put that value in the output
@@ -171,7 +171,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <returns>The gradient to pass to the previous layer.</returns>
     /// <exception cref="ArgumentException">Thrown when the output gradient tensor doesn't have 3 dimensions.</exception>
     /// <remarks>
-    /// For Beginners: During training, neural networks need to adjust their parameters based on
+    /// <b>For Beginners:</b> During training, neural networks need to adjust their parameters based on
     /// how much error they made. This adjustment flows backward through the network.
     /// 
     /// In max pooling, only the maximum value from each window contributed to the output.
@@ -220,7 +220,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="writer">The binary writer to write the data to.</param>
     /// <remarks>
-    /// For Beginners: This method saves the layer's settings (pool size and stride)
+    /// <b>For Beginners:</b> This method saves the layer's settings (pool size and stride)
     /// so that you can reload the exact same layer later. It's like saving your game
     /// progress so you can continue from where you left off.
     /// </remarks>
@@ -236,7 +236,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="reader">The binary reader to read the data from.</param>
     /// <remarks>
-    /// For Beginners: This method loads previously saved settings for the layer.
+    /// <b>For Beginners:</b> This method loads previously saved settings for the layer.
     /// It's the counterpart to Serialize - if Serialize is like saving your game,
     /// Deserialize is like loading that saved game.
     /// </remarks>
@@ -252,7 +252,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>An empty collection since max pooling layers don't use activation functions.</returns>
     /// <remarks>
-    /// For Beginners: Activation functions are mathematical operations that determine
+    /// <b>For Beginners:</b> Activation functions are mathematical operations that determine
     /// the output of a neural network node. They introduce non-linearity, which helps
     /// neural networks learn complex patterns.
     /// 
@@ -270,7 +270,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="learningRate">The learning rate that controls how much parameters change.</param>
     /// <remarks>
-    /// For Beginners: This method is part of the neural network training process.
+    /// <b>For Beginners:</b> This method is part of the neural network training process.
     /// 
     /// During training, most layers need to update their internal values (parameters) to learn
     /// from data. However, max pooling layers don't have any trainable parameters - they just
@@ -289,7 +289,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>An empty vector since max pooling layers have no trainable parameters.</returns>
     /// <remarks>
-    /// For Beginners: This method returns all the values that can be adjusted during training.
+    /// <b>For Beginners:</b> This method returns all the values that can be adjusted during training.
     /// 
     /// Many neural network layers have weights and biases that get updated as the network learns.
     /// However, max pooling layers simply select the maximum value from each window - there are
@@ -307,7 +307,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method clears any information the layer has stored from previous
+    /// <b>For Beginners:</b> This method clears any information the layer has stored from previous
     /// calculations.
     /// 
     /// During the forward pass, the max pooling layer remembers which positions had the maximum

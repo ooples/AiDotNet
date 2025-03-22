@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: This interface defines a method that measures how similar two pieces of data are to each other.
+/// <b>For Beginners:</b> This interface defines a method that measures how similar two pieces of data are to each other.
 /// 
 /// Imagine you have two photographs and you want to determine how similar they are:
 /// - You could compare them pixel by pixel, but that's not always the best approach
@@ -39,7 +39,7 @@ public interface IKernelFunction<T>
     /// <param name="x2">The second vector to compare.</param>
     /// <returns>A scalar value representing the similarity between the two vectors.</returns>
     /// <remarks>
-    /// For Beginners: This method measures how similar two pieces of data are to each other.
+    /// <b>For Beginners:</b> This method measures how similar two pieces of data are to each other.
     /// 
     /// The parameters:
     /// - x1: The first data point (represented as a list of numbers)

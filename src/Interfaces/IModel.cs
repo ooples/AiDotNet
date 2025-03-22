@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// This interface represents the fundamental operations that all machine learning models should support:
 /// training on data, making predictions with new data, and providing metadata about the model's performance.
 /// 
-/// For Beginners: A machine learning model is like a recipe that learns from examples.
+/// <b>For Beginners:</b> A machine learning model is like a recipe that learns from examples.
 /// 
 /// Think of a model as a student learning to recognize patterns:
 /// - First, you train the model by showing it examples (training data)
@@ -30,7 +30,7 @@ public interface IModel<T>
     /// <remarks>
     /// This method takes training data and adjusts the model's internal parameters to learn patterns in the data.
     /// 
-    /// For Beginners: Training is like teaching the model by showing it examples.
+    /// <b>For Beginners:</b> Training is like teaching the model by showing it examples.
     /// 
     /// Imagine teaching a child to identify fruits:
     /// - You show them many examples of apples, oranges, and bananas (input features x)
@@ -56,7 +56,7 @@ public interface IModel<T>
     /// <remarks>
     /// After training, this method applies the learned patterns to new data to predict outcomes.
     /// 
-    /// For Beginners: Prediction is when the model uses what it learned to make educated guesses about new information.
+    /// <b>For Beginners:</b> Prediction is when the model uses what it learned to make educated guesses about new information.
     /// 
     /// Continuing the fruit identification example:
     /// - After learning from many examples, the child (model) can now identify new fruits they haven't seen before
@@ -83,7 +83,7 @@ public interface IModel<T>
     /// <remarks>
     /// This method provides information about the model's structure, parameters, and performance metrics.
     /// 
-    /// For Beginners: Model metadata is like a report card for your machine learning model.
+    /// <b>For Beginners:</b> Model metadata is like a report card for your machine learning model.
     /// 
     /// Just as a report card shows how well a student is performing in different subjects,
     /// model metadata shows how well your model is performing and provides details about its structure.

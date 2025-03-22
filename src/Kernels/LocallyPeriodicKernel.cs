@@ -10,7 +10,7 @@
 /// modeling data that shows repeating patterns that may change or decay over time or space.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Locally Periodic kernel is specially designed for data that repeats in patterns (like seasonal sales,
 /// daily temperature cycles, or sound waves) but where the pattern might change gradually over time.
 /// </para>
@@ -37,7 +37,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// Controls how quickly the similarity decays as points get farther apart in multiple cycles.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of the '_lengthScale' parameter as a "memory span" for the pattern.
+    /// <b>For Beginners:</b> Think of the '_lengthScale' parameter as a "memory span" for the pattern.
     /// 
     /// A larger value means the kernel "remembers" the pattern over a longer distance or time,
     /// so even points that are many cycles apart can still be considered similar if they're at
@@ -54,7 +54,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// Defines the length of one complete cycle in the periodic pattern.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The '_period' parameter tells the kernel how long each repeating cycle is.
+    /// <b>For Beginners:</b> The '_period' parameter tells the kernel how long each repeating cycle is.
     /// 
     /// For example:
     /// - If you're analyzing daily temperature patterns, the period might be 24 hours
@@ -70,7 +70,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// Controls the overall strength or magnitude of the kernel output.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The '_amplitude' parameter controls how "strong" the pattern signal is.
+    /// <b>For Beginners:</b> The '_amplitude' parameter controls how "strong" the pattern signal is.
     /// 
     /// Think of it as a volume knob - a higher amplitude means the periodic pattern has a stronger
     /// influence on your model's predictions. A lower amplitude means the pattern has a more subtle effect.
@@ -93,7 +93,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// <param name="amplitude">Controls the overall strength of the pattern. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Locally Periodic kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Locally Periodic kernel for use. You can optionally
     /// provide values for the three parameters that control how the kernel behaves.
     /// </para>
     /// <para>
@@ -129,7 +129,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Locally Periodic kernel formula.
     /// </para>
     /// <para>

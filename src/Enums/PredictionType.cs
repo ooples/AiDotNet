@@ -4,7 +4,7 @@ namespace AiDotNet.Enums;
 /// Specifies the type of prediction task that a machine learning model performs.
 /// </summary>
 /// <remarks>
-/// For Beginners: This enum helps you tell the library what kind of prediction you're trying to make.
+/// <b>For Beginners:</b> This enum helps you tell the library what kind of prediction you're trying to make.
 /// Think of it as telling the AI system what type of question you're asking:
 /// 
 /// - Are you asking a yes/no question? Use Binary.
@@ -19,7 +19,7 @@ public enum PredictionType
     /// Represents a binary classification task where the output is one of two possible classes.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Use this when your prediction has only two possible outcomes, like:
+    /// <b>For Beginners:</b> Use this when your prediction has only two possible outcomes, like:
     /// - Yes or No
     /// - True or False
     /// - Spam or Not Spam
@@ -37,7 +37,7 @@ public enum PredictionType
     /// Represents a regression task where the output is a continuous numerical value.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Use this when your prediction is a number that can take any value within a range, like:
+    /// <b>For Beginners:</b> Use this when your prediction is a number that can take any value within a range, like:
     /// - Price of a house
     /// - Temperature tomorrow
     /// - Number of sales next month

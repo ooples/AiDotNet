@@ -5,7 +5,7 @@ namespace AiDotNet.Helpers;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
-/// For Beginners: Regression is a technique used in AI to find relationships between variables.
+/// <b>For Beginners:</b> Regression is a technique used in AI to find relationships between variables.
 /// For example, predicting house prices based on features like size, location, and age.
 /// This helper class provides tools to make regression work better with your data.
 /// </remarks>
@@ -31,7 +31,7 @@ public static class RegressionHelper<T>
     /// - yStd: The standard deviation of the target values
     /// </returns>
     /// <remarks>
-    /// For Beginners: This method prepares your data for machine learning by making all features
+    /// <b>For Beginners:</b> This method prepares your data for machine learning by making all features
     /// comparable to each other. Think of it like converting different measurements (inches, pounds, etc.)
     /// to a common scale.
     /// 

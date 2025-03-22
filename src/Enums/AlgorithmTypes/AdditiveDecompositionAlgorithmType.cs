@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Additive decomposition is a technique used to break down time series data 
+/// <b>For Beginners:</b> Additive decomposition is a technique used to break down time series data 
 /// (data collected over time, like daily temperatures or monthly sales) into separate components:
 /// 
 /// 1. Trend - The long-term direction of the data (going up, down, or staying flat over time)
@@ -26,7 +26,7 @@ public enum AdditiveDecompositionAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Moving Average method works by calculating averages over fixed windows of time
+    /// <b>For Beginners:</b> The Moving Average method works by calculating averages over fixed windows of time
     /// to smooth out short-term fluctuations and highlight longer-term trends. It's like looking at the 
     /// "big picture" by averaging out the day-to-day noise in your data.
     /// 
@@ -42,7 +42,7 @@ public enum AdditiveDecompositionAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Exponential Smoothing is like a weighted average that gives more importance to recent data
+    /// <b>For Beginners:</b> Exponential Smoothing is like a weighted average that gives more importance to recent data
     /// and less importance to older data. It's similar to how you might naturally pay more attention to what 
     /// happened yesterday than what happened last month.
     /// 
@@ -58,7 +58,7 @@ public enum AdditiveDecompositionAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: STL (Seasonal and Trend decomposition using Loess) is a more sophisticated method
+    /// <b>For Beginners:</b> STL (Seasonal and Trend decomposition using Loess) is a more sophisticated method
     /// that can handle complex seasonal patterns that might change over time.
     /// 
     /// Imagine you're analyzing ice cream sales over several years. Not only do sales increase in summer

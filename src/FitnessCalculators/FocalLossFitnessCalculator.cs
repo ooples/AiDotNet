@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on classification tasks,
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on classification tasks,
 /// especially when some classes appear much more frequently than others in your data.
 /// 
 /// Focal Loss is designed to solve a common problem in AI:
@@ -38,7 +38,7 @@ public class FocalLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This parameter (gamma) controls how much the model should focus on hard examples.
+    /// <b>For Beginners:</b> This parameter (gamma) controls how much the model should focus on hard examples.
     /// 
     /// - When gamma = 0: Focal Loss becomes the standard Cross-Entropy Loss
     /// - When gamma increases: The model pays more attention to difficult, misclassified examples
@@ -59,7 +59,7 @@ public class FocalLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This parameter (alpha) helps balance between different classes when they appear
+    /// <b>For Beginners:</b> This parameter (alpha) helps balance between different classes when they appear
     /// with different frequencies in your data.
     /// 
     /// - When alpha = 0.5: Both classes are treated equally
@@ -84,7 +84,7 @@ public class FocalLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Focal Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Focal Loss
     /// to evaluate your model's performance, with special attention to difficult examples
     /// and handling class imbalance.
     /// 
@@ -121,7 +121,7 @@ public class FocalLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated Focal Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Focal Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Focal Loss.
     /// 
     /// It works by:
     /// 1. Taking the predictions your model made

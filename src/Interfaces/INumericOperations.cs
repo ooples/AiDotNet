@@ -8,7 +8,7 @@
 /// underlying numeric type (float, double, decimal, etc.), allowing algorithms to work with
 /// different numeric types without changing their implementation.
 /// 
-/// For Beginners: This interface is like a translator that helps AI algorithms work with
+/// <b>For Beginners:</b> This interface is like a translator that helps AI algorithms work with
 /// different types of numbers.
 /// 
 /// Why is this needed?
@@ -73,7 +73,7 @@ public interface INumericOperations<T>
     /// Gets the zero value for the numeric type.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This provides the value of zero in the current number type.
+    /// <b>For Beginners:</b> This provides the value of zero in the current number type.
     /// For example, 0 for integers, 0.0 for floating-point numbers.
     /// </remarks>
     T Zero { get; }
@@ -82,7 +82,7 @@ public interface INumericOperations<T>
     /// Gets the value of one for the numeric type.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This provides the value of one in the current number type.
+    /// <b>For Beginners:</b> This provides the value of one in the current number type.
     /// For example, 1 for integers, 1.0 for floating-point numbers.
     /// </remarks>
     T One { get; }
@@ -91,7 +91,7 @@ public interface INumericOperations<T>
     /// Calculates the square root of a value.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The square root of a number is a value that, when multiplied by itself,
+    /// <b>For Beginners:</b> The square root of a number is a value that, when multiplied by itself,
     /// gives the original number. For example, the square root of 9 is 3 because 3 × 3 = 9.
     /// </remarks>
     /// <param name="value">The value to calculate the square root of.</param>
@@ -102,7 +102,7 @@ public interface INumericOperations<T>
     /// Converts a double value to the numeric type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This converts a standard decimal number (double) to whatever
+    /// <b>For Beginners:</b> This converts a standard decimal number (double) to whatever
     /// number type this interface is working with.
     /// </remarks>
     /// <param name="value">The double value to convert.</param>
@@ -113,7 +113,7 @@ public interface INumericOperations<T>
     /// Converts a value of type T to a 32-bit integer.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This converts the current number type to a whole number (integer).
+    /// <b>For Beginners:</b> This converts the current number type to a whole number (integer).
     /// If the original number has a decimal part, it will be truncated (removed).
     /// </remarks>
     /// <param name="value">The value to convert.</param>
@@ -140,7 +140,7 @@ public interface INumericOperations<T>
     /// Calculates the absolute value of a number.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The absolute value is the distance of a number from zero,
+    /// <b>For Beginners:</b> The absolute value is the distance of a number from zero,
     /// without considering its sign. For example, the absolute value of both 5 and -5 is 5.
     /// </remarks>
     /// <param name="value">The value to calculate the absolute value of.</param>
@@ -151,7 +151,7 @@ public interface INumericOperations<T>
     /// Calculates the square of a value.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The square of a number is the result of multiplying the number by itself.
+    /// <b>For Beginners:</b> The square of a number is the result of multiplying the number by itself.
     /// For example, the square of 4 is 16 because 4 × 4 = 16.
     /// </remarks>
     /// <param name="value">The value to square.</param>
@@ -162,7 +162,7 @@ public interface INumericOperations<T>
     /// Calculates the exponential function (e raised to the power of the value).
     /// </summary>
     /// <remarks>
-    /// For Beginners: This calculates "e" (a special mathematical constant, approximately 2.71828)
+    /// <b>For Beginners:</b> This calculates "e" (a special mathematical constant, approximately 2.71828)
     /// raised to the power of the given value. For example, Exp(2) is e² ≈ 7.389.
     /// 
     /// The exponential function is commonly used in machine learning for:
@@ -186,7 +186,7 @@ public interface INumericOperations<T>
     /// Raises a value to the power of an exponent.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This calculates the result of multiplying a number by itself a specific
+    /// <b>For Beginners:</b> This calculates the result of multiplying a number by itself a specific
     /// number of times. For example, Power(2, 3) means 2³ = 2 × 2 × 2 = 8.
     /// </remarks>
     /// <param name="baseValue">The base value.</param>
@@ -198,7 +198,7 @@ public interface INumericOperations<T>
     /// Calculates the natural logarithm (base e) of a value.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The natural logarithm is the inverse of the exponential function.
+    /// <b>For Beginners:</b> The natural logarithm is the inverse of the exponential function.
     /// It answers the question: "To what power must e be raised to get this value?"
     /// For example, Log(7.389) ≈ 2 because e² ≈ 7.389.
     /// 
@@ -231,7 +231,7 @@ public interface INumericOperations<T>
     /// Rounds a value to the nearest integral value.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This converts a number with decimals to the nearest whole number.
+    /// <b>For Beginners:</b> This converts a number with decimals to the nearest whole number.
     /// For example, Round(3.2) = 3 and Round(3.7) = 4.
     /// </remarks>
     /// <param name="value">The value to round.</param>
@@ -242,7 +242,7 @@ public interface INumericOperations<T>
     /// Gets the minimum possible value for the numeric type.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is the smallest number that can be represented in the current number type.
+    /// <b>For Beginners:</b> This is the smallest number that can be represented in the current number type.
     /// For example, for a 32-bit integer, this would be -2,147,483,648.
     /// </remarks>
     T MinValue { get; }
@@ -251,7 +251,7 @@ public interface INumericOperations<T>
     /// Gets the maximum possible value for the numeric type.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is the largest number that can be represented in the current number type.
+    /// <b>For Beginners:</b> This is the largest number that can be represented in the current number type.
     /// For example, for a 32-bit integer, this would be 2,147,483,647.
     /// </remarks>
     T MaxValue { get; }
@@ -260,7 +260,7 @@ public interface INumericOperations<T>
     /// Determines whether the specified value is Not a Number (NaN).
     /// </summary>
     /// <remarks>
-    /// For Beginners: NaN (Not a Number) is a special value that represents an undefined or 
+    /// <b>For Beginners:</b> NaN (Not a Number) is a special value that represents an undefined or 
     /// unrepresentable mathematical result. It occurs in situations like:
     /// - Dividing zero by zero
     /// - Taking the square root of a negative number
@@ -279,7 +279,7 @@ public interface INumericOperations<T>
     /// Determines whether the specified value is positive or negative infinity.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Infinity represents a value that is larger than any finite number.
+    /// <b>For Beginners:</b> Infinity represents a value that is larger than any finite number.
     /// In computing, infinity can occur when:
     /// - Dividing a number by zero
     /// - A calculation results in a number too large to be represented
@@ -301,7 +301,7 @@ public interface INumericOperations<T>
     /// Returns the sign of the value (1 for positive, -1 for negative) or zero if the value is zero.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method tells you about the direction or sign of a number:
+    /// <b>For Beginners:</b> This method tells you about the direction or sign of a number:
     /// - For positive numbers, it returns 1 (or the equivalent in type T)
     /// - For negative numbers, it returns -1 (or the equivalent in type T)
     /// - For zero, it returns 0 (or the equivalent in type T)

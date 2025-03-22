@@ -8,7 +8,7 @@ namespace AiDotNet.Interfaces;
 /// from a central point. They are commonly used in machine learning for creating complex models
 /// from simpler building blocks.
 /// 
-/// For Beginners: Think of a radial basis function as a "similarity detector" that works like this:
+/// <b>For Beginners:</b> Think of a radial basis function as a "similarity detector" that works like this:
 /// - It measures how similar or close two points are to each other
 /// - The closer two points are, the higher the output value
 /// - The function creates a smooth "hill" or "bump" shape centered at a specific point
@@ -29,7 +29,7 @@ public interface IRadialBasisFunction<T>
     /// <remarks>
     /// This is the core function that determines the "shape" of the radial basis function.
     /// 
-    /// For Beginners: This method takes a distance value and returns how strong the similarity is.
+    /// <b>For Beginners:</b> This method takes a distance value and returns how strong the similarity is.
     /// Think of it like asking: "If I'm this far away from the center, how strong is the connection?"
     /// 
     /// For example, with a Gaussian RBF:
@@ -48,7 +48,7 @@ public interface IRadialBasisFunction<T>
     /// The derivative tells us how quickly the function value changes as the distance changes.
     /// This is important for optimization algorithms that need to adjust the function parameters.
     /// 
-    /// For Beginners: This method calculates how quickly the similarity changes as you move
+    /// <b>For Beginners:</b> This method calculates how quickly the similarity changes as you move
     /// farther from or closer to the center. It's like measuring the steepness of the "hill"
     /// at a particular distance.
     /// 
@@ -67,7 +67,7 @@ public interface IRadialBasisFunction<T>
     /// This derivative is used when optimizing the width parameter of the radial basis function.
     /// The width parameter controls how quickly the function value decreases as distance increases.
     /// 
-    /// For Beginners: The width of an RBF determines how far its influence reaches. This method
+    /// <b>For Beginners:</b> The width of an RBF determines how far its influence reaches. This method
     /// helps the learning algorithm figure out whether to make the "hill" wider or narrower.
     /// 
     /// - A wider RBF (larger width) affects points farther away from its center

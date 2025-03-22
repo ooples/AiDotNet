@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps you evaluate how well your model is performing while also encouraging it to be simpler.
+/// <b>For Beginners:</b> This calculator helps you evaluate how well your model is performing while also encouraging it to be simpler.
 /// 
 /// Elastic Net Loss combines two approaches to keep your model from becoming too complex:
 /// 1. It measures how well your predictions match the actual values (like other loss functions)
@@ -33,7 +33,7 @@ public class ElasticNetLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This value controls the balance between two different ways of keeping your model simple:
+    /// <b>For Beginners:</b> This value controls the balance between two different ways of keeping your model simple:
     /// - When closer to 1: Favors removing less important features entirely (making them exactly zero)
     /// - When closer to 0: Favors making all features smaller but keeping more of them
     /// 
@@ -47,7 +47,7 @@ public class ElasticNetLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This value controls how strongly the model is encouraged to be simple:
+    /// <b>For Beginners:</b> This value controls how strongly the model is encouraged to be simple:
     /// - Higher values: Strongly encourage simplicity (even if it means slightly worse predictions)
     /// - Lower values: Focus more on making accurate predictions (allowing more complexity)
     /// 
@@ -64,7 +64,7 @@ public class ElasticNetLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Elastic Net Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Elastic Net Loss
     /// to evaluate your model's performance while encouraging simplicity.
     /// 
     /// Parameters:
@@ -97,7 +97,7 @@ public class ElasticNetLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The Elastic Net Loss value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model's predictions match the actual values,
+    /// <b>For Beginners:</b> This method calculates how well your model's predictions match the actual values,
     /// while also adding penalties for complexity.
     /// 
     /// The method works by:

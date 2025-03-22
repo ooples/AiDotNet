@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: LDL decomposition is a way to break down a symmetric matrix into simpler parts that make 
+/// <b>For Beginners:</b> LDL decomposition is a way to break down a symmetric matrix into simpler parts that make 
 /// calculations much easier and faster.
 /// 
 /// Imagine you have a complex puzzle (the matrix) that you need to solve. LDL decomposition breaks this puzzle 
@@ -44,7 +44,7 @@ public enum LdlAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Cholesky method is a specialized approach for LDL decomposition that works 
+    /// <b>For Beginners:</b> The Cholesky method is a specialized approach for LDL decomposition that works 
     /// specifically with symmetric, positive-definite matrices (a special type of matrix common in 
     /// machine learning).
     /// 
@@ -76,7 +76,7 @@ public enum LdlAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Crout method is a more general approach for LDL decomposition that can handle 
+    /// <b>For Beginners:</b> The Crout method is a more general approach for LDL decomposition that can handle 
     /// a wider variety of matrices, including those that aren't positive-definite.
     /// 
     /// While Cholesky is like finding the square root of a matrix (which only works for certain matrices), 

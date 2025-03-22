@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Scaled Tanh activation function is a parameterized version of the standard
+/// <b>For Beginners:</b> The Scaled Tanh activation function is a parameterized version of the standard
 /// hyperbolic tangent function. Like the standard tanh, it outputs values between -1 and 1, making
 /// it useful for neural networks where you want the output to be centered around zero.
 /// 
@@ -38,7 +38,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// <param name="beta">The steepness parameter. Higher values make the curve steeper. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: The beta parameter controls how "steep" the S-curve of the function is.
+    /// <b>For Beginners:</b> The beta parameter controls how "steep" the S-curve of the function is.
     /// - A higher beta value (e.g., 2.0) makes the transition from -1 to 1 happen more quickly
     /// - A lower beta value (e.g., 0.5) makes the transition more gradual
     /// - When beta = 2.0, this function is exactly equivalent to the standard tanh function
@@ -66,7 +66,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// <returns>The activated output value between -1 and 1.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms an input value using the formula:
+    /// <b>For Beginners:</b> This method transforms an input value using the formula:
     /// f(x) = (1 - e^(-βx)) / (1 + e^(-βx))
     /// 
     /// No matter how large or small the input is, the output will always be between -1 and 1:
@@ -96,7 +96,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value at the input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative measures how much the Scaled Tanh function's output changes
+    /// <b>For Beginners:</b> The derivative measures how much the Scaled Tanh function's output changes
     /// when its input changes slightly. This is used during neural network training to determine
     /// how to adjust weights.
     /// 

@@ -7,7 +7,7 @@ namespace AiDotNet.Helpers;
 /// </summary>
 /// <typeparam name="T">The numeric type used in calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: This helper class ensures that the data you provide to AI models is valid and properly formatted.
+/// <b>For Beginners:</b> This helper class ensures that the data you provide to AI models is valid and properly formatted.
 /// Think of it as a quality control checkpoint that prevents errors before they happen by checking that your
 /// data meets all the requirements needed for successful model training and prediction.
 /// </remarks>
@@ -21,7 +21,7 @@ public static class ValidationHelper<T>
     /// <param name="x">The feature matrix containing input variables.</param>
     /// <param name="y">The target vector containing output values to predict.</param>
     /// <remarks>
-    /// For Beginners: This method checks that your input data (x) and output data (y) are compatible.
+    /// <b>For Beginners:</b> This method checks that your input data (x) and output data (y) are compatible.
     /// The input data (x) is a matrix where each row represents one data point and each column represents
     /// one feature or characteristic. The output data (y) is a vector where each element is the target value
     /// you want to predict for the corresponding row in x. This method ensures they have matching dimensions.
@@ -37,7 +37,7 @@ public static class ValidationHelper<T>
     /// <param name="skipFrames">Number of frames to skip in the stack trace.</param>
     /// <returns>A tuple containing the component name and operation name.</returns>
     /// <remarks>
-    /// For Beginners: This method identifies which part of the code called a validation function.
+    /// <b>For Beginners:</b> This method identifies which part of the code called a validation function.
     /// It's like caller ID for functions, helping to provide more specific error messages.
     /// You typically won't need to call this directly in your code.
     /// </remarks>
@@ -78,7 +78,7 @@ public static class ValidationHelper<T>
     /// <param name="skipFrames">Number of frames to skip in the stack trace.</param>
     /// <returns>A tuple containing the resolved component and operation names.</returns>
     /// <remarks>
-    /// For Beginners: This method helps create more informative error messages by identifying
+    /// <b>For Beginners:</b> This method helps create more informative error messages by identifying
     /// which part of the library is performing an operation. You typically won't need to call
     /// this directly in your code.
     /// </remarks>
@@ -105,7 +105,7 @@ public static class ValidationHelper<T>
     /// </summary>
     /// <param name="inputData">The optimization input data containing training, validation, and test datasets.</param>
     /// <remarks>
-    /// For Beginners: When training AI models, we typically split our data into three sets:
+    /// <b>For Beginners:</b> When training AI models, we typically split our data into three sets:
     /// 1. Training data - used to teach the model patterns (like studying for a test)
     /// 2. Validation data - used to tune the model (like practice tests)
     /// 3. Test data - used to evaluate the final model (like the final exam)
@@ -132,7 +132,7 @@ public static class ValidationHelper<T>
     /// </summary>
     /// <param name="y">The target vector containing output values to predict.</param>
     /// <remarks>
-    /// For Beginners: Poisson regression is a special type of model used when predicting counts
+    /// <b>For Beginners:</b> Poisson regression is a special type of model used when predicting counts
     /// (like number of customers, number of events, etc.). This method checks that your target values
     /// are non-negative integers (0, 1, 2, etc.), which is required for Poisson regression to work correctly.
     /// 
@@ -157,7 +157,7 @@ public static class ValidationHelper<T>
     /// <param name="y">The target vector containing output values to predict.</param>
     /// <param name="datasetName">The name of the dataset being validated (e.g., "Training", "Test").</param>
     /// <remarks>
-    /// For Beginners: This method ensures that your input data (x) and output data (y) are compatible.
+    /// <b>For Beginners:</b> This method ensures that your input data (x) and output data (y) are compatible.
     /// It checks that:
     /// 1. Neither is null (missing entirely)
     /// 2. The number of rows in x matches the length of y (each input row has a corresponding output value)

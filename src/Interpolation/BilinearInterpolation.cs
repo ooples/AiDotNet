@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Bilinear interpolation creates a smooth surface that passes through a grid of known data points.
 /// It's commonly used for image resizing, terrain modeling, and data visualization.
 /// 
-/// For Beginners: Think of bilinear interpolation as a way to "fill in the blanks" between points in a grid.
+/// <b>For Beginners:</b> Think of bilinear interpolation as a way to "fill in the blanks" between points in a grid.
 /// Imagine you have a grid of temperature readings taken at different locations, but you want to know
 /// the temperature at a location between your measurement points. Bilinear interpolation gives you
 /// an estimated value based on the four nearest known points.
@@ -32,7 +32,7 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// The z-values (data values) at each grid point, organized as a matrix.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is your actual data - the known values at each grid point.
+    /// <b>For Beginners:</b> This is your actual data - the known values at each grid point.
     /// If you're thinking of a temperature map, these would be the temperature readings
     /// at each measured location.
     /// </remarks>
@@ -42,7 +42,7 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a utility that helps perform math operations (like addition
+    /// <b>For Beginners:</b> This is a utility that helps perform math operations (like addition
     /// and multiplication) on different types of numbers. You don't need to interact with
     /// this directly.
     /// </remarks>
@@ -55,7 +55,7 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// This constructor validates the input data and initializes the necessary components
     /// for performing bilinear interpolation.
     /// 
-    /// For Beginners: This sets up everything needed to perform the interpolation:
+    /// <b>For Beginners:</b> This sets up everything needed to perform the interpolation:
     /// 1. It checks that your data grid is valid (matching dimensions and enough points)
     /// 2. It stores your grid coordinates and values
     /// 3. It prepares the mathematical tools needed for calculations
@@ -86,7 +86,7 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// This method finds the grid cell containing the target point and uses bilinear
     /// interpolation to estimate the z-value at that point.
     /// 
-    /// For Beginners: This is the main method you'll use. Give it an (x,y) location, and it will:
+    /// <b>For Beginners:</b> This is the main method you'll use. Give it an (x,y) location, and it will:
     /// 1. Find which grid cell contains your point
     /// 2. Get the values at the four corners of that cell
     /// 3. Calculate a weighted average based on how close your point is to each corner
@@ -134,7 +134,7 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// This method locates which grid cell contains the target coordinate.
     /// 
-    /// For Beginners: This helper method finds which grid cell contains our point of interest.
+    /// <b>For Beginners:</b> This helper method finds which grid cell contains our point of interest.
     /// For example, if we have grid points at x = [0, 10, 20, 30] and we want to interpolate
     /// at x = 15, this method will tell us that 15 is in the interval between index 1 (value 10)
     /// and index 2 (value 20).

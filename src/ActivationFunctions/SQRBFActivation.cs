@@ -11,7 +11,7 @@
 /// of 1 occurring when the input is 0, and values approaching 0 as the input moves away from 0 in either direction.
 /// </para>
 /// <para>
-/// For Beginners: The Squared Radial Basis Function (SQRBF) is an activation function that produces a bell-shaped curve.
+/// <b>For Beginners:</b> The Squared Radial Basis Function (SQRBF) is an activation function that produces a bell-shaped curve.
 /// Unlike functions like ReLU or Sigmoid that are used in standard neural networks, SQRBF is commonly used in 
 /// Radial Basis Function Networks (RBFNs).
 /// 
@@ -44,7 +44,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// while a smaller beta value results in a wider curve.
     /// </para>
     /// <para>
-    /// For Beginners: Think of beta as a "sensitivity knob" for the function:
+    /// <b>For Beginners:</b> Think of beta as a "sensitivity knob" for the function:
     /// - Higher beta values (e.g., 5.0) make the function more sensitive to changes in input, creating a narrow peak
     /// - Lower beta values (e.g., 0.1) make the function less sensitive, creating a wide, gentle curve
     /// 
@@ -75,7 +75,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// The SQRBF function is calculated as f(x) = exp(-β * x²), where β is the width parameter.
     /// </para>
     /// <para>
-    /// For Beginners: This method takes an input value and returns a value between 0 and 1:
+    /// <b>For Beginners:</b> This method takes an input value and returns a value between 0 and 1:
     /// - When the input is 0, the output is exactly 1
     /// - As the input moves away from 0 (in either direction), the output gets closer to 0
     /// - The rate at which the output decreases is controlled by the beta parameter
@@ -107,7 +107,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// This derivative is used during the backpropagation step of neural network training.
     /// </para>
     /// <para>
-    /// For Beginners: The derivative tells us how the output of the SQRBF function changes when we make a small change to the input.
+    /// <b>For Beginners:</b> The derivative tells us how the output of the SQRBF function changes when we make a small change to the input.
     /// 
     /// Some key properties of this derivative:
     /// - At x=0, the derivative is 0 (the function is at its peak and momentarily flat)

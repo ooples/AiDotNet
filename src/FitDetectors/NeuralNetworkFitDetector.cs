@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps you understand if your neural network is performing well or not.
+/// <b>For Beginners:</b> This class helps you understand if your neural network is performing well or not.
 /// It analyzes how your model performs on different data sets and gives you recommendations
 /// on how to improve it.
 /// 
@@ -29,7 +29,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This measures how well your model performs on the data it was trained with.
+    /// <b>For Beginners:</b> This measures how well your model performs on the data it was trained with.
     /// Lower values mean better performance.
     /// </para>
     /// </remarks>
@@ -40,7 +40,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This measures how well your model performs on data it hasn't seen during training
+    /// <b>For Beginners:</b> This measures how well your model performs on data it hasn't seen during training
     /// but is used to check progress during training. Lower values mean better performance.
     /// </para>
     /// </remarks>
@@ -51,7 +51,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This measures how well your model performs on completely new data
+    /// <b>For Beginners:</b> This measures how well your model performs on completely new data
     /// that wasn't used during training or validation. Lower values mean better performance.
     /// </para>
     /// </remarks>
@@ -62,7 +62,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This score tells you if your model is "memorizing" the training data
+    /// <b>For Beginners:</b> This score tells you if your model is "memorizing" the training data
     /// instead of learning general patterns. A higher score means more overfitting,
     /// which is usually a problem you want to fix.
     /// </para>
@@ -75,7 +75,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This creates a new tool that will analyze your neural network's performance.
+    /// <b>For Beginners:</b> This creates a new tool that will analyze your neural network's performance.
     /// You can provide custom settings or use the default ones.
     /// </para>
     /// </remarks>
@@ -92,7 +92,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// <exception cref="ArgumentNullException">Thrown when evaluationData is null.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method that examines how well your neural network is performing.
+    /// <b>For Beginners:</b> This is the main method that examines how well your neural network is performing.
     /// It looks at the errors on different datasets, calculates an overfitting score,
     /// determines the type of fit, and provides recommendations for improvement.
     /// 
@@ -139,7 +139,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// <returns>The assessed fit type of the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method decides how well your neural network fits the data by checking:
+    /// <b>For Beginners:</b> This method decides how well your neural network fits the data by checking:
     /// 
     /// 1. Validation Loss: How well your model performs on data it hasn't seen during training
     /// 2. Overfitting Score: Whether your model is memorizing training data instead of learning patterns
@@ -170,7 +170,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how sure we are about our assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how sure we are about our assessment of your model.
     /// 
     /// The confidence is based on two factors:
     /// 1. Loss Confidence: How far your validation loss is from what we consider "poor"
@@ -201,7 +201,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations for improving the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method provides practical advice on how to improve your neural network
+    /// <b>For Beginners:</b> This method provides practical advice on how to improve your neural network
     /// based on the problems we've detected.
     /// 
     /// The recommendations vary depending on your model's fit type:
@@ -253,7 +253,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// <returns>A score representing the degree of overfitting, where higher values indicate more severe overfitting.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how much your model might be "memorizing" the training data
+    /// <b>For Beginners:</b> This method calculates how much your model might be "memorizing" the training data
     /// instead of learning general patterns that work on new data.
     /// 
     /// The overfitting score is calculated by comparing:

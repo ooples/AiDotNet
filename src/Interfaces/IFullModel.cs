@@ -5,7 +5,7 @@ namespace AiDotNet.Interfaces;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: This interface combines two important capabilities that a complete AI model needs.
+/// <b>For Beginners:</b> This interface combines two important capabilities that a complete AI model needs.
 /// 
 /// Think of IFullModel as a "complete package" for a machine learning model. It combines:
 /// 

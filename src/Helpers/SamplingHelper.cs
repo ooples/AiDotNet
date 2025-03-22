@@ -4,7 +4,7 @@ namespace AiDotNet.Helpers;
 /// Provides methods for sampling data, which is essential for many AI and machine learning techniques.
 /// </summary>
 /// <remarks>
-/// For Beginners: Sampling is like picking random items from a collection. This is important in AI
+/// <b>For Beginners:</b> Sampling is like picking random items from a collection. This is important in AI
 /// for creating training sets, validation sets, and implementing techniques like bootstrapping
 /// that help improve model accuracy and reliability.
 /// </remarks>
@@ -24,7 +24,7 @@ public static class SamplingHelper
     /// <returns>An array of indices representing the sampled items.</returns>
     /// <exception cref="ArgumentException">Thrown when sample size is greater than population size.</exception>
     /// <remarks>
-    /// For Beginners: Think of this like drawing lottery numbers where each ball can only be 
+    /// <b>For Beginners:</b> Think of this like drawing lottery numbers where each ball can only be 
     /// drawn once. For example, if you have 100 data points and need a random subset of 10,
     /// this method ensures you get 10 different data points.
     /// </remarks>
@@ -55,7 +55,7 @@ public static class SamplingHelper
     /// <param name="sampleSize">The number of samples to take.</param>
     /// <returns>An array of indices representing the sampled items.</returns>
     /// <remarks>
-    /// For Beginners: This is like rolling a die multiple times - you can get the same number 
+    /// <b>For Beginners:</b> This is like rolling a die multiple times - you can get the same number 
     /// more than once. In data terms, if you have 100 data points and need 10 samples, 
     /// some data points might be selected multiple times while others might not be selected at all.
     /// 
@@ -82,7 +82,7 @@ public static class SamplingHelper
     /// <param name="sampleSize">The size of each bootstrap sample. If null, it will be the same as the original data size.</param>
     /// <returns>A list of bootstrap samples, where each sample is an array of data elements.</returns>
     /// <remarks>
-    /// For Beginners: Bootstrapping is a powerful technique where you create multiple "synthetic" 
+    /// <b>For Beginners:</b> Bootstrapping is a powerful technique where you create multiple "synthetic" 
     /// datasets by randomly sampling from your original data (with replacement).
     /// 
     /// For example, if you have 100 data points:
@@ -114,7 +114,7 @@ public static class SamplingHelper
     /// </summary>
     /// <param name="seed">The seed value to initialize the random number generator.</param>
     /// <remarks>
-    /// For Beginners: Random number generators aren't truly random - they follow mathematical 
+    /// <b>For Beginners:</b> Random number generators aren't truly random - they follow mathematical 
     /// formulas that produce numbers that appear random. The "seed" is the starting point for 
     /// this formula.
     /// 

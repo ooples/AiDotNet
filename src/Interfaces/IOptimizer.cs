@@ -7,7 +7,7 @@
 /// An optimizer is responsible for finding the best parameters for a machine learning model
 /// by minimizing or maximizing an objective function.
 /// 
-/// For Beginners: Think of an optimizer as a "tuning expert" that adjusts your model's settings
+/// <b>For Beginners:</b> Think of an optimizer as a "tuning expert" that adjusts your model's settings
 /// to make it perform better. Just like tuning a radio to get the clearest signal, an optimizer
 /// tunes your model's parameters to get the best predictions.
 /// 
@@ -31,7 +31,7 @@ public interface IOptimizer<T> : IModelSerializer
     /// This method takes input data and attempts to find the optimal parameters
     /// that minimize or maximize the objective function.
     /// 
-    /// For Beginners: This is where the actual "learning" happens. The optimizer looks at your data
+    /// <b>For Beginners:</b> This is where the actual "learning" happens. The optimizer looks at your data
     /// and tries different parameter values to find the ones that make your model perform best.
     /// 
     /// The process typically involves:
@@ -53,7 +53,7 @@ public interface IOptimizer<T> : IModelSerializer
     /// Early stopping is a technique to prevent overfitting by stopping the optimization
     /// process before it completes all iterations if certain conditions are met.
     /// 
-    /// For Beginners: This is like knowing when to stop cooking - if the model is "done" 
+    /// <b>For Beginners:</b> This is like knowing when to stop cooking - if the model is "done" 
     /// (trained well enough), this method says "stop now" instead of continuing unnecessarily.
     /// 
     /// Common reasons for early stopping include:
@@ -76,7 +76,7 @@ public interface IOptimizer<T> : IModelSerializer
     /// These options control how the optimization algorithm behaves, including
     /// parameters like learning rate, maximum iterations, and convergence criteria.
     /// 
-    /// For Beginners: This provides the "settings" or "rules" that the optimizer follows.
+    /// <b>For Beginners:</b> This provides the "settings" or "rules" that the optimizer follows.
     /// Just like a recipe has instructions (bake at 350°F for 30 minutes), an optimizer
     /// has settings (learn at rate 0.01, stop after 1000 tries).
     /// 

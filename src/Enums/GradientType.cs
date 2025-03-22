@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Gradient descent is how AI models learn from data. Think of it like finding the 
+/// <b>For Beginners:</b> Gradient descent is how AI models learn from data. Think of it like finding the 
 /// lowest point in a valley by taking steps downhill. Different gradient types represent different 
 /// strategies for how to take these steps - some are faster but riskier, others are slower but more reliable.
 /// </para>
@@ -17,7 +17,7 @@ public enum GradientType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Omega gradient combines the best features of several optimization methods.
+    /// <b>For Beginners:</b> Omega gradient combines the best features of several optimization methods.
     /// 
     /// Think of it like a smart car that:
     /// - Remembers which direction was working well (momentum)
@@ -35,7 +35,7 @@ public enum GradientType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Alpha gradient is designed for speed, taking larger steps to reach the solution faster.
+    /// <b>For Beginners:</b> Alpha gradient is designed for speed, taking larger steps to reach the solution faster.
     /// 
     /// Think of it like a sports car that:
     /// - Moves quickly toward the destination
@@ -56,7 +56,7 @@ public enum GradientType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Beta gradient is designed for reliability, taking careful steps to ensure stable learning.
+    /// <b>For Beginners:</b> Beta gradient is designed for reliability, taking careful steps to ensure stable learning.
     /// 
     /// Think of it like an off-road vehicle that:
     /// - Moves more cautiously but consistently

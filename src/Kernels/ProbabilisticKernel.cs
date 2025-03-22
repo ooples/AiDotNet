@@ -10,7 +10,7 @@
 /// making it useful for capturing both directional and magnitude-based relationships between data points.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Probabilistic kernel is special because it considers both:
 /// 1. The angle between data points (like cosine similarity)
 /// 2. The difference in their magnitudes (like Gaussian kernel)
@@ -42,7 +42,7 @@ public class ProbabilisticKernel<T> : IKernelFunction<T>
     /// The sigma parameter that controls sensitivity to differences in vector magnitudes.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Sigma (σ) determines how much the kernel cares about differences in the "size" of your data points.
+    /// <b>For Beginners:</b> Sigma (σ) determines how much the kernel cares about differences in the "size" of your data points.
     /// 
     /// Think of it like this:
     /// - Small sigma values (e.g., 0.1): Very sensitive to differences in magnitude
@@ -58,7 +58,7 @@ public class ProbabilisticKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -70,7 +70,7 @@ public class ProbabilisticKernel<T> : IKernelFunction<T>
     /// <param name="sigma">The parameter that controls sensitivity to differences in vector magnitudes. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Probabilistic kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Probabilistic kernel for use. You can optionally
     /// provide a value for the sigma parameter:
     /// </para>
     /// <para>
@@ -103,7 +103,7 @@ public class ProbabilisticKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Probabilistic kernel formula.
     /// </para>
     /// <para>

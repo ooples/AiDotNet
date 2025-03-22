@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps determine if your machine learning model is a good fit for your data
+/// <b>For Beginners:</b> This class helps determine if your machine learning model is a good fit for your data
 /// using a technique called "jackknife resampling". This is like testing your model multiple times, 
 /// each time leaving out one data point, to see how stable your model's performance is. 
 /// 
@@ -28,7 +28,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector. If null, default settings will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the constructor that creates a new jackknife fit detector. You can provide
+    /// <b>For Beginners:</b> This is the constructor that creates a new jackknife fit detector. You can provide
     /// custom settings through the options parameter, or leave it empty to use the default settings.
     /// </para>
     /// </remarks>
@@ -44,7 +44,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method you'll use to check if your model is a good fit.
+    /// <b>For Beginners:</b> This is the main method you'll use to check if your model is a good fit.
     /// You provide your model's performance data, and it returns:
     /// 1. What type of fit your model has (good fit, overfit, or underfit)
     /// 2. How confident the detector is in its assessment
@@ -74,7 +74,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// <returns>The detected fit type (GoodFit, Overfit, or Underfit).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method figures out if your model is:
+    /// <b>For Beginners:</b> This method figures out if your model is:
     /// - Overfitting: Your model is too complex and has memorized the training data instead of learning general patterns
     /// - Underfitting: Your model is too simple and isn't capturing important patterns in the data
     /// - Good fit: Your model has the right balance of complexity
@@ -112,7 +112,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how sure the detector is about its assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how sure the detector is about its assessment of your model.
     /// 
     /// The confidence is based on how much the model's performance changes when using jackknife resampling
     /// compared to the original performance. If there's a big difference, the confidence will be lower.
@@ -141,7 +141,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of string recommendations for improving the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a list of practical suggestions to help you improve your model
+    /// <b>For Beginners:</b> This method creates a list of practical suggestions to help you improve your model
     /// based on what type of fit was detected. Think of it as personalized advice for your specific situation:
     /// 
     /// - If your model is "Overfitting", it suggests ways to make your model more generalized (less memorizing, more learning).
@@ -189,7 +189,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// <exception cref="InvalidOperationException">Thrown when the sample size is too small for jackknife resampling.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method implements the "jackknife" technique, which is a way to test how stable your model is.
+    /// <b>For Beginners:</b> This method implements the "jackknife" technique, which is a way to test how stable your model is.
     /// 
     /// Here's how it works in simple terms:
     /// 1. It takes your original data (actual values and what your model predicted)

@@ -10,7 +10,7 @@ namespace AiDotNet.ActivationFunctions;
 /// It's often used in the output layer of binary classification problems or in hidden layers of neural networks.
 /// </para>
 /// <para>
-/// For Beginners: The Sigmoid function is like a "squashing" function that takes any number (from negative 
+/// <b>For Beginners:</b> The Sigmoid function is like a "squashing" function that takes any number (from negative 
 /// infinity to positive infinity) and converts it to a value between 0 and 1. This is useful in neural networks 
 /// because it helps transform unbounded values into a probability-like range. The function creates an S-shaped 
 /// curve that approaches 0 for very negative inputs and approaches 1 for very positive inputs, with a smooth 
@@ -33,7 +33,7 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The input value to activate.</param>
     /// <returns>The Sigmoid of the input: 1 / (1 + e^(-input)).</returns>
     /// <remarks>
-    /// For Beginners: This method calculates the Sigmoid value for a single number. The formula 1/(1+e^(-x)) 
+    /// <b>For Beginners:</b> This method calculates the Sigmoid value for a single number. The formula 1/(1+e^(-x)) 
     /// creates that S-shaped curve that squashes any input to be between 0 and 1. When the input is 0, 
     /// the output is exactly 0.5. As inputs get more positive, the output approaches 1, and as inputs get 
     /// more negative, the output approaches 0.
@@ -49,7 +49,7 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The input value to calculate the derivative for.</param>
     /// <returns>The derivative of Sigmoid at the input: sigmoid(input) * (1 - sigmoid(input)).</returns>
     /// <remarks>
-    /// For Beginners: The derivative tells us how much the Sigmoid output changes when we slightly change the input.
+    /// <b>For Beginners:</b> The derivative tells us how much the Sigmoid output changes when we slightly change the input.
     /// For the Sigmoid function, the derivative has a simple formula: sigmoid(x) * (1 - sigmoid(x)).
     /// This means the derivative is largest (0.25) when the input is 0, and gets smaller as the input moves away from 0
     /// in either direction. This property can cause the "vanishing gradient problem" in deep neural networks,
@@ -67,7 +67,7 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The vector of input values.</param>
     /// <returns>A new vector with the Sigmoid function applied to each element.</returns>
     /// <remarks>
-    /// For Beginners: This method applies the Sigmoid function to a whole list of numbers at once.
+    /// <b>For Beginners:</b> This method applies the Sigmoid function to a whole list of numbers at once.
     /// It processes each number in the list individually using the same Sigmoid formula and returns
     /// a new list with all the transformed values.
     /// </remarks>
@@ -87,7 +87,7 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     /// For element-wise functions like Sigmoid, this is a diagonal matrix.
     /// </para>
     /// <para>
-    /// For Beginners: This method calculates how sensitive each output is to changes in the input,
+    /// <b>For Beginners:</b> This method calculates how sensitive each output is to changes in the input,
     /// but for a whole list of numbers at once. The result is a special matrix (called a diagonal matrix)
     /// that shows the rate of change for each input value. This is important during the learning process
     /// when the neural network is adjusting its weights. Don't worry too much about the mathematical details -

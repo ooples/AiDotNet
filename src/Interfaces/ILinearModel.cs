@@ -5,7 +5,7 @@ namespace AiDotNet.Interfaces;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: This interface represents the simplest and most fundamental type of machine learning model.
+/// <b>For Beginners:</b> This interface represents the simplest and most fundamental type of machine learning model.
 /// 
 /// Imagine you're trying to predict house prices based on features like:
 /// - Square footage
@@ -41,7 +41,7 @@ public interface ILinearModel<T> : IFullModel<T>
     /// Gets the weights (coefficients) assigned to each input feature in the linear model.
     /// </summary>
     /// <remarks>
-    /// For Beginners: These are the numbers that determine how important each input feature is to your prediction.
+    /// <b>For Beginners:</b> These are the numbers that determine how important each input feature is to your prediction.
     /// 
     /// In our house price example:
     /// - The coefficient for square footage might be 100 (each square foot adds $100)
@@ -63,7 +63,7 @@ public interface ILinearModel<T> : IFullModel<T>
     /// Gets the constant term (bias) added to the weighted sum of features in the linear model.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is the "starting value" or "base value" for your prediction before 
+    /// <b>For Beginners:</b> This is the "starting value" or "base value" for your prediction before 
     /// considering any of the input features.
     /// 
     /// In our house price example:
@@ -83,7 +83,7 @@ public interface ILinearModel<T> : IFullModel<T>
     /// Gets a value indicating whether this linear model includes an intercept term.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This tells you whether the model includes a "starting value" (intercept) or not.
+    /// <b>For Beginners:</b> This tells you whether the model includes a "starting value" (intercept) or not.
     /// 
     /// When this is true:
     /// - The model includes an intercept term (the base value)

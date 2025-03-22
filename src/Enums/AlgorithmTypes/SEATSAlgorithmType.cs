@@ -5,7 +5,7 @@ namespace AiDotNet.Enums.AlgorithmTypes;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: SEATS (Seasonal Extraction in ARIMA Time Series) is a method used to break down time series data 
+/// <b>For Beginners:</b> SEATS (Seasonal Extraction in ARIMA Time Series) is a method used to break down time series data 
 /// into different components, making it easier to understand patterns and make predictions.
 /// 
 /// Think of time series data as a recording of values over time, like daily temperature readings, monthly sales figures, 
@@ -45,7 +45,7 @@ public enum SEATSAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Standard SEATS algorithm is the original implementation of the SEATS methodology, 
+    /// <b>For Beginners:</b> The Standard SEATS algorithm is the original implementation of the SEATS methodology, 
     /// developed by the Bank of Spain and widely used in official statistics.
     /// 
     /// The Standard approach:
@@ -83,7 +83,7 @@ public enum SEATSAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Canonical SEATS approach is a variation that imposes additional mathematical constraints 
+    /// <b>For Beginners:</b> The Canonical SEATS approach is a variation that imposes additional mathematical constraints 
     /// to ensure the decomposition has certain desirable properties.
     /// 
     /// Think of it like solving a puzzle with extra rules: the canonical approach adds specific requirements about 
@@ -124,7 +124,7 @@ public enum SEATSAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Burman approach is a modified version of SEATS that emphasizes robustness and 
+    /// <b>For Beginners:</b> The Burman approach is a modified version of SEATS that emphasizes robustness and 
     /// practical applicability, especially for data with outliers or structural changes.
     /// 
     /// Imagine you're trying to find patterns in weather data that includes some extreme events like hurricanes. 

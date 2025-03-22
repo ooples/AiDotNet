@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Hard Tanh is a simplified version of the standard Tanh (hyperbolic tangent) function.
+/// <b>For Beginners:</b> The Hard Tanh is a simplified version of the standard Tanh (hyperbolic tangent) function.
 /// 
 /// While the regular Tanh creates an S-shaped curve that smoothly transitions from -1 to 1,
 /// the Hard Tanh uses straight lines to approximate this curve, making it:
@@ -42,7 +42,7 @@ public class HardTanhActivation<T> : ActivationFunctionBase<T>
     /// <returns>The transformed value, constrained between -1 and 1.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms any input number into a value between -1 and 1:
+    /// <b>For Beginners:</b> This method transforms any input number into a value between -1 and 1:
     /// 
     /// - If the input is less than -1, the output is -1
     /// - If the input is greater than 1, the output is 1
@@ -74,7 +74,7 @@ public class HardTanhActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value (1 if input is between -1 and 1, otherwise 0).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how much the output changes when the input changes slightly.
+    /// <b>For Beginners:</b> The derivative tells us how much the output changes when the input changes slightly.
     /// 
     /// For Hard Tanh:
     /// - If input is between -1 and 1: derivative = 1 (the output changes at the same rate as the input)

@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps you evaluate how well your model is performing on classification tasks,
+/// <b>For Beginners:</b> This calculator helps you evaluate how well your model is performing on classification tasks,
 /// with a special focus on heavily penalizing predictions that are both wrong and confident.
 /// 
 /// Exponential Loss works by:
@@ -34,7 +34,7 @@ public class ExponentialLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Exponential Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Exponential Loss
     /// to evaluate your model's performance, with a focus on heavily penalizing confident mistakes.
     /// 
     /// The "dataSetType" parameter lets you choose which data to evaluate:
@@ -58,7 +58,7 @@ public class ExponentialLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The Exponential Loss value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model's predictions match the actual values,
+    /// <b>For Beginners:</b> This method calculates how well your model's predictions match the actual values,
     /// with a special emphasis on penalizing confident mistakes.
     /// 
     /// The method works by:

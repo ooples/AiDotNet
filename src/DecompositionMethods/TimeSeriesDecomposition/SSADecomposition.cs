@@ -5,7 +5,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: SSA is a technique that helps break down a time series (sequence of data points) into 
+/// <b>For Beginners:</b> SSA is a technique that helps break down a time series (sequence of data points) into 
 /// meaningful components like trends, seasonal patterns, and noise. Think of it like separating the 
 /// ingredients of a mixed smoothie - you can identify the fruits, yogurt, and other components that were 
 /// blended together.
@@ -27,7 +27,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The window size determines how much historical data is considered when looking for patterns.
+    /// <b>For Beginners:</b> The window size determines how much historical data is considered when looking for patterns.
     /// A larger window can capture longer-term patterns but requires more data. The number of components 
     /// controls how many different patterns you want to extract from your data.
     /// </para>
@@ -97,7 +97,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: SVD is a mathematical technique that breaks down a complex matrix into simpler parts.
+    /// <b>For Beginners:</b> SVD is a mathematical technique that breaks down a complex matrix into simpler parts.
     /// It's like factoring a number (e.g., 12 = 3 × 4), but for matrices. This helps identify the most 
     /// important patterns in your data.
     /// </para>
@@ -115,7 +115,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Sequential SSA extracts patterns one by one, starting with the strongest pattern.
+    /// <b>For Beginners:</b> Sequential SSA extracts patterns one by one, starting with the strongest pattern.
     /// After finding each pattern, it removes that pattern from the data before looking for the next one.
     /// This is like identifying the loudest instrument in an orchestra, removing its sound, then identifying
     /// the next loudest, and so on.
@@ -167,7 +167,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Toeplitz SSA is a variation that uses a special matrix structure to find patterns.
+    /// <b>For Beginners:</b> Toeplitz SSA is a variation that uses a special matrix structure to find patterns.
     /// It focuses on how data points relate to each other at different time lags. This approach can be 
     /// more efficient for certain types of time series data, especially when the patterns are consistent
     /// over time.
@@ -251,7 +251,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A trajectory matrix is a way to reorganize your time series data into a matrix format.
+    /// <b>For Beginners:</b> A trajectory matrix is a way to reorganize your time series data into a matrix format.
     /// Imagine taking a sliding window of size _windowSize and moving it through your data one step at a time.
     /// Each position of this window becomes a column in the matrix. This transformation helps us identify
     /// patterns that might not be obvious in the original data.
@@ -279,7 +279,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: After breaking down our data using SVD (Singular Value Decomposition), 
+    /// <b>For Beginners:</b> After breaking down our data using SVD (Singular Value Decomposition), 
     /// this method reconstructs each individual component. Think of it like reassembling specific 
     /// instruments from an orchestra recording - we're recreating each instrument's contribution 
     /// to the overall sound.
@@ -312,7 +312,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method converts the matrix components back into time series format.
+    /// <b>For Beginners:</b> This method converts the matrix components back into time series format.
     /// Since we transformed our original time series into a matrix earlier, we now need to reverse
     /// that process to get meaningful time series components.
     /// </para>

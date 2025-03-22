@@ -5,7 +5,7 @@ namespace AiDotNet.Interfaces;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: This interface defines a method for "filling in the gaps" between known data points.
+/// <b>For Beginners:</b> This interface defines a method for "filling in the gaps" between known data points.
 /// 
 /// Imagine you have a few data points:
 /// - You know that at 9:00 AM, the temperature was 65°F
@@ -36,7 +36,7 @@ public interface IInterpolation<T>
     /// <param name="x">The point at which to interpolate.</param>
     /// <returns>The interpolated value at point x.</returns>
     /// <remarks>
-    /// For Beginners: This method estimates a value at a specific point using surrounding known data points.
+    /// <b>For Beginners:</b> This method estimates a value at a specific point using surrounding known data points.
     /// 
     /// The parameter:
     /// - x: The point where you want to estimate a value

@@ -7,7 +7,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing when you want to predict
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing when you want to predict
 /// a specific percentile of your data rather than just the average value.
 /// 
 /// Quantile Loss is designed specifically for problems where:
@@ -67,7 +67,7 @@ public class QuantileLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Quantile Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Quantile Loss
     /// to evaluate your model's performance when predicting specific percentiles.
     /// 
     /// Parameters:
@@ -105,7 +105,7 @@ public class QuantileLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated Quantile Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Quantile Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Quantile Loss.
     /// 
     /// It works by comparing your model's predictions to the actual values, but with a twist:
     /// - It penalizes under-predictions and over-predictions differently based on the quantile you chose

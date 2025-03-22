@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Thresholded ReLU (Rectified Linear Unit) is a variation of the standard ReLU activation function.
+/// <b>For Beginners:</b> The Thresholded ReLU (Rectified Linear Unit) is a variation of the standard ReLU activation function.
 /// 
 /// While a standard ReLU outputs the input value when it's positive and zero when it's negative (f(x) = max(0, x)),
 /// the Thresholded ReLU adds an additional parameter called "theta" (θ) that acts as a threshold.
@@ -37,7 +37,7 @@ public class ThresholdedReLUActivation<T> : ActivationFunctionBase<T>
     /// <param name="theta">The threshold value. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: The theta parameter controls how "picky" the activation function is.
+    /// <b>For Beginners:</b> The theta parameter controls how "picky" the activation function is.
     /// 
     /// - With a higher theta value (e.g., 2.0), the function will only activate for stronger input signals,
     ///   ignoring weaker ones.
@@ -66,7 +66,7 @@ public class ThresholdedReLUActivation<T> : ActivationFunctionBase<T>
     /// <returns>The input value if it's greater than the threshold, otherwise zero.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method implements the core functionality of the Thresholded ReLU:
+    /// <b>For Beginners:</b> This method implements the core functionality of the Thresholded ReLU:
     /// 
     /// - If the input is greater than the threshold (theta), it returns the input unchanged
     /// - If the input is less than or equal to the threshold, it returns zero
@@ -92,7 +92,7 @@ public class ThresholdedReLUActivation<T> : ActivationFunctionBase<T>
     /// <returns>1 if the input is greater than the threshold, otherwise 0.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how the output changes when the input changes slightly.
+    /// <b>For Beginners:</b> The derivative tells us how the output changes when the input changes slightly.
     /// This is crucial for training neural networks through backpropagation.
     /// 
     /// For Thresholded ReLU:

@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Cubic spline interpolation creates a smooth curve that passes through all given data points.
 /// The curve consists of piecewise cubic polynomials with continuous first and second derivatives.
 /// 
-/// For Beginners: This class helps you estimate values between known data points.
+/// <b>For Beginners:</b> This class helps you estimate values between known data points.
 /// Imagine you have measurements at specific times (like temperature readings every hour),
 /// and you want to estimate what happened between those measurements. Cubic spline
 /// interpolation creates a smooth curve that passes through all your known points and
@@ -59,7 +59,7 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
     /// The constructor initializes the spline by calculating all the coefficients
     /// needed for interpolation.
     /// 
-    /// For Beginners: When you create a new CubicSplineInterpolation object with your data points,
+    /// <b>For Beginners:</b> When you create a new CubicSplineInterpolation object with your data points,
     /// it automatically does all the complex math needed to set up the smooth curve.
     /// You just need to provide the x and y coordinates of your known points, and the
     /// constructor handles the rest.
@@ -88,7 +88,7 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
     /// This method finds the interval containing the x-value and evaluates the corresponding
     /// cubic polynomial at that point.
     /// 
-    /// For Beginners: This is the main method you'll use after creating the interpolation.
+    /// <b>For Beginners:</b> This is the main method you'll use after creating the interpolation.
     /// Give it any x-value within your data range, and it will return the estimated y-value
     /// at that point. It's like asking "if I have this x-value, what would the y-value be
     /// on the smooth curve that passes through all my known points?"
@@ -124,7 +124,7 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
     /// of the cubic spline. It ensures that the resulting curve is continuous and has
     /// continuous first and second derivatives at all data points.
     /// 
-    /// For Beginners: This method does the complex math needed to create a smooth curve.
+    /// <b>For Beginners:</b> This method does the complex math needed to create a smooth curve.
     /// It calculates the coefficients (a, b, c, d) that define the shape of the curve
     /// between each pair of data points. These coefficients ensure that the curve not only
     /// passes through all points but also transitions smoothly between segments.
@@ -202,7 +202,7 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This method uses binary search to efficiently find which interval contains the x-value.
     /// 
-    /// For Beginners: This method finds which segment of your data the x-value falls into.
+    /// <b>For Beginners:</b> This method finds which segment of your data the x-value falls into.
     /// It's like finding which chapter of a book contains a specific page number.
     /// Binary search makes this process very efficient, even with large datasets.
     /// </remarks>

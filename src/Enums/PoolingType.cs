@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Pooling is like summarizing information to make it more manageable. Imagine you have a large, 
+/// <b>For Beginners:</b> Pooling is like summarizing information to make it more manageable. Imagine you have a large, 
 /// detailed photograph and you want to create a smaller version that still captures the important features. 
 /// Pooling does this for AI models by taking groups of numbers (like pixels) and combining them into single values.
 /// 
@@ -24,7 +24,7 @@ public enum PoolingType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Max Pooling works by looking at small groups of numbers and keeping only the largest 
+    /// <b>For Beginners:</b> Max Pooling works by looking at small groups of numbers and keeping only the largest 
     /// value from each group. 
     /// 
     /// For example, if we have this 4×4 grid of numbers:
@@ -51,7 +51,7 @@ public enum PoolingType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Average Pooling works by looking at small groups of numbers and taking the average 
+    /// <b>For Beginners:</b> Average Pooling works by looking at small groups of numbers and taking the average 
     /// (mean) of all values in each group.
     /// 
     /// Using the same 4×4 grid example:

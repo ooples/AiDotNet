@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Barycentric interpolation is a stable and efficient technique that works well even with unevenly spaced data points.
 /// It creates a smooth curve that passes exactly through all provided data points.
 /// 
-/// For Beginners: Think of this as a sophisticated way to "connect the dots" between your data points.
+/// <b>For Beginners:</b> Think of this as a sophisticated way to "connect the dots" between your data points.
 /// Unlike simpler methods that might just draw straight lines between points, this method creates a smooth
 /// curve that passes exactly through each point. It's particularly good at handling data where points
 /// aren't evenly spaced, and it avoids the wild oscillations that can happen with some other methods.
@@ -32,7 +32,7 @@ public class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// The barycentric weights used in the interpolation formula.
     /// </summary>
     /// <remarks>
-    /// For Beginners: These weights determine how much influence each data point has when calculating
+    /// <b>For Beginners:</b> These weights determine how much influence each data point has when calculating
     /// values between points. They're calculated once when you create the interpolation object and then
     /// used for all interpolation calculations.
     /// </remarks>
@@ -50,7 +50,7 @@ public class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// This constructor validates the input data, initializes the necessary arrays,
     /// and calculates the barycentric weights needed for interpolation.
     /// 
-    /// For Beginners: This sets up everything needed to perform the interpolation:
+    /// <b>For Beginners:</b> This sets up everything needed to perform the interpolation:
     /// 1. It checks that your data is valid (same number of x and y values, at least 2 points)
     /// 2. It stores your data points
     /// 3. It calculates special "weights" that will be used when estimating values between your points
@@ -85,7 +85,7 @@ public class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// This method uses the barycentric interpolation formula to calculate the y-value
     /// at the given x-coordinate based on the provided data points.
     /// 
-    /// For Beginners: This is the main method you'll use. Give it an x-value, and it will:
+    /// <b>For Beginners:</b> This is the main method you'll use. Give it an x-value, and it will:
     /// 1. Check if the x-value exactly matches one of your original data points
     ///    (if so, it returns the exact y-value from your data)
     /// 2. If not, it calculates what the y-value should be at that x-value using the smooth curve
@@ -125,7 +125,7 @@ public class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// This method computes the weights based on the x-coordinates of the data points.
     /// These weights are a key component of the barycentric interpolation formula.
     /// 
-    /// For Beginners: This method does the mathematical heavy lifting that makes barycentric
+    /// <b>For Beginners:</b> This method does the mathematical heavy lifting that makes barycentric
     /// interpolation work. It calculates special values (weights) for each of your data points
     /// that will later be used to create a smooth curve through all points.
     /// 

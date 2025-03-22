@@ -5,7 +5,7 @@ namespace AiDotNet.Enums;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Time series decomposition is like breaking down a complex song into its individual instruments.
+/// <b>For Beginners:</b> Time series decomposition is like breaking down a complex song into its individual instruments.
 /// 
 /// When analyzing data that changes over time (like stock prices, temperature readings, or website traffic),
 /// it's often helpful to separate the data into simpler components to better understand what's happening.
@@ -92,7 +92,7 @@ public enum DecompositionComponentType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Cycle component represents repeating patterns that don't have a fixed time period.
+    /// <b>For Beginners:</b> The Cycle component represents repeating patterns that don't have a fixed time period.
     /// 
     /// Unlike seasonality (which occurs at fixed intervals like every December), cycles have varying lengths:
     /// - Business cycles (boom and bust) might last 2-10 years
@@ -111,7 +111,7 @@ public enum DecompositionComponentType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The TrendCycle component combines the long-term trend and cyclical patterns into a single component.
+    /// <b>For Beginners:</b> The TrendCycle component combines the long-term trend and cyclical patterns into a single component.
     /// 
     /// This is often used when:
     /// - It's difficult to separate the trend from cycles
@@ -152,7 +152,7 @@ public enum DecompositionComponentType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: IMF stands for Intrinsic Mode Function, which is a special type of component extracted 
+    /// <b>For Beginners:</b> IMF stands for Intrinsic Mode Function, which is a special type of component extracted 
     /// using a technique called Empirical Mode Decomposition (EMD).
     /// 
     /// Unlike traditional decomposition that separates data into trend, seasonality, and residuals, EMD breaks 

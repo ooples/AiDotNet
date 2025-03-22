@@ -5,7 +5,7 @@ namespace AiDotNet.Enums;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: The condition number is a measure of how sensitive a matrix is to changes in input.
+/// <b>For Beginners:</b> The condition number is a measure of how sensitive a matrix is to changes in input.
 /// 
 /// Think of it like checking how stable a table is - a table with uneven legs (high condition number) 
 /// will wobble a lot with small changes, while a stable table (low condition number) remains steady.
@@ -26,7 +26,7 @@ public enum ConditionNumberMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: SVD (Singular Value Decomposition) is a way to break down a matrix into three simpler matrices.
+    /// <b>For Beginners:</b> SVD (Singular Value Decomposition) is a way to break down a matrix into three simpler matrices.
     /// 
     /// Using SVD, the condition number is calculated as the ratio of the largest singular value to the smallest non-zero singular value.
     /// 
@@ -49,7 +49,7 @@ public enum ConditionNumberMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The L1 norm condition number uses the sum of absolute values in each column to estimate how sensitive the matrix is.
+    /// <b>For Beginners:</b> The L1 norm condition number uses the sum of absolute values in each column to estimate how sensitive the matrix is.
     /// 
     /// It's calculated by multiplying the L1 norm of the matrix by the L1 norm of its inverse.
     /// 
@@ -73,7 +73,7 @@ public enum ConditionNumberMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Infinity norm condition number uses the maximum row sum of absolute values to estimate matrix sensitivity.
+    /// <b>For Beginners:</b> The Infinity norm condition number uses the maximum row sum of absolute values to estimate matrix sensitivity.
     /// 
     /// It's calculated by multiplying the Infinity norm of the matrix by the Infinity norm of its inverse.
     /// 
@@ -97,7 +97,7 @@ public enum ConditionNumberMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Power Iteration is an iterative method that estimates the largest and smallest eigenvalues 
+    /// <b>For Beginners:</b> Power Iteration is an iterative method that estimates the largest and smallest eigenvalues 
     /// without computing the full matrix decomposition.
     /// 
     /// Instead of calculating everything exactly, it uses repeated multiplication to converge to an estimate.

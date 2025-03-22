@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: UDU' decomposition is a way to break down a symmetric matrix into simpler components 
+/// <b>For Beginners:</b> UDU' decomposition is a way to break down a symmetric matrix into simpler components 
 /// that are easier to work with. The "U" stands for an upper triangular matrix (values only on and above 
 /// the diagonal), "D" stands for a diagonal matrix (values only on the diagonal), and "U'" is the 
 /// transpose of U.
@@ -34,7 +34,7 @@ public enum UduAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Crout algorithm is a specific method for performing matrix decomposition 
+    /// <b>For Beginners:</b> The Crout algorithm is a specific method for performing matrix decomposition 
     /// that computes the elements of the decomposition in a particular order.
     /// 
     /// In the context of UDU' decomposition, the Crout method:
@@ -61,7 +61,7 @@ public enum UduAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Doolittle algorithm is another method for matrix decomposition that 
+    /// <b>For Beginners:</b> The Doolittle algorithm is another method for matrix decomposition that 
     /// differs from Crout in the order of computation and some implementation details.
     /// 
     /// In the context of UDU' decomposition, the Doolittle method:

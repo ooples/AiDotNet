@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// This interface provides functionality to save trained models to binary format and load them back.
 /// Serialization allows models to be stored to disk, transmitted over networks, or embedded in applications.
 /// 
-/// For Beginners: Think of serialization like taking a snapshot of your model.
+/// <b>For Beginners:</b> Think of serialization like taking a snapshot of your model.
 /// 
 /// Imagine you've spent hours training a machine learning model:
 /// - Serialization is like taking a photo of your model's current state
@@ -33,7 +33,7 @@ public interface IModelSerializer
     /// This method captures all the essential information about a trained model and converts it
     /// into a sequence of bytes that can be stored or transmitted.
     /// 
-    /// For Beginners: This is like exporting your work to a file.
+    /// <b>For Beginners:</b> This is like exporting your work to a file.
     /// 
     /// When you call this method:
     /// - The model's current state (all its learned patterns and parameters) is captured
@@ -58,7 +58,7 @@ public interface IModelSerializer
     /// This method takes binary data created by the Serialize method and uses it to
     /// restore a model to its previous state.
     /// 
-    /// For Beginners: This is like opening a saved file to continue your work.
+    /// <b>For Beginners:</b> This is like opening a saved file to continue your work.
     /// 
     /// When you call this method:
     /// - You provide the binary data (bytes) that was previously created by Serialize

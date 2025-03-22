@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Fitness calculators measure how well your AI model's predictions match the actual data.
+/// <b>For Beginners:</b> Fitness calculators measure how well your AI model's predictions match the actual data.
 /// 
 /// Think of fitness metrics like grades on a test:
 /// - They tell you how well your model is performing
@@ -93,7 +93,7 @@ public enum FitnessCalculatorType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: R-Squared (R²) measures how well your model explains the variation in your data.
+    /// <b>For Beginners:</b> R-Squared (R²) measures how well your model explains the variation in your data.
     /// 
     /// Formula: R² = 1 - (Sum of Squared Residuals / Total Sum of Squares)
     /// 
@@ -126,7 +126,7 @@ public enum FitnessCalculatorType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Adjusted R-Squared is a modified version of R-Squared that accounts for the number 
+    /// <b>For Beginners:</b> Adjusted R-Squared is a modified version of R-Squared that accounts for the number 
     /// of variables in your model.
     /// 
     /// Formula: Adjusted R² = 1 - [(1 - R²) * (n - 1) / (n - p - 1)]

@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Hessenberg decomposition is a way to transform a complex matrix into a simpler form 
+/// <b>For Beginners:</b> Hessenberg decomposition is a way to transform a complex matrix into a simpler form 
 /// that makes further calculations much easier and faster.
 /// 
 /// Imagine you have a cluttered desk with papers scattered everywhere. Hessenberg decomposition is like 
@@ -38,7 +38,7 @@ public enum HessenbergAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Householder method uses special mathematical operations called "reflections" to 
+    /// <b>For Beginners:</b> The Householder method uses special mathematical operations called "reflections" to 
     /// transform a matrix into Hessenberg form.
     /// 
     /// Imagine you're rearranging furniture in a room by flipping the entire room over an imaginary line - 
@@ -66,7 +66,7 @@ public enum HessenbergAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Givens method uses mathematical operations called "rotations" to transform a matrix 
+    /// <b>For Beginners:</b> The Givens method uses mathematical operations called "rotations" to transform a matrix 
     /// into Hessenberg form.
     /// 
     /// While Householder reflections flip entire spaces at once, Givens rotations are more like turning a dial - 
@@ -94,7 +94,7 @@ public enum HessenbergAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Elementary Transformations method uses the most basic matrix operations to transform 
+    /// <b>For Beginners:</b> The Elementary Transformations method uses the most basic matrix operations to transform 
     /// a matrix into Hessenberg form.
     /// 
     /// These operations are like the fundamental building blocks of matrix manipulation - simple operations like 
@@ -123,7 +123,7 @@ public enum HessenbergAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Implicit QR method combines Hessenberg decomposition with eigenvalue calculations in 
+    /// <b>For Beginners:</b> The Implicit QR method combines Hessenberg decomposition with eigenvalue calculations in 
     /// a single, efficient process.
     /// 
     /// Rather than first converting to Hessenberg form and then finding eigenvalues, this method does both 
@@ -150,7 +150,7 @@ public enum HessenbergAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Lanczos method is a specialized algorithm designed specifically for symmetric matrices 
+    /// <b>For Beginners:</b> The Lanczos method is a specialized algorithm designed specifically for symmetric matrices 
     /// (matrices that are mirror images across their diagonal).
     /// 
     /// For symmetric matrices, the Hessenberg form is actually tridiagonal (non-zero elements only on the main 

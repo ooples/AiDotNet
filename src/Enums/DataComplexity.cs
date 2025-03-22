@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Data complexity refers to how difficult it is for a machine learning model to find patterns in your data.
+/// <b>For Beginners:</b> Data complexity refers to how difficult it is for a machine learning model to find patterns in your data.
 /// 
 /// Think of it like solving puzzles:
 /// - Simple data is like a basic jigsaw puzzle with few, large pieces

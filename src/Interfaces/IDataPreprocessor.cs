@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: Data preprocessing is like preparing ingredients before cooking.
+/// <b>For Beginners:</b> Data preprocessing is like preparing ingredients before cooking.
 /// 
 /// Raw data often isn't ready for machine learning algorithms. It might have missing values,
 /// different scales (like mixing inches and centimeters), or other issues. Data preprocessing
@@ -33,7 +33,7 @@ public interface IDataPreprocessor<T>
     /// - Normalization information that can be used to transform new data consistently
     /// </returns>
     /// <remarks>
-    /// For Beginners: This method cleans and transforms your raw data to make it suitable for machine learning.
+    /// <b>For Beginners:</b> This method cleans and transforms your raw data to make it suitable for machine learning.
     /// 
     /// Parameters explained:
     /// - X: Your input data organized as a matrix (think of it as a table or spreadsheet)
@@ -71,7 +71,7 @@ public interface IDataPreprocessor<T>
     /// - yTest: Target vector for testing
     /// </returns>
     /// <remarks>
-    /// For Beginners: This method divides your data into three separate sets, each with a specific purpose.
+    /// <b>For Beginners:</b> This method divides your data into three separate sets, each with a specific purpose.
     /// 
     /// Imagine you're learning to cook a new recipe:
     /// - Training set: This is where you practice and learn the recipe (70-80% of your data)

@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Singular Spectrum Analysis (SSA) is a powerful technique used to analyze time series data 
+/// <b>For Beginners:</b> Singular Spectrum Analysis (SSA) is a powerful technique used to analyze time series data 
 /// by breaking it down into meaningful components. Think of it as taking apart a complex musical piece to 
 /// identify the individual instruments playing.
 /// 
@@ -49,7 +49,7 @@ public enum SSAAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Basic SSA algorithm follows the classic four-step approach described above: embedding, 
+    /// <b>For Beginners:</b> The Basic SSA algorithm follows the classic four-step approach described above: embedding, 
     /// decomposition, grouping, and reconstruction.
     /// 
     /// Imagine sorting through a box of mixed Lego pieces. The Basic SSA approach would be like:
@@ -91,7 +91,7 @@ public enum SSAAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Sequential SSA algorithm processes the time series data in a step-by-step manner, 
+    /// <b>For Beginners:</b> The Sequential SSA algorithm processes the time series data in a step-by-step manner, 
     /// updating the decomposition as new data points become available.
     /// 
     /// Think of it like reading a book one page at a time and continuously updating your understanding of the 
@@ -136,7 +136,7 @@ public enum SSAAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Toeplitz SSA algorithm uses a special type of matrix called a Toeplitz matrix during 
+    /// <b>For Beginners:</b> The Toeplitz SSA algorithm uses a special type of matrix called a Toeplitz matrix during 
     /// the embedding step, which has a unique pattern where each diagonal contains the same value.
     /// 
     /// Imagine a staircase where each step has the same pattern repeated. A Toeplitz matrix has a similar 

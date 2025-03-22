@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: The Schur decomposition is an important way to break down a square matrix into simpler parts 
+/// <b>For Beginners:</b> The Schur decomposition is an important way to break down a square matrix into simpler parts 
 /// that are easier to work with. It's like taking a complex machine and disassembling it into basic components.
 /// 
 /// Specifically, the Schur decomposition of a matrix A gives you:
@@ -46,7 +46,7 @@ public enum SchurAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Francis algorithm is a sophisticated method that efficiently computes the Schur 
+    /// <b>For Beginners:</b> The Francis algorithm is a sophisticated method that efficiently computes the Schur 
     /// decomposition by using clever mathematical shortcuts.
     /// 
     /// Imagine you're trying to solve a maze: instead of checking every possible path (which would take forever), 
@@ -78,7 +78,7 @@ public enum SchurAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Implicit algorithm is a variation that focuses on numerical stability and efficiency 
+    /// <b>For Beginners:</b> The Implicit algorithm is a variation that focuses on numerical stability and efficiency 
     /// by avoiding explicit calculations of certain intermediate results.
     /// 
     /// Think of it like mental math: instead of writing down every step when calculating 5×18, you might think 
@@ -110,7 +110,7 @@ public enum SchurAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The QR algorithm is the fundamental approach to computing the Schur decomposition through 
+    /// <b>For Beginners:</b> The QR algorithm is the fundamental approach to computing the Schur decomposition through 
     /// repeated QR decompositions and recombinations.
     /// 
     /// Imagine you're kneading dough: you fold it, roll it out, fold it again, and so on. Each time, the dough 

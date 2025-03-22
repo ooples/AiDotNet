@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps determine if your machine learning model is a good fit for your data.
+/// <b>For Beginners:</b> This class helps determine if your machine learning model is a good fit for your data.
 /// It uses a technique called "bootstrap resampling" which creates many simulated datasets by
 /// randomly reusing the errors (residuals) from your original model. This helps understand if your
 /// model is too complex (overfit), too simple (underfit), or just right (good fit).
@@ -30,7 +30,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector. If null, default settings are used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This creates a new detector that will analyze your model's performance.
+    /// <b>For Beginners:</b> This creates a new detector that will analyze your model's performance.
     /// You can customize how it works by providing options, or just use the default settings.
     /// </para>
     /// </remarks>
@@ -47,7 +47,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method that examines your model and tells you:
+    /// <b>For Beginners:</b> This is the main method that examines your model and tells you:
     /// 1. Whether your model is a good fit, overfit, or underfit
     /// 2. How confident the detector is in this assessment
     /// 3. What steps you might take to improve your model
@@ -74,7 +74,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// <returns>The determined fit type (Overfit, Underfit, or GoodFit).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method decides if your model is:
+    /// <b>For Beginners:</b> This method decides if your model is:
     /// - Overfit: Too complex, memorizing training data rather than learning patterns
     /// - Underfit: Too simple, missing important patterns in the data
     /// - Good fit: Just right, capturing the important patterns without memorizing noise
@@ -115,7 +115,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how sure the detector is about its assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how sure the detector is about its assessment of your model.
     /// Think of it like a percentage of certainty.
     /// 
     /// The confidence is calculated by comparing your model's error to the errors from many simulated datasets.
@@ -147,7 +147,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations as strings.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method provides practical advice on how to improve your model based on
+    /// <b>For Beginners:</b> This method provides practical advice on how to improve your model based on
     /// whether it's overfit, underfit, or a good fit.
     /// 
     /// - For overfit models: Suggestions to make the model simpler or add more training data
@@ -191,7 +191,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// <exception cref="InvalidOperationException">Thrown when the sample size is too small for reliable bootstrap analysis.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates many "what-if" scenarios to test how reliable your model is.
+    /// <b>For Beginners:</b> This method creates many "what-if" scenarios to test how reliable your model is.
     /// 
     /// Here's how it works in simple terms:
     /// 1. It calculates the errors (residuals) between what your model predicted and the actual values

@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Identity activation function is the simplest activation function - it returns exactly what you give it.
+/// <b>For Beginners:</b> The Identity activation function is the simplest activation function - it returns exactly what you give it.
 /// 
 /// When you pass a value through this function:
 /// - Input of 2 → Output of 2
@@ -30,7 +30,7 @@ public class IdentityActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The input value.</param>
     /// <returns>The same value that was input (unchanged).</returns>
     /// <remarks>
-    /// For Beginners: This method simply returns the exact same value you give it.
+    /// <b>For Beginners:</b> This method simply returns the exact same value you give it.
     /// </remarks>
     public override T Activate(T input)
     {
@@ -44,7 +44,7 @@ public class IdentityActivation<T> : ActivationFunctionBase<T>
     /// <returns>Always returns 1, as the derivative of the Identity function is constant.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how much the output changes when we slightly change the input.
+    /// <b>For Beginners:</b> The derivative tells us how much the output changes when we slightly change the input.
     /// 
     /// For the Identity function (f(x) = x), the derivative is always 1, meaning:
     /// - When you increase the input by a small amount
@@ -64,7 +64,7 @@ public class IdentityActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The input vector.</param>
     /// <returns>The same vector that was input (unchanged).</returns>
     /// <remarks>
-    /// For Beginners: This method works on a collection of values at once (a vector),
+    /// <b>For Beginners:</b> This method works on a collection of values at once (a vector),
     /// returning each value unchanged.
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
@@ -79,7 +79,7 @@ public class IdentityActivation<T> : ActivationFunctionBase<T>
     /// <returns>A diagonal matrix with all 1s on the diagonal.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how the output vector changes when we slightly change each input value.
+    /// <b>For Beginners:</b> This method calculates how the output vector changes when we slightly change each input value.
     /// 
     /// For the Identity function, this creates a special matrix called a "diagonal matrix" where:
     /// - All values on the main diagonal (top-left to bottom-right) are 1

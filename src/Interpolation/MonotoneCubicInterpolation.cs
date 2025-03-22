@@ -8,7 +8,7 @@ namespace AiDotNet.Interpolation;
 /// the monotonicity of the data (meaning if your data is increasing, the interpolation will also
 /// be increasing, and similarly for decreasing data).
 /// 
-/// For Beginners: Monotone cubic interpolation is like drawing a smooth curve through points
+/// <b>For Beginners:</b> Monotone cubic interpolation is like drawing a smooth curve through points
 /// on a graph, but with a special property: if your original data is always going up (or always going down)
 /// between certain points, the curve will also always go up (or down) between those points. This avoids
 /// unwanted "wiggles" or oscillations that can happen with other smooth interpolation methods.
@@ -31,7 +31,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// The slopes at each data point, calculated to ensure monotonicity.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The slope at each point tells us the direction and steepness of the curve
+    /// <b>For Beginners:</b> The slope at each point tells us the direction and steepness of the curve
     /// at that exact point. These slopes are carefully calculated to make sure our curve remains
     /// smooth but doesn't create unwanted oscillations.
     /// </remarks>
@@ -49,7 +49,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// This constructor initializes the interpolator with your data points and calculates
     /// the necessary slopes to ensure monotonicity.
     /// 
-    /// For Beginners: When you create a monotone cubic interpolator, you provide the x-coordinates
+    /// <b>For Beginners:</b> When you create a monotone cubic interpolator, you provide the x-coordinates
     /// and corresponding y-values of your known data points. The interpolator then calculates
     /// special values (slopes) at each point to ensure the resulting curve is both smooth and
     /// preserves the "always increasing" or "always decreasing" property of your original data.
@@ -84,7 +84,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// This method calculates the y-value at any x-coordinate using cubic Hermite splines
     /// with slopes that ensure monotonicity.
     /// 
-    /// For Beginners: Once you've set up the interpolator with your known points, this method
+    /// <b>For Beginners:</b> Once you've set up the interpolator with your known points, this method
     /// lets you ask "What would the y-value be at this specific x-coordinate?" It finds the two
     /// known points that are closest to your target x-coordinate (one on each side), and then
     /// creates a smooth curve between them that respects the overall shape of your data.
@@ -128,7 +128,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// This method computes the slopes at each data point using a technique that ensures
     /// the resulting interpolation preserves monotonicity.
     /// 
-    /// For Beginners: This method does the important work of figuring out how steep the curve
+    /// <b>For Beginners:</b> This method does the important work of figuring out how steep the curve
     /// should be at each of your known points. It first calculates the simple slope between each
     /// pair of adjacent points (rise divided by run). Then, for points in the middle, it adjusts
     /// these slopes to ensure the resulting curve doesn't create unwanted wiggles or oscillations.
@@ -187,7 +187,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// This method uses binary search to efficiently find which pair of known points
     /// the target x-coordinate falls between.
     /// 
-    /// For Beginners: Before we can interpolate, we need to know which two known points
+    /// <b>For Beginners:</b> Before we can interpolate, we need to know which two known points
     /// to draw a curve between. This method efficiently finds the right pair of points by
     /// using a technique called "binary search" (like when you search for a word in a dictionary
     /// by repeatedly dividing the book in half). It returns the index of the known point

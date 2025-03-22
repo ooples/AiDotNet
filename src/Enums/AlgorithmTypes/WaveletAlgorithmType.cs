@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Wavelet transforms are mathematical techniques that break down signals (like audio, 
+/// <b>For Beginners:</b> Wavelet transforms are mathematical techniques that break down signals (like audio, 
 /// images, or any data that changes over time) into different frequency components, similar to how 
 /// a prism breaks light into different colors.
 /// 
@@ -31,7 +31,7 @@ public enum WaveletAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Discrete Wavelet Transform (DWT) is the most common wavelet transform method.
+    /// <b>For Beginners:</b> The Discrete Wavelet Transform (DWT) is the most common wavelet transform method.
     /// 
     /// Imagine having a set of different-sized magnifying glasses to examine your data:
     /// 
@@ -56,7 +56,7 @@ public enum WaveletAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Maximal Overlap Discrete Wavelet Transform (MODWT) is a modified version of DWT 
+    /// <b>For Beginners:</b> The Maximal Overlap Discrete Wavelet Transform (MODWT) is a modified version of DWT 
     /// that overcomes some of its limitations.
     /// 
     /// Unlike DWT, MODWT:
@@ -85,7 +85,7 @@ public enum WaveletAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Stationary Wavelet Transform (SWT) is very similar to MODWT and is sometimes 
+    /// <b>For Beginners:</b> The Stationary Wavelet Transform (SWT) is very similar to MODWT and is sometimes 
     /// called the "undecimated wavelet transform" or "algorithme à trous" (algorithm with holes).
     /// 
     /// Like MODWT, SWT:

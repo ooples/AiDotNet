@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: QR decomposition breaks down a matrix into two parts - Q (which has perpendicular columns with length 1) 
+/// <b>For Beginners:</b> QR decomposition breaks down a matrix into two parts - Q (which has perpendicular columns with length 1) 
 /// and R (which is triangular with zeros below the diagonal). This is useful for solving equations and other matrix operations.
 /// Think of it like factoring a number into its prime components, but for matrices.
 /// </para>
@@ -18,7 +18,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Q matrix has special properties - its columns are perpendicular to each other 
+    /// <b>For Beginners:</b> The Q matrix has special properties - its columns are perpendicular to each other 
     /// (orthogonal) and each column has a length of 1. This makes it useful for many calculations.
     /// </para>
     /// </remarks>
@@ -29,7 +29,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The R matrix is upper triangular, which means it has numbers on and above the diagonal,
+    /// <b>For Beginners:</b> The R matrix is upper triangular, which means it has numbers on and above the diagonal,
     /// and zeros below the diagonal. This structure makes solving equations much easier.
     /// </para>
     /// </remarks>
@@ -52,7 +52,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="qrAlgorithm">The algorithm to use for QR decomposition (default is Householder).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: Different algorithms can be used to perform QR decomposition. Each has advantages in terms of 
+    /// <b>For Beginners:</b> Different algorithms can be used to perform QR decomposition. Each has advantages in terms of 
     /// speed, accuracy, or memory usage. Householder is generally a good default choice for most applications.
     /// </para>
     /// </remarks>
@@ -70,7 +70,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x such that Ax ≈ b.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method solves equations of the form Ax = b, where A is a matrix, and x and b are vectors.
+    /// <b>For Beginners:</b> This method solves equations of the form Ax = b, where A is a matrix, and x and b are vectors.
     /// It finds the values of x that make the equation true. Using QR decomposition often gives more accurate results
     /// than other methods, especially for complex matrices.
     /// </para>
@@ -107,7 +107,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the Q and R matrices.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Gram-Schmidt process transforms a set of vectors into a set of perpendicular vectors.
+    /// <b>For Beginners:</b> The Gram-Schmidt process transforms a set of vectors into a set of perpendicular vectors.
     /// It works by taking each column of the matrix and removing any components that point in the same direction
     /// as previous columns. This is like ensuring that each new direction is completely different from all previous ones.
     /// </para>
@@ -147,7 +147,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the Q and R matrices.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Householder reflections use special matrices that act like mirrors, reflecting vectors
+    /// <b>For Beginners:</b> Householder reflections use special matrices that act like mirrors, reflecting vectors
     /// across a plane. This method is more numerically stable than Gram-Schmidt, meaning it gives more accurate
     /// results, especially for large or complex matrices. It works by systematically creating zeros below the diagonal
     /// of the matrix.
@@ -202,7 +202,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the Q and R matrices.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Givens rotations work by rotating the matrix in a plane to create zeros in specific positions.
+    /// <b>For Beginners:</b> Givens rotations work by rotating the matrix in a plane to create zeros in specific positions.
     /// Think of it like carefully turning a dial to make certain values become zero. This method is particularly useful
     /// for sparse matrices (matrices with many zeros) because it can target specific elements without changing others.
     /// </para>
@@ -248,7 +248,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the Q and R matrices.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Modified Gram-Schmidt process is an improved version of the classical Gram-Schmidt method.
+    /// <b>For Beginners:</b> The Modified Gram-Schmidt process is an improved version of the classical Gram-Schmidt method.
     /// It performs the same task (creating perpendicular vectors) but does it in a way that reduces rounding errors
     /// in calculations. This makes it more reliable for complex problems or when high precision is needed.
     /// </para>
@@ -283,7 +283,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the Q and R matrices.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Iterative Gram-Schmidt method repeats the orthogonalization process multiple times
+    /// <b>For Beginners:</b> The Iterative Gram-Schmidt method repeats the orthogonalization process multiple times
     /// to achieve better accuracy. Think of it like double-checking your work to make sure the vectors are truly
     /// perpendicular to each other. This method is useful when working with matrices that might cause precision problems.
     /// </para>
@@ -322,7 +322,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Back substitution is a simple way to solve equations when your matrix is triangular.
+    /// <b>For Beginners:</b> Back substitution is a simple way to solve equations when your matrix is triangular.
     /// It works by starting at the bottom row (which has only one unknown) and solving for that value.
     /// Then it moves up row by row, using the values already found to solve for each new unknown.
     /// This is like solving a puzzle where each piece you place helps you figure out where the next one goes.
@@ -350,7 +350,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The inverse of the original matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The inverse of a matrix is like the reciprocal of a number. When you multiply a matrix by its inverse,
+    /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. When you multiply a matrix by its inverse,
     /// you get the identity matrix (similar to how multiplying a number by its reciprocal gives 1).
     /// Finding the inverse is useful for solving systems of equations and many other matrix operations.
     /// QR decomposition provides a stable way to calculate this inverse.

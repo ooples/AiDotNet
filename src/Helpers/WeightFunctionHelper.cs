@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: In standard regression, all data points are treated equally. However, in real-world data,
+/// <b>For Beginners:</b> In standard regression, all data points are treated equally. However, in real-world data,
 /// some points may be outliers (unusual values that don't follow the general pattern). Robust regression
 /// techniques handle these outliers by assigning different "weights" to different data points.
 /// 
@@ -28,7 +28,7 @@ public static class WeightFunctionHelper<T>
     /// <param name="tuningConstant">A parameter that controls how aggressively to downweight outliers.</param>
     /// <returns>A vector of weights for each data point.</returns>
     /// <remarks>
-    /// For Beginners: This method takes the errors in your model's predictions (residuals) and calculates
+    /// <b>For Beginners:</b> This method takes the errors in your model's predictions (residuals) and calculates
     /// how much each data point should influence your model.
     /// 
     /// The residual for a data point is the difference between what your model predicted and the actual value.
@@ -60,7 +60,7 @@ public static class WeightFunctionHelper<T>
     /// <param name="tuningConstant">The tuning constant that controls the threshold for outliers.</param>
     /// <returns>A vector of weights for each data point.</returns>
     /// <remarks>
-    /// For Beginners: Huber weights work like this:
+    /// <b>For Beginners:</b> Huber weights work like this:
     /// - If a residual is small (less than the tuning constant), the data point gets a weight of 1 (full influence)
     /// - If a residual is large, the weight decreases proportionally to 1/|residual|
     /// 
@@ -87,7 +87,7 @@ public static class WeightFunctionHelper<T>
     /// <param name="tuningConstant">The tuning constant that controls the threshold for outliers.</param>
     /// <returns>A vector of weights for each data point.</returns>
     /// <remarks>
-    /// For Beginners: Bisquare weights are more aggressive than Huber weights:
+    /// <b>For Beginners:</b> Bisquare weights are more aggressive than Huber weights:
     /// - If a residual is small (less than the tuning constant), the weight is calculated using a formula
     ///   that gradually decreases as the residual gets larger
     /// - If a residual is large (greater than the tuning constant), the data point gets a weight of 0
@@ -126,7 +126,7 @@ public static class WeightFunctionHelper<T>
     /// <param name="tuningConstant">The tuning constant that controls the threshold for outliers.</param>
     /// <returns>A vector of weights for each data point.</returns>
     /// <remarks>
-    /// For Beginners: Andrews weights use a sine function to determine weights:
+    /// <b>For Beginners:</b> Andrews weights use a sine function to determine weights:
     /// - If a residual is small (less than π times the tuning constant), the weight is calculated using
     ///   a sine function that gradually decreases as the residual gets larger
     /// - If a residual is large, the data point gets a weight of 0 (no influence at all)

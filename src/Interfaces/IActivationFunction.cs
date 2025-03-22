@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: An activation function is like a decision-maker in a neural network.
+/// <b>For Beginners:</b> An activation function is like a decision-maker in a neural network.
 /// 
 /// Imagine each neuron (node) in a neural network receives a number as input. The activation 
 /// function decides how strongly that neuron should "fire" or activate based on that input.
@@ -29,7 +29,7 @@ public interface IActivationFunction<T>
     /// <param name="input">The input value to the activation function.</param>
     /// <returns>The activated output value.</returns>
     /// <remarks>
-    /// For Beginners: This method takes a number (which could be positive, negative, or zero)
+    /// <b>For Beginners:</b> This method takes a number (which could be positive, negative, or zero)
     /// and transforms it according to the specific activation function's rule.
     /// 
     /// For example, with the ReLU activation function:
@@ -47,7 +47,7 @@ public interface IActivationFunction<T>
     /// <param name="input">The input value at which to calculate the derivative.</param>
     /// <returns>The derivative value of the activation function at the input point.</returns>
     /// <remarks>
-    /// For Beginners: The derivative tells us how quickly the activation function's output
+    /// <b>For Beginners:</b> The derivative tells us how quickly the activation function's output
     /// changes when we make a small change to the input.
     /// 
     /// Think of it as the "slope" or "steepness" at a particular point on the activation function's curve.

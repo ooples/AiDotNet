@@ -5,7 +5,7 @@ namespace AiDotNet.Interfaces;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: This interface defines methods for algorithms that help machine learning models learn efficiently.
+/// <b>For Beginners:</b> This interface defines methods for algorithms that help machine learning models learn efficiently.
 /// 
 /// Imagine you're trying to find the lowest point in a hilly landscape while blindfolded:
 /// - You can feel which way is downhill from your current position (this is the "gradient")
@@ -37,7 +37,7 @@ public interface IGradientBasedOptimizer<T> : IOptimizer<T>
     /// <param name="gradient">The gradient vector indicating the direction of steepest increase in error.</param>
     /// <returns>A new vector containing the updated parameter values.</returns>
     /// <remarks>
-    /// For Beginners: This method adjusts a list of numbers (parameters) to make your model better.
+    /// <b>For Beginners:</b> This method adjusts a list of numbers (parameters) to make your model better.
     /// 
     /// The parameters:
     /// - parameters: The current settings of your model (like weights in a neural network)
@@ -66,7 +66,7 @@ public interface IGradientBasedOptimizer<T> : IOptimizer<T>
     /// <param name="gradient">The gradient matrix indicating the direction of steepest increase in error.</param>
     /// <returns>A new matrix containing the updated parameter values.</returns>
     /// <remarks>
-    /// For Beginners: This method is similar to UpdateVector, but works with a table of numbers instead of a list.
+    /// <b>For Beginners:</b> This method is similar to UpdateVector, but works with a table of numbers instead of a list.
     /// 
     /// The parameters:
     /// - parameters: The current settings of your model organized in a table (rows and columns)
@@ -92,7 +92,7 @@ public interface IGradientBasedOptimizer<T> : IOptimizer<T>
     /// Resets the internal state of the optimizer.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method clears the optimizer's memory and starts fresh.
+    /// <b>For Beginners:</b> This method clears the optimizer's memory and starts fresh.
     /// 
     /// Many advanced optimizers (like Adam or RMSProp) keep track of information from previous
     /// updates to make better decisions about future updates. This is like having a "memory"

@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Bicubic interpolation creates a smooth surface that passes through a grid of known data points.
 /// It's commonly used for image resizing, terrain modeling, and scientific data visualization.
 /// 
-/// For Beginners: Think of this as a sophisticated way to "fill in the blanks" between points in a grid.
+/// <b>For Beginners:</b> Think of this as a sophisticated way to "fill in the blanks" between points in a grid.
 /// Imagine you have a grid of height measurements for a landscape (like a topographic map) but you want
 /// to know the height at points between your measurements. Bicubic interpolation creates a smooth surface
 /// that passes through all your known points and gives reasonable estimates for the in-between areas.
@@ -32,7 +32,7 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// The z-values (heights) at each grid point, organized as a matrix.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is your actual data - the known values at each grid point.
+    /// <b>For Beginners:</b> This is your actual data - the known values at each grid point.
     /// If you're thinking of a landscape, these would be the heights at each measured location.
     /// </remarks>
     private readonly Matrix<T> _z;
@@ -46,7 +46,7 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// Optional matrix decomposition method used for solving the linear system.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is an advanced mathematical tool that helps solve the equations
+    /// <b>For Beginners:</b> This is an advanced mathematical tool that helps solve the equations
     /// needed for the interpolation. You typically don't need to worry about this parameter.
     /// </remarks>
     private readonly IMatrixDecomposition<T>? _decomposition;
@@ -58,7 +58,7 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// This constructor validates the input data and initializes the necessary components
     /// for performing bicubic interpolation.
     /// 
-    /// For Beginners: This sets up everything needed to perform the interpolation:
+    /// <b>For Beginners:</b> This sets up everything needed to perform the interpolation:
     /// 1. It checks that your data grid is valid (matching dimensions and enough points)
     /// 2. It stores your grid coordinates and values
     /// 3. It prepares the mathematical tools needed for calculations
@@ -91,7 +91,7 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// This method finds the grid cell containing the target point and uses bicubic
     /// interpolation to estimate the z-value at that point.
     /// 
-    /// For Beginners: This is the main method you'll use. Give it an (x,y) location, and it will:
+    /// <b>For Beginners:</b> This is the main method you'll use. Give it an (x,y) location, and it will:
     /// 1. Find which grid cell contains your point
     /// 2. Gather the necessary data from that cell and its neighbors
     /// 3. Calculate a smooth estimate of the value at your exact location
@@ -130,7 +130,7 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// This method calculates the bicubic coefficients and uses them to compute
     /// the interpolated value at the specified normalized coordinates.
     /// 
-    /// For Beginners: This method does the actual mathematical interpolation once we've
+    /// <b>For Beginners:</b> This method does the actual mathematical interpolation once we've
     /// identified which grid cell contains our point of interest. It uses a mathematical
     /// formula that considers 16 surrounding points (a 4x4 grid) to create a smooth surface
     /// and then calculates the height at the exact position we want.
@@ -163,7 +163,7 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// This method solves a 16x16 linear system to find the 16 coefficients
     /// needed for bicubic interpolation.
     /// 
-    /// For Beginners: This is the mathematical heart of bicubic interpolation.
+    /// <b>For Beginners:</b> This is the mathematical heart of bicubic interpolation.
     /// It calculates 16 special values (coefficients) that define the shape of the
     /// smooth surface passing through our grid points. These coefficients capture
     /// not just the heights at each point but also how the surface curves between points.
@@ -221,7 +221,7 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// This method locates which grid cell contains the target coordinate.
     /// 
-    /// For Beginners: This helper method finds which grid cell contains our point of interest.
+    /// <b>For Beginners:</b> This helper method finds which grid cell contains our point of interest.
     /// For example, if we have grid points at x = [0, 10, 20, 30] and we want to interpolate
     /// at x = 15, this method will tell us that 15 is in the interval between index 1 (value 10)
     /// and index 2 (value 20).

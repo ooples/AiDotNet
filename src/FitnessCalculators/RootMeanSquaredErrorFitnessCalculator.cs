@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing by measuring
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing by measuring
 /// the average size of the errors in your predictions, with a special emphasis on larger errors.
 /// 
 /// Root Mean Squared Error (RMSE) is one of the most commonly used metrics in machine learning and is:
@@ -50,7 +50,7 @@ public class RootMeanSquaredErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Root Mean Squared Error (RMSE)
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Root Mean Squared Error (RMSE)
     /// to evaluate your model's performance.
     /// 
     /// Parameter:
@@ -80,7 +80,7 @@ public class RootMeanSquaredErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated RMSE score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Root Mean Squared Error.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Root Mean Squared Error.
     /// 
     /// It works by:
     /// 1. Taking the difference between each predicted value and the actual value

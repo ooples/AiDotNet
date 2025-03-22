@@ -8,7 +8,7 @@ namespace AiDotNet.Interpolation;
 /// It uses 16 neighboring points (a 4x4 grid) to calculate each interpolated value,
 /// resulting in a continuous surface with smooth first derivatives.
 /// 
-/// For Beginners: This class helps you estimate values between known data points on a 2D grid.
+/// <b>For Beginners:</b> This class helps you estimate values between known data points on a 2D grid.
 /// Imagine having temperature readings at specific locations on a map, and you want to
 /// estimate the temperature at locations between your measurement points. This interpolation
 /// creates a smooth surface that passes through all your known points and provides reasonable
@@ -41,7 +41,7 @@ public class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
     /// Creates a new cubic convolution interpolation from the given 2D data points.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This constructor takes your grid of data points and prepares
+    /// <b>For Beginners:</b> This constructor takes your grid of data points and prepares
     /// everything needed to perform interpolation. The x and y parameters represent
     /// the coordinates of your grid points, and the z matrix contains the values at
     /// each of those grid points.
@@ -68,7 +68,7 @@ public class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
     /// This method finds the grid cell containing the point and uses cubic convolution
     /// interpolation to estimate the z-value at that point.
     /// 
-    /// For Beginners: This is the main method you'll use after creating the interpolation.
+    /// <b>For Beginners:</b> This is the main method you'll use after creating the interpolation.
     /// Give it any (x,y) coordinates within your data range, and it will return the estimated
     /// z-value at that point. It's like asking "if I have this location on my map, what would
     /// the value be based on the surrounding known points?"
@@ -109,7 +109,7 @@ public class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
     /// This method applies cubic interpolation in both x and y directions to calculate
     /// the interpolated value.
     /// 
-    /// For Beginners: Bicubic interpolation works in two steps: first, it calculates four
+    /// <b>For Beginners:</b> Bicubic interpolation works in two steps: first, it calculates four
     /// intermediate values by interpolating along one direction (y), then it uses these
     /// four values to interpolate along the other direction (x) to get the final result.
     /// This two-step process creates a smooth surface that connects all the known points.
@@ -138,7 +138,7 @@ public class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
     /// This method implements the cubic convolution interpolation formula to calculate
     /// a smooth curve through four points.
     /// 
-    /// For Beginners: Cubic interpolation uses four points to create a smooth curve.
+    /// <b>For Beginners:</b> Cubic interpolation uses four points to create a smooth curve.
     /// Unlike simpler methods that only use two points, cubic interpolation creates
     /// a curve that not only passes through the points but also has a natural-looking
     /// shape between them. The formula looks complex, but it's essentially creating
@@ -173,7 +173,7 @@ public class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// This method uses binary search to efficiently find which interval contains the point.
     /// 
-    /// For Beginners: This method finds which "box" or cell in your grid contains the point
+    /// <b>For Beginners:</b> This method finds which "box" or cell in your grid contains the point
     /// you're interested in. It's like finding which square on a map contains a specific
     /// location. The binary search approach makes this process very efficient, even with
     /// large grids.

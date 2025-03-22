@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on ordinal classification tasks,
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on ordinal classification tasks,
 /// which are a special type of classification where the categories have a meaningful order or rank.
 /// 
 /// Ordinal Regression Loss is designed specifically for problems where:
@@ -60,7 +60,7 @@ public class OrdinalRegressionLossFitnessCalculator<T> : FitnessCalculatorBase<T
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Ordinal Regression Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Ordinal Regression Loss
     /// to evaluate your model's performance on problems where your categories have a meaningful order.
     /// 
     /// Parameters:
@@ -95,7 +95,7 @@ public class OrdinalRegressionLossFitnessCalculator<T> : FitnessCalculatorBase<T
     /// <returns>The calculated Ordinal Regression Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Ordinal Regression Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Ordinal Regression Loss.
     /// 
     /// It works by:
     /// 1. Checking if you provided the number of classes when creating the calculator
@@ -135,7 +135,7 @@ public class OrdinalRegressionLossFitnessCalculator<T> : FitnessCalculatorBase<T
     /// <returns>The calculated loss score using the most appropriate method.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method is called when you didn't specify how many categories your data has.
+    /// <b>For Beginners:</b> This method is called when you didn't specify how many categories your data has.
     /// It tries to figure out the best way to evaluate your model based on the data itself.
     /// 
     /// It works by:
@@ -170,7 +170,7 @@ public class OrdinalRegressionLossFitnessCalculator<T> : FitnessCalculatorBase<T
     /// <returns>True if the data appears to represent a classification problem; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method looks at your data and tries to determine if you're working on
+    /// <b>For Beginners:</b> This method looks at your data and tries to determine if you're working on
     /// a classification problem (predicting categories) or a regression problem (predicting continuous values).
     /// 
     /// It uses several clues to make this determination:

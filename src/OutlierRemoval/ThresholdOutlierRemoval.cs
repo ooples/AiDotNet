@@ -7,7 +7,7 @@
 /// <remarks>
 /// This class uses the Median Absolute Deviation (MAD) method to identify and remove outliers.
 /// 
-/// For beginners: Outliers are data points that differ significantly from other observations in your dataset.
+/// <b>For Beginners:</b> Outliers are data points that differ significantly from other observations in your dataset.
 /// They can negatively impact your model's performance by skewing the results. This class helps
 /// identify and remove these unusual data points before training your model.
 /// </remarks>
@@ -25,7 +25,7 @@ public class ThresholdOutlierRemoval<T> : IOutlierRemoval<T>
     /// If not specified, a default value of 3.0 is used.
     /// </param>
     /// <remarks>
-    /// For beginners: The threshold determines how sensitive the outlier detection is.
+    /// <b>For Beginners:</b> The threshold determines how sensitive the outlier detection is.
     /// A common rule of thumb is to use 3.0, which means data points more than 3 times
     /// the median deviation from the median are considered outliers. If your data naturally
     /// has more variation, you might want to use a higher threshold.
@@ -57,7 +57,7 @@ public class ThresholdOutlierRemoval<T> : IOutlierRemoval<T>
     /// 3. It calculates the median of these deviations (the MAD)
     /// 4. Points that deviate more than (threshold × MAD) from the median are considered outliers
     /// 
-    /// For beginners: This method examines each feature (column) in your data separately.
+    /// <b>For Beginners:</b> This method examines each feature (column) in your data separately.
     /// It finds the middle value (median) for each feature, then measures how far each data point
     /// is from this middle value. If any point is too far away (based on your threshold),
     /// that entire row of data is considered an outlier and removed from both inputs and outputs.

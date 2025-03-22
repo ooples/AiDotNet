@@ -4,7 +4,7 @@ namespace AiDotNet.Enums;
 /// Specifies the type of spiking neuron model to use in neuromorphic computing simulations.
 /// </summary>
 /// <remarks>
-/// For Beginners: Spiking neurons are AI components that work more like real brain cells.
+/// <b>For Beginners:</b> Spiking neurons are AI components that work more like real brain cells.
 /// 
 /// Traditional AI neurons output continuous values (like 0.7), but spiking neurons work with
 /// discrete "spikes" or pulses of activity (like a real neuron firing). This makes them more
@@ -22,7 +22,7 @@ public enum SpikingNeuronType
     /// A simplified neuron model that accumulates input and "leaks" voltage over time.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is like a leaky bucket collecting water (electrical charge).
+    /// <b>For Beginners:</b> This is like a leaky bucket collecting water (electrical charge).
     /// 
     /// How it works:
     /// 1. The neuron collects incoming signals (like water filling a bucket)
@@ -43,7 +43,7 @@ public enum SpikingNeuronType
     /// A basic neuron model that accumulates input until reaching a threshold, then fires.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is like a bucket collecting water without any leaks.
+    /// <b>For Beginners:</b> This is like a bucket collecting water without any leaks.
     /// 
     /// How it works:
     /// 1. The neuron collects incoming signals (like water filling a bucket)
@@ -66,7 +66,7 @@ public enum SpikingNeuronType
     /// A computationally efficient model that can reproduce many behaviors of biological neurons.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This model strikes a balance between biological realism and computational efficiency.
+    /// <b>For Beginners:</b> This model strikes a balance between biological realism and computational efficiency.
     /// 
     /// Named after Eugene Izhikevich who developed it, this model can simulate many different
     /// firing patterns seen in real neurons (like bursting, chattering, or regular spiking)
@@ -89,7 +89,7 @@ public enum SpikingNeuronType
     /// A detailed biophysical model that accurately represents ion channel dynamics in neurons.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is the most biologically accurate model, but also the most complex.
+    /// <b>For Beginners:</b> This is the most biologically accurate model, but also the most complex.
     /// 
     /// Named after Alan Hodgkin and Andrew Huxley who won a Nobel Prize for this work,
     /// this model precisely describes how ions flow through channels in the neuron's membrane.
@@ -111,7 +111,7 @@ public enum SpikingNeuronType
     /// A model that combines exponential spike generation with adaptive threshold mechanisms.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This model adds adaptability to neuron behavior.
+    /// <b>For Beginners:</b> This model adds adaptability to neuron behavior.
     /// 
     /// The "Adaptive" part means the neuron can change its sensitivity based on recent activity.
     /// The "Exponential" part refers to how quickly the neuron responds when close to firing.

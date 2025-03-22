@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// represents distributions, such as histograms, word frequencies, or any normalized non-negative data.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Hellinger kernel is specifically designed for comparing data that represents probabilities or
 /// frequencies (like how often words appear in documents, or the distribution of pixel intensities in images).
 /// </para>
@@ -42,7 +42,7 @@ public class HellingerKernel<T> : IKernelFunction<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Hellinger kernel for use. Unlike some other kernels,
+    /// <b>For Beginners:</b> This constructor sets up the Hellinger kernel for use. Unlike some other kernels,
     /// the Hellinger kernel doesn't have any parameters to adjust - it works the same way for all data.
     /// </para>
     /// <para>
@@ -68,7 +68,7 @@ public class HellingerKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two distributions.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Hellinger kernel formula.
     /// </para>
     /// <para>

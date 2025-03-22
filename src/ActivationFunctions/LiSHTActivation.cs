@@ -6,7 +6,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The LiSHT activation function combines the input value with its hyperbolic tangent.
+/// <b>For Beginners:</b> The LiSHT activation function combines the input value with its hyperbolic tangent.
 /// 
 /// The formula is: f(x) = x * tanh(x)
 /// 
@@ -39,7 +39,7 @@ public class LiSHTActivation<T> : ActivationFunctionBase<T>
     /// <returns>The result of x * tanh(x).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes a single number and transforms it using the LiSHT function.
+    /// <b>For Beginners:</b> This method takes a single number and transforms it using the LiSHT function.
     /// 
     /// It first calculates tanh(x), which is a value between -1 and 1, and then multiplies
     /// the original input by this value. This creates a smooth curve that passes through zero
@@ -60,7 +60,7 @@ public class LiSHTActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value at the input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how quickly the LiSHT function is changing at a specific point.
+    /// <b>For Beginners:</b> The derivative tells us how quickly the LiSHT function is changing at a specific point.
     /// 
     /// This is crucial for neural network training because it helps determine how to adjust the weights
     /// during backpropagation. The formula looks complex, but it's just the mathematical way to express

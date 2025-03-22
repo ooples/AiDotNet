@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Heteroscedasticity is a statistical term that means "uneven spread" of errors. 
+/// <b>For Beginners:</b> Heteroscedasticity is a statistical term that means "uneven spread" of errors. 
 /// In a good model, the errors (differences between predictions and actual values) should be 
 /// roughly the same size regardless of what you're predicting. If errors get much larger or smaller 
 /// for certain predictions (like having more accurate predictions for small values but less accurate 
@@ -28,7 +28,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector. If not provided, default settings will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: When you create this detector, you can customize how it works by providing options.
+    /// <b>For Beginners:</b> When you create this detector, you can customize how it works by providing options.
     /// If you don't provide any options, it will use reasonable default settings.
     /// </para>
     /// </remarks>
@@ -44,7 +44,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method examines your model's predictions and actual values to see if the errors 
+    /// <b>For Beginners:</b> This method examines your model's predictions and actual values to see if the errors 
     /// are consistent across all predictions. It runs statistical tests (Breusch-Pagan and White tests) 
     /// to check for heteroscedasticity. The result tells you if your model has consistent errors (good fit), 
     /// somewhat inconsistent errors (moderate fit), or very inconsistent errors (unstable fit), along with 
@@ -77,7 +77,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// <returns>A classification of the model fit quality (GoodFit, Moderate, or Unstable).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method runs two statistical tests (Breusch-Pagan and White tests) to check if your 
+    /// <b>For Beginners:</b> This method runs two statistical tests (Breusch-Pagan and White tests) to check if your 
     /// model's errors are consistent. If both tests show consistent errors, it returns "GoodFit". If both tests 
     /// show very inconsistent errors, it returns "Unstable". If the results are somewhere in between, it returns "Moderate".
     /// </para>
@@ -110,7 +110,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method determines how sure the detector is about its assessment of your model. 
+    /// <b>For Beginners:</b> This method determines how sure the detector is about its assessment of your model. 
     /// It looks at the results of the statistical tests and calculates a confidence score between 0 and 1. 
     /// A higher score (closer to 1) means the detector is very confident in its assessment, while a lower 
     /// score means it's less certain.
@@ -135,7 +135,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// <returns>The Breusch-Pagan test statistic value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Breusch-Pagan test is a statistical test that checks if the errors in your model 
+    /// <b>For Beginners:</b> The Breusch-Pagan test is a statistical test that checks if the errors in your model 
     /// have consistent variance. This method calculates a test statistic - a single number that summarizes 
     /// the test result. Higher values suggest your model has inconsistent errors (heteroscedasticity), 
     /// which is generally not desirable.
@@ -177,7 +177,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// <returns>The White test statistic value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The White test is another statistical test (similar to Breusch-Pagan) that checks 
+    /// <b>For Beginners:</b> The White test is another statistical test (similar to Breusch-Pagan) that checks 
     /// if your model's errors have consistent variance. It's more general than the Breusch-Pagan test 
     /// because it doesn't assume the errors follow a normal distribution.
     /// 
@@ -235,7 +235,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations for improving or maintaining model quality.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a list of practical suggestions based on how well your model's 
+    /// <b>For Beginners:</b> This method creates a list of practical suggestions based on how well your model's 
     /// errors are distributed. If your model has inconsistent errors (heteroscedasticity), it will suggest 
     /// specific techniques to fix the problem, like transforming your data or using different regression methods.
     /// 

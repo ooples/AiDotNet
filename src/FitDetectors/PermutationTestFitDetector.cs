@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps you determine if your machine learning model is performing well
+/// <b>For Beginners:</b> This class helps you determine if your machine learning model is performing well
 /// or if it has common problems like overfitting (memorizing data instead of learning patterns) or
 /// underfitting (being too simple to capture important patterns).
 /// 
@@ -33,7 +33,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector. If null, default settings will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new detector with either your custom settings or default settings.
+    /// <b>For Beginners:</b> This constructor creates a new detector with either your custom settings or default settings.
     /// The settings control things like how many tests to run and what threshold to use when deciding if a result is significant.
     /// </para>
     /// </remarks>
@@ -50,7 +50,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the detected fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method you'll call to check if your model is working well.
+    /// <b>For Beginners:</b> This is the main method you'll call to check if your model is working well.
     /// It takes your model's performance data and returns:
     /// 1. What type of fit your model has (good, overfit, underfit, etc.)
     /// 2. How confident we are in this assessment
@@ -80,7 +80,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// <returns>The detected fit type.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method figures out if your model has a good balance, or if it has problems like:
+    /// <b>For Beginners:</b> This method figures out if your model has a good balance, or if it has problems like:
     /// 
     /// - Overfitting: Your model performs great on training data but poorly on new data. It's like memorizing 
     ///   exam questions instead of understanding the subject.
@@ -136,7 +136,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method tells you how confident we are in our assessment of your model.
+    /// <b>For Beginners:</b> This method tells you how confident we are in our assessment of your model.
     /// 
     /// It works by running permutation tests on each dataset and averaging the results.
     /// A confidence level close to 1 means we're very confident in our assessment.
@@ -168,7 +168,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations as strings.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method provides practical advice on how to improve your model based on its current performance.
+    /// <b>For Beginners:</b> This method provides practical advice on how to improve your model based on its current performance.
     /// 
     /// For example:
     /// - If your model is overfitting, it might suggest adding more training data or simplifying your model
@@ -230,7 +230,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// </returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method helps determine if your model's performance is truly meaningful or if it 
+    /// <b>For Beginners:</b> This method helps determine if your model's performance is truly meaningful or if it 
     /// could have happened by random chance.
     /// 
     /// It works like this:
@@ -265,7 +265,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// <returns>A simulated R2 value that represents what might occur by random chance.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a "what-if" scenario to simulate what your model's performance 
+    /// <b>For Beginners:</b> This method creates a "what-if" scenario to simulate what your model's performance 
     /// might look like if there was no real relationship between your inputs and outputs.
     /// 
     /// It adds a small amount of random noise (between -0.1 and +0.1) to your original R2 score,

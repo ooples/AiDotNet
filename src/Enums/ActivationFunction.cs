@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Activation functions are mathematical operations that determine whether a neuron in a 
+/// <b>For Beginners:</b> Activation functions are mathematical operations that determine whether a neuron in a 
 /// neural network should be "activated" (output a signal) or not.
 /// 
 /// Think of a neuron as a decision-maker that:
@@ -29,7 +29,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: ReLU (Rectified Linear Unit) is the most commonly used activation function in 
+    /// <b>For Beginners:</b> ReLU (Rectified Linear Unit) is the most commonly used activation function in 
     /// modern neural networks.
     /// 
     /// How it works:
@@ -58,7 +58,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Sigmoid function squeezes any input value into an output between 0 and 1, 
+    /// <b>For Beginners:</b> The Sigmoid function squeezes any input value into an output between 0 and 1, 
     /// creating an S-shaped curve.
     /// 
     /// How it works:
@@ -90,7 +90,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Tanh (hyperbolic tangent) function is similar to Sigmoid but maps inputs 
+    /// <b>For Beginners:</b> The Tanh (hyperbolic tangent) function is similar to Sigmoid but maps inputs 
     /// to values between -1 and 1 instead of 0 and 1.
     /// 
     /// How it works:
@@ -121,7 +121,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Linear activation function simply returns the input without any change.
+    /// <b>For Beginners:</b> The Linear activation function simply returns the input without any change.
     /// 
     /// How it works:
     /// - Output equals input: f(x) = x
@@ -147,7 +147,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: LeakyReLU is a variation of ReLU that allows a small, non-zero output for 
+    /// <b>For Beginners:</b> LeakyReLU is a variation of ReLU that allows a small, non-zero output for 
     /// negative inputs.
     /// 
     /// How it works:
@@ -175,7 +175,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: ELU (Exponential Linear Unit) is an activation function that combines the benefits 
+    /// <b>For Beginners:</b> ELU (Exponential Linear Unit) is an activation function that combines the benefits 
     /// of ReLU while addressing some of its limitations.
     /// 
     /// How it works:
@@ -206,7 +206,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: SELU (Scaled Exponential Linear Unit) is a special activation function designed 
+    /// <b>For Beginners:</b> SELU (Scaled Exponential Linear Unit) is a special activation function designed 
     /// to make neural networks "self-normalizing."
     /// 
     /// How it works:
@@ -239,7 +239,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Softmax is special because it works on a group of neurons together, not just one at a time.
+    /// <b>For Beginners:</b> Softmax is special because it works on a group of neurons together, not just one at a time.
     /// It converts a set of numbers into a probability distribution that sums to 1.
     /// 
     /// How it works:
@@ -271,7 +271,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Softplus is a smooth version of ReLU that has a more gradual transition 
+    /// <b>For Beginners:</b> Softplus is a smooth version of ReLU that has a more gradual transition 
     /// from 0 to positive values.
     /// 
     /// How it works:
@@ -301,7 +301,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: SoftSign is similar to Tanh but approaches its asymptotes more slowly, 
+    /// <b>For Beginners:</b> SoftSign is similar to Tanh but approaches its asymptotes more slowly, 
     /// which can help with learning in some cases.
     /// 
     /// How it works:
@@ -332,7 +332,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Swish is a newer activation function that was discovered through automated search 
+    /// <b>For Beginners:</b> Swish is a newer activation function that was discovered through automated search 
     /// techniques and often outperforms ReLU in deep networks.
     /// 
     /// How it works:
@@ -364,7 +364,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: GELU (Gaussian Error Linear Unit) is an activation function that has become popular 
+    /// <b>For Beginners:</b> GELU (Gaussian Error Linear Unit) is an activation function that has become popular 
     /// in modern language models like BERT and GPT.
     /// 
     /// How it works:
@@ -396,7 +396,7 @@ public enum ActivationFunction
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Identity activation function simply passes the input through unchanged - 
+    /// <b>For Beginners:</b> The Identity activation function simply passes the input through unchanged - 
     /// whatever value goes in is exactly what comes out.
     /// 
     /// How it works:

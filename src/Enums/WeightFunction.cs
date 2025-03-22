@@ -4,7 +4,7 @@
 /// Defines different weight functions used in robust statistical methods and machine learning algorithms.
 /// </summary>
 /// <remarks>
-/// For Beginners: Weight functions are special mathematical formulas that help AI models handle unusual 
+/// <b>For Beginners:</b> Weight functions are special mathematical formulas that help AI models handle unusual 
 /// or extreme data points (outliers).
 /// 
 /// In regular statistics, outliers can significantly throw off your results. For example, if you're 
@@ -28,7 +28,7 @@ public enum WeightFunction
     /// The Huber weight function, which provides a balance between efficiency and robustness.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Huber function is like a "middle ground" approach to handling outliers.
+    /// <b>For Beginners:</b> The Huber function is like a "middle ground" approach to handling outliers.
     /// 
     /// How it works:
     /// - For data points that are close to the expected pattern, it treats them normally (with full weight)
@@ -52,7 +52,7 @@ public enum WeightFunction
     /// The Bisquare (also known as Tukey's biweight) weight function, which completely downweights extreme outliers.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Bisquare function is more aggressive in handling outliers than Huber.
+    /// <b>For Beginners:</b> The Bisquare function is more aggressive in handling outliers than Huber.
     /// 
     /// How it works:
     /// - For data points close to the expected pattern, it treats them normally (with full weight)
@@ -76,7 +76,7 @@ public enum WeightFunction
     /// The Andrews weight function, which uses a sine wave to handle outliers.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Andrews function uses a wave-like pattern (specifically, a sine wave) 
+    /// <b>For Beginners:</b> The Andrews function uses a wave-like pattern (specifically, a sine wave) 
     /// to determine how much weight to give to different data points.
     /// 
     /// How it works:

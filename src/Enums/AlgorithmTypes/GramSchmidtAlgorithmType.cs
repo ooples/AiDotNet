@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: The Gram-Schmidt process is a method for converting a set of vectors into a set of 
+/// <b>For Beginners:</b> The Gram-Schmidt process is a method for converting a set of vectors into a set of 
 /// orthogonal vectors (vectors that are perpendicular to each other).
 /// 
 /// Imagine you're in a room with walls that aren't at right angles to each other. The Gram-Schmidt process 
@@ -39,7 +39,7 @@ public enum GramSchmidtAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Classical Gram-Schmidt algorithm is the original and most straightforward 
+    /// <b>For Beginners:</b> The Classical Gram-Schmidt algorithm is the original and most straightforward 
     /// implementation of the orthogonalization process.
     /// 
     /// It works by taking each vector in sequence and subtracting from it any components that point in the 
@@ -65,7 +65,7 @@ public enum GramSchmidtAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Modified Gram-Schmidt algorithm is a more numerically stable version of the 
+    /// <b>For Beginners:</b> The Modified Gram-Schmidt algorithm is a more numerically stable version of the 
     /// orthogonalization process.
     /// 
     /// While the Classical method computes all projections using the original vectors, the Modified method 

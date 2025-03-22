@@ -10,7 +10,7 @@ namespace AiDotNet.Kernels;
 /// It's equivalent to performing linear regression or linear classification in the original feature space.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Linear kernel is the most basic type of kernel - it simply measures similarity as the dot product
 /// between two data points.
 /// </para>
@@ -41,7 +41,7 @@ public class LinearKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Linear kernel formula.
     /// </para>
     /// <para>

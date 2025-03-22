@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// This interface provides functionality for models that can evolve and improve through
 /// processes inspired by natural selection, such as genetic algorithms.
 /// 
-/// For Beginners: This interface helps create AI models that can "evolve" to get better over time.
+/// <b>For Beginners:</b> This interface helps create AI models that can "evolve" to get better over time.
 /// 
 /// What are evolutionary algorithms?
 /// - These are optimization techniques inspired by natural evolution
@@ -37,7 +37,7 @@ public interface IOptimizableModel<T>
     /// <remarks>
     /// This method applies the model to the input data and produces an output value.
     /// 
-    /// For Beginners: This is how the model makes predictions or calculations based on input data.
+    /// <b>For Beginners:</b> This is how the model makes predictions or calculations based on input data.
     /// 
     /// For example:
     /// - In a weather prediction model, the input might be today's weather data
@@ -57,7 +57,7 @@ public interface IOptimizableModel<T>
     /// <remarks>
     /// This method introduces random changes to the model's parameters based on the mutation rate.
     /// 
-    /// For Beginners: This is like creating a variation of the model with small random changes.
+    /// <b>For Beginners:</b> This is like creating a variation of the model with small random changes.
     /// 
     /// What is mutation?
     /// - Mutation introduces random changes to explore new possibilities
@@ -88,7 +88,7 @@ public interface IOptimizableModel<T>
     /// This method creates a new model by combining parameters from this model and another model,
     /// based on the crossover rate.
     /// 
-    /// For Beginners: This is like creating a "child" model that inherits traits from two "parent" models.
+    /// <b>For Beginners:</b> This is like creating a "child" model that inherits traits from two "parent" models.
     /// 
     /// What is crossover?
     /// - Crossover combines parts of two successful models to create a new one
@@ -120,7 +120,7 @@ public interface IOptimizableModel<T>
     /// <remarks>
     /// This method creates a new instance of the model with identical parameters.
     /// 
-    /// For Beginners: This creates an exact duplicate of the model.
+    /// <b>For Beginners:</b> This creates an exact duplicate of the model.
     /// 
     /// Why cloning is important:
     /// - It preserves good solutions while exploring new ones

@@ -4,7 +4,7 @@
 /// Provides helper methods for creating and manipulating vectors used in AI and machine learning operations.
 /// </summary>
 /// <remarks>
-/// For Beginners: In AI and machine learning, a vector is simply a list of numbers arranged in a specific order.
+/// <b>For Beginners:</b> In AI and machine learning, a vector is simply a list of numbers arranged in a specific order.
 /// Think of it as a one-dimensional array or a single column/row of data. Vectors are used to represent:
 /// - Features of a single data point (like height, weight, age of a person)
 /// - Target values we want to predict
@@ -22,7 +22,7 @@ public static class VectorHelper
     /// <param name="size">The number of elements in the vector.</param>
     /// <returns>A new vector initialized with default values.</returns>
     /// <remarks>
-    /// For Beginners: This method creates an empty vector with a specific length.
+    /// <b>For Beginners:</b> This method creates an empty vector with a specific length.
     /// For example, if you need a vector to store 5 values, you would call:
     /// <code>
     /// var myVector = VectorHelper.CreateVector&lt;double&gt;(5);

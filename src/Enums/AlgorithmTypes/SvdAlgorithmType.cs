@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Singular Value Decomposition (SVD) is a powerful mathematical technique that breaks down a matrix 
+/// <b>For Beginners:</b> Singular Value Decomposition (SVD) is a powerful mathematical technique that breaks down a matrix 
 /// (which you can think of as a table of numbers) into three simpler component matrices. It's like taking apart a 
 /// complex machine to understand how it works.
 /// 
@@ -44,7 +44,7 @@ public enum SvdAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Golub-Reinsch algorithm is the "classic" method for computing SVD. It's like the 
+    /// <b>For Beginners:</b> The Golub-Reinsch algorithm is the "classic" method for computing SVD. It's like the 
     /// standard recipe that has been trusted for decades.
     /// 
     /// This algorithm works in two main steps:
@@ -87,7 +87,7 @@ public enum SvdAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Jacobi algorithm takes a different approach to computing SVD by using a series of 
+    /// <b>For Beginners:</b> The Jacobi algorithm takes a different approach to computing SVD by using a series of 
     /// rotations to gradually transform the matrix.
     /// 
     /// Imagine you're trying to align a crooked picture frame. The Jacobi method is like making a series of small 
@@ -133,7 +133,7 @@ public enum SvdAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Randomized SVD algorithms use probability and random sampling to quickly compute an 
+    /// <b>For Beginners:</b> Randomized SVD algorithms use probability and random sampling to quickly compute an 
     /// approximate SVD, trading some accuracy for significant speed improvements.
     /// 
     /// Think of it like taking a survey: instead of asking everyone in a city about their opinion, you might 
@@ -181,7 +181,7 @@ public enum SvdAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Power Iteration method is a simple but powerful approach that's especially good at 
+    /// <b>For Beginners:</b> The Power Iteration method is a simple but powerful approach that's especially good at 
     /// finding the largest singular values and their corresponding vectors.
     /// 
     /// Imagine you're trying to find the tallest mountain in a range. The Power Iteration method is like starting 
@@ -229,7 +229,7 @@ public enum SvdAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Truncated SVD focuses on computing only a specified number (k) of the largest singular values 
+    /// <b>For Beginners:</b> Truncated SVD focuses on computing only a specified number (k) of the largest singular values 
     /// and their corresponding vectors, rather than the complete decomposition.
     /// 
     /// Think of it like summarizing a book by only keeping the most important chapters:
@@ -274,7 +274,7 @@ public enum SvdAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Divide and Conquer approach breaks down a large problem into smaller, more manageable 
+    /// <b>For Beginners:</b> The Divide and Conquer approach breaks down a large problem into smaller, more manageable 
     /// sub-problems, solves them separately, and then combines their solutions.
     /// 
     /// Think of it like a team working on a big project:

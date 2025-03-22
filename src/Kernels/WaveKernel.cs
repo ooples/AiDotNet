@@ -11,7 +11,7 @@
 /// distance between points increases.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Wave kernel is special because it creates a pattern of similarity that rises and falls like a wave
 /// as points get farther apart. This is different from most kernels where similarity only decreases with distance.
 /// </para>
@@ -41,7 +41,7 @@ public class WaveKernel<T> : IKernelFunction<T>
     /// The sigma parameter that controls the width of the waves in the kernel.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This parameter controls how quickly the waves in the similarity pattern
+    /// <b>For Beginners:</b> This parameter controls how quickly the waves in the similarity pattern
     /// oscillate. A smaller sigma means more rapid oscillations, while a larger sigma means
     /// more gradual changes in similarity.
     /// </remarks>
@@ -51,7 +51,7 @@ public class WaveKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -65,7 +65,7 @@ public class WaveKernel<T> : IKernelFunction<T>
     /// </param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Wave kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Wave kernel for use. You can optionally
     /// provide a value for sigma, which controls how quickly the similarity oscillates as
     /// points get farther apart.
     /// </para>
@@ -98,7 +98,7 @@ public class WaveKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Wave kernel formula.
     /// </para>
     /// <para>

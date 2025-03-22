@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// robust to outliers in the data.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Cauchy kernel is a specialized similarity measure that works well when your data might contain
 /// unusual or extreme values (outliers).
 /// </para>
@@ -28,7 +28,7 @@ public class CauchyKernel<T> : IKernelFunction<T>
     /// The scaling parameter that controls the width of the kernel.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of sigma as a "sensitivity knob" for your similarity measurement.
+    /// <b>For Beginners:</b> Think of sigma as a "sensitivity knob" for your similarity measurement.
     /// A smaller sigma makes the kernel more sensitive to differences between data points,
     /// while a larger sigma makes the kernel more tolerant of differences.
     /// 
@@ -49,7 +49,7 @@ public class CauchyKernel<T> : IKernelFunction<T>
     /// <param name="sigma">The scaling parameter that controls the width of the kernel. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Cauchy kernel with your chosen settings.
+    /// <b>For Beginners:</b> This constructor sets up the Cauchy kernel with your chosen settings.
     /// If you don't specify any settings, it will use a default value of 1.0 for sigma,
     /// which works well for many problems.
     /// </para>
@@ -76,7 +76,7 @@ public class CauchyKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Cauchy kernel formula.
     /// </para>
     /// <para>

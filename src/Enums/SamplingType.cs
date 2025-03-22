@@ -4,7 +4,7 @@
 /// Specifies the method used to sample or combine values when reducing data dimensions.
 /// </summary>
 /// <remarks>
-/// For Beginners: Sampling is how we summarize a group of numbers into a single value.
+/// <b>For Beginners:</b> Sampling is how we summarize a group of numbers into a single value.
 /// 
 /// In AI, we often need to take a collection of values (like a grid of pixels in an image)
 /// and represent them with fewer values. This process is called "downsampling" or "pooling".
@@ -22,7 +22,7 @@ public enum SamplingType
     /// Takes the maximum value from the input region.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Max sampling simply picks the largest number from a group of values.
+    /// <b>For Beginners:</b> Max sampling simply picks the largest number from a group of values.
     /// 
     /// For example, if you have these numbers: [2, 5, 1, 3], Max sampling would give you 5.
     /// 
@@ -40,7 +40,7 @@ public enum SamplingType
     /// Takes the average (mean) value from the input region.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Average sampling calculates the mean of all values in a group.
+    /// <b>For Beginners:</b> Average sampling calculates the mean of all values in a group.
     /// 
     /// For example, if you have these numbers: [2, 5, 1, 3], Average sampling would give you 2.75.
     /// 
@@ -58,7 +58,7 @@ public enum SamplingType
     /// Calculates the L2 norm (Euclidean norm) of the values in the input region.
     /// </summary>
     /// <remarks>
-    /// For Beginners: L2Norm sampling uses a special mathematical formula to combine values.
+    /// <b>For Beginners:</b> L2Norm sampling uses a special mathematical formula to combine values.
     /// 
     /// It works by:
     /// 1. Squaring each number

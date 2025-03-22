@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: An envelope in data analysis is like drawing a line that follows the peaks or valleys of your data.
+/// <b>For Beginners:</b> An envelope in data analysis is like drawing a line that follows the peaks or valleys of your data.
 /// 
 /// Think of it like tracing the outline of a mountain range:
 /// - The upper envelope follows the tops of the mountains (the highest points)

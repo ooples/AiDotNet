@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on classification tasks,
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on classification tasks,
 /// especially when you're trying to clearly separate two classes from each other.
 /// 
 /// Hinge Loss is commonly used with Support Vector Machines (SVMs), which are models that try to find
@@ -39,7 +39,7 @@ public class HingeLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Hinge Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Hinge Loss
     /// to evaluate your model's performance, which is especially good for binary classification
     /// problems (where you're deciding between two options).
     /// 
@@ -68,7 +68,7 @@ public class HingeLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated Hinge Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Hinge Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Hinge Loss.
     /// 
     /// It works by:
     /// 1. Taking the predictions your model made

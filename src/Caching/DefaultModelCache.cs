@@ -6,7 +6,7 @@ namespace AiDotNet.Caching;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: A model cache is like a storage box that keeps track of the progress made during 
+/// <b>For Beginners:</b> A model cache is like a storage box that keeps track of the progress made during 
 /// machine learning model training.
 /// 
 /// When training a machine learning model, the system makes many small adjustments (optimization steps) 
@@ -52,7 +52,7 @@ public class DefaultModelCache<T> : IModelCache<T>
     /// <returns>The cached optimization step data if found; otherwise, a new empty instance.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method looks up previously saved information about a specific training step.
+    /// <b>For Beginners:</b> This method looks up previously saved information about a specific training step.
     /// 
     /// The "key" is like a label that identifies which piece of information you want to retrieve.
     /// For example, the key might represent a specific parameter in your model or a particular
@@ -74,7 +74,7 @@ public class DefaultModelCache<T> : IModelCache<T>
     /// <param name="stepData">The optimization step data to cache.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method saves information about a training step so it can be used later.
+    /// <b>For Beginners:</b> This method saves information about a training step so it can be used later.
     /// 
     /// During model training, each step produces valuable information about how the model is changing
     /// and improving. This method stores that information with a unique label (the key) so you can

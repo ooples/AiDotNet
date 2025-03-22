@@ -11,7 +11,7 @@ namespace AiDotNet.ActivationFunctions;
 /// across the network, which helps with training stability and convergence.
 /// </para>
 /// <para>
-/// For Beginners: SELU (Scaled Exponential Linear Unit) is a special activation function that 
+/// <b>For Beginners:</b> SELU (Scaled Exponential Linear Unit) is a special activation function that 
 /// helps neural networks train more effectively. Unlike simpler functions like ReLU, SELU has 
 /// carefully chosen constants (alpha and lambda) that help keep the data flowing through your 
 /// neural network well-balanced. This means your network can learn faster and more reliably 
@@ -41,7 +41,7 @@ public class SELUActivation<T> : ActivationFunctionBase<T>
     /// Initializes a new instance of the SELU activation function with predefined constants.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The constructor sets up the SELU function with two special numbers (lambda and alpha)
+    /// <b>For Beginners:</b> The constructor sets up the SELU function with two special numbers (lambda and alpha)
     /// that have been mathematically calculated to give SELU its self-normalizing properties.
     /// You don't need to change these values - they're carefully chosen to make neural networks work well.
     /// </remarks>
@@ -66,7 +66,7 @@ public class SELUActivation<T> : ActivationFunctionBase<T>
     /// For negative inputs: lambda * alpha * (e^input - 1)
     /// </returns>
     /// <remarks>
-    /// For Beginners: This method processes a single number through the SELU function:
+    /// <b>For Beginners:</b> This method processes a single number through the SELU function:
     /// - If the number is positive or zero, it multiplies it by lambda (about 1.05)
     /// - If the number is negative, it applies a special exponential formula that creates a smooth curve
     ///   that approaches a negative value as inputs become more negative
@@ -95,7 +95,7 @@ public class SELUActivation<T> : ActivationFunctionBase<T>
     /// For negative inputs: lambda * alpha * e^input
     /// </returns>
     /// <remarks>
-    /// For Beginners: The derivative tells us how much the output changes when we slightly change the input.
+    /// <b>For Beginners:</b> The derivative tells us how much the output changes when we slightly change the input.
     /// For SELU:
     /// - When the input is positive, the derivative is simply lambda (about 1.05), meaning the output
     ///   changes slightly faster than the input

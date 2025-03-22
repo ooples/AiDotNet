@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps determine if your machine learning model is a good fit for your data.
+/// <b>For Beginners:</b> This class helps determine if your machine learning model is a good fit for your data.
 /// It uses a technique called "K-Fold Cross-Validation" which:
 /// 1. Splits your data into K equal parts (or "folds")
 /// 2. Trains the model K times, each time using a different fold as a validation set
@@ -32,7 +32,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector. If not provided, default settings will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the constructor that creates a new detector object. You can customize how it works by providing options,
+    /// <b>For Beginners:</b> This is the constructor that creates a new detector object. You can customize how it works by providing options,
     /// or just use the default settings if you're not sure what to change.
     /// </para>
     /// </remarks>
@@ -48,7 +48,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the detected fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method you'll use to check if your model is working well.
+    /// <b>For Beginners:</b> This is the main method you'll use to check if your model is working well.
     /// It examines how your model performed on different data sets and tells you:
     /// 1. What type of fit your model has (good, overfit, underfit, etc.)
     /// 2. How confident the detector is about this assessment
@@ -78,7 +78,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>The detected fit type (Overfit, Underfit, GoodFit, HighVariance, or Unstable).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method looks at how your model performed on different data sets and determines if there are any problems.
+    /// <b>For Beginners:</b> This method looks at how your model performed on different data sets and determines if there are any problems.
     /// 
     /// It compares the R² (R-squared) values, which measure how well your model explains the data (higher is better, with 1.0 being perfect):
     /// - If training R² is much higher than validation R², your model might be overfitting (memorizing instead of learning)
@@ -133,7 +133,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A value between 0 and 1 representing the confidence level.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how confident we are in our assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how confident we are in our assessment of your model.
     /// 
     /// The confidence is based on how consistent your model performs between validation and test data:
     /// - If validation and test R² values are very close, confidence will be high (closer to 1)
@@ -162,7 +162,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations for improving the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method provides practical advice on how to improve your model based on the detected issues.
+    /// <b>For Beginners:</b> This method provides practical advice on how to improve your model based on the detected issues.
     /// 
     /// Different recommendations are given depending on the fit type:
     /// - Good Fit: Congratulations! Your model is working well, with suggestions for deployment or fine-tuning

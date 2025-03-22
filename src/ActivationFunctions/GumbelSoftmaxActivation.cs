@@ -7,7 +7,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Gumbel-Softmax is a special activation function that helps neural networks
+/// <b>For Beginners:</b> The Gumbel-Softmax is a special activation function that helps neural networks
 /// make categorical (multiple-choice) decisions while still allowing for gradient-based learning.
 /// 
 /// Imagine you want your neural network to choose between several options (like choosing a word
@@ -32,7 +32,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The temperature parameter controls how "decisive" the function is:
+    /// <b>For Beginners:</b> The temperature parameter controls how "decisive" the function is:
     /// - Low temperature (e.g., 0.1): Makes the function choose one option with high confidence
     /// - High temperature (e.g., 5.0): Makes the function more uncertain, spreading probability across options
     /// 
@@ -54,7 +54,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <param name="seed">Optional seed for the random number generator to ensure reproducible results.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: When creating a Gumbel-Softmax activation:
+    /// <b>For Beginners:</b> When creating a Gumbel-Softmax activation:
     /// - The temperature parameter controls how "certain" the choices will be (lower = more certain)
     /// - The seed parameter lets you get consistent results across runs (useful for testing)
     /// 
@@ -80,7 +80,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector of probabilities that sum to 1.0.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms a vector of numbers (logits) into a probability distribution:
+    /// <b>For Beginners:</b> This method transforms a vector of numbers (logits) into a probability distribution:
     /// 
     /// 1. It adds random Gumbel noise to each input value
     /// 2. It applies the softmax function to convert these values to probabilities
@@ -110,7 +110,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A matrix representing the partial derivatives of each output with respect to each input.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how changes in the input affect the output.
+    /// <b>For Beginners:</b> This method calculates how changes in the input affect the output.
     /// 
     /// The result is a matrix where:
     /// - Each row corresponds to an output value
@@ -155,7 +155,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector of Gumbel-distributed random values.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates the randomness needed for Gumbel-Softmax.
+    /// <b>For Beginners:</b> This method creates the randomness needed for Gumbel-Softmax.
     /// 
     /// The Gumbel distribution is a special probability distribution that, when added to values
     /// before applying softmax, effectively simulates random sampling from a categorical distribution.
@@ -197,7 +197,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector of probabilities that sum to 1.0.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method converts a vector of any numbers into a probability distribution.
+    /// <b>For Beginners:</b> This method converts a vector of any numbers into a probability distribution.
     /// 
     /// The softmax function works by:
     /// 1. Taking the exponential (e^x) of each input value divided by the temperature

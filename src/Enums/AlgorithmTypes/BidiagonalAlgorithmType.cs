@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Bidiagonal decomposition is a technique used in linear algebra and machine learning 
+/// <b>For Beginners:</b> Bidiagonal decomposition is a technique used in linear algebra and machine learning 
 /// to simplify complex matrices (tables of numbers) into a special form that makes further calculations easier.
 /// 
 /// A bidiagonal matrix is a special type of matrix where non-zero values appear only on the main diagonal 
@@ -29,7 +29,7 @@ public enum BidiagonalAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Householder method uses special mathematical operations called "reflections" 
+    /// <b>For Beginners:</b> The Householder method uses special mathematical operations called "reflections" 
     /// to gradually transform a matrix into bidiagonal form.
     /// 
     /// Imagine you have a room full of furniture (your original matrix) and you want to rearrange it 
@@ -49,7 +49,7 @@ public enum BidiagonalAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Givens method uses mathematical operations called "rotations" to gradually 
+    /// <b>For Beginners:</b> The Givens method uses mathematical operations called "rotations" to gradually 
     /// transform a matrix into bidiagonal form.
     /// 
     /// Continuing with our furniture analogy, while Householder moves multiple pieces at once, 
@@ -69,7 +69,7 @@ public enum BidiagonalAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Lanczos method is an iterative approach that is particularly efficient for 
+    /// <b>For Beginners:</b> The Lanczos method is an iterative approach that is particularly efficient for 
     /// very large, sparse matrices (huge tables with mostly zero values).
     /// 
     /// In our furniture analogy, if you had an enormous warehouse with just a few pieces of furniture 

@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Model fit describes how well your AI model matches the data it's trying to learn from.
+/// <b>For Beginners:</b> Model fit describes how well your AI model matches the data it's trying to learn from.
 /// 
 /// Think of model fit like trying on clothes:
 /// - A good fit means the model captures the true patterns in your data
@@ -48,7 +48,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Overfitting happens when your model learns the training data too well, 
+    /// <b>For Beginners:</b> Overfitting happens when your model learns the training data too well, 
     /// memorizing even the random noise instead of just the important patterns.
     /// 
     /// Think of it like a student who memorizes test answers without understanding the concepts:
@@ -83,7 +83,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Underfitting happens when your model is too simple to capture the important 
+    /// <b>For Beginners:</b> Underfitting happens when your model is too simple to capture the important 
     /// patterns in your data.
     /// 
     /// Think of it like using a straight line to describe a curved relationship:
@@ -118,7 +118,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: High bias means your model makes systematic errors because it's missing 
+    /// <b>For Beginners:</b> High bias means your model makes systematic errors because it's missing 
     /// important patterns in the data.
     /// 
     /// Think of bias like a consistent error in measurement:
@@ -153,7 +153,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: High variance means your model changes dramatically with small changes in the training data.
+    /// <b>For Beginners:</b> High variance means your model changes dramatically with small changes in the training data.
     /// 
     /// Think of variance like inconsistency:
     /// - The model is very sensitive to which specific data points it sees during training
@@ -189,7 +189,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An unstable model produces wildly different predictions with small changes to input data.
+    /// <b>For Beginners:</b> An unstable model produces wildly different predictions with small changes to input data.
     /// 
     /// Think of instability like a wobbly table:
     /// - Small changes cause big, unpredictable movements
@@ -224,7 +224,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Severe multicollinearity means some of your input features are so closely related 
+    /// <b>For Beginners:</b> Severe multicollinearity means some of your input features are so closely related 
     /// that the model can't tell them apart.
     /// 
     /// Think of it like trying to determine the individual contributions of two chefs who always cook together:
@@ -258,7 +258,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Moderate multicollinearity means some of your input features are somewhat related, 
+    /// <b>For Beginners:</b> Moderate multicollinearity means some of your input features are somewhat related, 
     /// which can make your model less reliable but not completely unstable.
     /// 
     /// Think of it like having two explanatory variables that overlap partially:
@@ -320,7 +320,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A very poor fit means your model is almost completely failing to learn from your data.
+    /// <b>For Beginners:</b> A very poor fit means your model is almost completely failing to learn from your data.
     /// 
     /// Think of it like trying to predict the weather by flipping a coin:
     /// - The model's predictions have little to no relationship with the actual outcomes
@@ -355,7 +355,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Strong positive autocorrelation means your data points are strongly related to previous data points.
+    /// <b>For Beginners:</b> Strong positive autocorrelation means your data points are strongly related to previous data points.
     /// 
     /// Think of it like weather patterns:
     /// - If today is hot, tomorrow is very likely to be hot too
@@ -389,7 +389,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Strong negative autocorrelation means your data tends to swing back and forth, with high values 
+    /// <b>For Beginners:</b> Strong negative autocorrelation means your data tends to swing back and forth, with high values 
     /// typically followed by low values and vice versa.
     /// 
     /// Think of it like a pendulum:
@@ -424,7 +424,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Weak autocorrelation means your data shows some relationship to previous values, 
+    /// <b>For Beginners:</b> Weak autocorrelation means your data shows some relationship to previous values, 
     /// but the connection isn't very strong.
     /// 
     /// Think of it like the relationship between today's and next week's weather:
@@ -458,7 +458,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: No autocorrelation means each data point is independent of previous data points.
+    /// <b>For Beginners:</b> No autocorrelation means each data point is independent of previous data points.
     /// 
     /// Think of it like flipping a coin:
     /// - Previous flips don't influence the next flip
@@ -489,7 +489,7 @@ public enum FitType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Moderate indicates a middle-ground situation - not strong enough 
+    /// <b>For Beginners:</b> Moderate indicates a middle-ground situation - not strong enough 
     /// to be concerning, but not weak enough to ignore completely.
     /// 
     /// Think of it like a partly cloudy day:

@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Takagi decomposition is a special matrix factorization that works on symmetric matrices.
+/// <b>For Beginners:</b> The Takagi decomposition is a special matrix factorization that works on symmetric matrices.
 /// It breaks down a matrix into simpler components that make calculations easier. Think of it like
 /// factoring a number into its prime components, but for matrices.
 /// </para>
@@ -19,7 +19,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// Gets the diagonal matrix containing the singular values.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Singular values represent the "strength" or "importance" of different dimensions in your data.
+    /// <b>For Beginners:</b> Singular values represent the "strength" or "importance" of different dimensions in your data.
     /// Larger singular values indicate more important patterns in the data.
     /// </remarks>
     public Matrix<T> SigmaMatrix { get; private set; }
@@ -28,7 +28,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// Gets the unitary matrix used in the decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: A unitary matrix preserves lengths and angles when multiplied with vectors.
+    /// <b>For Beginners:</b> A unitary matrix preserves lengths and angles when multiplied with vectors.
     /// It's like rotating or reflecting data without changing its fundamental structure.
     /// </remarks>
     public Matrix<Complex<T>> UnitaryMatrix { get; private set; }
@@ -44,7 +44,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose</param>
     /// <param name="algorithm">The algorithm to use for decomposition</param>
     /// <remarks>
-    /// For Beginners: This constructor takes your input matrix and breaks it down using the specified algorithm.
+    /// <b>For Beginners:</b> This constructor takes your input matrix and breaks it down using the specified algorithm.
     /// Different algorithms have different trade-offs in terms of speed and accuracy.
     /// </remarks>
     public TakagiDecomposition(Matrix<T> matrix, TakagiAlgorithmType algorithm = TakagiAlgorithmType.Jacobi)
@@ -107,7 +107,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the singular values matrix and unitary matrix</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Jacobi algorithm works by gradually eliminating off-diagonal elements
+    /// <b>For Beginners:</b> The Jacobi algorithm works by gradually eliminating off-diagonal elements
     /// through a series of rotations. It's like solving a Rubik's cube by focusing on one piece at a time
     /// until the entire puzzle is solved.
     /// </para>
@@ -206,7 +206,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the diagonal matrix S and unitary matrix U</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The QR algorithm is an iterative method that gradually transforms the matrix
+    /// <b>For Beginners:</b> The QR algorithm is an iterative method that gradually transforms the matrix
     /// into a simpler form. Each iteration brings the matrix closer to a diagonal form,
     /// making it easier to extract the important values.
     /// </para>
@@ -268,7 +268,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The magnitude of the complex number</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The magnitude of a complex number is its distance from zero in the complex plane.
+    /// <b>For Beginners:</b> The magnitude of a complex number is its distance from zero in the complex plane.
     /// It's calculated using the Pythagorean theorem: sqrt(real² + imaginary²).
     /// </para>
     /// </remarks>
@@ -284,7 +284,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the Q and R matrices</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: QR decomposition breaks a matrix into two parts:
+    /// <b>For Beginners:</b> QR decomposition breaks a matrix into two parts:
     /// Q (an orthogonal matrix) and R (an upper triangular matrix).
     /// This is useful for solving systems of equations and finding eigenvalues.
     /// </para>
@@ -335,7 +335,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the diagonal matrix S and unitary matrix U</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Eigendecomposition breaks down a matrix using its eigenvalues and eigenvectors.
+    /// <b>For Beginners:</b> Eigendecomposition breaks down a matrix using its eigenvalues and eigenvectors.
     /// Eigenvalues represent how much the matrix stretches or shrinks in certain directions,
     /// while eigenvectors represent those directions.
     /// </para>
@@ -369,7 +369,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the diagonal matrix S and unitary matrix U</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Power iteration is a simple algorithm that finds the most important direction
+    /// <b>For Beginners:</b> Power iteration is a simple algorithm that finds the most important direction
     /// (eigenvector) in your data. It works by repeatedly multiplying a vector by the matrix,
     /// which gradually aligns the vector with the dominant eigenvector.
     /// </para>
@@ -424,7 +424,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the diagonal matrix S and unitary matrix U</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Lanczos algorithm is a technique that transforms a large matrix into a smaller,
+    /// <b>For Beginners:</b> The Lanczos algorithm is a technique that transforms a large matrix into a smaller,
     /// simpler form (called tridiagonal) that's easier to work with. Think of it like summarizing a long
     /// book into key points while preserving the most important information. This makes calculations much
     /// faster while still giving accurate results.
@@ -511,7 +511,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The inverted matrix</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Matrix inversion is like finding the reciprocal of a number (e.g., 1/x).
+    /// <b>For Beginners:</b> Matrix inversion is like finding the reciprocal of a number (e.g., 1/x).
     /// When you multiply a matrix by its inverse, you get the identity matrix (similar to how x * (1/x) = 1).
     /// This method uses the decomposition we've already calculated to find the inverse efficiently.
     /// </para>
@@ -533,7 +533,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the values of x in the equation Ax = b.
+    /// <b>For Beginners:</b> This method finds the values of x in the equation Ax = b.
     /// Think of it like solving for x in the equation 3x = 6 (where x = 2),
     /// but with matrices instead of simple numbers. Using the decomposition makes
     /// this process much more efficient than directly inverting the matrix.

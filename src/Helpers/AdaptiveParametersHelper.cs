@@ -6,7 +6,7 @@ namespace AiDotNet.Helpers;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This helper class contains methods that automatically adjust the settings of a genetic algorithm
+/// <b>For Beginners:</b> This helper class contains methods that automatically adjust the settings of a genetic algorithm
 /// while it's running to help it find better solutions.
 /// 
 /// A genetic algorithm is an AI technique inspired by natural evolution - it creates a "population" of possible 
@@ -41,7 +41,7 @@ public static class AdaptiveParametersHelper<T>
     /// <param name="options">Configuration options for the genetic algorithm optimizer.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method is like an automatic tuning system for the genetic algorithm.
+    /// <b>For Beginners:</b> This method is like an automatic tuning system for the genetic algorithm.
     /// 
     /// Imagine you're trying to find the best recipe for a cake. If your latest attempt tastes better than 
     /// the previous one, you might want to:

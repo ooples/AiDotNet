@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Gaussian Process interpolation is a probabilistic approach to interpolation that not only
 /// provides estimates for unknown points but also quantifies the uncertainty in those estimates.
 /// 
-/// For Beginners: This class helps you estimate values between known data points using a technique
+/// <b>For Beginners:</b> This class helps you estimate values between known data points using a technique
 /// that's especially good when your data might contain noise or uncertainty. Think of it like
 /// drawing a smooth line through your points, but also showing a "confidence band" around that
 /// line to indicate how certain the estimates are. It's particularly useful when you have limited
@@ -42,7 +42,7 @@ public class GaussianProcessInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// The constructor initializes and trains the Gaussian Process model with the provided data points.
     /// 
-    /// For Beginners: When you create a new GaussianProcessInterpolation object with your data points,
+    /// <b>For Beginners:</b> When you create a new GaussianProcessInterpolation object with your data points,
     /// it automatically sets up and trains a statistical model that can make predictions at any point.
     /// The model learns patterns from your data and can use these patterns to make estimates at new points.
     /// The training process involves finding the best parameters that explain your data.
@@ -96,7 +96,7 @@ public class GaussianProcessInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This method uses the trained Gaussian Process model to predict the y-value at the given x-value.
     /// 
-    /// For Beginners: This is the main method you'll use after creating the interpolation.
+    /// <b>For Beginners:</b> This is the main method you'll use after creating the interpolation.
     /// Give it any x-value within (or even slightly outside) your data range, and it will return
     /// the estimated y-value at that point. The estimate is based on patterns learned from your
     /// original data points. Unlike simpler methods, Gaussian Processes consider the overall pattern

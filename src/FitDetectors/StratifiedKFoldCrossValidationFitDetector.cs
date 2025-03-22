@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps you determine if your machine learning model is performing well
+/// <b>For Beginners:</b> This class helps you determine if your machine learning model is performing well
 /// or if it has common problems like overfitting or underfitting.
 /// 
 /// Stratified K-Fold Cross-Validation is a technique that:
@@ -32,7 +32,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Configuration options for the detector. If null, default options will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new fit detector with either custom settings
+    /// <b>For Beginners:</b> This constructor creates a new fit detector with either custom settings
     /// that you provide or default settings if you don't specify any.
     /// 
     /// Think of this as setting up a tool that will analyze your model's performance.
@@ -52,7 +52,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method is like a doctor examining test results to diagnose a patient.
+    /// <b>For Beginners:</b> This method is like a doctor examining test results to diagnose a patient.
     /// 
     /// It takes all the performance data from your model and:
     /// 1. Determines if your model has a good fit, is overfitting, underfitting, etc.
@@ -85,7 +85,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>The determined fit type (GoodFit, Overfit, Underfit, HighVariance, or Unstable).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method analyzes your model's performance to identify common problems.
+    /// <b>For Beginners:</b> This method analyzes your model's performance to identify common problems.
     /// 
     /// It compares how well your model performs on:
     /// - Training data (data it learned from)
@@ -149,7 +149,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how confident we are in our diagnosis of the model.
+    /// <b>For Beginners:</b> This method calculates how confident we are in our diagnosis of the model.
     /// 
     /// It works by comparing the model's performance on validation data versus test data.
     /// If these performances are very similar, we're more confident in our diagnosis.
@@ -183,7 +183,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of string recommendations for improving the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a personalized "action plan" for your model based on its diagnosis.
+    /// <b>For Beginners:</b> This method creates a personalized "action plan" for your model based on its diagnosis.
     /// 
     /// Think of it like getting advice from a doctor after they've diagnosed your condition:
     /// 

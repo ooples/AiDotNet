@@ -8,7 +8,7 @@
 /// complex patterns in data. This interface provides methods to apply activation functions
 /// to vectors and tensors, as well as calculate their derivatives for backpropagation.
 /// 
-/// For Beginners: Activation functions are like "decision makers" in neural networks.
+/// <b>For Beginners:</b> Activation functions are like "decision makers" in neural networks.
 /// 
 /// Imagine you're deciding whether to go outside based on the temperature:
 /// - If it's below 60°F, you definitely won't go (output = 0)
@@ -34,7 +34,7 @@ public interface IVectorActivationFunction<T>
     /// <remarks>
     /// This method transforms each value in the input vector according to the activation function.
     /// 
-    /// For Beginners: This method takes a list of numbers (the input vector) and applies
+    /// <b>For Beginners:</b> This method takes a list of numbers (the input vector) and applies
     /// the same transformation to each number. For example, if using the ReLU activation function:
     /// 
     /// Input vector: [-2, 0, 3, -1, 5]
@@ -54,7 +54,7 @@ public interface IVectorActivationFunction<T>
     /// This method computes how the activation function's output changes with respect to small
     /// changes in its input. This is essential for the backpropagation algorithm in neural networks.
     /// 
-    /// For Beginners: The derivative tells us how sensitive the activation function is to changes
+    /// <b>For Beginners:</b> The derivative tells us how sensitive the activation function is to changes
     /// in its input. This is crucial for the "learning" part of neural networks.
     /// 
     /// Think of it like this: If you slightly increase the temperature in our earlier example,
@@ -73,7 +73,7 @@ public interface IVectorActivationFunction<T>
     /// <remarks>
     /// This method transforms each value in the input tensor according to the activation function.
     /// 
-    /// For Beginners: A tensor is like a multi-dimensional array - think of it as a cube or
+    /// <b>For Beginners:</b> A tensor is like a multi-dimensional array - think of it as a cube or
     /// higher-dimensional block of numbers. This method applies the same transformation to
     /// every number in that block.
     /// 
@@ -91,7 +91,7 @@ public interface IVectorActivationFunction<T>
     /// <remarks>
     /// This method computes the derivatives of the activation function for all elements in the input tensor.
     /// 
-    /// For Beginners: Similar to the vector version, this calculates how sensitive the activation
+    /// <b>For Beginners:</b> Similar to the vector version, this calculates how sensitive the activation
     /// function is to changes in each element of the input tensor. The difference is that this
     /// works with multi-dimensional data.
     /// 

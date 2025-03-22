@@ -6,7 +6,7 @@ namespace AiDotNet.Interpolation;
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double, decimal).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Interpolation is a way to estimate values between known data points. Newton's divided difference
+/// <b>For Beginners:</b> Interpolation is a way to estimate values between known data points. Newton's divided difference
 /// interpolation creates a smooth curve (a polynomial) that passes exactly through all your known data points.
 /// </para>
 /// <para>
@@ -45,7 +45,7 @@ public class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
     /// </exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor takes two vectors (arrays) of equal length:
+    /// <b>For Beginners:</b> This constructor takes two vectors (arrays) of equal length:
     /// - The x vector contains the input values (like time points, positions, etc.)
     /// - The y vector contains the corresponding output values
     /// </para>
@@ -82,7 +82,7 @@ public class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value at the specified x-value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes an x-value and returns the estimated y-value based on the smooth curve
+    /// <b>For Beginners:</b> This method takes an x-value and returns the estimated y-value based on the smooth curve
     /// that was created from your data points.
     /// </para>
     /// <para>
@@ -120,7 +120,7 @@ public class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
     /// of the interpolation polynomial.
     /// </para>
     /// <para>
-    /// For Beginners: This is the "behind the scenes" math that makes the interpolation work. It calculates
+    /// <b>For Beginners:</b> This is the "behind the scenes" math that makes the interpolation work. It calculates
     /// the formula for the smooth curve that will pass through all your data points. The math involves
     /// calculating how the rate of change varies across your data points.
     /// </para>

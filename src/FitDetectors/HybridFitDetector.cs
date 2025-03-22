@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class combines two different ways of checking how well your model is performing:
+/// <b>For Beginners:</b> This class combines two different ways of checking how well your model is performing:
 /// 1. Residual analysis - which looks at the differences between predicted and actual values
 /// 2. Learning curve analysis - which examines how your model performs as it sees more training data
 /// 
@@ -29,7 +29,7 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the hybrid detector.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the hybrid detector by combining two specialized detectors:
+    /// <b>For Beginners:</b> This constructor sets up the hybrid detector by combining two specialized detectors:
     /// - The residual analyzer looks at prediction errors (the difference between what your model predicts and the actual values)
     /// - The learning curve detector examines how your model's performance changes as it sees more training examples
     /// 
@@ -53,7 +53,7 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result containing the determined fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method is the main function that analyzes your model and tells you how well it's performing.
+    /// <b>For Beginners:</b> This method is the main function that analyzes your model and tells you how well it's performing.
     /// It works by:
     /// 1. Running both the residual analysis and learning curve detectors
     /// 2. Combining their results to determine the overall fit type (like "good fit" or "overfitting")
@@ -92,7 +92,7 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     /// <returns>The determined fit type of the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method focuses specifically on determining what category your model's performance
+    /// <b>For Beginners:</b> This method focuses specifically on determining what category your model's performance
     /// falls into (like "good fit", "overfitting", etc.). It gets opinions from both the residual analyzer
     /// and learning curve detector, then combines them to make a final decision about your model's fit type.
     /// </para>
@@ -113,7 +113,7 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     /// <returns>A numeric value representing the confidence level in the fit determination.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how confident the detector is in its assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how confident the detector is in its assessment of your model.
     /// It combines the confidence levels from both the residual analyzer and learning curve detector
     /// to give you an overall confidence score. A higher number means the detector is more certain
     /// about its conclusions regarding your model's performance.
@@ -136,7 +136,7 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     /// <returns>The combined fit type that best represents the model's performance.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method acts like a referee when the two detectors have different opinions
+    /// <b>For Beginners:</b> This method acts like a referee when the two detectors have different opinions
     /// about your model's performance. It uses a scoring system to decide which fit type is most likely correct.
     /// 
     /// For example:
@@ -195,7 +195,7 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     /// <returns>A combined confidence level that represents the overall certainty in the fit determination.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method combines the confidence scores from our two different detectors into one
+    /// <b>For Beginners:</b> This method combines the confidence scores from our two different detectors into one
     /// final confidence score. Think of confidence as "how sure we are" about our assessment of your model.
     /// 
     /// The method works like this:

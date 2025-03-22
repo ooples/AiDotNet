@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The GELU activation function is a modern activation function used in many 
+/// <b>For Beginners:</b> The GELU activation function is a modern activation function used in many 
 /// state-of-the-art neural networks, including transformers like BERT and GPT.
 /// 
 /// Think of GELU as a "smoother" version of ReLU that:
@@ -38,7 +38,7 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     /// <returns>The activated output value using the GELU function.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms an input value using the GELU formula.
+    /// <b>For Beginners:</b> This method transforms an input value using the GELU formula.
     /// 
     /// The GELU function behaves differently based on the input:
     /// - For large positive inputs: the output is approximately equal to the input
@@ -71,7 +71,7 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value at the input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative measures how much the GELU function's output changes
+    /// <b>For Beginners:</b> The derivative measures how much the GELU function's output changes
     /// when its input changes slightly. This is essential for neural network training as it
     /// determines how weights should be adjusted during backpropagation.
     /// 

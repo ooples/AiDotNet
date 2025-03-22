@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// logarithmically with distance.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Log kernel is special because it uses logarithms to determine similarity.
 /// </para>
 /// <para>
@@ -36,7 +36,7 @@ public class LogKernel<T> : IKernelFunction<T>
     /// Controls the power to which the logarithm of the distance is raised.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The '_degree' parameter controls how strongly the logarithm affects the similarity calculation.
+    /// <b>For Beginners:</b> The '_degree' parameter controls how strongly the logarithm affects the similarity calculation.
     /// 
     /// A higher degree value makes the kernel more sensitive to differences in distance.
     /// A lower degree value makes the kernel less sensitive to differences in distance.
@@ -56,7 +56,7 @@ public class LogKernel<T> : IKernelFunction<T>
     /// <param name="degree">The power to which the logarithm of the distance is raised. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Log kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Log kernel for use. You can optionally
     /// provide a value for the degree parameter that controls how the kernel behaves.
     /// </para>
     /// <para>
@@ -86,7 +86,7 @@ public class LogKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Log kernel formula.
     /// </para>
     /// <para>

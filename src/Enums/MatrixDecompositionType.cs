@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Matrix decomposition is like breaking a complex puzzle into simpler pieces 
+/// <b>For Beginners:</b> Matrix decomposition is like breaking a complex puzzle into simpler pieces 
 /// that are easier to work with. In mathematics, we often need to break down complex matrices 
 /// (grids of numbers) into simpler components to solve problems more efficiently.
 /// 
@@ -31,7 +31,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Cramer's rule uses determinants (special numbers calculated from matrices) 
+    /// <b>For Beginners:</b> Cramer's rule uses determinants (special numbers calculated from matrices) 
     /// to find the solution to a system of equations.
     /// 
     /// Think of it as:
@@ -53,7 +53,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Cholesky decomposition breaks a special type of matrix (symmetric and positive-definite) 
+    /// <b>For Beginners:</b> Cholesky decomposition breaks a special type of matrix (symmetric and positive-definite) 
     /// into a simpler form: a lower triangular matrix multiplied by its mirror image.
     /// 
     /// Think of it as:
@@ -76,7 +76,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Gram-Schmidt takes a set of vectors that might be pointing in various directions 
+    /// <b>For Beginners:</b> Gram-Schmidt takes a set of vectors that might be pointing in various directions 
     /// and converts them into a new set of vectors that are all perpendicular (orthogonal) to each other.
     /// 
     /// Think of it as:
@@ -97,7 +97,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: LU decomposition breaks a matrix into a product of two triangular matrices - 
+    /// <b>For Beginners:</b> LU decomposition breaks a matrix into a product of two triangular matrices - 
     /// one with non-zero entries below the diagonal (L) and one with non-zero entries above the diagonal (U).
     /// 
     /// Think of it as:
@@ -118,7 +118,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: QR decomposition breaks a matrix into a product of an orthogonal matrix Q 
+    /// <b>For Beginners:</b> QR decomposition breaks a matrix into a product of an orthogonal matrix Q 
     /// (which preserves lengths and angles) and an upper triangular matrix R.
     /// 
     /// Think of it as:
@@ -139,7 +139,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: SVD is one of the most powerful matrix decompositions that breaks any matrix into 
+    /// <b>For Beginners:</b> SVD is one of the most powerful matrix decompositions that breaks any matrix into 
     /// three components: U (rotation/reflection), Σ (scaling), and V* (another rotation/reflection).
     /// 
     /// Think of it as:
@@ -165,7 +165,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Normal decomposition transforms a matrix into a form that's useful for solving 
+    /// <b>For Beginners:</b> Normal decomposition transforms a matrix into a form that's useful for solving 
     /// least squares problems (finding the best fit for overdetermined systems).
     /// 
     /// Think of it as:
@@ -185,7 +185,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: LQ decomposition is like QR decomposition but in reverse order - 
+    /// <b>For Beginners:</b> LQ decomposition is like QR decomposition but in reverse order - 
     /// it breaks a matrix into a lower triangular matrix L and an orthogonal matrix Q.
     /// 
     /// Think of it as:
@@ -205,7 +205,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Takagi decomposition is a specialized decomposition for complex symmetric matrices, 
+    /// <b>For Beginners:</b> Takagi decomposition is a specialized decomposition for complex symmetric matrices, 
     /// expressing them in terms of a unitary matrix and a diagonal matrix.
     /// 
     /// Think of it as:
@@ -225,7 +225,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Hessenberg decomposition transforms a matrix into a form that's almost triangular - 
+    /// <b>For Beginners:</b> Hessenberg decomposition transforms a matrix into a form that's almost triangular - 
     /// it has zeros below the first subdiagonal.
     /// 
     /// Think of it as:
@@ -245,7 +245,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Schur decomposition expresses a matrix as a product of an orthogonal matrix 
+    /// <b>For Beginners:</b> Schur decomposition expresses a matrix as a product of an orthogonal matrix 
     /// and an upper triangular (or nearly triangular) matrix.
     /// 
     /// Think of it as:
@@ -266,7 +266,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Eigendecomposition breaks a matrix into its eigenvalues (special scaling factors) 
+    /// <b>For Beginners:</b> Eigendecomposition breaks a matrix into its eigenvalues (special scaling factors) 
     /// and eigenvectors (special directions that maintain their orientation when transformed).
     /// 
     /// Think of it as:
@@ -291,7 +291,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Polar decomposition separates a matrix into a rotation/reflection component 
+    /// <b>For Beginners:</b> Polar decomposition separates a matrix into a rotation/reflection component 
     /// and a stretching/scaling component.
     /// 
     /// Think of it as:
@@ -312,7 +312,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Tridiagonal decomposition converts a matrix into a special form where only three diagonals 
+    /// <b>For Beginners:</b> Tridiagonal decomposition converts a matrix into a special form where only three diagonals 
     /// contain non-zero values - the main diagonal and the ones directly above and below it.
     /// 
     /// Think of it as:
@@ -336,7 +336,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Bidiagonal decomposition converts a matrix into an even simpler form than tridiagonal - 
+    /// <b>For Beginners:</b> Bidiagonal decomposition converts a matrix into an even simpler form than tridiagonal - 
     /// it has non-zero values only on the main diagonal and one adjacent diagonal (either above or below).
     /// 
     /// Think of it as:
@@ -357,7 +357,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: UDU decomposition breaks a symmetric matrix into three parts: 
+    /// <b>For Beginners:</b> UDU decomposition breaks a symmetric matrix into three parts: 
     /// an upper triangular matrix U with 1s on its diagonal, a diagonal matrix D, and the transpose of U.
     /// 
     /// Think of it as:
@@ -381,7 +381,7 @@ public enum MatrixDecompositionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: LDL decomposition is similar to UDU but uses lower triangular matrices instead of upper ones.
+    /// <b>For Beginners:</b> LDL decomposition is similar to UDU but uses lower triangular matrices instead of upper ones.
     /// It breaks a symmetric matrix into a lower triangular matrix L with 1s on its diagonal, 
     /// a diagonal matrix D, and the transpose of L.
     /// 

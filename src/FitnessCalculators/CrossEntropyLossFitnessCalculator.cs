@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps you evaluate how well your model is performing on classification tasks,
+/// <b>For Beginners:</b> This calculator helps you evaluate how well your model is performing on classification tasks,
 /// where you need to assign items to specific categories or classes.
 /// 
 /// Cross Entropy Loss is one of the most common ways to measure how well a model is doing when it needs to
@@ -35,7 +35,7 @@ public class CrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Cross Entropy Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Cross Entropy Loss
     /// to evaluate your model's performance on classification tasks.
     /// 
     /// The "dataSetType" parameter lets you choose which data to evaluate:
@@ -59,7 +59,7 @@ public class CrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The Cross Entropy Loss value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model's predictions match the actual categories.
+    /// <b>For Beginners:</b> This method calculates how well your model's predictions match the actual categories.
     /// 
     /// The method works by:
     /// 1. Taking the predicted probabilities from your model (e.g., "70% chance it's a cat, 20% dog, 10% bird")

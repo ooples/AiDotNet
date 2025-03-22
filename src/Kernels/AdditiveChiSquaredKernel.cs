@@ -14,7 +14,7 @@
 /// The kernel is defined as K(x,y) = -log(1 + Σ[(x_i - y_i)²/(x_i + y_i)]) for all dimensions i.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a way to measure how similar two data points are to each other.
+/// <b>For Beginners:</b> A kernel function is a way to measure how similar two data points are to each other.
 /// Think of it like a special ruler that can measure distance in complex data spaces. The Additive 
 /// Chi-Squared kernel is particularly good at comparing data that represents counts or frequencies 
 /// (like how many times words appear in documents, or how many pixels of each color appear in images).
@@ -37,7 +37,7 @@ public class AdditiveChiSquaredKernel<T> : IKernelFunction<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor prepares the kernel function for use. It doesn't need any
+    /// <b>For Beginners:</b> This constructor prepares the kernel function for use. It doesn't need any
     /// parameters because the Additive Chi-Squared kernel doesn't have any adjustable settings.
     /// It simply sets up the mathematical operations needed for the calculations.
     /// </para>
@@ -55,7 +55,7 @@ public class AdditiveChiSquaredKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Additive Chi-Squared formula.
     /// </para>
     /// <para>

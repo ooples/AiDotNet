@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: This interface helps determine if your model is learning properly or has problems.
+/// <b>For Beginners:</b> This interface helps determine if your model is learning properly or has problems.
 /// 
 /// When training machine learning models, three common problems can occur:
 /// 
@@ -32,7 +32,7 @@ public interface IFitDetector<T>
     /// <param name="evaluationData">Data containing model performance metrics on training and validation datasets.</param>
     /// <returns>A FitDetectorResult object containing the detected fit type and relevant metrics.</returns>
     /// <remarks>
-    /// For Beginners: This method examines how your model performs on different data sets to diagnose problems.
+    /// <b>For Beginners:</b> This method examines how your model performs on different data sets to diagnose problems.
     /// 
     /// The input parameter:
     /// - evaluationData: Contains information about how well your model performs on:

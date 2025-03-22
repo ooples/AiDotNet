@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: LU decomposition is a way to break down a matrix into two simpler parts that make 
+/// <b>For Beginners:</b> LU decomposition is a way to break down a matrix into two simpler parts that make 
 /// calculations much easier and faster.
 /// 
 /// Imagine you have a complex math problem (the matrix) that you need to solve. LU decomposition breaks this problem 
@@ -43,7 +43,7 @@ public enum LuAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Doolittle method is a specific way to perform LU decomposition where the diagonal 
+    /// <b>For Beginners:</b> The Doolittle method is a specific way to perform LU decomposition where the diagonal 
     /// elements of L (the lower triangular matrix) are all set to 1.
     /// 
     /// Imagine you're building a house - the Doolittle method is like having a standard foundation (the 1's on 
@@ -72,7 +72,7 @@ public enum LuAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Crout method is similar to Doolittle, but it sets the diagonal elements of U 
+    /// <b>For Beginners:</b> The Crout method is similar to Doolittle, but it sets the diagonal elements of U 
     /// (the upper triangular matrix) to 1 instead of L.
     /// 
     /// If Doolittle is like building a house with a standard foundation, Crout is like building with a 
@@ -102,7 +102,7 @@ public enum LuAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Partial pivoting is a technique that makes LU decomposition more reliable by rearranging 
+    /// <b>For Beginners:</b> Partial pivoting is a technique that makes LU decomposition more reliable by rearranging 
     /// the rows of the matrix during the calculation.
     /// 
     /// Imagine you're cooking a complex recipe. Partial pivoting is like making sure you always use the 
@@ -134,7 +134,7 @@ public enum LuAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Complete pivoting takes the stability idea from partial pivoting even further by 
+    /// <b>For Beginners:</b> Complete pivoting takes the stability idea from partial pivoting even further by 
     /// rearranging both rows AND columns during the calculation.
     /// 
     /// Extending our cooking analogy, complete pivoting is like reorganizing both your ingredients (rows) 
@@ -168,7 +168,7 @@ public enum LuAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Cholesky method is a specialized form of LU decomposition that only works for a 
+    /// <b>For Beginners:</b> The Cholesky method is a specialized form of LU decomposition that only works for a 
     /// specific type of matrix (symmetric positive-definite), but is twice as efficient when applicable.
     /// 
     /// Imagine you have a special type of puzzle that has a hidden symmetry. If you recognize this symmetry, 

@@ -9,7 +9,7 @@
 /// It works by creating new features that are powers of the original features (x, x², x³, etc.),
 /// then applying linear regression techniques to these expanded features.
 /// 
-/// For beginners: While linear regression fits a straight line to your data,
+/// <b>For Beginners:</b> While linear regression fits a straight line to your data,
 /// polynomial regression can fit curves, allowing it to capture more complex patterns.
 /// </remarks>
 public class PolynomialRegression<T> : RegressionBase<T>
@@ -28,7 +28,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
     /// coefficient values, which helps create a more generalizable model.
     /// </param>
     /// <remarks>
-    /// For beginners: The degree of the polynomial determines how "curvy" your model can be.
+    /// <b>For Beginners:</b> The degree of the polynomial determines how "curvy" your model can be.
     /// A higher degree (like 3 or 4) allows for more complex curves but may lead to overfitting
     /// if you don't have enough data.
     /// </remarks>
@@ -53,7 +53,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
     /// 2. Adds a constant column for the intercept if specified in the options
     /// 3. Solves the least squares equation to find the optimal coefficients
     /// 
-    /// For beginners: Training means finding the best curve that fits your data points.
+    /// <b>For Beginners:</b> Training means finding the best curve that fits your data points.
     /// The algorithm creates additional features by raising your original features to different powers,
     /// then finds the best combination of these features to predict your target values.
     /// </remarks>
@@ -120,7 +120,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
     /// A vector of predicted values, one for each row in the input matrix.
     /// </returns>
     /// <remarks>
-    /// For beginners: Once the model is trained, this method uses the discovered polynomial equation
+    /// <b>For Beginners:</b> Once the model is trained, this method uses the discovered polynomial equation
     /// to predict outcomes for new data points. It first transforms the input features into polynomial features,
     /// then applies the learned coefficients to make predictions.
     /// </remarks>

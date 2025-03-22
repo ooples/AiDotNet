@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
-/// For beginners: Regression is a type of machine learning algorithm used to predict continuous values.
+/// <b>For Beginners:</b> Regression is a type of machine learning algorithm used to predict continuous values.
 /// 
 /// For example, regression can be used to:
 /// - Predict house prices based on features like size, location, and age

@@ -4,7 +4,7 @@
 /// Represents different types of statistical tests used to evaluate hypotheses and determine significance in data analysis.
 /// </summary>
 /// <remarks>
-/// For Beginners: Statistical tests help us decide if patterns we see in data are real or just due to chance.
+/// <b>For Beginners:</b> Statistical tests help us decide if patterns we see in data are real or just due to chance.
 /// 
 /// Think of statistical tests like different tools in a toolbox - each one is designed for specific situations:
 /// 
@@ -25,7 +25,7 @@ public enum TestStatisticType
     /// A statistical test used to determine if there is a significant association between categorical variables.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Chi-Square test helps us understand if two categorical characteristics are related.
+    /// <b>For Beginners:</b> The Chi-Square test helps us understand if two categorical characteristics are related.
     /// 
     /// Imagine you want to know if ice cream flavor preference (chocolate, vanilla, strawberry) is related
     /// to gender. The Chi-Square test compares the actual distribution of preferences across genders with
@@ -44,7 +44,7 @@ public enum TestStatisticType
     /// A statistical test that compares the variances of two or more groups to determine if they are significantly different.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The F-Test helps us compare the spread or variability between different groups.
+    /// <b>For Beginners:</b> The F-Test helps us compare the spread or variability between different groups.
     /// 
     /// Imagine comparing the test scores from three different teaching methods. The F-Test can tell us
     /// if one method produces more consistent results (less variability) than others.
@@ -64,7 +64,7 @@ public enum TestStatisticType
     /// A statistical test used to determine if there is a significant difference between the means of two groups.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The T-Test helps us decide if two groups have different averages.
+    /// <b>For Beginners:</b> The T-Test helps us decide if two groups have different averages.
     /// 
     /// Imagine comparing the heights of men and women. The T-Test tells us if the difference
     /// in average height between the two groups is statistically significant or could have
@@ -83,7 +83,7 @@ public enum TestStatisticType
     /// A non-parametric test that compares two independent samples without assuming they follow a normal distribution.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Mann-Whitney U test is like a T-Test but works when your data doesn't follow a nice, neat pattern.
+    /// <b>For Beginners:</b> The Mann-Whitney U test is like a T-Test but works when your data doesn't follow a nice, neat pattern.
     /// 
     /// Imagine comparing customer satisfaction ratings (1-5 stars) between two restaurants. Since ratings
     /// are often skewed (not following a bell curve), the Mann-Whitney U test is more appropriate than a T-Test.
@@ -102,7 +102,7 @@ public enum TestStatisticType
     /// A resampling-based test that repeatedly shuffles observed data to determine if patterns are statistically significant.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Permutation Test is like shuffling a deck of cards many times to see how likely a particular arrangement is.
+    /// <b>For Beginners:</b> The Permutation Test is like shuffling a deck of cards many times to see how likely a particular arrangement is.
     /// 
     /// Imagine you have test scores from students who studied using two different methods. You mix all scores together
     /// and randomly reassign them to the two methods thousands of times. If the original difference between methods

@@ -25,7 +25,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a feed-forward neural network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A feed-forward neural network is the simplest type of neural network where
+    /// <b>For Beginners:</b> A feed-forward neural network is the simplest type of neural network where
     /// information flows in one direction from input to output. Think of it as an assembly line
     /// where each layer processes the data and passes it to the next layer.
     /// </para>
@@ -72,7 +72,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a CNN.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Convolutional Neural Network (CNN) is specialized for processing grid-like data,
+    /// <b>For Beginners:</b> A Convolutional Neural Network (CNN) is specialized for processing grid-like data,
     /// such as images. Instead of connecting every input to every neuron (which would be inefficient for images),
     /// CNNs use filters that scan across the image to detect features like edges, textures, and shapes.
     /// </para>
@@ -142,12 +142,139 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default layers for an occupancy detection neural network with temporal data.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
+    /// <param name="historyWindowSize">The number of time steps to consider in the temporal data (how many past observations to include).</param>
+    /// <returns>A collection of layers forming a temporal occupancy detection network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method builds a neural network specifically designed to detect occupancy 
+    /// (whether a space is occupied by people) using data that changes over time. It uses special layer types 
+    /// like LSTM (Long Short-Term Memory) that can "remember" patterns in sequential data, and attention 
+    /// mechanisms that help the network focus on the most important time steps in the data sequence.
+    /// </para>
+    /// <para>
+    /// Temporal data refers to data collected over time, where the sequence and patterns across time 
+    /// points are important for making predictions. For example, sensor readings collected every minute
+    /// over several hours would be temporal data.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultOccupancyTemporalLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int historyWindowSize)
+    {
+        ValidateLayerParameters(1, 32, architecture.OutputSize);
+
+        var inputShape = architecture.GetInputShape();
+        int inputFeatures = inputShape[2];  // Assuming shape is [batch, time, features]
+
+        // LSTM layers to process temporal data
+        yield return new LSTMLayer<T>(
+            inputSize: inputFeatures,
+            hiddenSize: 64,
+            inputShape: [historyWindowSize, inputFeatures],
+            activation: new TanhActivation<T>() as IActivationFunction<T>,
+            recurrentActivation: new SigmoidActivation<T>()
+        );
+        yield return new LSTMLayer<T>(
+            inputSize: 64,
+            hiddenSize: 32,
+            inputShape: [historyWindowSize, 64],
+            activation: new TanhActivation<T>() as IActivationFunction<T>,
+            recurrentActivation: new SigmoidActivation<T>()
+        );
+
+        // Add a TimeDistributed layer to process each time step
+        yield return new TimeDistributedLayer<T>(
+            innerLayer: new DenseLayer<T>(32, 16, new ReLUActivation<T>() as IActivationFunction<T>),
+            inputShape: [historyWindowSize, 32],
+            activationFunction: null
+        );
+
+        // Add multi-head attention mechanism to focus on relevant time steps
+        yield return new MultiHeadAttentionLayer<T>(
+            sequenceLength: historyWindowSize,
+            embeddingDimension: 16,
+            headCount: 4,
+            activationFunction: new ReLUActivation<T>()
+        );
+
+        // Flatten the output
+        yield return new FlattenLayer<T>([historyWindowSize, 16]);
+
+        // Flatten the output of LSTM layers
+        yield return new FlattenLayer<T>([historyWindowSize, 32]);
+
+        // Dense layers for further processing
+        yield return new DenseLayer<T>(historyWindowSize * 32, 64, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new DropoutLayer<T>(0.3f);
+
+        yield return new DenseLayer<T>(64, 32, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new BatchNormalizationLayer<T>(32);
+        yield return new DropoutLayer<T>(0.2f);
+
+        // Output layer
+        yield return new DenseLayer<T>(32, architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for an occupancy detection neural network without temporal data.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
+    /// <returns>A collection of layers forming a non-temporal occupancy detection network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method builds a simpler neural network for detecting occupancy 
+    /// (whether a space is occupied by people) using data from a single point in time, rather than 
+    /// a sequence of time points. It uses standard Dense layers (also called fully connected layers) 
+    /// to process the input features.
+    /// </para>
+    /// <para>
+    /// Non-temporal data means the model makes predictions based only on current data points
+    /// without considering how values have changed over time. For example, using the current 
+    /// temperature, humidity, and CO2 levels to predict occupancy without looking at historical values.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultOccupancyLayers(
+        NeuralNetworkArchitecture<T> architecture)
+    {
+        ValidateLayerParameters(1, 32, architecture.OutputSize);
+
+        var inputShape = architecture.GetInputShape();
+        int inputFeatures = inputShape[0];
+
+        // Dense layers for processing input features
+        yield return new DenseLayer<T>(inputFeatures, 64, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new DropoutLayer<T>(0.3f);
+
+        yield return new DenseLayer<T>(64, 32, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new BatchNormalizationLayer<T>(32);
+        yield return new DropoutLayer<T>(0.2f);
+
+        yield return new DenseLayer<T>(32, 16, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Output layer
+        yield return new DenseLayer<T>(16, architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
     /// Validates the parameters used for creating neural network layers.
     /// </summary>
-    /// <param name="layerCount">Number of layers to validate.</param>
-    /// <param name="layerSize">Size of layers to validate.</param>
-    /// <param name="outputSize">Output size to validate.</param>
+    /// <param name="layerCount">The number of layers in the network.</param>
+    /// <param name="layerSize">The size (number of neurons) in each layer.</param>
+    /// <param name="outputSize">The size of the output layer.</param>
     /// <exception cref="ArgumentException">Thrown when any parameter is less than 1.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This helper method makes sure that the neural network configuration
+    /// makes sense before trying to build it. It checks that we have at least one layer,
+    /// that each layer has at least one neuron, and that the output has at least one value.
+    /// This validation prevents errors that might occur from invalid configurations.
+    /// </para>
+    /// </remarks>
     private static void ValidateLayerParameters(int layerCount, int layerSize, int outputSize)
     {
         if (layerCount < 1)
@@ -167,7 +294,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a ResNet.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Residual Network (ResNet) is designed to solve the "vanishing gradient problem" 
+    /// <b>For Beginners:</b> A Residual Network (ResNet) is designed to solve the "vanishing gradient problem" 
     /// that occurs when training very deep networks. It does this by adding "skip connections" that 
     /// allow information to bypass some layers.
     /// </para>
@@ -258,7 +385,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers that form a residual block.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A residual block is a special structure in neural networks that allows information to 
+    /// <b>For Beginners:</b> A residual block is a special structure in neural networks that allows information to 
     /// "skip" over some layers. This helps solve the "vanishing gradient problem" in deep networks, making 
     /// them easier to train. Think of it like a highway bypass that lets some traffic go directly from 
     /// point A to point C without going through point B.
@@ -320,7 +447,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming an attention-based neural network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Attention mechanisms allow neural networks to focus on specific parts of the input 
+    /// <b>For Beginners:</b> Attention mechanisms allow neural networks to focus on specific parts of the input 
     /// that are most relevant for a given task. Similar to how humans pay attention to specific details 
     /// in a conversation, these layers help the network "pay attention" to important parts of the data.
     /// Transformers use this mechanism to process sequences (like text) very effectively.
@@ -362,7 +489,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming an autoencoder neural network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: An autoencoder is a type of neural network that learns to compress data into a 
+    /// <b>For Beginners:</b> An autoencoder is a type of neural network that learns to compress data into a 
     /// smaller representation and then reconstruct it back to the original form. Think of it like 
     /// learning to create a thumbnail of an image and then expanding it back to full size. The network 
     /// has two main parts: an encoder that compresses the data and a decoder that reconstructs it.
@@ -427,7 +554,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a capsule network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A capsule network is an advanced type of neural network that tries to better 
+    /// <b>For Beginners:</b> A capsule network is an advanced type of neural network that tries to better 
     /// understand spatial relationships in data. Unlike traditional networks that just detect features, 
     /// capsule networks also track the position, orientation, and size of features. Think of it like 
     /// the difference between recognizing a face by just its parts (eyes, nose, mouth) versus understanding 
@@ -499,7 +626,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a Deep Belief Network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Deep Belief Network is a type of neural network that learns to recognize patterns 
+    /// <b>For Beginners:</b> A Deep Belief Network is a type of neural network that learns to recognize patterns 
     /// in data by building multiple layers that each specialize in finding specific features. It works by 
     /// training each layer one at a time (called "pre-training"), which helps the network learn more 
     /// effectively, especially when you don't have a lot of labeled training data.
@@ -545,7 +672,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a Deep Q-Network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Deep Q-Network is a type of neural network used in reinforcement learning, 
+    /// <b>For Beginners:</b> A Deep Q-Network is a type of neural network used in reinforcement learning, 
     /// which is how computers learn to make decisions by trying different actions and receiving rewards. 
     /// Think of it like teaching a dog new tricks with treats. The network learns which actions 
     /// (like moving left or right in a game) will lead to the highest rewards over time.
@@ -585,7 +712,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a Differentiable Neural Computer.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Differentiable Neural Computer (DNC) is like a neural network with a built-in 
+    /// <b>For Beginners:</b> A Differentiable Neural Computer (DNC) is like a neural network with a built-in 
     /// memory system. Traditional neural networks process information and then forget it, but a DNC 
     /// can store information in its "memory" and retrieve it later when needed. This makes DNCs good 
     /// at tasks that require remembering information over time, like answering questions about a story 
@@ -628,7 +755,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming an Echo State Network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: An Echo State Network is a special type of recurrent neural network where most 
+    /// <b>For Beginners:</b> An Echo State Network is a special type of recurrent neural network where most 
     /// of the connections between neurons are fixed (not trained). Only the connections from the hidden 
     /// layer to the output are trained. Think of it like having a pool of water (the reservoir) that 
     /// you disturb with input signals, and then you learn to read the ripple patterns to predict outputs. 
@@ -661,7 +788,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a Variational Autoencoder.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Variational Autoencoder (VAE) is a type of neural network that learns to 
+    /// <b>For Beginners:</b> A Variational Autoencoder (VAE) is a type of neural network that learns to 
     /// compress data into a smaller representation (encoding) and then reconstruct it back (decoding). 
     /// What makes VAEs special is that they create a "fuzzy" compressed representation rather than 
     /// an exact one, which helps the network learn meaningful patterns in your data. This makes VAEs 
@@ -726,7 +853,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a Transformer neural network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Transformer is a powerful type of neural network especially good at processing 
+    /// <b>For Beginners:</b> A Transformer is a powerful type of neural network especially good at processing 
     /// sequences like text or time series data. Unlike older networks, Transformers can look at all parts 
     /// of the input at once (using "attention") rather than processing it step by step. This makes them 
     /// excellent for tasks like translation, text generation, and understanding language.
@@ -913,7 +1040,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a Spiking Neural Network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Spiking Neural Networks (SNNs) are a type of neural network that more closely 
+    /// <b>For Beginners:</b> Spiking Neural Networks (SNNs) are a type of neural network that more closely 
     /// mimics how real neurons in the brain work. Unlike traditional neural networks that use continuous 
     /// values, SNNs use "spikes" (binary on/off signals) to communicate between neurons. This makes them 
     /// more biologically realistic and potentially more energy-efficient for certain tasks.
@@ -1019,7 +1146,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming an Extreme Learning Machine.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: An Extreme Learning Machine (ELM) is a simplified neural network where only the 
+    /// <b>For Beginners:</b> An Extreme Learning Machine (ELM) is a simplified neural network where only the 
     /// output layer weights are trained. The hidden layer weights are randomly initialized and never updated. 
     /// This makes ELMs very fast to train compared to traditional neural networks, while still providing 
     /// good performance for many tasks. Think of it as a "shortcut" approach to neural network training.
@@ -1058,7 +1185,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers forming a Graph Neural Network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Graph Neural Networks (GNNs) are specialized neural networks designed to work with 
+    /// <b>For Beginners:</b> Graph Neural Networks (GNNs) are specialized neural networks designed to work with 
     /// graph-structured data, where information is represented as nodes (points) connected by edges (lines). 
     /// Examples include social networks, molecular structures, or road networks.
     /// </para>
@@ -1137,7 +1264,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers configured for GRU-based processing.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A GRU (Gated Recurrent Unit) is a type of recurrent neural network that's 
+    /// <b>For Beginners:</b> A GRU (Gated Recurrent Unit) is a type of recurrent neural network that's 
     /// especially good at learning patterns in sequences of data, like text or time series. 
     /// It's similar to LSTM but with a simpler structure, making it faster to train while 
     /// still capturing long-term dependencies in data.
@@ -1298,7 +1425,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers configured for HTM processing.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Hierarchical Temporal Memory (HTM) is a machine learning technology that 
+    /// <b>For Beginners:</b> Hierarchical Temporal Memory (HTM) is a machine learning technology that 
     /// mimics certain structural and algorithmic properties of the neocortex (the part of the brain 
     /// responsible for higher-order thinking). HTM is particularly good at learning patterns in 
     /// sequential data and making predictions.
@@ -1345,7 +1472,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers configured for a Memory Network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Memory Network is a type of neural network that has an explicit memory component.
+    /// <b>For Beginners:</b> A Memory Network is a type of neural network that has an explicit memory component.
     /// Think of it like a notebook that the network can write to and read from while processing information.
     /// This makes it particularly good at tasks that require remembering context from earlier in a sequence,
     /// such as answering questions about a story or maintaining a conversation.
@@ -1434,7 +1561,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers configured for RNN-based processing.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Recurrent Neural Network (RNN) is designed to work with sequential data
+    /// <b>For Beginners:</b> A Recurrent Neural Network (RNN) is designed to work with sequential data
     /// by maintaining a form of "memory" of previous inputs. Unlike standard neural networks,
     /// RNNs can use their internal state to process sequences of inputs, making them ideal for
     /// tasks like text analysis, speech recognition, or time series prediction.
@@ -1501,7 +1628,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers configured for RBF network processing.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Radial Basis Function (RBF) Network is a special type of neural network that uses
+    /// <b>For Beginners:</b> A Radial Basis Function (RBF) Network is a special type of neural network that uses
     /// "distance" to make predictions. Instead of gradually learning patterns through weights like standard
     /// neural networks, RBF networks measure how similar or different an input is from known examples.
     /// </para>
@@ -1565,7 +1692,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers configured for a Quantum Neural Network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Quantum Neural Network combines quantum computing concepts with neural networks.
+    /// <b>For Beginners:</b> A Quantum Neural Network combines quantum computing concepts with neural networks.
     /// Think of qubits as special units that can exist in multiple states at once (unlike regular bits
     /// that are either 0 or 1). This gives quantum networks potential advantages for certain problems.
     /// The numQubits parameter controls how many of these special quantum units are used in each
@@ -1641,7 +1768,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers configured for a Neural Turing Machine.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Neural Turing Machine (NTM) is a type of neural network that has an external 
+    /// <b>For Beginners:</b> A Neural Turing Machine (NTM) is a type of neural network that has an external 
     /// memory component, similar to how computers have RAM. The network learns to read from and write to 
     /// this memory, which helps it solve tasks that require remembering information over long periods.
     /// </para>
@@ -1718,7 +1845,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers configured for a standard neural network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates the basic building blocks (layers) of a neural network.
+    /// <b>For Beginners:</b> This method creates the basic building blocks (layers) of a neural network.
     /// Think of layers as a series of connected processing units that transform your input data
     /// step by step until it produces the desired output. The complexity parameter in the architecture
     /// determines how many layers and neurons your network will have - Simple networks have fewer layers
@@ -1821,7 +1948,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers configured for a Liquid State Machine.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Liquid State Machine is a special type of neural network inspired by how 
+    /// <b>For Beginners:</b> A Liquid State Machine is a special type of neural network inspired by how 
     /// the brain processes information. The key component is the "reservoir" - imagine it as a pool 
     /// of randomly connected neurons that create complex patterns when input is fed into them.
     /// 
@@ -1930,7 +2057,7 @@ public static class LayerHelper<T>
     /// <returns>A collection of layers configured for an LSTM neural network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: LSTM (Long Short-Term Memory) networks are a special kind of neural network
+    /// <b>For Beginners:</b> LSTM (Long Short-Term Memory) networks are a special kind of neural network
     /// designed to remember information for long periods of time. Think of them like a person with
     /// a good memory who can recall things from the past to make decisions in the present.
     /// </para>
@@ -2021,8 +2148,9 @@ public static class LayerHelper<T>
             yield return new LSTMLayer<T>(
                 inputSize: _currentInputSize,
                 hiddenSize: _layerHiddenSize,
-                activation: new TanhActivation<T>() as IActivationFunction<T>,
-                recurrentActivation: new SigmoidActivation<T>()
+                inputShape: [_currentInputSize],
+                activation: new TanhActivation<T>(),
+                recurrentActivation: new SigmoidActivation<T>() as IActivationFunction<T>
             );
     
             // Add Activation Layer after LSTM

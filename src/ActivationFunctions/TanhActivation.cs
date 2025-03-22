@@ -6,7 +6,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Hyperbolic Tangent (tanh) activation function is a popular choice in neural networks.
+/// <b>For Beginners:</b> The Hyperbolic Tangent (tanh) activation function is a popular choice in neural networks.
 /// It transforms any input value to an output between -1 and 1, creating an S-shaped curve that's
 /// symmetric around the origin.
 /// 
@@ -41,7 +41,7 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     /// <returns>The activated output value between -1 and 1.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms any input number into an output between -1 and 1.
+    /// <b>For Beginners:</b> This method transforms any input number into an output between -1 and 1.
     /// The transformation follows an S-shaped curve that passes through the origin (0,0).
     /// 
     /// For example:
@@ -64,7 +64,7 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value at the input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative measures how much the tanh function's output changes
+    /// <b>For Beginners:</b> The derivative measures how much the tanh function's output changes
     /// when its input changes slightly. This is crucial during neural network training to determine
     /// how to adjust weights.
     /// 

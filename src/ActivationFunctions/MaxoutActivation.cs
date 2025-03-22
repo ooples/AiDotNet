@@ -6,7 +6,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Maxout activation function is different from most activation functions.
+/// <b>For Beginners:</b> The Maxout activation function is different from most activation functions.
 /// Instead of applying a mathematical formula to each value, it:
 /// 
 /// 1. Groups your input values into small sets (e.g., groups of 2, 3, or more values)
@@ -36,7 +36,7 @@ public class MaxoutActivation<T> : ActivationFunctionBase<T>
     /// <exception cref="ArgumentException">Thrown when numPieces is less than 2.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: The numPieces parameter determines how many input values are grouped together.
+    /// <b>For Beginners:</b> The numPieces parameter determines how many input values are grouped together.
     /// For example, if numPieces is 3, then every 3 consecutive values in your input will be grouped,
     /// and only the maximum value from each group will be kept in the output.
     /// 
@@ -59,7 +59,7 @@ public class MaxoutActivation<T> : ActivationFunctionBase<T>
     /// <returns>False, as Maxout requires a vector of values to operate.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This returns false because Maxout needs to compare multiple values
+    /// <b>For Beginners:</b> This returns false because Maxout needs to compare multiple values
     /// to find the maximum in each group. It can't process just one number at a time.
     /// </para>
     /// </remarks>
@@ -73,7 +73,7 @@ public class MaxoutActivation<T> : ActivationFunctionBase<T>
     /// <exception cref="ArgumentException">Thrown when the input length is not divisible by the number of pieces.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes your input values and:
+    /// <b>For Beginners:</b> This method takes your input values and:
     /// 1. Divides them into groups of size _numPieces
     /// 2. Finds the maximum value in each group
     /// 3. Returns these maximum values as a new, smaller vector
@@ -114,7 +114,7 @@ public class MaxoutActivation<T> : ActivationFunctionBase<T>
     /// <exception cref="ArgumentException">Thrown when the input length is not divisible by the number of pieces.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative helps us understand how the output changes when we slightly change the input.
+    /// <b>For Beginners:</b> The derivative helps us understand how the output changes when we slightly change the input.
     /// 
     /// For Maxout, the derivative is simple but special:
     /// - For each group, only the maximum value affects the output

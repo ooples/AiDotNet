@@ -11,7 +11,7 @@ namespace AiDotNet.ActivationFunctions;
 /// architectures where vector orientation is important.
 /// </para>
 /// <para>
-/// For Beginners: The Squash function is different from most activation functions because it works on
+/// <b>For Beginners:</b> The Squash function is different from most activation functions because it works on
 /// entire vectors (groups of numbers) rather than individual numbers. Think of a vector as an arrow
 /// pointing in some direction with a certain length.
 /// 
@@ -74,7 +74,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// where ||v|| is the Euclidean norm (length) of the vector v.
     /// </para>
     /// <para>
-    /// For Beginners: This method takes a vector (think of it as an arrow with direction and length)
+    /// <b>For Beginners:</b> This method takes a vector (think of it as an arrow with direction and length)
     /// and returns a new vector that:
     /// - Points in the same direction as the original vector
     /// - Has a length between 0 and 1
@@ -109,7 +109,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// component with respect to the j-th input component.
     /// </para>
     /// <para>
-    /// For Beginners: The derivative (or in this case, the "Jacobian matrix") tells us how the output
+    /// <b>For Beginners:</b> The derivative (or in this case, the "Jacobian matrix") tells us how the output
     /// of the Squash function changes when we make small changes to the input vector.
     /// 
     /// Think of it this way:
@@ -169,7 +169,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// The input tensor is expected to have shape [batchSize, vectorLength].
     /// </para>
     /// <para>
-    /// For Beginners: A tensor in this context is essentially a collection of vectors (like a batch of examples).
+    /// <b>For Beginners:</b> A tensor in this context is essentially a collection of vectors (like a batch of examples).
     /// This method:
     /// 1. Takes each vector from the collection
     /// 2. Applies the Squash function to it (as described in the Activate method)
@@ -215,7 +215,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// [batchSize, vectorLength, vectorLength], where each [i, :, :] slice is the Jacobian matrix for the i-th input vector.
     /// </para>
     /// <para>
-    /// For Beginners: This method helps us understand how the Squash function would change if we made small changes to our inputs.
+    /// <b>For Beginners:</b> This method helps us understand how the Squash function would change if we made small changes to our inputs.
     /// 
     /// Think of it this way:
     /// - We have a batch (collection) of vectors

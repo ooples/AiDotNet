@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on regression tasks
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on regression tasks
 /// (where you're predicting continuous values like prices, temperatures, etc.) by measuring the average
 /// size of the errors in your predictions without considering their direction.
 /// 
@@ -47,7 +47,7 @@ public class MeanAbsoluteErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Mean Absolute Error (MAE)
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Mean Absolute Error (MAE)
     /// to evaluate your model's performance, which is especially good for regression problems
     /// where you want to understand the typical size of your prediction errors in the original units.
     /// 
@@ -75,7 +75,7 @@ public class MeanAbsoluteErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated MAE score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Mean Absolute Error.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Mean Absolute Error.
     /// 
     /// It works by:
     /// 1. Taking the predictions your model made

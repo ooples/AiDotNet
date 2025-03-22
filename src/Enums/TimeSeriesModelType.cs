@@ -4,7 +4,7 @@ namespace AiDotNet.Enums;
 /// Represents different types of time series forecasting models used for analyzing and predicting sequential data over time.
 /// </summary>
 /// <remarks>
-/// For Beginners: Time series models help us understand patterns in data that change over time and make predictions about future values.
+/// <b>For Beginners:</b> Time series models help us understand patterns in data that change over time and make predictions about future values.
 /// 
 /// Think of time series data as any measurement collected regularly over time - like daily temperature readings, 
 /// monthly sales figures, or hourly website traffic. These models help us answer questions like:
@@ -27,7 +27,7 @@ public enum TimeSeriesModelType
     /// that combines autoregression, differencing, and moving average components.
     /// </summary>
     /// <remarks>
-    /// For Beginners: ARIMA is like a Swiss Army knife for time series forecasting - it's versatile and widely used.
+    /// <b>For Beginners:</b> ARIMA is like a Swiss Army knife for time series forecasting - it's versatile and widely used.
     /// 
     /// ARIMA looks at three aspects of your data:
     /// - AR (Auto-Regressive): How much the current value depends on previous values
@@ -50,7 +50,7 @@ public enum TimeSeriesModelType
     /// Seasonal Auto-Regressive Integrated Moving Average model - extends ARIMA to handle data with seasonal patterns.
     /// </summary>
     /// <remarks>
-    /// For Beginners: SARIMA is like ARIMA but with added capabilities to handle predictable seasonal patterns.
+    /// <b>For Beginners:</b> SARIMA is like ARIMA but with added capabilities to handle predictable seasonal patterns.
     /// 
     /// If your data shows regular patterns that repeat (like higher ice cream sales every summer), 
     /// SARIMA can capture both the overall trend and these seasonal fluctuations.
@@ -72,7 +72,7 @@ public enum TimeSeriesModelType
     /// without the differencing (integration) step.
     /// </summary>
     /// <remarks>
-    /// For Beginners: ARMA is a simpler version of ARIMA used when your data is already stable.
+    /// <b>For Beginners:</b> ARMA is a simpler version of ARIMA used when your data is already stable.
     /// 
     /// ARMA combines:
     /// - AR (Auto-Regressive): How past values influence the current value
@@ -91,7 +91,7 @@ public enum TimeSeriesModelType
     /// Auto-Regressive model - predicts future values based solely on past values of the same variable.
     /// </summary>
     /// <remarks>
-    /// For Beginners: AR models predict the future based only on the past values of the data itself.
+    /// <b>For Beginners:</b> AR models predict the future based only on the past values of the data itself.
     /// 
     /// Think of AR like predicting tomorrow's temperature based only on today's and yesterday's temperatures.
     /// The model assumes that recent past values have the strongest influence on the next value.
@@ -108,7 +108,7 @@ public enum TimeSeriesModelType
     /// Moving Average model - predicts future values based on past forecast errors rather than past values.
     /// </summary>
     /// <remarks>
-    /// For Beginners: MA models focus on the errors or surprises in previous predictions.
+    /// <b>For Beginners:</b> MA models focus on the errors or surprises in previous predictions.
     /// 
     /// Instead of using past values directly, MA uses past prediction errors (the difference between 
     /// what we predicted and what actually happened). It's like saying "I was off by X yesterday, 
@@ -127,7 +127,7 @@ public enum TimeSeriesModelType
     /// A general class of forecasting methods that give more weight to recent observations and less weight to older observations.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Exponential Smoothing is like having a weighted average where newer data points matter more than older ones.
+    /// <b>For Beginners:</b> Exponential Smoothing is like having a weighted average where newer data points matter more than older ones.
     /// 
     /// Imagine you're trying to predict tomorrow's temperature. You might care more about today's temperature 
     /// than what happened a week ago. Exponential smoothing does exactly this - it gives more importance to 
@@ -145,7 +145,7 @@ public enum TimeSeriesModelType
     /// The most basic form of exponential smoothing that handles data with no clear trend or seasonality.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Simple Exponential Smoothing is the most basic version that works well for stable data without trends.
+    /// <b>For Beginners:</b> Simple Exponential Smoothing is the most basic version that works well for stable data without trends.
     /// 
     /// This method calculates a weighted average of all past observations, with weights decreasing exponentially 
     /// as observations get older. It's controlled by a single parameter (alpha) that determines how quickly 
@@ -163,7 +163,7 @@ public enum TimeSeriesModelType
     /// Also known as Holt's method.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Double Exponential Smoothing adds the ability to handle data that shows an upward or downward trend.
+    /// <b>For Beginners:</b> Double Exponential Smoothing adds the ability to handle data that shows an upward or downward trend.
     /// 
     /// While Simple Exponential Smoothing works for data that fluctuates around a stable average, 
     /// Double Exponential Smoothing (also called Holt's method) can handle data that's consistently 
@@ -184,7 +184,7 @@ public enum TimeSeriesModelType
     /// Also known as Holt-Winters' method.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Triple Exponential Smoothing handles data with both trends and seasonal patterns.
+    /// <b>For Beginners:</b> Triple Exponential Smoothing handles data with both trends and seasonal patterns.
     /// 
     /// This method (also called Holt-Winters) is the most comprehensive of the exponential smoothing family. 
     /// It can model:
@@ -207,7 +207,7 @@ public enum TimeSeriesModelType
     /// A flexible framework for time series modeling that represents a system's behavior using state variables.
     /// </summary>
     /// <remarks>
-    /// For Beginners: State Space models track the "hidden state" of a system that we can't directly observe.
+    /// <b>For Beginners:</b> State Space models track the "hidden state" of a system that we can't directly observe.
     /// 
     /// Imagine you're trying to track a person's location based only on their cell phone signal strength. 
     /// You can't directly see where they are (the hidden state), but you can make educated guesses based 
@@ -227,7 +227,7 @@ public enum TimeSeriesModelType
     /// TBATS stands for Trigonometric, Box-Cox transform, ARMA errors, Trend, and Seasonal components.
     /// </summary>
     /// <remarks>
-    /// For Beginners: TBATS is a specialized model for handling complex or multiple seasonal patterns.
+    /// <b>For Beginners:</b> TBATS is a specialized model for handling complex or multiple seasonal patterns.
     /// 
     /// While models like SARIMA work well for simple seasonal patterns, TBATS can handle more complex situations like:
     /// - Multiple seasonal patterns (e.g., daily, weekly, and yearly patterns all at once)
@@ -246,7 +246,7 @@ public enum TimeSeriesModelType
     /// A model that combines regression with ARIMA modeling of the error terms to account for both external factors and time dependencies.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This model combines traditional regression with time series techniques.
+    /// <b>For Beginners:</b> This model combines traditional regression with time series techniques.
     /// 
     /// Imagine you're forecasting ice cream sales. You know temperature affects sales (higher temperature = higher sales), 
     /// but there are also time-based patterns. This model lets you:
@@ -264,7 +264,7 @@ public enum TimeSeriesModelType
     /// ARIMA model with additional explanatory variables (exogenous variables) that can influence the forecast.
     /// </summary>
     /// <remarks>
-    /// For Beginners: ARIMAX is like ARIMA but allows you to include external factors that might affect your forecast.
+    /// <b>For Beginners:</b> ARIMAX is like ARIMA but allows you to include external factors that might affect your forecast.
     /// 
     /// Standard ARIMA only looks at past values of the thing you're trying to predict. ARIMAX lets you add other 
     /// relevant variables. For example, when forecasting ice cream sales, you could include temperature as an 
@@ -282,7 +282,7 @@ public enum TimeSeriesModelType
     /// Generalized Autoregressive Conditional Heteroskedasticity model - specialized for forecasting volatility in time series.
     /// </summary>
     /// <remarks>
-    /// For Beginners: GARCH models are designed specifically for predicting how much a value will fluctuate or vary over time.
+    /// <b>For Beginners:</b> GARCH models are designed specifically for predicting how much a value will fluctuate or vary over time.
     /// 
     /// While most time series models focus on predicting the actual values, GARCH focuses on predicting the volatility 
     /// (how much the values jump around). This is especially useful in finance where understanding risk (volatility) 
@@ -301,7 +301,7 @@ public enum TimeSeriesModelType
     /// Vector Autoregression model - extends autoregressive models to multiple related time series that influence each other.
     /// </summary>
     /// <remarks>
-    /// For Beginners: VAR models handle multiple related time series that affect each other.
+    /// <b>For Beginners:</b> VAR models handle multiple related time series that affect each other.
     /// 
     /// While models like ARIMA work with a single time series, VAR handles multiple related series simultaneously. 
     /// For example, prices of related products might influence each other - if beef prices rise, chicken demand 
@@ -320,7 +320,7 @@ public enum TimeSeriesModelType
     /// Vector Autoregression Moving-Average model - combines VAR and moving average components for multiple related time series.
     /// </summary>
     /// <remarks>
-    /// For Beginners: VARMA extends the VAR model by adding moving average components.
+    /// <b>For Beginners:</b> VARMA extends the VAR model by adding moving average components.
     /// 
     /// VARMA combines two approaches:
     /// - Vector Autoregression (VAR): How past values of multiple related variables affect current values
@@ -342,7 +342,7 @@ public enum TimeSeriesModelType
     /// A forecasting model developed by Facebook that handles multiple seasonality patterns and is robust to missing data and outliers.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Prophet is a user-friendly forecasting tool designed by Facebook to be easy to use while still being powerful.
+    /// <b>For Beginners:</b> Prophet is a user-friendly forecasting tool designed by Facebook to be easy to use while still being powerful.
     /// 
     /// Prophet works like an advanced version of decomposition methods - it breaks down your time series into:
     /// - Trend: The overall direction (increasing or decreasing)
@@ -367,7 +367,7 @@ public enum TimeSeriesModelType
     /// A hybrid model that combines neural networks with traditional ARIMA models to leverage the strengths of both approaches.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This hybrid model combines traditional statistical methods with modern machine learning.
+    /// <b>For Beginners:</b> This hybrid model combines traditional statistical methods with modern machine learning.
     /// 
     /// Think of this as a "best of both worlds" approach:
     /// - ARIMA provides a solid statistical foundation that works well for linear patterns
@@ -391,7 +391,7 @@ public enum TimeSeriesModelType
     /// A flexible Bayesian approach to time series modeling that incorporates prior knowledge and uncertainty.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This model uses Bayesian statistics to incorporate uncertainty and prior knowledge into forecasts.
+    /// <b>For Beginners:</b> This model uses Bayesian statistics to incorporate uncertainty and prior knowledge into forecasts.
     /// 
     /// Bayesian models are different because they:
     /// - Start with "prior beliefs" about what might happen
@@ -415,7 +415,7 @@ public enum TimeSeriesModelType
     /// Analyzes time series data by decomposing it into different frequency components to identify cyclical patterns.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Spectral Analysis is like breaking down a song into individual notes to understand its composition.
+    /// <b>For Beginners:</b> Spectral Analysis is like breaking down a song into individual notes to understand its composition.
     /// 
     /// This approach transforms time series data from the time domain to the frequency domain. 
     /// Instead of asking "what happens next?", it asks "what cycles or rhythms exist in this data?"
@@ -437,7 +437,7 @@ public enum TimeSeriesModelType
     /// Seasonal and Trend decomposition using Loess - breaks down time series into trend, seasonal, and remainder components.
     /// </summary>
     /// <remarks>
-    /// For Beginners: STL Decomposition is like separating a smoothie back into its original ingredients.
+    /// <b>For Beginners:</b> STL Decomposition is like separating a smoothie back into its original ingredients.
     /// 
     /// This method breaks your time series into three components:
     /// - Trend: The long-term progression (increasing or decreasing)
@@ -461,7 +461,7 @@ public enum TimeSeriesModelType
     /// Analyzes how specific events or interventions affect a time series and quantifies their impact.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Intervention Analysis helps measure how specific events changed your time series.
+    /// <b>For Beginners:</b> Intervention Analysis helps measure how specific events changed your time series.
     /// 
     /// This approach focuses on quantifying the impact of known events or "interventions" on your data. 
     /// For example:
@@ -483,7 +483,7 @@ public enum TimeSeriesModelType
     /// Models how one time series affects another with potential time delays between cause and effect.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Transfer Function Models help understand how one variable affects another over time.
+    /// <b>For Beginners:</b> Transfer Function Models help understand how one variable affects another over time.
     /// 
     /// These models are designed to capture how changes in an input variable (X) affect an output 
     /// variable (Y) over time, including:
@@ -506,7 +506,7 @@ public enum TimeSeriesModelType
     /// Models time series by representing them as combinations of unobserved components like trend, cycle, and seasonality.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This model breaks down your time series into hidden components that can't be directly observed.
+    /// <b>For Beginners:</b> This model breaks down your time series into hidden components that can't be directly observed.
     /// 
     /// Unobserved Components Models (UCM) assume your time series is made up of several underlying 
     /// components that you can't directly measure, such as:
@@ -529,7 +529,7 @@ public enum TimeSeriesModelType
     /// Represents a custom or user-defined time series model not covered by the standard types.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This option allows you to implement your own specialized time series model.
+    /// <b>For Beginners:</b> This option allows you to implement your own specialized time series model.
     /// 
     /// The Custom option gives you flexibility to:
     /// - Implement models not included in the standard list

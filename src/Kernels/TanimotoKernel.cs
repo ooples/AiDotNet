@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// of the intersection to the union of the features.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Tanimoto kernel is special because it focuses on the overlap between features relative to their
 /// combined magnitude. It's like measuring how much two sets have in common compared to their total size.
 /// </para>
@@ -43,7 +43,7 @@ public class TanimotoKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -54,7 +54,7 @@ public class TanimotoKernel<T> : IKernelFunction<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Tanimoto kernel for use. Unlike some other
+    /// <b>For Beginners:</b> This constructor sets up the Tanimoto kernel for use. Unlike some other
     /// kernels, the Tanimoto kernel doesn't have any parameters that you need to set - it works
     /// right out of the box.
     /// </para>
@@ -85,7 +85,7 @@ public class TanimotoKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Tanimoto kernel formula.
     /// </para>
     /// <para>

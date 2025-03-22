@@ -10,7 +10,7 @@ namespace AiDotNet.Kernels;
 /// like Support Vector Machines (SVMs) to find patterns in higher-dimensional spaces.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Polynomial kernel is special because it can find complex patterns in your data by implicitly
 /// mapping your data to a higher-dimensional space without actually performing the expensive calculations
 /// that would normally be required.
@@ -42,7 +42,7 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     /// The degree of the polynomial used in the kernel function.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The degree determines the "complexity" of patterns the kernel can detect.
+    /// <b>For Beginners:</b> The degree determines the "complexity" of patterns the kernel can detect.
     /// 
     /// Think of it like this:
     /// - degree = 1: Can only find straight-line patterns (linear)
@@ -60,7 +60,7 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     /// The constant coefficient added to the dot product before raising to the power of the degree.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This parameter (sometimes called the "bias" term) controls how much influence
+    /// <b>For Beginners:</b> This parameter (sometimes called the "bias" term) controls how much influence
     /// the degree has on the result.
     /// 
     /// Think of it as a "flexibility adjustment":
@@ -75,7 +75,7 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -88,7 +88,7 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     /// <param name="coef0">The constant coefficient added to the dot product. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Polynomial kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Polynomial kernel for use. You can optionally
     /// provide values for:
     /// </para>
     /// <para>
@@ -126,7 +126,7 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Polynomial kernel formula.
     /// </para>
     /// <para>

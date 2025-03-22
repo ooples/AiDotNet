@@ -4,7 +4,7 @@
 /// Defines the different types of tasks that transformer-based AI models can perform.
 /// </summary>
 /// <remarks>
-/// For Beginners: Transformers are a type of neural network architecture that has revolutionized AI, 
+/// <b>For Beginners:</b> Transformers are a type of neural network architecture that has revolutionized AI, 
 /// especially in natural language processing. They're the technology behind models like GPT, BERT, and T5.
 /// 
 /// This enum lists the common tasks these models can perform. Think of these as different "jobs" 
@@ -16,7 +16,7 @@ public enum TransformerTaskType
     /// Task of categorizing input data into predefined classes or categories.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Classification is about sorting things into categories.
+    /// <b>For Beginners:</b> Classification is about sorting things into categories.
     /// 
     /// Imagine you have a bunch of emails and you want the AI to sort them into "Spam" or "Not Spam" - 
     /// that's classification. The AI looks at the content and decides which category it belongs to.
@@ -34,7 +34,7 @@ public enum TransformerTaskType
     /// Task of predicting continuous numerical values based on input features.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Regression is about predicting numbers rather than categories.
+    /// <b>For Beginners:</b> Regression is about predicting numbers rather than categories.
     /// 
     /// While classification predicts categories (like "Spam" or "Not Spam"), regression predicts 
     /// numerical values. For example:
@@ -53,7 +53,7 @@ public enum TransformerTaskType
     /// Task of generating coherent and contextually relevant text based on a prompt or input.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Text Generation is about creating new text that continues or responds to some input.
+    /// <b>For Beginners:</b> Text Generation is about creating new text that continues or responds to some input.
     /// 
     /// This is what models like ChatGPT do - you provide some text (a prompt), and the model generates 
     /// new text that follows naturally from what you provided. The model predicts what words should 
@@ -74,7 +74,7 @@ public enum TransformerTaskType
     /// Task of labeling each element in a sequence with a specific tag or category.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Sequence Tagging is about labeling each word or piece in a text with a specific tag.
+    /// <b>For Beginners:</b> Sequence Tagging is about labeling each word or piece in a text with a specific tag.
     /// 
     /// Unlike classification which assigns one label to an entire input, sequence tagging assigns 
     /// a label to each element in the sequence. It's like going through a sentence with a highlighter 
@@ -96,7 +96,7 @@ public enum TransformerTaskType
     /// Task of converting text from one language to another while preserving meaning.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Translation is about converting text from one language to another.
+    /// <b>For Beginners:</b> Translation is about converting text from one language to another.
     /// 
     /// This task involves understanding the meaning of text in a source language and expressing 
     /// that same meaning in a target language. Modern transformer-based translation systems don't 

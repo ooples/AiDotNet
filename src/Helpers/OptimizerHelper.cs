@@ -10,7 +10,7 @@ public static class OptimizerHelper<T>
     /// Provides operations for the numeric type T (like addition, multiplication, etc.).
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a utility that helps perform math operations regardless of 
+    /// <b>For Beginners:</b> This is a utility that helps perform math operations regardless of 
     /// whether you're using integers, floats, doubles, or other numeric types.
     /// </remarks>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
@@ -29,7 +29,7 @@ public static class OptimizerHelper<T>
     /// <param name="iterationCount">Number of iterations the optimization process ran for.</param>
     /// <returns>A complete optimization result object.</returns>
     /// <remarks>
-    /// For Beginners: This method packages all the results from training an AI model into one 
+    /// <b>For Beginners:</b> This method packages all the results from training an AI model into one 
     /// organized container. Think of it like a report card that shows how well your model performed,
     /// what features it found important, and whether it's a good fit for your data.
     /// </remarks>
@@ -72,7 +72,7 @@ public static class OptimizerHelper<T>
     /// <param name="y">The target values for this dataset.</param>
     /// <returns>A dataset result object containing all evaluation metrics.</returns>
     /// <remarks>
-    /// For Beginners: This method creates a detailed report about how well your model performed on a 
+    /// <b>For Beginners:</b> This method creates a detailed report about how well your model performed on a 
     /// specific set of data. It includes various measurements of accuracy and error, as well as 
     /// information about the data itself. This helps you understand where your model is doing well 
     /// and where it might need improvement.
@@ -104,7 +104,7 @@ public static class OptimizerHelper<T>
     /// <param name="solution">The model to analyze.</param>
     /// <returns>A list of indices representing the features used by the model.</returns>
     /// <remarks>
-    /// For Beginners: Features are the individual pieces of information your model uses to make predictions
+    /// <b>For Beginners:</b> Features are the individual pieces of information your model uses to make predictions
     /// (like "age", "height", etc.). This method checks which features your model is actually using,
     /// since some models might ignore certain features if they're not helpful for predictions.
     /// </remarks>
@@ -136,7 +136,7 @@ public static class OptimizerHelper<T>
     /// <param name="selectedFeatures">List of indices for features to keep.</param>
     /// <returns>A new matrix with only the selected features.</returns>
     /// <remarks>
-    /// For Beginners: If your model only uses certain features, this method creates a simplified
+    /// <b>For Beginners:</b> If your model only uses certain features, this method creates a simplified
     /// version of your data that includes just those important features. This can make your model
     /// faster and sometimes more accurate by focusing only on what matters.
     /// </remarks>
@@ -162,7 +162,7 @@ public static class OptimizerHelper<T>
     /// <param name="selectedFeatures">List of feature vectors representing important features.</param>
     /// <returns>A new matrix with only the selected features.</returns>
     /// <remarks>
-    /// For Beginners: This is similar to the other SelectFeatures method, but it works with a different
+    /// <b>For Beginners:</b> This is similar to the other SelectFeatures method, but it works with a different
     /// way of representing which features are important. Instead of simple indices, it uses vectors
     /// that might contain more complex information about feature importance.
     /// </remarks>
@@ -178,7 +178,7 @@ public static class OptimizerHelper<T>
     /// <param name="featureVector">A vector representing a feature.</param>
     /// <returns>The index of the feature represented by this vector.</returns>
     /// <remarks>
-    /// For Beginners: This helper method interprets different ways that important features might be
+    /// <b>For Beginners:</b> This helper method interprets different ways that important features might be
     /// represented in your model. It handles several common formats and converts them to a simple
     /// feature index (like "feature #3").
     /// </remarks>
@@ -229,7 +229,7 @@ public static class OptimizerHelper<T>
     /// <param name="yTest">Target values for testing.</param>
     /// <returns>A structured container with all datasets needed for optimization.</returns>
     /// <remarks>
-    /// For Beginners: This method organizes your data into three separate sets:
+    /// <b>For Beginners:</b> This method organizes your data into three separate sets:
     /// 1. Training data - Used to teach your model patterns (like studying for a test)
     /// 2. Validation data - Used to check progress during training (like practice questions)
     /// 3. Test data - Used for final evaluation (like the actual test)
@@ -264,7 +264,7 @@ public static class OptimizerHelper<T>
     /// <param name="c2">Wolfe condition parameter (controls curvature).</param>
     /// <returns>The optimal step size to use for updating model parameters.</returns>
     /// <remarks>
-    /// For Beginners: Line search is like finding the right "step size" when walking downhill.
+    /// <b>For Beginners:</b> Line search is like finding the right "step size" when walking downhill.
     /// If you take steps that are too small, you'll waste time. If you take steps that are too big,
     /// you might overshoot and go uphill again. This method finds the "just right" step size
     /// to help your model improve as quickly as possible without overshooting.
@@ -325,7 +325,7 @@ public static class OptimizerHelper<T>
     /// <param name="inputData">The dataset containing training data.</param>
     /// <returns>The mean squared error of the model's predictions.</returns>
     /// <remarks>
-    /// For Beginners: Loss is a measure of how wrong your model's predictions are.
+    /// <b>For Beginners:</b> Loss is a measure of how wrong your model's predictions are.
     /// Lower loss means better predictions. This method calculates the "Mean Squared Error",
     /// which is the average of the squared differences between predictions and actual values.
     /// Squaring the differences ensures that both underestimates and overestimates count as errors.
@@ -344,7 +344,7 @@ public static class OptimizerHelper<T>
     /// <param name="y">The target values.</param>
     /// <returns>A vector representing the gradient (direction of steepest increase in loss).</returns>
     /// <remarks>
-    /// For Beginners: The gradient is like a compass that points in the direction where the error
+    /// <b>For Beginners:</b> The gradient is like a compass that points in the direction where the error
     /// increases most rapidly. By going in the opposite direction, we can reduce the error.
     /// 
     /// This method calculates this "compass direction" for our model parameters. For linear models,

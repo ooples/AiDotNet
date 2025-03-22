@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: A tridiagonal matrix is a special type of square matrix where non-zero values appear only 
+/// <b>For Beginners:</b> A tridiagonal matrix is a special type of square matrix where non-zero values appear only 
 /// on the main diagonal and the diagonals directly above and below it. All other elements are zero.
 /// 
 /// For example, a 5×5 tridiagonal matrix looks like this (where * represents non-zero values):
@@ -31,7 +31,7 @@ public enum TridiagonalAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Householder method uses special transformations called "reflections" to 
+    /// <b>For Beginners:</b> The Householder method uses special transformations called "reflections" to 
     /// systematically zero out elements in the matrix.
     /// 
     /// Imagine you have a mirror that can reflect vectors in a special way. The Householder method:
@@ -55,7 +55,7 @@ public enum TridiagonalAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Givens method uses a series of simple rotations to gradually transform 
+    /// <b>For Beginners:</b> The Givens method uses a series of simple rotations to gradually transform 
     /// the matrix into tridiagonal form.
     /// 
     /// Think of it like carefully turning knobs to adjust values:
@@ -79,7 +79,7 @@ public enum TridiagonalAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Lanczos algorithm takes a completely different approach by building a tridiagonal 
+    /// <b>For Beginners:</b> The Lanczos algorithm takes a completely different approach by building a tridiagonal 
     /// matrix that approximates the properties of the original matrix.
     /// 
     /// Imagine creating a simplified model that captures the essential behavior of a complex system:

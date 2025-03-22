@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps you evaluate how well your model is performing on binary classification tasks
+/// <b>For Beginners:</b> This calculator helps you evaluate how well your model is performing on binary classification tasks
 /// (problems where you're predicting one of two possible outcomes, like "yes/no" or "spam/not spam").
 /// 
 /// Binary Cross-Entropy Loss measures the difference between your model's predicted probabilities and the actual
@@ -32,7 +32,7 @@ public class BinaryCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Binary Cross-Entropy Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Binary Cross-Entropy Loss
     /// to evaluate your model's performance on binary classification tasks.
     /// 
     /// The "dataSetType" parameter lets you choose which data to evaluate:
@@ -56,7 +56,7 @@ public class BinaryCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<
     /// <returns>The Binary Cross-Entropy Loss value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model's predictions match the actual outcomes
+    /// <b>For Beginners:</b> This method calculates how well your model's predictions match the actual outcomes
     /// using the Binary Cross-Entropy Loss formula.
     /// 
     /// The formula looks at each prediction your model made, compares it to the actual outcome,

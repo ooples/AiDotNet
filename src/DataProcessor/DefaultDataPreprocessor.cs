@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Data preprocessing is like preparing ingredients before cooking a meal. 
+/// <b>For Beginners:</b> Data preprocessing is like preparing ingredients before cooking a meal. 
 /// Raw data often needs to be cleaned and transformed before a machine learning algorithm can use it effectively.
 /// 
 /// This class handles three important preprocessing steps:
@@ -48,7 +48,7 @@ public class DefaultDataPreprocessor<T> : IDataPreprocessor<T>
     /// <param name="options">Optional configuration settings for data processing.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the data preprocessor with the tools it needs.
+    /// <b>For Beginners:</b> This constructor sets up the data preprocessor with the tools it needs.
     /// Think of it like assembling a toolkit before starting a project:
     /// - The normalizer adjusts the scale of your data
     /// - The feature selector helps choose which parts of your data are most important
@@ -72,7 +72,7 @@ public class DefaultDataPreprocessor<T> : IDataPreprocessor<T>
     /// <returns>A tuple containing the processed feature matrix, target vector, and normalization information.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method cleans and prepares your data in three steps:
+    /// <b>For Beginners:</b> This method cleans and prepares your data in three steps:
     /// 
     /// 1. First, it removes outliers (unusual data points that might confuse the learning algorithm)
     /// 
@@ -117,7 +117,7 @@ public class DefaultDataPreprocessor<T> : IDataPreprocessor<T>
     /// <returns>A tuple containing the training, validation, and test datasets.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method divides your data into three separate groups:
+    /// <b>For Beginners:</b> This method divides your data into three separate groups:
     /// 
     /// 1. Training data - The largest portion, used to teach the model patterns
     ///    (like studying examples to learn a new skill)

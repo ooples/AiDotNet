@@ -36,7 +36,7 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// Thrown when the options parameter is null or doesn't contain weights.
     /// </exception>
     /// <remarks>
-    /// For beginners: Think of weights as a way to tell the model "pay more attention to these points 
+    /// <b>For Beginners:</b> Think of weights as a way to tell the model "pay more attention to these points 
     /// and less attention to those points" when finding the best fit line.
     /// </remarks>
     public WeightedRegression(WeightedRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
@@ -62,7 +62,7 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// 3. Applies the weights to give different importance to each data point
     /// 4. Solves the weighted least squares equation to find the optimal coefficients
     /// 
-    /// For beginners: Training means finding the best line (or curve) that fits your data points,
+    /// <b>For Beginners:</b> Training means finding the best line (or curve) that fits your data points,
     /// while taking into account how important each point is (based on its weight).
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
@@ -100,7 +100,7 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// A vector of predicted values, one for each row in the input matrix.
     /// </returns>
     /// <remarks>
-    /// For beginners: Once the model is trained, this method uses the discovered pattern (equation)
+    /// <b>For Beginners:</b> Once the model is trained, this method uses the discovered pattern (equation)
     /// to predict outcomes for new data points.
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)

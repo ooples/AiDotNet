@@ -6,7 +6,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The LogSoftmax function combines two operations:
+/// <b>For Beginners:</b> The LogSoftmax function combines two operations:
 /// 
 /// 1. First, it applies the "softmax" function, which converts a vector of numbers into probabilities 
 ///    (values between 0 and 1 that sum to 1).
@@ -31,7 +31,7 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>False, as LogSoftmax requires a vector of values to operate.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This returns false because LogSoftmax needs to look at all values together
+    /// <b>For Beginners:</b> This returns false because LogSoftmax needs to look at all values together
     /// to calculate probabilities. It can't process just one number at a time.
     /// </para>
     /// </remarks>
@@ -44,7 +44,7 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector with LogSoftmax applied.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes a collection of numbers and transforms them using the LogSoftmax function.
+    /// <b>For Beginners:</b> This method takes a collection of numbers and transforms them using the LogSoftmax function.
     /// 
     /// The implementation uses a numerically stable approach:
     /// 1. First, it finds the maximum value in the input (to prevent overflow)
@@ -72,7 +72,7 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A Jacobian matrix representing the derivative of LogSoftmax.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative of LogSoftmax is more complex than most activation functions
+    /// <b>For Beginners:</b> The derivative of LogSoftmax is more complex than most activation functions
     /// because each output depends on all inputs.
     /// 
     /// This method calculates a special matrix called a "Jacobian matrix" that shows how each 

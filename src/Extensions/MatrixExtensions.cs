@@ -4,7 +4,7 @@
 /// Provides extension methods for matrix operations, making it easier to work with matrices in AI applications.
 /// </summary>
 /// <remarks>
-/// For Beginners: A matrix is a rectangular array of numbers arranged in rows and columns.
+/// <b>For Beginners:</b> A matrix is a rectangular array of numbers arranged in rows and columns.
 /// These extension methods add useful functionality to matrices, like adding columns or performing
 /// mathematical operations that are commonly needed in AI and machine learning algorithms.
 /// </remarks>
@@ -18,7 +18,7 @@ public static class MatrixExtensions
     /// <param name="value">The constant value to add as the first column.</param>
     /// <returns>A new matrix with the constant column added as the first column.</returns>
     /// <remarks>
-    /// For Beginners: This method is often used in linear regression to add a "bias" term.
+    /// <b>For Beginners:</b> This method is often used in linear regression to add a "bias" term.
     /// It creates a new matrix with an extra column at the beginning, where every value in that
     /// column is the same (usually 1). This helps the AI model learn an offset or baseline value.
     /// </remarks>
@@ -46,7 +46,7 @@ public static class MatrixExtensions
     /// <returns>A new matrix where each row is the sum of the original row and the vector.</returns>
     /// <exception cref="ArgumentException">Thrown when the vector length doesn't match the matrix column count.</exception>
     /// <remarks>
-    /// For Beginners: This is like adding the same set of values to every row in your matrix.
+    /// <b>For Beginners:</b> This is like adding the same set of values to every row in your matrix.
     /// For example, if you have a matrix of features for different data points, and you want to
     /// adjust all features by the same amount, you would use this method.
     /// </remarks>
@@ -75,7 +75,7 @@ public static class MatrixExtensions
     /// <param name="matrix">The matrix whose columns will be summed.</param>
     /// <returns>A vector containing the sum of each column.</returns>
     /// <remarks>
-    /// For Beginners: This method adds up all the values in each column of your matrix.
+    /// <b>For Beginners:</b> This method adds up all the values in each column of your matrix.
     /// For example, if your matrix represents multiple data points with features in columns,
     /// this would give you the total of each feature across all data points.
     /// </remarks>
@@ -105,7 +105,7 @@ public static class MatrixExtensions
     /// <param name="columnIndex">The index of the column to extract.</param>
     /// <returns>A vector containing the values from the specified column.</returns>
     /// <remarks>
-    /// For Beginners: This method pulls out a single column from your matrix and returns it as a vector.
+    /// <b>For Beginners:</b> This method pulls out a single column from your matrix and returns it as a vector.
     /// This is useful when you need to work with just one feature or dimension from your dataset.
     /// </remarks>
     public static Vector<T> GetColumn<T>(this Matrix<T> matrix, int columnIndex)
@@ -128,7 +128,7 @@ public static class MatrixExtensions
     /// <param name="bVector">The right-hand side vector of the equation system.</param>
     /// <returns>The solution vector x where Ax = b.</returns>
     /// <remarks>
-    /// For Beginners: Backward substitution is a method to solve equations when your matrix is in a special form
+    /// <b>For Beginners:</b> Backward substitution is a method to solve equations when your matrix is in a special form
     /// called "upper triangular" (where all values below the diagonal are zero).
     /// 
     /// This is often used as the final step in solving systems of linear equations, which is a common
@@ -168,7 +168,7 @@ public static class MatrixExtensions
     /// <param name="blockCols">The number of columns in each block for block matrix detection (default: 2).</param>
     /// <returns>An enumeration of matrix types that apply to the given matrix.</returns>
     /// <remarks>
-    /// For Beginners: This method examines a matrix and tells you what special properties it has.
+    /// <b>For Beginners:</b> This method examines a matrix and tells you what special properties it has.
     /// 
     /// Matrices can have many different characteristics (like being symmetric, triangular, etc.)
     /// that make them behave in special ways. Knowing these properties can help you choose the right

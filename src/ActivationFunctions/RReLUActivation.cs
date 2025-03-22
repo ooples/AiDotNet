@@ -11,7 +11,7 @@ namespace AiDotNet.ActivationFunctions;
 /// For negative inputs, it multiplies the input by a random factor (alpha) between the specified lower and upper bounds.
 /// </para>
 /// <para>
-/// For Beginners: RReLU (Randomized Rectified Linear Unit) is like a "smart filter" for neural networks.
+/// <b>For Beginners:</b> RReLU (Randomized Rectified Linear Unit) is like a "smart filter" for neural networks.
 /// When data is positive, it lets it pass through unchanged. When data is negative, instead of setting it to zero
 /// (like regular ReLU), it reduces the value by multiplying it by a small random number. This randomness helps
 /// prevent "dead neurons" (neurons that stop learning) and can improve the network's ability to learn.
@@ -51,7 +51,7 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     /// <param name="lowerBound">The lower bound for the random alpha parameter. Default is 1/8 (0.125).</param>
     /// <param name="upperBound">The upper bound for the random alpha parameter. Default is 1/3 (0.333...).</param>
     /// <remarks>
-    /// For Beginners: This constructor sets up the RReLU function with boundaries for how much negative values
+    /// <b>For Beginners:</b> This constructor sets up the RReLU function with boundaries for how much negative values
     /// will be reduced. The default values (1/8 to 1/3) are commonly used in practice and mean that negative values
     /// will be multiplied by a random number between 0.125 and 0.333, making them smaller but not zero.
     /// </remarks>
@@ -79,7 +79,7 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     /// otherwise the input multiplied by a random alpha value.
     /// </returns>
     /// <remarks>
-    /// For Beginners: This method processes a single number through the RReLU function.
+    /// <b>For Beginners:</b> This method processes a single number through the RReLU function.
     /// If the number is positive or zero, it's returned unchanged.
     /// If the number is negative, it's multiplied by a small random value (during training)
     /// or by a fixed value (during testing/inference) to make it smaller but not zero.
@@ -107,7 +107,7 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The input value to calculate the derivative for.</param>
     /// <returns>1 if the input is greater than or equal to zero, otherwise the current alpha value.</returns>
     /// <remarks>
-    /// For Beginners: The derivative tells us how much the output changes when we slightly change the input.
+    /// <b>For Beginners:</b> The derivative tells us how much the output changes when we slightly change the input.
     /// For RReLU, the derivative is 1 for positive inputs (meaning the output changes at the same rate as the input),
     /// and the alpha value for negative inputs (meaning the output changes at a reduced rate when the input changes).
     /// </remarks>
@@ -133,7 +133,7 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     /// In inference mode, alpha is fixed to the average of the lower and upper bounds.
     /// </para>
     /// <para>
-    /// For Beginners: This method lets you switch between two modes:
+    /// <b>For Beginners:</b> This method lets you switch between two modes:
     /// - Training mode: Uses random values for processing negative inputs, which helps with learning
     /// - Inference mode (testing/production): Uses a fixed value (the average of your bounds) for consistency
     /// 

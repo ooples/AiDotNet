@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Acquisition functions help an AI system decide where to look next when searching 
+/// <b>For Beginners:</b> Acquisition functions help an AI system decide where to look next when searching 
 /// for the best solution to a problem.
 /// 
 /// Imagine you're trying to find the highest point in a mountain range that's covered in fog:
@@ -33,7 +33,7 @@ public enum AcquisitionFunctionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Upper Confidence Bound (UCB) approach is like an optimistic explorer who 
+    /// <b>For Beginners:</b> The Upper Confidence Bound (UCB) approach is like an optimistic explorer who 
     /// follows this rule: "I'll check places that either look promising or that I'm very uncertain about."
     /// 
     /// UCB works by:
@@ -62,7 +62,7 @@ public enum AcquisitionFunctionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Expected Improvement (EI) is like a strategic explorer who asks: "Where am I most 
+    /// <b>For Beginners:</b> Expected Improvement (EI) is like a strategic explorer who asks: "Where am I most 
     /// likely to find something better than the best I've seen so far?"
     /// 
     /// EI works by:

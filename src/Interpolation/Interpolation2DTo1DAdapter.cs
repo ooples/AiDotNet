@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// This adapter allows you to use a 2D interpolation method as if it were a 1D interpolation
 /// by keeping one of the coordinates (either X or Y) at a fixed value.
 /// 
-/// For Beginners: Think of this like taking a slice through a 3D surface. Imagine a landscape
+/// <b>For Beginners:</b> Think of this like taking a slice through a 3D surface. Imagine a landscape
 /// with hills and valleys - if you cut through it in a straight line, you get a 2D profile
 /// showing the heights along that line. This adapter does something similar - it takes a 2D
 /// interpolation (which works with X and Y coordinates) and creates a 1D view of it (which
@@ -35,7 +35,7 @@ public class Interpolation2DTo1DAdapter<T> : IInterpolation<T>
     /// Gets a human-readable description of this interpolation adapter.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This property provides a simple text description of what this adapter is doing,
+    /// <b>For Beginners:</b> This property provides a simple text description of what this adapter is doing,
     /// showing which coordinate (X or Y) is being kept constant and what value it's set to.
     /// </remarks>
     public string Description { get; }
@@ -47,7 +47,7 @@ public class Interpolation2DTo1DAdapter<T> : IInterpolation<T>
     /// This constructor sets up the adapter with the specified 2D interpolation method and
     /// configures which coordinate will be fixed and at what value.
     /// 
-    /// For Beginners: When you create this adapter, you're telling it three things:
+    /// <b>For Beginners:</b> When you create this adapter, you're telling it three things:
     /// 1. Which 2D interpolation method to use underneath
     /// 2. What value to keep constant for one of the coordinates
     /// 3. Whether it's the X or Y coordinate that should be kept constant
@@ -75,7 +75,7 @@ public class Interpolation2DTo1DAdapter<T> : IInterpolation<T>
     /// This method takes a single coordinate value and combines it with the fixed coordinate value
     /// to perform a 2D interpolation.
     /// 
-    /// For Beginners: This is the main method you'll use after creating the adapter. You provide
+    /// <b>For Beginners:</b> This is the main method you'll use after creating the adapter. You provide
     /// a single value (for either X or Y, depending on which one isn't fixed), and the method
     /// automatically combines it with your fixed value to get the interpolated result from the
     /// underlying 2D interpolation. It's like saying "I want to know the value at this specific

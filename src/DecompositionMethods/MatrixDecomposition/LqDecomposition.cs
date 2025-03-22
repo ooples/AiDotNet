@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
-/// For beginners: LQ decomposition breaks down a matrix A into two components: A = LQ where:
+/// <b>For Beginners:</b> LQ decomposition breaks down a matrix A into two components: A = LQ where:
 /// - L is a lower triangular matrix (values only on and below the diagonal)
 /// - Q is an orthogonal matrix (its columns are perpendicular to each other)
 /// 
@@ -23,7 +23,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// Gets the lower triangular matrix L from the decomposition.
     /// </summary>
     /// <remarks>
-    /// For beginners: The L matrix contains values only on and below the diagonal.
+    /// <b>For Beginners:</b> The L matrix contains values only on and below the diagonal.
     /// It represents one part of the factorization of the original matrix.
     /// </remarks>
     public Matrix<T> L { get; private set; }
@@ -32,7 +32,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// Gets the orthogonal matrix Q from the decomposition.
     /// </summary>
     /// <remarks>
-    /// For beginners: An orthogonal matrix has columns that are perpendicular to each other
+    /// <b>For Beginners:</b> An orthogonal matrix has columns that are perpendicular to each other
     /// and have unit length. This means Q^T × Q = I (the identity matrix).
     /// </remarks>
     public Matrix<T> Q { get; private set; }
@@ -48,7 +48,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="algorithm">The algorithm to use for the decomposition (default is Householder).</param>
     /// <remarks>
-    /// For beginners: This constructor takes your input matrix and immediately performs
+    /// <b>For Beginners:</b> This constructor takes your input matrix and immediately performs
     /// the LQ decomposition using the specified algorithm. After creating this object,
     /// you can access the L and Q matrices or use methods like Solve() to work with the decomposition.
     /// </remarks>
@@ -65,7 +65,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="b">The right-hand side vector of the equation Ax = b.</param>
     /// <returns>The solution vector x.</returns>
     /// <remarks>
-    /// For beginners: This method finds the values of x that satisfy the equation Ax = b.
+    /// <b>For Beginners:</b> This method finds the values of x that satisfy the equation Ax = b.
     /// It uses the LQ decomposition to solve this in two steps:
     /// 
     /// 1. Forward substitution: Solve Ly = b for y
@@ -103,7 +103,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <returns>A tuple containing the L and Q matrices.</returns>
     /// <remarks>
-    /// For beginners: The Householder method uses reflections to transform the matrix
+    /// <b>For Beginners:</b> The Householder method uses reflections to transform the matrix
     /// into lower triangular form. It's numerically stable and efficient.
     /// 
     /// A Householder reflection is a transformation that reflects a vector about a plane.
@@ -197,7 +197,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <returns>A tuple containing the L and Q matrices.</returns>
     /// <remarks>
-    /// For beginners: The Gram-Schmidt process transforms a set of vectors into a set of 
+    /// <b>For Beginners:</b> The Gram-Schmidt process transforms a set of vectors into a set of 
     /// orthogonal vectors (vectors that are perpendicular to each other). 
     /// 
     /// This method works by:
@@ -249,7 +249,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <returns>A tuple containing the L and Q matrices.</returns>
     /// <remarks>
-    /// For beginners: Givens rotations are a way to zero out specific elements in a matrix
+    /// <b>For Beginners:</b> Givens rotations are a way to zero out specific elements in a matrix
     /// by rotating two rows or columns at a time. 
     /// 
     /// This method:
@@ -307,7 +307,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="b">The right-hand side vector.</param>
     /// <returns>The solution vector x.</returns>
     /// <remarks>
-    /// For beginners: Forward substitution is a method to solve equations when the matrix
+    /// <b>For Beginners:</b> Forward substitution is a method to solve equations when the matrix
     /// is lower triangular (has non-zero values only on and below the diagonal).
     /// 
     /// The process works by:
@@ -342,7 +342,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <returns>The inverse of the original matrix A.</returns>
     /// <remarks>
-    /// For beginners: The inverse of a matrix A is another matrix A⁻¹ such that when multiplied 
+    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A⁻¹ such that when multiplied 
     /// together, they give the identity matrix (A × A⁻¹ = I).
     /// 
     /// This method uses a helper function that efficiently computes the inverse using

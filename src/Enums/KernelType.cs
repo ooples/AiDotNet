@@ -5,7 +5,7 @@ namespace AiDotNet.Enums;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: A kernel is a special mathematical function that helps machine learning algorithms 
+/// <b>For Beginners:</b> A kernel is a special mathematical function that helps machine learning algorithms 
 /// work with complex data. Think of kernels as "similarity measures" between data points.
 /// 
 /// Imagine you have data that can't be easily separated by a straight line. Kernels help by 
@@ -29,7 +29,7 @@ public enum KernelType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Linear kernel is the simplest kernel - it doesn't actually transform your data.
+    /// <b>For Beginners:</b> The Linear kernel is the simplest kernel - it doesn't actually transform your data.
     /// It works by measuring how similar two data points are by multiplying their features together.
     /// 
     /// Think of it as:
@@ -53,7 +53,7 @@ public enum KernelType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The RBF (Radial Basis Function) kernel, also known as the Gaussian kernel, 
+    /// <b>For Beginners:</b> The RBF (Radial Basis Function) kernel, also known as the Gaussian kernel, 
     /// transforms data based on how far apart points are from each other.
     /// 
     /// Think of it as:
@@ -79,7 +79,7 @@ public enum KernelType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Polynomial kernel measures similarity by raising the dot product 
+    /// <b>For Beginners:</b> The Polynomial kernel measures similarity by raising the dot product 
     /// of two data points to a certain power (degree).
     /// 
     /// Think of it as:
@@ -106,7 +106,7 @@ public enum KernelType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Sigmoid kernel is inspired by neural networks and uses the same 
+    /// <b>For Beginners:</b> The Sigmoid kernel is inspired by neural networks and uses the same 
     /// S-shaped function (hyperbolic tangent) that's common in neural network layers.
     /// 
     /// Think of it as:
@@ -132,7 +132,7 @@ public enum KernelType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Laplacian kernel is similar to RBF but uses a different way to 
+    /// <b>For Beginners:</b> The Laplacian kernel is similar to RBF but uses a different way to 
     /// measure distance between points (Manhattan distance instead of Euclidean distance).
     /// 
     /// Think of it as:

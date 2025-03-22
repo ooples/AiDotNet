@@ -5,7 +5,7 @@ namespace AiDotNet.Helpers;
 /// </summary>
 /// <typeparam name="T">The numeric type used in calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: Time series analysis is a technique used to analyze data points collected over time
+/// <b>For Beginners:</b> Time series analysis is a technique used to analyze data points collected over time
 /// to identify patterns and predict future values. This is commonly used for forecasting trends like
 /// stock prices, weather patterns, or sales data.
 /// </remarks>
@@ -20,7 +20,7 @@ public static class TimeSeriesHelper<T>
     /// <param name="d">The order of differencing (how many times to apply the difference operation).</param>
     /// <returns>The differenced time series.</returns>
     /// <remarks>
-    /// For Beginners: Differencing helps make a time series stationary by removing trends or seasonal patterns.
+    /// <b>For Beginners:</b> Differencing helps make a time series stationary by removing trends or seasonal patterns.
     /// First-order differencing (d=1) calculates the change between consecutive values.
     /// For example, if your data is [10, 13, 15, 19], first-order differencing gives [3, 2, 4],
     /// representing how much each value increased from the previous one.
@@ -49,7 +49,7 @@ public static class TimeSeriesHelper<T>
     /// <param name="decompositionType">The matrix decomposition method to use for solving the system.</param>
     /// <returns>The estimated AR coefficients.</returns>
     /// <remarks>
-    /// For Beginners: An Autoregressive (AR) model predicts future values based on past values.
+    /// <b>For Beginners:</b> An Autoregressive (AR) model predicts future values based on past values.
     /// The parameter 'p' determines how many past values to consider. For example, with p=2,
     /// we use the previous two values to predict the next value. The coefficients tell us how much
     /// weight to give each past value in our prediction. This is like saying "tomorrow's temperature
@@ -79,7 +79,7 @@ public static class TimeSeriesHelper<T>
     /// <param name="arCoefficients">The AR model coefficients.</param>
     /// <returns>The residuals (differences between actual and predicted values).</returns>
     /// <remarks>
-    /// For Beginners: Residuals are the differences between what your model predicted and what actually happened.
+    /// <b>For Beginners:</b> Residuals are the differences between what your model predicted and what actually happened.
     /// They tell you how accurate your model is. Small residuals mean your model is making good predictions.
     /// Analyzing residuals can help you improve your model or detect patterns your model missed.
     /// </remarks>
@@ -109,7 +109,7 @@ public static class TimeSeriesHelper<T>
     /// <param name="q">The order of the MA model (number of past errors to consider).</param>
     /// <returns>The estimated MA coefficients.</returns>
     /// <remarks>
-    /// For Beginners: A Moving Average (MA) model predicts future values based on past prediction errors.
+    /// <b>For Beginners:</b> A Moving Average (MA) model predicts future values based on past prediction errors.
     /// While AR models use past actual values, MA models use past mistakes in predictions.
     /// The parameter 'q' determines how many past errors to consider. This helps capture random
     /// shocks or unexpected events in your data that might affect future values.
@@ -132,7 +132,7 @@ public static class TimeSeriesHelper<T>
     /// <param name="lag">The lag (time shift) to calculate autocorrelation for.</param>
     /// <returns>The autocorrelation value at the specified lag.</returns>
     /// <remarks>
-    /// For Beginners: Autocorrelation measures how similar a time series is to a delayed version of itself.
+    /// <b>For Beginners:</b> Autocorrelation measures how similar a time series is to a delayed version of itself.
     /// A high autocorrelation at lag=1 means that if today's value is high, tomorrow's value is likely to be high too.
     /// This helps identify patterns in your data. For example, temperature readings often have high autocorrelation
     /// at lag=24 hours because temperatures follow a daily cycle.

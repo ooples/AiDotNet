@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// interpolation and approximation.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The B-Spline kernel is a specialized similarity measure that works well for data that needs smooth
 /// transitions between points. Think of B-splines like drawing a smooth curve through a set of points,
 /// where the curve doesn't necessarily pass through all points but creates a smooth approximation.
@@ -28,7 +28,7 @@ public class BSplineKernel<T> : IKernelFunction<T>
     /// The degree of the B-spline function used in the kernel calculation.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The degree determines how smooth the B-spline function is.
+    /// <b>For Beginners:</b> The degree determines how smooth the B-spline function is.
     /// Higher degrees create smoother functions but require more computation.
     /// A degree of 3 (the default) creates cubic B-splines, which provide a good
     /// balance between smoothness and computational efficiency for most applications.
@@ -39,7 +39,7 @@ public class BSplineKernel<T> : IKernelFunction<T>
     /// The spacing between knots in the B-spline function.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Knots are the points where pieces of the B-spline function connect.
+    /// <b>For Beginners:</b> Knots are the points where pieces of the B-spline function connect.
     /// The knot spacing controls how the kernel responds to differences between data points.
     /// A smaller spacing makes the kernel more sensitive to small differences,
     /// while a larger spacing makes it more tolerant of differences.
@@ -58,7 +58,7 @@ public class BSplineKernel<T> : IKernelFunction<T>
     /// <param name="knotSpacing">The spacing between knots in the B-spline function. Default is 1.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the B-Spline kernel with your chosen settings.
+    /// <b>For Beginners:</b> This constructor sets up the B-Spline kernel with your chosen settings.
     /// If you don't specify any settings, it will use default values that work well for many problems.
     /// </para>
     /// <para>
@@ -85,7 +85,7 @@ public class BSplineKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the B-Spline kernel formula.
     /// </para>
     /// <para>
@@ -119,7 +119,7 @@ public class BSplineKernel<T> : IKernelFunction<T>
     /// <returns>The value of the B-spline basis function.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates a special mathematical function called the "B-spline basis function"
+    /// <b>For Beginners:</b> This method calculates a special mathematical function called the "B-spline basis function"
     /// which is used in the kernel calculation. B-spline basis functions are building blocks for creating
     /// smooth curves and surfaces.
     /// </para>

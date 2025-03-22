@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: A matrix is simply a rectangular grid of numbers arranged in rows and columns.
+/// <b>For Beginners:</b> A matrix is simply a rectangular grid of numbers arranged in rows and columns.
 /// When working with data in programming, we need to specify how our data is organized.
 /// 
 /// Think of a spreadsheet:
@@ -35,7 +35,7 @@ public enum MatrixLayout
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: In ColumnArrays layout, each array contains all values for a single feature.
+    /// <b>For Beginners:</b> In ColumnArrays layout, each array contains all values for a single feature.
     /// 
     /// Example: If measuring temperature in different cities over days:
     /// - First array: [NYC_Day1, NYC_Day2, NYC_Day3, ...]
@@ -55,7 +55,7 @@ public enum MatrixLayout
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: In RowArrays layout, each array contains all features for a single data point.
+    /// <b>For Beginners:</b> In RowArrays layout, each array contains all features for a single data point.
     /// 
     /// Example: If measuring temperature in different cities over days:
     /// - First array: [NYC_Day1, LA_Day1, Chicago_Day1]

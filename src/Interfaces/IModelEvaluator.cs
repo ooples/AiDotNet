@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// This interface provides functionality to assess how well a machine learning model performs
 /// by comparing its predictions against known correct answers.
 /// 
-/// For Beginners: This interface helps you measure how good your AI model is at making predictions.
+/// <b>For Beginners:</b> This interface helps you measure how good your AI model is at making predictions.
 /// 
 /// What is model evaluation?
 /// - Model evaluation is the process of checking how accurate your AI model is
@@ -39,7 +39,7 @@ public interface IModelEvaluator<T>
     /// This method takes input data containing the model, test data, and evaluation parameters,
     /// then returns comprehensive metrics about the model's performance.
     /// 
-    /// For Beginners: This method tests your AI model and tells you how well it performs.
+    /// <b>For Beginners:</b> This method tests your AI model and tells you how well it performs.
     /// 
     /// What happens during evaluation:
     /// 1. The model makes predictions using the test data

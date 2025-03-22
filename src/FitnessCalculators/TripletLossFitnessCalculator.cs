@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps train models that learn to recognize similarities between items.
+/// <b>For Beginners:</b> This calculator helps train models that learn to recognize similarities between items.
 /// 
 /// Triplet Loss works with three examples at a time:
 /// - An "anchor" (the reference item)
@@ -39,7 +39,7 @@ public class TripletLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The margin is like a minimum required distance between different classes.
+    /// <b>For Beginners:</b> The margin is like a minimum required distance between different classes.
     /// 
     /// Think of it as a safety buffer:
     /// - If margin = 1.0 (default), the model will try to ensure that negative examples are at least 1.0 units
@@ -61,7 +61,7 @@ public class TripletLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Triplet Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Triplet Loss
     /// to evaluate your model's performance on similarity learning tasks.
     /// 
     /// The parameters:
@@ -88,7 +88,7 @@ public class TripletLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated Triplet Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Triplet Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Triplet Loss.
     /// 
     /// It works by:
     /// 1. Preparing triplets of data points (anchor, positive, negative)
@@ -117,7 +117,7 @@ public class TripletLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>A tuple containing matrices for anchor, positive, and negative examples.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method organizes your data into triplets needed for Triplet Loss calculation.
+    /// <b>For Beginners:</b> This method organizes your data into triplets needed for Triplet Loss calculation.
     /// 
     /// For each data point (anchor):
     /// 1. It finds another example of the same class (positive)

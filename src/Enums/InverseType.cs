@@ -5,7 +5,7 @@ namespace AiDotNet.Enums;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: A matrix inverse is like finding the opposite of a number. Just as 1/5 is the 
+/// <b>For Beginners:</b> A matrix inverse is like finding the opposite of a number. Just as 1/5 is the 
 /// inverse of 5 (because 5 × 1/5 = 1), a matrix inverse is a special matrix that, when multiplied 
 /// with the original matrix, gives the identity matrix (the matrix equivalent of the number 1).
 /// 
@@ -26,7 +26,7 @@ public enum InverseType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Strassen algorithm is a clever approach that breaks down large matrix 
+    /// <b>For Beginners:</b> The Strassen algorithm is a clever approach that breaks down large matrix 
     /// operations into smaller ones, making calculations faster for big matrices.
     /// 
     /// Think of it as:
@@ -49,7 +49,7 @@ public enum InverseType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Newton's method (also called Newton-Raphson) finds the inverse by making 
+    /// <b>For Beginners:</b> Newton's method (also called Newton-Raphson) finds the inverse by making 
     /// an initial guess and then repeatedly improving that guess.
     /// 
     /// Think of it as:
@@ -72,7 +72,7 @@ public enum InverseType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Gaussian-Jordan method is a systematic approach that transforms 
+    /// <b>For Beginners:</b> The Gaussian-Jordan method is a systematic approach that transforms 
     /// the original matrix into the identity matrix while simultaneously transforming the 
     /// identity matrix into the inverse.
     /// 

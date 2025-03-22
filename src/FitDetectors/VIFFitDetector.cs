@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps you identify if your model has a problem called "multicollinearity" - 
+/// <b>For Beginners:</b> This class helps you identify if your model has a problem called "multicollinearity" - 
 /// which happens when your input features (variables) are too closely related to each other.
 /// 
 /// Think of multicollinearity like this: if you're trying to predict house prices using both 
@@ -42,7 +42,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
     /// <param name="modelStatsOptions">Configuration options for model statistics. If null, default options are used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the constructor that creates a new VIF detector. You can customize how 
+    /// <b>For Beginners:</b> This is the constructor that creates a new VIF detector. You can customize how 
     /// it works by providing options, or just use the default settings if you're not sure.
     /// </para>
     /// </remarks>
@@ -59,7 +59,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the detected fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method that examines your model and tells you if it has problems.
+    /// <b>For Beginners:</b> This is the main method that examines your model and tells you if it has problems.
     /// It works in three steps:
     /// 
     /// 1. It determines what type of fit your model has (good, poor, or has multicollinearity issues)
@@ -93,7 +93,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
     /// <returns>The detected fit type (SevereMulticollinearity, ModerateMulticollinearity, GoodFit, or PoorFit).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method examines your model to determine if it has multicollinearity problems
+    /// <b>For Beginners:</b> This method examines your model to determine if it has multicollinearity problems
     /// or other fit issues. It does this by:
     /// 
     /// 1. Calculating VIF values for each feature (higher values indicate multicollinearity)
@@ -139,7 +139,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method determines how confident the detector is about its assessment of your model.
+    /// <b>For Beginners:</b> This method determines how confident the detector is about its assessment of your model.
     /// 
     /// It calculates confidence by:
     /// 1. Looking at both the average and maximum VIF values
@@ -170,7 +170,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of string recommendations for improving the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a personalized "improvement plan" for your model based on its issues.
+    /// <b>For Beginners:</b> This method creates a personalized "improvement plan" for your model based on its issues.
     /// 
     /// Depending on what problems were detected, it provides different advice:
     /// 

@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps you understand if your time series model is learning correctly from your data.
+/// <b>For Beginners:</b> This class helps you understand if your time series model is learning correctly from your data.
 /// 
 /// Time series data is information collected over time in sequence (like daily temperatures, monthly sales, 
 /// or hourly website traffic). When working with time series data, we need special techniques because:
@@ -38,7 +38,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector. If not provided, default settings will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the constructor that creates a new detector object. You can customize how
+    /// <b>For Beginners:</b> This is the constructor that creates a new detector object. You can customize how
     /// the detector works by providing options, or use the default settings if you're just starting out.
     /// </para>
     /// </remarks>
@@ -54,7 +54,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the fit type, confidence level, and recommendations for improvement.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method that examines your model's performance and provides a diagnosis.
+    /// <b>For Beginners:</b> This is the main method that examines your model's performance and provides a diagnosis.
     /// 
     /// It works in three steps:
     /// 1. It determines what type of fit your model has (good, overfit, underfit, etc.)
@@ -88,7 +88,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>The detected fit type (GoodFit, Overfit, Underfit, HighVariance, or Unstable).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method diagnoses your model's "learning health" by comparing error measurements.
+    /// <b>For Beginners:</b> This method diagnoses your model's "learning health" by comparing error measurements.
     /// 
     /// It looks at how your model performs on different datasets:
     /// - Training data: The data your model learned from
@@ -149,7 +149,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence score between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method measures how sure the detector is about its diagnosis of your model.
+    /// <b>For Beginners:</b> This method measures how sure the detector is about its diagnosis of your model.
     /// 
     /// Think of it like a doctor's confidence in their diagnosis. The confidence level ranges from 0 to 1:
     /// - 1.0 means "completely confident" 
@@ -189,7 +189,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of string recommendations for improving the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a personalized "improvement plan" for your model based on how it's performing.
+    /// <b>For Beginners:</b> This method creates a personalized "improvement plan" for your model based on how it's performing.
     /// 
     /// After analyzing your model, this method provides specific advice on how to make it better. The recommendations
     /// are tailored to the specific issues detected:

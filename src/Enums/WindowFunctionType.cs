@@ -4,7 +4,7 @@
 /// Defines different window functions used in signal processing and data analysis.
 /// </summary>
 /// <remarks>
-/// For Beginners: Window functions are special mathematical tools that help analyze signals (like audio) 
+/// <b>For Beginners:</b> Window functions are special mathematical tools that help analyze signals (like audio) 
 /// by focusing on specific portions of data.
 /// 
 /// Imagine you have a long audio recording and want to analyze just small chunks at a time. 
@@ -29,7 +29,7 @@ public enum WindowFunctionType
     /// The simplest window function that gives equal weight to all samples within the window.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Rectangular window is like looking through a standard window - 
+    /// <b>For Beginners:</b> The Rectangular window is like looking through a standard window - 
     /// you see everything inside the frame with equal clarity, and nothing outside.
     /// 
     /// Advantages:
@@ -52,7 +52,7 @@ public enum WindowFunctionType
     /// A window function that increases linearly from zero to the middle point, then decreases linearly back to zero.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Triangular window is like looking through a window where clarity 
+    /// <b>For Beginners:</b> The Triangular window is like looking through a window where clarity 
     /// gradually increases as you move toward the center, then gradually decreases again.
     /// 
     /// Advantages:
@@ -75,7 +75,7 @@ public enum WindowFunctionType
     /// A raised cosine window with coefficients that minimize the maximum sidelobe amplitude.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Hamming window is like looking through a window with rounded edges 
+    /// <b>For Beginners:</b> The Hamming window is like looking through a window with rounded edges 
     /// that fade out gradually but never quite reach zero at the edges.
     /// 
     /// Advantages:
@@ -98,7 +98,7 @@ public enum WindowFunctionType
     /// A raised cosine window that reaches zero at the edges, providing good frequency resolution.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Hanning window (also called Hann) is similar to Hamming but 
+    /// <b>For Beginners:</b> The Hanning window (also called Hann) is similar to Hamming but 
     /// fades completely to zero at the edges.
     /// 
     /// Advantages:
@@ -121,7 +121,7 @@ public enum WindowFunctionType
     /// A window function with better sidelobe suppression than Hamming or Hanning.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Blackman window provides an even smoother transition to zero 
+    /// <b>For Beginners:</b> The Blackman window provides an even smoother transition to zero 
     /// at the edges than Hanning, further reducing certain types of analysis errors.
     /// 
     /// Advantages:
@@ -144,7 +144,7 @@ public enum WindowFunctionType
     /// An improved version of the Blackman window with even better sidelobe suppression.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Blackman-Harris window is an enhanced version of the Blackman window 
+    /// <b>For Beginners:</b> The Blackman-Harris window is an enhanced version of the Blackman window 
     /// that further reduces interference between different frequencies.
     /// 
     /// Advantages:
@@ -167,7 +167,7 @@ public enum WindowFunctionType
     /// A window designed for very accurate amplitude measurements in the frequency domain.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The FlatTop window is specially designed to measure the exact amplitude 
+    /// <b>For Beginners:</b> The FlatTop window is specially designed to measure the exact amplitude 
     /// (strength) of frequencies very accurately.
     /// 
     /// Advantages:
@@ -191,7 +191,7 @@ public enum WindowFunctionType
     /// A window function based on the Gaussian distribution, offering a good balance of properties.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Gaussian window has a bell-shaped curve (like the famous bell curve 
+    /// <b>For Beginners:</b> The Gaussian window has a bell-shaped curve (like the famous bell curve 
     /// in statistics) and provides a smooth transition to near-zero at the edges.
     /// 
     /// Advantages:
@@ -214,7 +214,7 @@ public enum WindowFunctionType
     /// A parabolic window function that emphasizes the center of the data.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Welch window has a parabolic (curved) shape that emphasizes 
+    /// <b>For Beginners:</b> The Welch window has a parabolic (curved) shape that emphasizes 
     /// data in the center and smoothly reduces to zero at the edges.
     /// 
     /// Advantages:
@@ -237,7 +237,7 @@ public enum WindowFunctionType
     /// A triangular window that reaches zero at the edges, used in signal processing applications.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Bartlett window is essentially a triangular window that 
+    /// <b>For Beginners:</b> The Bartlett window is essentially a triangular window that 
     /// reaches exactly zero at both edges.
     /// 
     /// Advantages:
@@ -260,7 +260,7 @@ public enum WindowFunctionType
     /// A combination of Bartlett and Hann windows, offering a balance of their characteristics.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Bartlett-Hann window combines features of both the Bartlett (triangular) 
+    /// <b>For Beginners:</b> The Bartlett-Hann window combines features of both the Bartlett (triangular) 
     /// and Hann windows to create a hybrid with balanced properties.
     /// 
     /// Advantages:
@@ -283,7 +283,7 @@ public enum WindowFunctionType
     /// A high-performance window function with excellent sidelobe characteristics.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Nuttall window is an advanced window function that provides 
+    /// <b>For Beginners:</b> The Nuttall window is an advanced window function that provides 
     /// excellent reduction of spectral leakage and interference between frequencies.
     /// 
     /// Advantages:
@@ -306,7 +306,7 @@ public enum WindowFunctionType
     /// A modified Blackman window with improved sidelobe characteristics.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Blackman-Nuttall window is a variation of the Blackman window 
+    /// <b>For Beginners:</b> The Blackman-Nuttall window is a variation of the Blackman window 
     /// that provides even better reduction of interference between different frequencies.
     /// 
     /// Advantages:
@@ -330,7 +330,7 @@ public enum WindowFunctionType
     /// A simple window function based on the cosine function.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Cosine window is a simple window that uses the familiar cosine 
+    /// <b>For Beginners:</b> The Cosine window is a simple window that uses the familiar cosine 
     /// wave shape to create a smooth transition from the center to the edges.
     /// 
     /// Advantages:
@@ -353,7 +353,7 @@ public enum WindowFunctionType
     /// A window function that uses the sinc function, often used in signal interpolation.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Lanczos window uses a mathematical function called "sinc" 
+    /// <b>For Beginners:</b> The Lanczos window uses a mathematical function called "sinc" 
     /// to create a window that's particularly good for resampling and interpolating signals.
     /// 
     /// Advantages:
@@ -377,7 +377,7 @@ public enum WindowFunctionType
     /// A window function that is flat in the middle and tapered at the edges, with adjustable taper width.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Tukey window (also called the cosine-tapered window) is like a 
+    /// <b>For Beginners:</b> The Tukey window (also called the cosine-tapered window) is like a 
     /// rectangular window in the middle with smooth edges that taper down to zero.
     /// 
     /// Imagine a window that keeps the original signal intact in the center portion,
@@ -403,7 +403,7 @@ public enum WindowFunctionType
     /// A flexible window function with an adjustable shape parameter.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Kaiser window is a versatile window with a parameter that lets you 
+    /// <b>For Beginners:</b> The Kaiser window is a versatile window with a parameter that lets you 
     /// adjust the trade-off between frequency resolution and spectral leakage.
     /// 
     /// Think of it like having a dial that you can turn to optimize the window for your specific needs:
@@ -430,7 +430,7 @@ public enum WindowFunctionType
     /// A window function with a piecewise cubic shape that provides good frequency resolution.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Parzen window (also called the de la Vallée-Poussin window) 
+    /// <b>For Beginners:</b> The Parzen window (also called the de la Vallée-Poussin window) 
     /// uses a smooth cubic curve shape that provides excellent sidelobe suppression.
     /// 
     /// Imagine a window shape that's even smoother than triangular, with a rounded peak
@@ -456,7 +456,7 @@ public enum WindowFunctionType
     /// A window function with a specialized shape that provides good sidelobe characteristics.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Bohman window is a specialized window function that provides 
+    /// <b>For Beginners:</b> The Bohman window is a specialized window function that provides 
     /// excellent sidelobe suppression with a unique shape.
     /// 
     /// It's similar to the Parzen window but with even better properties for 
@@ -483,7 +483,7 @@ public enum WindowFunctionType
     /// A window function that decays exponentially from the center.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The Poisson window decreases exponentially (very rapidly) from 
+    /// <b>For Beginners:</b> The Poisson window decreases exponentially (very rapidly) from 
     /// the center to the edges, like a bell curve with a sharp peak.
     /// 
     /// Imagine a window that strongly emphasizes the center of your data and 

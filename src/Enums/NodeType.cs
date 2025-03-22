@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: A computational graph is a way to represent mathematical operations as a network
+/// <b>For Beginners:</b> A computational graph is a way to represent mathematical operations as a network
 /// of connected nodes. Think of it like a recipe with steps: some nodes are ingredients (constants and variables),
 /// while others are actions (like add, subtract). This is how AI models internally organize calculations.
 /// Each node in the graph performs a specific operation on its inputs and passes the result to the next node.
@@ -18,7 +18,7 @@ public enum NodeType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Constant is simply a fixed number that doesn't change, like the number 5 or 3.14.
+    /// <b>For Beginners:</b> A Constant is simply a fixed number that doesn't change, like the number 5 or 3.14.
     /// In AI models, constants are often used for things like weights, biases, or other fixed parameters.
     /// </para>
     /// </remarks>
@@ -29,7 +29,7 @@ public enum NodeType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Variable is a value that can change, like a placeholder that gets filled in with
+    /// <b>For Beginners:</b> A Variable is a value that can change, like a placeholder that gets filled in with
     /// different values. In AI models, variables often represent the input data (like images or text) or
     /// values that get updated during training (like weights that the model is learning).
     /// </para>
@@ -41,7 +41,7 @@ public enum NodeType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An Add node takes two or more values and adds them together. For example,
+    /// <b>For Beginners:</b> An Add node takes two or more values and adds them together. For example,
     /// if one input is 3 and another is 4, the Add node outputs 7. In neural networks, addition is often
     /// used to combine different signals or to add a bias term to a weighted sum.
     /// </para>
@@ -53,7 +53,7 @@ public enum NodeType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Subtract node takes two values and subtracts the second from the first. For example,
+    /// <b>For Beginners:</b> A Subtract node takes two values and subtracts the second from the first. For example,
     /// if the inputs are 7 and 3, the Subtract node outputs 4. In AI models, subtraction might be used in
     /// calculating differences or errors between predicted and actual values.
     /// </para>
@@ -65,7 +65,7 @@ public enum NodeType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Multiply node takes two or more values and multiplies them together. For example,
+    /// <b>For Beginners:</b> A Multiply node takes two or more values and multiplies them together. For example,
     /// if one input is 3 and another is 4, the Multiply node outputs 12. In neural networks, multiplication
     /// is commonly used to apply weights to input values, controlling how much influence each input has.
     /// </para>
@@ -77,7 +77,7 @@ public enum NodeType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Divide node takes two values and divides the first by the second. For example,
+    /// <b>For Beginners:</b> A Divide node takes two values and divides the first by the second. For example,
     /// if the inputs are 10 and 2, the Divide node outputs 5. In AI models, division might be used for
     /// normalization (adjusting values to a standard scale) or calculating ratios between values.
     /// </para>

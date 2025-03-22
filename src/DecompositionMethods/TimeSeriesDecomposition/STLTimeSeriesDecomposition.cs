@@ -9,7 +9,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// trend (long-term progression), seasonal (recurring patterns), and residual (remaining noise).
 /// </para>
 /// <para>
-/// For Beginners: Think of this like breaking down your monthly expenses into:
+/// <b>For Beginners:</b> Think of this like breaking down your monthly expenses into:
 /// - A trend (are you spending more or less over time?)
 /// - Seasonal patterns (do you spend more during holidays?)
 /// - Unexpected expenses (random costs that don't fit the patterns)
@@ -40,7 +40,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes your time series data and splits it into three parts:
+    /// <b>For Beginners:</b> This method takes your time series data and splits it into three parts:
     /// trend, seasonal patterns, and residuals (unexplained variations). The algorithm type
     /// determines how this splitting is done - Standard is balanced, Robust handles outliers better,
     /// and Fast prioritizes speed over precision.
@@ -85,7 +85,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method prepares your data in a special format that helps the Fast STL
+    /// <b>For Beginners:</b> This method prepares your data in a special format that helps the Fast STL
     /// algorithm work more efficiently. It creates a table with three columns: a time index (like
     /// day 1, day 2, etc.), your original values, and preprocessed values that handle issues like
     /// missing data points.
@@ -119,7 +119,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method makes sure each data point has a date associated with it.
+    /// <b>For Beginners:</b> This method makes sure each data point has a date associated with it.
     /// If dates are already provided, it uses those. Otherwise, it creates dates starting from
     /// a specified date (or today) with regular intervals (like daily or hourly).
     /// </para>
@@ -174,7 +174,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: When data is missing, this method estimates what the value should be.
+    /// <b>For Beginners:</b> When data is missing, this method estimates what the value should be.
     /// It looks at nearby values and uses their average. If there are no valid nearby values,
     /// it uses the average of the entire series.
     /// </para>
@@ -219,7 +219,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An outlier is a data point that's unusually different from the rest of your data.
+    /// <b>For Beginners:</b> An outlier is a data point that's unusually different from the rest of your data.
     /// This method checks if a value is an outlier using one of three methods:
     /// - Z-Score: Checks how many standard deviations the value is from the average
     /// - IQR: Checks if the value is far from the middle 50% of your data
@@ -245,7 +245,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Z-Score measures how far a value is from the average in terms of standard deviations.
+    /// <b>For Beginners:</b> The Z-Score measures how far a value is from the average in terms of standard deviations.
     /// Think of it like measuring how unusual a person's height is compared to the average height.
     /// A Z-Score of 2 means the value is 2 standard deviations away from the average.
     /// Values with high Z-Scores (typically above 2 or 3) are considered outliers.
@@ -273,7 +273,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The IQR method identifies outliers by looking at the middle 50% of your data.
+    /// <b>For Beginners:</b> The IQR method identifies outliers by looking at the middle 50% of your data.
     /// Imagine lining up all your data points from smallest to largest:
     /// - Q1 is the value 25% of the way through your data
     /// - Q3 is the value 75% of the way through your data
@@ -315,7 +315,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Standard deviation measures how spread out the data is from the average.
+    /// <b>For Beginners:</b> Standard deviation measures how spread out the data is from the average.
     /// A low standard deviation means most values are close to the average.
     /// A high standard deviation means values are more spread out.
     /// 
@@ -340,7 +340,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: When we find an unusual value (outlier), we replace it with a more reasonable one.
+    /// <b>For Beginners:</b> When we find an unusual value (outlier), we replace it with a more reasonable one.
     /// This method looks at a small window of values around the outlier (2 values before and 2 after),
     /// and uses the median (middle value) from this window as the replacement.
     /// 
@@ -374,7 +374,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Some patterns in data are due to the calendar - like higher retail sales 
+    /// <b>For Beginners:</b> Some patterns in data are due to the calendar - like higher retail sales 
     /// during weekends or holidays. This method adjusts values to account for these patterns.
     /// 
     /// For example, if Mondays typically have 20% lower sales than average days, this method
@@ -411,7 +411,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This applies a specific adjustment factor for each day of the week.
+    /// <b>For Beginners:</b> This applies a specific adjustment factor for each day of the week.
     /// For example, if weekends typically have higher values than weekdays, this method
     /// would apply those day-specific factors to make all days comparable.
     /// </para>
@@ -432,7 +432,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This applies a specific adjustment factor for each month.
+    /// <b>For Beginners:</b> This applies a specific adjustment factor for each month.
     /// For example, December might have higher retail sales due to holidays,
     /// so this method would apply a factor to make December sales comparable to other months.
     /// </para>
@@ -453,7 +453,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Holidays often cause unusual patterns in data. This method checks if
+    /// <b>For Beginners:</b> Holidays often cause unusual patterns in data. This method checks if
     /// a value's date is a holiday, and if so, applies a special adjustment factor for that holiday.
     /// 
     /// For example, retail sales might be much higher on Black Friday, so this method would

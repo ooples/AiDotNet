@@ -12,7 +12,7 @@ namespace AiDotNet.Interpolation;
 /// that pass through scattered data points in 2D or higher dimensions.
 /// </para>
 /// <para>
-/// For Beginners: Think of RBF interpolation as creating a rubber sheet that's stretched to
+/// <b>For Beginners:</b> Think of RBF interpolation as creating a rubber sheet that's stretched to
 /// pass through all your data points. The sheet's shape between and beyond your known points
 /// is determined by special mathematical functions (called radial basis functions) that create
 /// smooth transitions. This is particularly useful when your data points aren't arranged in a grid.
@@ -68,7 +68,7 @@ public class RadialBasisFunctionInterpolation<T> : I2DInterpolation<T>
     /// </exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor takes your 3D data points (x, y, and z values) and prepares
+    /// <b>For Beginners:</b> This constructor takes your 3D data points (x, y, and z values) and prepares
     /// the interpolation algorithm. It checks that your data is valid (same number of x, y, and z values,
     /// and at least 3 points) and then calculates the weights needed for the interpolation.
     /// </para>
@@ -105,7 +105,7 @@ public class RadialBasisFunctionInterpolation<T> : I2DInterpolation<T>
     /// <returns>The interpolated z-value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the height (z-value) on the interpolated surface for any
+    /// <b>For Beginners:</b> This method finds the height (z-value) on the interpolated surface for any
     /// x and y coordinates you provide, even if they're between or outside your original data points.
     /// </para>
     /// <para>
@@ -137,7 +137,7 @@ public class RadialBasisFunctionInterpolation<T> : I2DInterpolation<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method solves a system of equations to find the right "strength" (weight)
+    /// <b>For Beginners:</b> This method solves a system of equations to find the right "strength" (weight)
     /// for each data point's influence on the final surface.
     /// </para>
     /// <para>
@@ -180,7 +180,7 @@ public class RadialBasisFunctionInterpolation<T> : I2DInterpolation<T>
     /// <returns>The distance between the two points.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates the straight-line distance between two points
+    /// <b>For Beginners:</b> This method calculates the straight-line distance between two points
     /// using the Pythagorean theorem (a² + b² = c²).
     /// </para>
     /// <para>

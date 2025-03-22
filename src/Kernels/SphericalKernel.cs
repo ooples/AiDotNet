@@ -11,7 +11,7 @@
 /// for large datasets as it creates sparse matrices.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Spherical kernel is special because it has a "limited range" - if two points are too far apart
 /// (farther than the sigma parameter), the kernel says they have zero similarity. This is different from
 /// many other kernels that might say points have a very small similarity even when they're very far apart.
@@ -43,7 +43,7 @@ public class SphericalKernel<T> : IKernelFunction<T>
     /// The radius parameter that determines the range of influence for the kernel.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The sigma parameter controls how far the "bubble of influence" extends around each data point:
+    /// <b>For Beginners:</b> The sigma parameter controls how far the "bubble of influence" extends around each data point:
     /// 
     /// Think of it like this:
     /// - Larger sigma values (e.g., 2.0): Create a larger bubble, allowing points that are farther apart to still have some similarity
@@ -57,7 +57,7 @@ public class SphericalKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -69,7 +69,7 @@ public class SphericalKernel<T> : IKernelFunction<T>
     /// <param name="sigma">The radius parameter that determines the range of influence for the kernel. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Spherical kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Spherical kernel for use. You can optionally
     /// provide a value for the sigma parameter:
     /// </para>
     /// <para>
@@ -102,7 +102,7 @@ public class SphericalKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Spherical kernel formula.
     /// </para>
     /// <para>

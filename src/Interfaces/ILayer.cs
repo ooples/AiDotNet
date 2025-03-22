@@ -5,7 +5,7 @@ namespace AiDotNet.Interfaces;
 /// </summary>
 /// <typeparam name="T">The numeric type used for computations (typically float or double).</typeparam>
 /// <remarks>
-/// For Beginners: A neural network is made up of layers, similar to how a sandwich has layers.
+/// <b>For Beginners:</b> A neural network is made up of layers, similar to how a sandwich has layers.
 /// Each layer processes data in some way and passes it to the next layer.
 /// 
 /// This interface defines what all layers must be able to do, regardless of their specific type.
@@ -18,7 +18,7 @@ public interface ILayer<T>
     /// </summary>
     /// <returns>An array of integers representing the input dimensions.</returns>
     /// <remarks>
-    /// For Beginners: This tells us what size and shape of data this layer expects to receive.
+    /// <b>For Beginners:</b> This tells us what size and shape of data this layer expects to receive.
     /// For example, if processing images, this might be [3, 28, 28] for 28×28 pixel images with 3 color channels.
     /// </remarks>
     int[] GetInputShape();
@@ -28,7 +28,7 @@ public interface ILayer<T>
     /// </summary>
     /// <returns>An array of integers representing the output dimensions.</returns>
     /// <remarks>
-    /// For Beginners: This tells us what size and shape of data this layer will produce.
+    /// <b>For Beginners:</b> This tells us what size and shape of data this layer will produce.
     /// The output shape often differs from the input shape because the layer may transform the data.
     /// For example, a pooling layer might reduce the dimensions from [3, 28, 28] to [3, 14, 14].
     /// </remarks>
@@ -40,7 +40,7 @@ public interface ILayer<T>
     /// <param name="input">The input tensor to be processed.</param>
     /// <returns>The output tensor after processing.</returns>
     /// <remarks>
-    /// For Beginners: This is where the actual work happens when data flows through the network.
+    /// <b>For Beginners:</b> This is where the actual work happens when data flows through the network.
     /// Each layer takes some input, applies its specific operation, and produces an output.
     /// 
     /// For example:
@@ -58,7 +58,7 @@ public interface ILayer<T>
     /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
     /// <returns>The gradient to pass to the previous layer.</returns>
     /// <remarks>
-    /// For Beginners: During training, neural networks learn by adjusting their parameters.
+    /// <b>For Beginners:</b> During training, neural networks learn by adjusting their parameters.
     /// To know how to adjust them, we need to calculate how much each parameter affects the error.
     /// 
     /// This method handles the "backward pass" where error information flows backward through the network.
@@ -75,7 +75,7 @@ public interface ILayer<T>
     /// </summary>
     /// <param name="learningRate">The learning rate that controls how much parameters change.</param>
     /// <remarks>
-    /// For Beginners: This method adjusts the layer's internal values (weights and biases) during training.
+    /// <b>For Beginners:</b> This method adjusts the layer's internal values (weights and biases) during training.
     /// 
     /// The learning rate is like the size of the steps you take when adjusting parameters:
     /// - A large learning rate means big changes (faster learning but might overshoot)
@@ -90,7 +90,7 @@ public interface ILayer<T>
     /// </summary>
     /// <param name="parameters">The new parameter values to apply.</param>
     /// <remarks>
-    /// For Beginners: While the other UpdateParameters method calculates new values based on gradients,
+    /// <b>For Beginners:</b> While the other UpdateParameters method calculates new values based on gradients,
     /// this method lets you directly specify what the new parameter values should be.
     /// 
     /// This is useful for advanced optimization techniques where parameters are calculated externally,
@@ -102,7 +102,7 @@ public interface ILayer<T>
     /// Gets the total number of trainable parameters in this layer.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This tells you how many adjustable values this layer has.
+    /// <b>For Beginners:</b> This tells you how many adjustable values this layer has.
     /// 
     /// For example:
     /// - A dense layer with 10 inputs and 5 outputs has 10×5=50 weights plus 5 biases = 55 parameters
@@ -118,7 +118,7 @@ public interface ILayer<T>
     /// </summary>
     /// <param name="writer">The binary writer to write the data to.</param>
     /// <remarks>
-    /// For Beginners: This method saves all the information about the layer so it can be loaded later.
+    /// <b>For Beginners:</b> This method saves all the information about the layer so it can be loaded later.
     /// 
     /// It's like saving your progress in a video game - all the important information about the layer
     /// (its type, shape, and learned parameters) gets written to a file so you can continue using
@@ -131,7 +131,7 @@ public interface ILayer<T>
     /// </summary>
     /// <param name="reader">The binary reader to read the data from.</param>
     /// <remarks>
-    /// For Beginners: This method loads previously saved information about the layer.
+    /// <b>For Beginners:</b> This method loads previously saved information about the layer.
     /// 
     /// It's the counterpart to Serialize - if Serialize is like saving your game progress,
     /// Deserialize is like loading that saved game. It restores all the layer's settings and
@@ -144,7 +144,7 @@ public interface ILayer<T>
     /// </summary>
     /// <returns>A collection of activation functions used by this layer.</returns>
     /// <remarks>
-    /// For Beginners: Activation functions determine how a neuron responds to its input.
+    /// <b>For Beginners:</b> Activation functions determine how a neuron responds to its input.
     /// 
     /// They introduce non-linearity, which is crucial for neural networks to learn complex patterns.
     /// Common activation functions include:
@@ -161,7 +161,7 @@ public interface ILayer<T>
     /// </summary>
     /// <returns>A vector containing all trainable parameters.</returns>
     /// <remarks>
-    /// For Beginners: This method returns all the values that can be adjusted during training
+    /// <b>For Beginners:</b> This method returns all the values that can be adjusted during training
     /// (weights and biases) as a single list.
     /// 
     /// This is useful for:
@@ -177,7 +177,7 @@ public interface ILayer<T>
     /// Indicates whether this layer supports training operations.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This property tells you whether this layer can be trained (adjusted) during learning.
+    /// <b>For Beginners:</b> This property tells you whether this layer can be trained (adjusted) during learning.
     /// 
     /// Most layers (like convolutional or dense layers) return true because they have weights that need to be learned.
     /// Some layers (like input layers or certain normalization layers) might return false because they
@@ -190,7 +190,7 @@ public interface ILayer<T>
     /// </summary>
     /// <param name="isTraining">True to set the layer to training mode, false for evaluation mode.</param>
     /// <remarks>
-    /// For Beginners: Some layers behave differently during training versus when making predictions.
+    /// <b>For Beginners:</b> Some layers behave differently during training versus when making predictions.
     /// 
     /// For example:
     /// - Dropout layers randomly disable neurons during training but use all neurons during evaluation
@@ -205,7 +205,7 @@ public interface ILayer<T>
     /// </summary>
     /// <returns>A vector containing the gradients for all trainable parameters.</returns>
     /// <remarks>
-    /// For Beginners: During training, we calculate how much each parameter affects the error (the gradient).
+    /// <b>For Beginners:</b> During training, we calculate how much each parameter affects the error (the gradient).
     /// 
     /// This method returns those gradients, which show:
     /// 1. Which direction to adjust each parameter (increase or decrease)
@@ -219,7 +219,7 @@ public interface ILayer<T>
     /// Clears all accumulated gradients in the layer.
     /// </summary>
     /// <remarks>
-    /// For Beginners: During training, gradients are calculated and accumulated.
+    /// <b>For Beginners:</b> During training, gradients are calculated and accumulated.
     /// 
     /// This method resets those accumulated gradients to zero, which is typically done:
     /// 1. At the start of each training batch
@@ -235,7 +235,7 @@ public interface ILayer<T>
     /// </summary>
     /// <param name="parameters">The new parameter values to set.</param>
     /// <remarks>
-    /// For Beginners: This method lets you directly set all the weights and biases of the layer.
+    /// <b>For Beginners:</b> This method lets you directly set all the weights and biases of the layer.
     /// 
     /// This is useful when:
     /// 1. Loading a pre-trained model
@@ -250,7 +250,7 @@ public interface ILayer<T>
     /// Resets the internal state of the layer to its initial condition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Some layers (like recurrent layers) keep track of information from previous inputs.
+    /// <b>For Beginners:</b> Some layers (like recurrent layers) keep track of information from previous inputs.
     /// This is called the layer's "state" - it's like the layer's memory of what it has seen before.
     /// 
     /// This method clears that memory, making the layer forget all previous inputs. It's useful when:

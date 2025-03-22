@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on classification tasks
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on classification tasks
 /// (where you're predicting categories or classes) by using a special loss function that's more robust
 /// to outliers and noisy data than some alternatives.
 /// 
@@ -46,7 +46,7 @@ public class ModifiedHuberLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Modified Huber Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Modified Huber Loss
     /// to evaluate your model's performance, which is especially good for classification problems
     /// where you want a balance between robustness to outliers and mathematical convenience.
     /// 
@@ -77,7 +77,7 @@ public class ModifiedHuberLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated Modified Huber Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Modified Huber Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Modified Huber Loss.
     /// 
     /// It works by:
     /// 1. Taking the predictions your model made

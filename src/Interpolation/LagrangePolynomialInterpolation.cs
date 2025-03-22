@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Lagrange polynomial interpolation creates a smooth curve that passes exactly through 
 /// all provided data points. It's particularly useful for estimating values between known points.
 /// 
-/// For Beginners: Think of this like connecting dots with a smooth curve. If you have several
+/// <b>For Beginners:</b> Think of this like connecting dots with a smooth curve. If you have several
 /// points on a graph, Lagrange interpolation draws a smooth line through all of them, allowing
 /// you to estimate values between your known points. Unlike simpler methods like linear interpolation
 /// (which just draws straight lines between points), this creates a natural-looking curve.
@@ -36,7 +36,7 @@ public class LagrangePolynomialInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This constructor initializes the interpolator with your data points.
     /// 
-    /// For Beginners: When you create a Lagrange interpolator, you provide the x-coordinates
+    /// <b>For Beginners:</b> When you create a Lagrange interpolator, you provide the x-coordinates
     /// and corresponding y-values of your known data points. The interpolator will then be
     /// ready to estimate y-values for any x-coordinate you specify later.
     /// </remarks>
@@ -66,7 +66,7 @@ public class LagrangePolynomialInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This method calculates the y-value at any x-coordinate using the Lagrange polynomial formula.
     /// 
-    /// For Beginners: Once you've set up the interpolator with your known points, this method
+    /// <b>For Beginners:</b> Once you've set up the interpolator with your known points, this method
     /// lets you ask "What would the y-value be at this specific x-coordinate?" It uses a special
     /// mathematical formula to give you the best estimate based on your known points. The result
     /// will be a point that lies on a smooth curve passing through all your original points.

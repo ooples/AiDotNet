@@ -36,14 +36,13 @@ public class LSTMLayer<T> : LayerBase<T>
 
     public override bool SupportsTraining => true;
 
-    public LSTMLayer(int inputSize, int hiddenSize, 
-    IActivationFunction<T>? activation = null, 
-    IActivationFunction<T>? recurrentActivation = null)
-    : base([inputSize], [hiddenSize], activation ?? new TanhActivation<T>())
+    public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
+        IActivationFunction<T>? activation = null,
+        IActivationFunction<T>? recurrentActivation = null)
+        : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
-
         _useVectorActivation = false;
 
         _sigmoidActivation = recurrentActivation ?? new SigmoidActivation<T>();
@@ -71,15 +70,14 @@ public class LSTMLayer<T> : LayerBase<T>
         InitializeWeights();
     }
 
-    public LSTMLayer(int inputSize, int hiddenSize, 
-    IVectorActivationFunction<T>? activation = null, 
-    IVectorActivationFunction<T>? recurrentActivation = null)
-    : base([inputSize], [hiddenSize], activation ?? new TanhActivation<T>())
+    public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
+        IVectorActivationFunction<T>? activation = null,
+        IVectorActivationFunction<T>? recurrentActivation = null)
+        : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
-
-        _useVectorActivation = false;
+        _useVectorActivation = true;
 
         _sigmoidVectorActivation = recurrentActivation ?? new SigmoidActivation<T>();
         _tanhVectorActivation = activation ?? new TanhActivation<T>();
@@ -104,6 +102,16 @@ public class LSTMLayer<T> : LayerBase<T>
         _biasO = new Tensor<T>([_hiddenSize]);
 
         InitializeWeights();
+    }
+
+    private static int[] CalculateOutputShape(int[] inputShape, int hiddenSize)
+    {
+        // Preserve batch size and time steps, change last dimension to hiddenSize
+        var outputShape = new int[inputShape.Length];
+        Array.Copy(inputShape, outputShape, inputShape.Length);
+        outputShape[outputShape.Length - 1] = hiddenSize;
+
+        return outputShape;
     }
 
     private void InitializeWeights()

@@ -6,7 +6,7 @@ namespace AiDotNet.GaussianProcesses;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: A Gaussian Process is a flexible machine learning method that can learn patterns from data
+/// <b>For Beginners:</b> A Gaussian Process is a flexible machine learning method that can learn patterns from data
 /// and provide uncertainty estimates with its predictions. Think of it as drawing a smooth curve through your data points,
 /// but also showing how confident it is about different parts of that curve.
 /// 
@@ -26,7 +26,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The kernel function is like the "similarity measure" for your data points.
+    /// <b>For Beginners:</b> The kernel function is like the "similarity measure" for your data points.
     /// It determines how much influence nearby points have on each other's predictions.
     /// Different kernel functions create different types of patterns in the predictions.
     /// </para>
@@ -69,7 +69,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// <param name="kernel">The kernel function to use for the Gaussian Process.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is where you set up your Gaussian Process model by choosing a kernel function.
+    /// <b>For Beginners:</b> This is where you set up your Gaussian Process model by choosing a kernel function.
     /// The kernel function determines what kinds of patterns the model can learn.
     /// 
     /// Common kernel choices include:
@@ -100,7 +100,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// <exception cref="InvalidOperationException">Always thrown because this method is not supported.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method is not used for multi-output Gaussian Processes.
+    /// <b>For Beginners:</b> This method is not used for multi-output Gaussian Processes.
     /// Use the FitMultiOutput method instead when you have multiple output values to predict.
     /// </para>
     /// </remarks>
@@ -116,7 +116,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// <param name="Y">The output training data matrix where each row corresponds to a training example and each column is an output dimension.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is where your model "learns" from your training data.
+    /// <b>For Beginners:</b> This is where your model "learns" from your training data.
     /// 
     /// - X contains your input features (like temperature, humidity, pressure for weather prediction)
     /// - Y contains your multiple output values (like wind speed, rainfall, cloud cover)
@@ -169,7 +169,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// <exception cref="InvalidOperationException">Always thrown because this method is not supported.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method is not used for multi-output Gaussian Processes.
+    /// <b>For Beginners:</b> This method is not used for multi-output Gaussian Processes.
     /// Use the PredictMultiOutput method instead when you want to predict multiple output values.
     /// </para>
     /// </remarks>
@@ -185,7 +185,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// <returns>A tuple containing the predicted mean values and the covariance matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is where you get predictions from your trained model for new data points.
+    /// <b>For Beginners:</b> This is where you get predictions from your trained model for new data points.
     /// 
     /// For example, if you've trained a weather model on historical data, you can use this method
     /// to predict multiple weather variables (temperature, humidity, etc.) for tomorrow.
@@ -235,7 +235,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// <param name="kernel">The new kernel function to use.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method lets you change the "similarity measure" (kernel function) of your model
+    /// <b>For Beginners:</b> This method lets you change the "similarity measure" (kernel function) of your model
     /// after you've created it.
     /// 
     /// You might want to do this if:
@@ -264,7 +264,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// <returns>A matrix containing the kernel values between each pair of points from X1 and X2.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how similar each point in the first set is to each point in the second set.
+    /// <b>For Beginners:</b> This method calculates how similar each point in the first set is to each point in the second set.
     /// 
     /// Think of it like measuring the "distance" or "similarity" between data points. The kernel function
     /// transforms these distances into similarity scores, where:
@@ -300,7 +300,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// <returns>A vector containing the kernel values between each point in X and the point x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how similar a new data point is to each of your training data points.
+    /// <b>For Beginners:</b> This method calculates how similar a new data point is to each of your training data points.
     /// 
     /// When making predictions with a Gaussian Process, we need to know how similar the new point
     /// (that we want to predict) is to each of our training points. This method creates that list of similarities.

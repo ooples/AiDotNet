@@ -4,7 +4,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// Performs multiplicative decomposition of time series data into trend, seasonal, and residual components.
 /// </summary>
 /// <remarks>
-/// For Beginners: Multiplicative decomposition is used when the seasonal variations in your data increase 
+/// <b>For Beginners:</b> Multiplicative decomposition is used when the seasonal variations in your data increase 
 /// or decrease proportionally with the level of the time series. In this model, the components are multiplied 
 /// together (Original = Trend × Seasonal × Residual) rather than added. This is often appropriate for economic 
 /// or financial data where percentage changes are more meaningful than absolute changes.
@@ -54,7 +54,7 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Decomposes the time series using a geometric moving average approach.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method extracts the trend by calculating the geometric mean (multiplying values 
+    /// <b>For Beginners:</b> This method extracts the trend by calculating the geometric mean (multiplying values 
     /// and taking the nth root) of data points within a moving window. The geometric mean is used instead 
     /// of the arithmetic mean (simple average) because we're working with multiplicative relationships.
     /// Think of it like calculating compound growth rates rather than simple averages.
@@ -122,7 +122,7 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Decomposes the time series using multiplicative exponential smoothing.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Exponential smoothing is like calculating a weighted average where recent values 
+    /// <b>For Beginners:</b> Exponential smoothing is like calculating a weighted average where recent values 
     /// have more influence than older values. The "multiplicative" part means we're working with ratios 
     /// and products rather than differences and sums. This method uses three smoothing factors (alpha, beta, gamma) 
     /// that control how quickly the model adapts to changes in level, trend, and seasonality.
@@ -186,7 +186,7 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Decomposes the time series using a log-transformed STL (Seasonal-Trend decomposition using LOESS) approach.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method transforms multiplicative relationships into additive ones by taking 
+    /// <b>For Beginners:</b> This method transforms multiplicative relationships into additive ones by taking 
     /// the logarithm of the data. After this transformation, we can use STL (Seasonal-Trend decomposition 
     /// using LOESS), which is a powerful technique that works well with additive patterns. LOESS stands for 
     /// "LOcally Estimated Scatterplot Smoothing" - it's a way to find patterns in data by looking at small, 

@@ -7,7 +7,7 @@
 /// Multiquadric interpolation is a powerful technique for creating smooth surfaces from scattered data points.
 /// It uses radial basis functions centered at each data point to construct an interpolating surface.
 /// 
-/// For Beginners: Imagine you have several points with known heights (like mountains on a map),
+/// <b>For Beginners:</b> Imagine you have several points with known heights (like mountains on a map),
 /// and you want to estimate the height at any location between these points. Multiquadric interpolation
 /// creates a smooth surface that passes exactly through all your known points while providing reasonable
 /// estimates for all the areas in between. It's particularly good at handling irregularly spaced data points
@@ -35,7 +35,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// The shape parameter that controls the smoothness of the interpolation.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The epsilon parameter controls how "bumpy" or smooth your interpolated surface will be.
+    /// <b>For Beginners:</b> The epsilon parameter controls how "bumpy" or smooth your interpolated surface will be.
     /// A smaller epsilon creates steeper "hills" around your data points, while a larger epsilon creates
     /// a smoother, more gently varying surface. Finding the right value often requires some experimentation
     /// for your specific data.
@@ -51,7 +51,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// Optional matrix decomposition method for solving the interpolation system.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is an advanced option that determines how the mathematical equations
+    /// <b>For Beginners:</b> This is an advanced option that determines how the mathematical equations
     /// are solved internally. Most users can leave this as the default (null).
     /// </remarks>
     private readonly IMatrixDecomposition<T>? _decomposition;
@@ -60,7 +60,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// The calculated coefficients for the radial basis functions.
     /// </summary>
     /// <remarks>
-    /// For Beginners: These are the weights that determine how much each data point contributes
+    /// <b>For Beginners:</b> These are the weights that determine how much each data point contributes
     /// to the final interpolated surface. They're calculated automatically when you create the interpolator.
     /// </remarks>
     private Vector<T>? _coefficients;
@@ -72,7 +72,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// This constructor initializes the interpolator with your data points and configuration options,
     /// and automatically calculates the necessary coefficients.
     /// 
-    /// For Beginners: When you create a Multiquadric interpolator, you provide:
+    /// <b>For Beginners:</b> When you create a Multiquadric interpolator, you provide:
     /// 1. Your known data points (x, y coordinates and z values)
     /// 2. An epsilon value that controls the smoothness of the interpolation
     /// 
@@ -104,7 +104,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// This method sets up and solves the linear system to find the weights for each radial basis function.
     /// 
-    /// For Beginners: This method does the mathematical heavy lifting to prepare the interpolator.
+    /// <b>For Beginners:</b> This method does the mathematical heavy lifting to prepare the interpolator.
     /// It figures out how much influence each of your known data points should have when estimating
     /// values at new locations. This happens automatically when you create the interpolator, so you
     /// don't need to call this method directly.
@@ -136,7 +136,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// This method calculates the z-value at any (x,y) coordinate by combining the radial basis functions
     /// with their respective coefficients.
     /// 
-    /// For Beginners: Once you've set up the interpolator with your known points, this method
+    /// <b>For Beginners:</b> Once you've set up the interpolator with your known points, this method
     /// lets you ask "What would the z-value (height) be at this specific (x,y) location?"
     /// 
     /// The algorithm works by:
@@ -174,7 +174,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// This method implements the standard multiquadric function: sqrt(r² + ε²).
     /// 
-    /// For Beginners: This is the mathematical function that determines how the influence of a data point
+    /// <b>For Beginners:</b> This is the mathematical function that determines how the influence of a data point
     /// decreases with distance. The multiquadric function creates a smooth "hill" shape around each data point.
     /// The epsilon parameter controls how wide and flat these hills are.
     /// </remarks>

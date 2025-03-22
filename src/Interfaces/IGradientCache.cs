@@ -5,7 +5,7 @@ namespace AiDotNet.Interfaces;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: This interface defines methods for saving and reusing calculations to make your AI models run faster.
+/// <b>For Beginners:</b> This interface defines methods for saving and reusing calculations to make your AI models run faster.
 /// 
 /// In machine learning, models often need to calculate "gradients" - mathematical directions that show how to 
 /// adjust the model to make better predictions. These calculations can be time-consuming, especially for complex models.
@@ -33,7 +33,7 @@ public interface IGradientCache<T>
     /// <param name="key">The unique identifier for the gradient.</param>
     /// <returns>The cached gradient if found; otherwise, null.</returns>
     /// <remarks>
-    /// For Beginners: This method looks up a saved calculation in the cache.
+    /// <b>For Beginners:</b> This method looks up a saved calculation in the cache.
     /// 
     /// The parameter:
     /// - key: A unique name or identifier for the gradient you want to retrieve
@@ -60,7 +60,7 @@ public interface IGradientCache<T>
     /// <param name="key">The unique identifier to associate with this gradient.</param>
     /// <param name="gradient">The gradient to cache.</param>
     /// <remarks>
-    /// For Beginners: This method saves a calculation result so you can reuse it later.
+    /// <b>For Beginners:</b> This method saves a calculation result so you can reuse it later.
     /// 
     /// The parameters:
     /// - key: A unique name or identifier you choose for this gradient
@@ -86,7 +86,7 @@ public interface IGradientCache<T>
     /// Removes all cached gradients, freeing up memory.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method erases all saved calculations from the cache.
+    /// <b>For Beginners:</b> This method erases all saved calculations from the cache.
     /// 
     /// What this method does:
     /// 1. Removes all gradients that have been stored in the cache

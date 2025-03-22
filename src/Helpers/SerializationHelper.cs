@@ -5,7 +5,7 @@ namespace AiDotNet.Helpers;
 /// </summary>
 /// <typeparam name="T">The numeric type used in the AI models (e.g., double, float, int).</typeparam>
 /// <remarks>
-/// For Beginners: Serialization is the process of converting complex data structures (like AI models) 
+/// <b>For Beginners:</b> Serialization is the process of converting complex data structures (like AI models) 
 /// into a format that can be easily stored or transmitted. Think of it like saving your game progress 
 /// so you can continue later. This helper makes it possible to save trained AI models to disk and 
 /// load them back when needed.
@@ -23,7 +23,7 @@ public static class SerializationHelper<T>
     /// <param name="node">The decision tree node to serialize.</param>
     /// <param name="writer">The binary writer to write the serialized data to.</param>
     /// <remarks>
-    /// For Beginners: This method saves a decision tree (a flowchart-like model that makes decisions) 
+    /// <b>For Beginners:</b> This method saves a decision tree (a flowchart-like model that makes decisions) 
     /// to a file. Decision trees are used in AI for classification and regression tasks.
     /// </remarks>
     public static void SerializeNode(DecisionTreeNode<T>? node, BinaryWriter writer)
@@ -56,7 +56,7 @@ public static class SerializationHelper<T>
     /// <param name="reader">The binary reader to read the serialized data from.</param>
     /// <returns>The deserialized decision tree node.</returns>
     /// <remarks>
-    /// For Beginners: This method loads a previously saved decision tree from a file,
+    /// <b>For Beginners:</b> This method loads a previously saved decision tree from a file,
     /// reconstructing its structure so you can use it to make predictions without retraining.
     /// </remarks>
     public static DecisionTreeNode<T>? DeserializeNode(BinaryReader reader)
@@ -93,7 +93,7 @@ public static class SerializationHelper<T>
     /// <param name="value">The value to write.</param>
     /// <exception cref="NotSupportedException">Thrown when the type T is not supported for serialization.</exception>
     /// <remarks>
-    /// For Beginners: This method handles writing different types of numbers (like integers or decimals)
+    /// <b>For Beginners:</b> This method handles writing different types of numbers (like integers or decimals)
     /// to a file in a way that preserves their exact values.
     /// </remarks>
     public static void WriteValue(BinaryWriter writer, T value)
@@ -163,7 +163,7 @@ public static class SerializationHelper<T>
     /// <returns>The value read from the binary reader.</returns>
     /// <exception cref="NotSupportedException">Thrown when the type T is not supported for deserialization.</exception>
     /// <remarks>
-    /// For Beginners: This method reads different types of numbers from a file and converts them
+    /// <b>For Beginners:</b> This method reads different types of numbers from a file and converts them
     /// back to their original form so they can be used in calculations.
     /// </remarks>
     public static T ReadValue(BinaryReader reader)
@@ -232,7 +232,7 @@ public static class SerializationHelper<T>
     /// <param name="writer">The binary writer to write the serialized data to.</param>
     /// <param name="matrix">The matrix to serialize.</param>
     /// <remarks>
-    /// For Beginners: A matrix is a rectangular grid of numbers used in many AI algorithms.
+    /// <b>For Beginners:</b> A matrix is a rectangular grid of numbers used in many AI algorithms.
     /// This method saves that grid to a file so you can use it later.
     /// </remarks>
     public static void SerializeMatrix(BinaryWriter writer, Matrix<T> matrix)
@@ -257,7 +257,7 @@ public static class SerializationHelper<T>
     /// <returns>The deserialized matrix.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the stored matrix dimensions do not match the expected dimensions.</exception>
     /// <remarks>
-    /// For Beginners: This method loads a previously saved matrix from a file, but checks that
+    /// <b>For Beginners:</b> This method loads a previously saved matrix from a file, but checks that
     /// it has the size you expect. This is important because AI algorithms need matrices of specific sizes.
     /// </remarks>
     public static Matrix<T> DeserializeMatrix(BinaryReader reader, int rows, int columns)
@@ -288,7 +288,7 @@ public static class SerializationHelper<T>
     /// <param name="matrix">The matrix to serialize.</param>
     /// <returns>A byte array containing the serialized matrix.</returns>
     /// <remarks>
-    /// For Beginners: This method converts a matrix (grid of numbers) into a compact format
+    /// <b>For Beginners:</b> This method converts a matrix (grid of numbers) into a compact format
     /// that can be easily stored in memory or in a database.
     /// </remarks>
     public static byte[] SerializeMatrix(Matrix<T> matrix)
@@ -315,7 +315,7 @@ public static class SerializationHelper<T>
     /// <param name="reader">The binary reader to read the serialized data from.</param>
     /// <returns>The deserialized matrix with dimensions read from the binary data.</returns>
     /// <remarks>
-    /// For Beginners: This method loads a matrix (grid of numbers) from a file without needing to know
+    /// <b>For Beginners:</b> This method loads a matrix (grid of numbers) from a file without needing to know
     /// its size in advance. The size information is stored in the file itself.
     /// </remarks>
     public static Matrix<T> DeserializeMatrix(BinaryReader reader)
@@ -340,7 +340,7 @@ public static class SerializationHelper<T>
     /// <param name="data">The byte array containing the serialized matrix.</param>
     /// <returns>The deserialized matrix.</returns>
     /// <remarks>
-    /// For Beginners: This method converts a compact byte representation (which might have been
+    /// <b>For Beginners:</b> This method converts a compact byte representation (which might have been
     /// stored in a database or received over a network) back into a usable matrix for AI calculations.
     /// </remarks>
     public static Matrix<T> DeserializeMatrix(byte[] data)
@@ -368,7 +368,7 @@ public static class SerializationHelper<T>
     /// <param name="writer">The binary writer to write the serialized data to.</param>
     /// <param name="vector">The vector to serialize.</param>
     /// <remarks>
-    /// For Beginners: A vector is a one-dimensional array of numbers, like a single row or column
+    /// <b>For Beginners:</b> A vector is a one-dimensional array of numbers, like a single row or column
     /// of data. This method saves that list of numbers to a file so you can use it later.
     /// Vectors are commonly used in AI to represent features or weights.
     /// </remarks>
@@ -389,7 +389,7 @@ public static class SerializationHelper<T>
     /// <returns>The deserialized vector.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the stored vector length does not match the expected length.</exception>
     /// <remarks>
-    /// For Beginners: This method loads a previously saved vector (list of numbers) from a file,
+    /// <b>For Beginners:</b> This method loads a previously saved vector (list of numbers) from a file,
     /// but checks that it has the length you expect. This is important because AI algorithms often
     /// need vectors of specific lengths to work correctly.
     /// </remarks>
@@ -417,7 +417,7 @@ public static class SerializationHelper<T>
     /// <param name="reader">The binary reader to read the serialized data from.</param>
     /// <returns>The deserialized vector with length read from the binary data.</returns>
     /// <remarks>
-    /// For Beginners: This method loads a vector (list of numbers) from a file without needing to know
+    /// <b>For Beginners:</b> This method loads a vector (list of numbers) from a file without needing to know
     /// its length in advance. The length information is stored in the file itself.
     /// </remarks>
     public static Vector<T> DeserializeVector(BinaryReader reader)
@@ -438,7 +438,7 @@ public static class SerializationHelper<T>
     /// <param name="vector">The vector to serialize.</param>
     /// <returns>A byte array containing the serialized vector.</returns>
     /// <remarks>
-    /// For Beginners: This method converts a vector (list of numbers) into a compact format
+    /// <b>For Beginners:</b> This method converts a vector (list of numbers) into a compact format
     /// that can be easily stored in memory or in a database. This is useful when you want to
     /// save trained model parameters for later use without retraining.
     /// </remarks>
@@ -462,7 +462,7 @@ public static class SerializationHelper<T>
     /// <param name="data">The byte array containing the serialized vector.</param>
     /// <returns>The deserialized vector.</returns>
     /// <remarks>
-    /// For Beginners: This method converts a compact byte representation (which might have been
+    /// <b>For Beginners:</b> This method converts a compact byte representation (which might have been
     /// stored in a database or received over a network) back into a usable vector for AI calculations.
     /// Vectors are essential in many AI algorithms for representing features, weights, or predictions.
     /// </remarks>

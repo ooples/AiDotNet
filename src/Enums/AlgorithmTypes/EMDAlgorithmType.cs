@@ -5,7 +5,7 @@ namespace AiDotNet.Enums.AlgorithmTypes;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Empirical Mode Decomposition (EMD) is a technique used to break down complex data signals 
+/// <b>For Beginners:</b> Empirical Mode Decomposition (EMD) is a technique used to break down complex data signals 
 /// into simpler components called Intrinsic Mode Functions (IMFs).
 /// 
 /// Imagine you're listening to an orchestra. The music you hear is a complex mixture of sounds from many 
@@ -39,7 +39,7 @@ public enum EMDAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Standard EMD is the original version of the algorithm that decomposes a signal 
+    /// <b>For Beginners:</b> The Standard EMD is the original version of the algorithm that decomposes a signal 
     /// into a collection of Intrinsic Mode Functions (IMFs).
     /// 
     /// It works by identifying local extremes (peaks and valleys) in your data, connecting them with smooth 
@@ -61,7 +61,7 @@ public enum EMDAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Ensemble EMD improves on the standard algorithm by adding small amounts of noise to 
+    /// <b>For Beginners:</b> Ensemble EMD improves on the standard algorithm by adding small amounts of noise to 
     /// the original signal and performing multiple decompositions.
     /// 
     /// Imagine you're trying to find a path through a foggy forest. If you make the journey just once, you 
@@ -84,7 +84,7 @@ public enum EMDAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Complete Ensemble EMD is an enhanced version of EEMD that adds noise in pairs (positive 
+    /// <b>For Beginners:</b> Complete Ensemble EMD is an enhanced version of EEMD that adds noise in pairs (positive 
     /// and negative) to ensure that the added noise cancels out completely in the final result.
     /// 
     /// While EEMD adds random noise many times and averages the results, some residual noise can still remain 
@@ -107,7 +107,7 @@ public enum EMDAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Multivariate EMD extends the EMD concept to handle multiple related signals simultaneously.
+    /// <b>For Beginners:</b> Multivariate EMD extends the EMD concept to handle multiple related signals simultaneously.
     /// 
     /// While standard EMD, EEMD, and CEEMD work on a single data series (like temperature over time), MEMD can 
     /// analyze multiple related data series together (like temperature, humidity, and pressure over time).

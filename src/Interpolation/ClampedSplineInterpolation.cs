@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Clamped cubic splines create smooth curves that pass through all provided data points
 /// while allowing you to specify the slope at the endpoints of the curve.
 /// 
-/// For Beginners: Think of this as drawing a smooth curve through a set of points where
+/// <b>For Beginners:</b> Think of this as drawing a smooth curve through a set of points where
 /// you can control the "direction" the curve enters and exits the first and last points.
 /// This is useful when you need the curve to approach the endpoints from specific angles,
 /// such as when connecting to other curves or when modeling physical phenomena with known
@@ -34,7 +34,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// The slope of the curve at the first data point.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This controls the "direction" or "steepness" of the curve as it
+    /// <b>For Beginners:</b> This controls the "direction" or "steepness" of the curve as it
     /// leaves the first point. A positive value means the curve goes upward, a negative
     /// value means it goes downward, and zero means it's flat (horizontal).
     /// </remarks>
@@ -44,7 +44,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// The slope of the curve at the last data point.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This controls the "direction" or "steepness" of the curve as it
+    /// <b>For Beginners:</b> This controls the "direction" or "steepness" of the curve as it
     /// approaches the last point. A positive value means the curve comes from below,
     /// a negative value means it comes from above, and zero means it approaches horizontally.
     /// </remarks>
@@ -54,7 +54,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// The matrix decomposition method used to solve the spline equations.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is an advanced mathematical tool that helps solve the equations
+    /// <b>For Beginners:</b> This is an advanced mathematical tool that helps solve the equations
     /// needed to create the smooth curve. You typically don't need to worry about this
     /// unless you have specific performance requirements.
     /// </remarks>
@@ -64,7 +64,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// The coefficients of the cubic polynomials that define the spline segments.
     /// </summary>
     /// <remarks>
-    /// For Beginners: These are the mathematical values that define the shape of the curve
+    /// <b>For Beginners:</b> These are the mathematical values that define the shape of the curve
     /// between each pair of points. They're calculated automatically when you create the spline.
     /// </remarks>
     private readonly Vector<T>[] _coefficients;
@@ -73,7 +73,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a utility that helps perform math operations (like addition
+    /// <b>For Beginners:</b> This is a utility that helps perform math operations (like addition
     /// and multiplication) on different types of numbers. You don't need to interact with
     /// this directly.
     /// </remarks>
@@ -86,7 +86,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// This constructor validates the input data, sets up the spline parameters, and calculates
     /// the coefficients needed for interpolation.
     /// 
-    /// For Beginners: This sets up everything needed to create a smooth curve through your points:
+    /// <b>For Beginners:</b> This sets up everything needed to create a smooth curve through your points:
     /// 1. It checks that you have enough points (at least 2)
     /// 2. It stores your x and y coordinates
     /// 3. It sets up the slopes at the endpoints
@@ -138,7 +138,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// This method finds the segment containing the target x-coordinate and calculates
     /// the corresponding y-value using the cubic polynomial for that segment.
     /// 
-    /// For Beginners: This is the main method you'll use. Give it an x-value, and it will:
+    /// <b>For Beginners:</b> This is the main method you'll use. Give it an x-value, and it will:
     /// 1. Find which segment of your data contains this x-value
     /// 2. Use the cubic polynomial formula for that segment
     /// 3. Calculate the y-value on the smooth curve at your requested x-position
@@ -170,7 +170,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// This method sets up and solves a system of equations to determine the coefficients
     /// that define the cubic polynomial for each segment of the spline.
     /// 
-    /// For Beginners: This method does the mathematical heavy lifting to create the smooth curve.
+    /// <b>For Beginners:</b> This method does the mathematical heavy lifting to create the smooth curve.
     /// It works by:
     /// 1. Setting up a system of equations based on your data points
     /// 2. Applying the special "clamped" conditions at the endpoints using your specified slopes
@@ -236,7 +236,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// This method searches through the x-coordinates to find which segment
     /// contains the target x-value.
     /// 
-    /// For Beginners: Think of this as finding which "piece" of the curve contains
+    /// <b>For Beginners:</b> Think of this as finding which "piece" of the curve contains
     /// your x-value. For example, if your data points are at x = [0, 10, 20, 30]
     /// and you want to find where x = 15 belongs, this method will tell you it's
     /// in the segment between 10 and 20 (which is segment index 1).
@@ -264,7 +264,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// This method calculates x raised to the power of 'power' by multiplying
     /// x by itself 'power' times.
     /// 
-    /// For Beginners: This is a simple way to calculate powers. For example:
+    /// <b>For Beginners:</b> This is a simple way to calculate powers. For example:
     /// - Power(x, 2) means x² (x squared)
     /// - Power(x, 3) means x³ (x cubed)
     /// 

@@ -8,7 +8,7 @@ namespace AiDotNet.Interpolation;
 /// through three parameters: tension, continuity, and bias. This allows for more flexible and
 /// customizable interpolation compared to simpler methods.
 /// 
-/// For Beginners: This interpolation method creates smooth curves between data points with
+/// <b>For Beginners:</b> This interpolation method creates smooth curves between data points with
 /// special controls that let you adjust how the curve looks. Imagine drawing a line through
 /// dots on a graph, but being able to control how "tight" the curve is, how smoothly it
 /// transitions between segments, and whether it tends to overshoot or undershoot. This is
@@ -54,7 +54,7 @@ public class KochanekBartelsSplineInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// The constructor initializes the interpolation with the provided data points and shape parameters.
     /// 
-    /// For Beginners: When you create a new KochanekBartelsSplineInterpolation object, you provide
+    /// <b>For Beginners:</b> When you create a new KochanekBartelsSplineInterpolation object, you provide
     /// your data points (x and y values) and can optionally adjust three special parameters:
     /// 
     /// - Tension (default 0): Controls how "tight" the curve is. Think of it like a rubber band:
@@ -99,7 +99,7 @@ public class KochanekBartelsSplineInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This method finds the interval containing the x-value and evaluates the spline at that point.
     /// 
-    /// For Beginners: This is the main method you'll use after creating the interpolation.
+    /// <b>For Beginners:</b> This is the main method you'll use after creating the interpolation.
     /// Give it any x-value within your data range, and it will return the estimated y-value
     /// using the Kochanek-Bartels spline curve that passes through your data points.
     /// </remarks>
@@ -130,7 +130,7 @@ public class KochanekBartelsSplineInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This method searches through the x-coordinates to find which segment contains the given x-value.
     /// 
-    /// For Beginners: This helper method determines which pair of data points the x-value falls between.
+    /// <b>For Beginners:</b> This helper method determines which pair of data points the x-value falls between.
     /// It's like finding which page of a book contains a specific word.
     /// </remarks>
     /// <param name="x">The x-value to locate.</param>
@@ -153,7 +153,7 @@ public class KochanekBartelsSplineInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This method computes the cubic polynomial that represents the spline within a segment.
     /// 
-    /// For Beginners: Once we know which segment contains our x-value, this method calculates
+    /// <b>For Beginners:</b> Once we know which segment contains our x-value, this method calculates
     /// the actual y-value on the curve. It uses a special formula that takes into account
     /// the four nearest points and the tension, bias, and continuity parameters to create
     /// a smooth curve that passes through the data points.
@@ -208,7 +208,7 @@ public class KochanekBartelsSplineInterpolation<T> : IInterpolation<T>
     /// This method computes the tangent (slope) at a point using the Kochanek-Bartels formula,
     /// which takes into account the tension, continuity, and bias parameters.
     /// 
-    /// For Beginners: The tangent is like the direction and speed of the curve at a specific point.
+    /// <b>For Beginners:</b> The tangent is like the direction and speed of the curve at a specific point.
     /// Think of it as the direction a car would be heading if it was driving along the curve.
     /// This method calculates that direction based on three consecutive points and the special
     /// parameters (tension, bias, and continuity) that control the curve's shape.

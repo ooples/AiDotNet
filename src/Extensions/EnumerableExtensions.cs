@@ -4,7 +4,7 @@
 /// Provides extension methods for IEnumerable collections to enhance their functionality.
 /// </summary>
 /// <remarks>
-/// For Beginners: Extension methods are special methods that add new capabilities to existing types
+/// <b>For Beginners:</b> Extension methods are special methods that add new capabilities to existing types
 /// without modifying the original code. This class adds useful operations to collections in your code.
 /// </remarks>
 public static class EnumerableExtensions
@@ -19,7 +19,7 @@ public static class EnumerableExtensions
     /// returns the numeric zero value for type T.
     /// </returns>
     /// <remarks>
-    /// For Beginners: This method picks one random item from your collection, similar to
+    /// <b>For Beginners:</b> This method picks one random item from your collection, similar to
     /// drawing a name from a hat. If your collection is empty, it returns zero (or the equivalent
     /// for the data type you're using).
     /// 

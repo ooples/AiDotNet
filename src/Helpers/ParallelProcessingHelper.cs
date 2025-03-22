@@ -4,7 +4,7 @@ namespace AiDotNet.Helpers;
 /// Helper class for executing multiple tasks in parallel to improve performance.
 /// </summary>
 /// <remarks>
-/// For Beginners: This class helps your AI models run faster by doing multiple calculations 
+/// <b>For Beginners:</b> This class helps your AI models run faster by doing multiple calculations 
 /// at the same time, similar to having multiple people working on different parts of a project
 /// simultaneously instead of one person doing everything sequentially.
 /// </remarks>
@@ -19,7 +19,7 @@ public static class ParallelProcessingHelper
     /// If not specified, defaults to the number of processor cores.</param>
     /// <returns>A list containing all the results from the executed functions.</returns>
     /// <remarks>
-    /// For Beginners: This method takes a collection of "work items" (functions) and runs them
+    /// <b>For Beginners:</b> This method takes a collection of "work items" (functions) and runs them
     /// in parallel. It controls how many can run at once to prevent overloading your computer.
     /// 
     /// For example, if you have 100 data processing tasks but set maxDegreeOfParallelism to 4,
@@ -58,7 +58,7 @@ public static class ParallelProcessingHelper
     /// If not specified, defaults to the number of processor cores.</param>
     /// <returns>A list containing all the results from the executed tasks.</returns>
     /// <remarks>
-    /// For Beginners: This method is similar to the one above but works with tasks that are already
+    /// <b>For Beginners:</b> This method is similar to the one above but works with tasks that are already
     /// created. It processes these tasks in batches, with each batch containing a number of tasks
     /// equal to your processor count (or the value you specify).
     /// 

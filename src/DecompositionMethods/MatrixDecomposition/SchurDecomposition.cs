@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used in the matrix.</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Schur decomposition breaks down a complex matrix into simpler parts that are easier to work with.
+/// <b>For Beginners:</b> Schur decomposition breaks down a complex matrix into simpler parts that are easier to work with.
 /// It's like factoring a number (e.g., 12 = 3 × 4), but for matrices. The decomposition produces two matrices:
 /// a unitary matrix (which preserves lengths and angles) and an upper triangular matrix (which has zeros below the diagonal).
 /// This makes many calculations much simpler.
@@ -18,7 +18,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// Gets the upper triangular Schur matrix (S) from the decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is the triangular matrix that has all its non-zero elements on or above the diagonal.
+    /// <b>For Beginners:</b> This is the triangular matrix that has all its non-zero elements on or above the diagonal.
     /// It's easier to work with than the original matrix for many calculations.
     /// </remarks>
     public Matrix<T> SchurMatrix { get; private set; }
@@ -27,7 +27,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// Gets the unitary matrix (U) from the decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: A unitary matrix preserves the length of vectors and the angles between them.
+    /// <b>For Beginners:</b> A unitary matrix preserves the length of vectors and the angles between them.
     /// When you multiply a vector by a unitary matrix, the result has the same length as the original vector.
     /// </remarks>
     public Matrix<T> UnitaryMatrix { get; private set; }
@@ -78,7 +78,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the Schur matrix and the unitary matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method uses repeated QR decompositions to gradually transform the matrix
+    /// <b>For Beginners:</b> This method uses repeated QR decompositions to gradually transform the matrix
     /// into an upper triangular form. It's like repeatedly refining a rough sketch until you get a clear picture.
     /// The QR algorithm is one of the most common ways to find eigenvalues of a matrix.
     /// </para>
@@ -114,7 +114,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the Schur matrix and the unitary matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Francis QR algorithm is an improved version of the basic QR algorithm.
+    /// <b>For Beginners:</b> The Francis QR algorithm is an improved version of the basic QR algorithm.
     /// It uses special techniques to make the computation faster and more accurate.
     /// This method is particularly good for finding eigenvalues of large matrices.
     /// </para>
@@ -182,7 +182,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the Schur matrix and the unitary matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The implicit QR algorithm is another variation of the QR algorithm that avoids
+    /// <b>For Beginners:</b> The implicit QR algorithm is another variation of the QR algorithm that avoids
     /// explicitly forming certain matrices, making it more efficient. It's like taking a shortcut
     /// in a calculation by skipping steps that aren't necessary.
     /// </para>
@@ -250,7 +250,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A Householder reflection matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Householder reflection is a mathematical operation that "reflects" vectors across a plane.
+    /// <b>For Beginners:</b> A Householder reflection is a mathematical operation that "reflects" vectors across a plane.
     /// It's used in many matrix decomposition algorithms to transform matrices into simpler forms.
     /// Think of it like a mirror that reflects a vector to point in a specific direction.
     /// This helps simplify complex matrix operations by zeroing out specific elements.
@@ -285,7 +285,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the solution to a system of equations represented by Ax = b,
+    /// <b>For Beginners:</b> This method finds the solution to a system of equations represented by Ax = b,
     /// where A is the original matrix, x is the unknown vector we're solving for, and b is a known vector.
     /// It uses the Schur decomposition to break this problem into simpler steps that are easier to solve.
     /// </para>
@@ -306,7 +306,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The inverse of the original matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The inverse of a matrix is like the reciprocal of a number. Just as 1/x is the reciprocal of x,
+    /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/x is the reciprocal of x,
     /// the inverse of a matrix A (written as A⁻¹) is a matrix that, when multiplied by A, gives the identity matrix.
     /// </para>
     /// <para>

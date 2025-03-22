@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
-/// For beginners: Outliers are unusual data points that differ significantly from most of your data.
+/// <b>For Beginners:</b> Outliers are unusual data points that differ significantly from most of your data.
 /// These unusual values can negatively impact machine learning models by skewing results.
 /// 
 /// This interface provides a standard way to implement different outlier detection and removal
@@ -29,7 +29,7 @@ public interface IOutlierRemoval<T>
     /// - CleanedOutputs: A vector of output values corresponding to the cleaned inputs
     /// </returns>
     /// <remarks>
-    /// For beginners: This method analyzes your dataset to find unusual values (outliers) and removes them.
+    /// <b>For Beginners:</b> This method analyzes your dataset to find unusual values (outliers) and removes them.
     /// 
     /// The inputs parameter is a matrix where:
     /// - Each row represents one sample or data point

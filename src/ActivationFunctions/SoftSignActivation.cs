@@ -10,7 +10,7 @@
 /// It maps any input value to an output between -1 and 1, similar to tanh but with different properties.
 /// </para>
 /// <para>
-/// For Beginners: SoftSign is an activation function that squeezes input values into a range between -1 and 1.
+/// <b>For Beginners:</b> SoftSign is an activation function that squeezes input values into a range between -1 and 1.
 /// It's similar to the tanh function but approaches its limits more slowly.
 /// 
 /// Key properties of SoftSign:
@@ -36,7 +36,7 @@ public class SoftSignActivation<T> : ActivationFunctionBase<T>
     /// independently to each individual value.
     /// </para>
     /// <para>
-    /// For Beginners: This method returning true means that SoftSign works on one number at a time.
+    /// <b>For Beginners:</b> This method returning true means that SoftSign works on one number at a time.
     /// Each input value is transformed independently without needing to know about other values.
     /// </para>
     /// </remarks>
@@ -52,7 +52,7 @@ public class SoftSignActivation<T> : ActivationFunctionBase<T>
     /// Computes x / (1 + |x|) where x is the input value and |x| is the absolute value of x.
     /// </para>
     /// <para>
-    /// For Beginners: This method transforms an input number using the SoftSign formula:
+    /// <b>For Beginners:</b> This method transforms an input number using the SoftSign formula:
     /// 1. Calculate the absolute value of your input (remove any negative sign)
     /// 2. Add 1 to that absolute value
     /// 3. Divide the original input by this sum
@@ -86,7 +86,7 @@ public class SoftSignActivation<T> : ActivationFunctionBase<T>
     /// This derivative is always positive and approaches zero as |x| increases.
     /// </para>
     /// <para>
-    /// For Beginners: The derivative tells us how quickly the SoftSign function is changing at any point.
+    /// <b>For Beginners:</b> The derivative tells us how quickly the SoftSign function is changing at any point.
     /// It's calculated as 1 / (1 + |x|)^2.
     /// 
     /// This derivative has these important properties:

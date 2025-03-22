@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// Symbolic models create human-readable mathematical formulas to represent relationships in data.
 /// These models can evolve through genetic operations like mutation and crossover.
 /// 
-/// For Beginners: A symbolic model is like having an AI that writes mathematical formulas to
+/// <b>For Beginners:</b> A symbolic model is like having an AI that writes mathematical formulas to
 /// explain your data. Instead of being a "black box" where you can't see how decisions are made,
 /// symbolic models give you actual equations you can understand.
 /// 
@@ -26,7 +26,7 @@ public interface ISymbolicModel<T> : IFullModel<T>
     /// <remarks>
     /// Complexity typically represents how complicated the mathematical expression is.
     /// 
-    /// For Beginners: This property tells you how complicated the formula is. A higher
+    /// <b>For Beginners:</b> This property tells you how complicated the formula is. A higher
     /// number means a more complex formula with more operations, variables, or terms.
     /// 
     /// Simple formulas (low complexity) are usually preferred because they:
@@ -42,7 +42,7 @@ public interface ISymbolicModel<T> : IFullModel<T>
     /// <remarks>
     /// This method finds the best symbolic expression to represent the relationship between inputs and outputs.
     /// 
-    /// For Beginners: This is where the model "learns" from your data. You provide:
+    /// <b>For Beginners:</b> This is where the model "learns" from your data. You provide:
     /// - X: Your input data (features) organized in rows and columns
     /// - y: The correct answers (target values) you want the model to predict
     /// 
@@ -59,7 +59,7 @@ public interface ISymbolicModel<T> : IFullModel<T>
     /// <remarks>
     /// This method applies the symbolic expression to the input data to produce a prediction.
     /// 
-    /// For Beginners: Once your model has learned a formula, this method lets you use that
+    /// <b>For Beginners:</b> Once your model has learned a formula, this method lets you use that
     /// formula to make predictions. You provide the input values, and the model calculates
     /// what the output should be according to its formula.
     /// 
@@ -76,7 +76,7 @@ public interface ISymbolicModel<T> : IFullModel<T>
     /// <remarks>
     /// Mutation introduces small random changes to the symbolic expression to explore new solutions.
     /// 
-    /// For Beginners: This is like creating a "child" version of the model with small random changes.
+    /// <b>For Beginners:</b> This is like creating a "child" version of the model with small random changes.
     /// These changes might make the formula better or worse at predictions.
     /// 
     /// The mutationRate controls how many changes are made:
@@ -96,7 +96,7 @@ public interface ISymbolicModel<T> : IFullModel<T>
     /// <remarks>
     /// Crossover combines parts of two symbolic expressions to create a new expression.
     /// 
-    /// For Beginners: This is like creating a "child" model that inherits parts of its formula
+    /// <b>For Beginners:</b> This is like creating a "child" model that inherits parts of its formula
     /// from two "parent" models. The idea is that if both parent models have good qualities,
     /// the child might combine the best of both.
     /// 
@@ -118,7 +118,7 @@ public interface ISymbolicModel<T> : IFullModel<T>
     /// <remarks>
     /// This method creates a deep copy where all internal structures are duplicated.
     /// 
-    /// For Beginners: This creates an exact duplicate of the model with the same formula.
+    /// <b>For Beginners:</b> This creates an exact duplicate of the model with the same formula.
     /// Changes to the copy won't affect the original model.
     /// 
     /// This is useful when you want to:
@@ -135,7 +135,7 @@ public interface ISymbolicModel<T> : IFullModel<T>
     /// <remarks>
     /// This represents the number of variables the symbolic expression can use.
     /// 
-    /// For Beginners: This tells you how many different input variables the model's formula
+    /// <b>For Beginners:</b> This tells you how many different input variables the model's formula
     /// can work with. For example, if you're predicting house prices based on size, age,
     /// and number of bedrooms, the feature count would be 3.
     /// </remarks>
@@ -147,7 +147,7 @@ public interface ISymbolicModel<T> : IFullModel<T>
     /// <remarks>
     /// This method checks if a particular feature contributes to the model's predictions.
     /// 
-    /// For Beginners: This tells you if a specific input variable is actually used in the
+    /// <b>For Beginners:</b> This tells you if a specific input variable is actually used in the
     /// model's formula. Sometimes, the model might decide that certain inputs aren't helpful
     /// for making predictions and exclude them from the formula.
     /// 
@@ -164,7 +164,7 @@ public interface ISymbolicModel<T> : IFullModel<T>
     /// <remarks>
     /// Coefficients are the numerical values that scale or adjust terms in the expression.
     /// 
-    /// For Beginners: These are the numbers in the model's formula. For example, in the formula
+    /// <b>For Beginners:</b> These are the numbers in the model's formula. For example, in the formula
     /// "y = 2x + 3", the coefficients are 2 and 3.
     /// 
     /// Coefficients determine how strongly each part of the formula affects the final prediction.
@@ -178,7 +178,7 @@ public interface ISymbolicModel<T> : IFullModel<T>
     /// <remarks>
     /// This method allows fine-tuning the model by adjusting its numerical parameters.
     /// 
-    /// For Beginners: This lets you change just the numbers in the formula without changing
+    /// <b>For Beginners:</b> This lets you change just the numbers in the formula without changing
     /// its overall structure. It's like keeping the recipe the same but adjusting the amounts
     /// of each ingredient.
     /// 

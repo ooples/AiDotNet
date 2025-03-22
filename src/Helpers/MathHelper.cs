@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: This helper class contains various mathematical functions that are commonly 
+/// <b>For Beginners:</b> This helper class contains various mathematical functions that are commonly 
 /// used in AI and machine learning algorithms. These functions work with different numeric types 
 /// (like double, float, decimal) and handle the calculations in a consistent way.
 /// 
@@ -23,7 +23,7 @@ public static class MathHelper
     /// <exception cref="NotSupportedException">Thrown when the specified type is not supported.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method determines how to perform basic math operations (like addition, 
+    /// <b>For Beginners:</b> This method determines how to perform basic math operations (like addition, 
     /// multiplication) based on what type of number you're working with. 
     /// 
     /// For example, adding two doubles is different from adding two integers at the computer level.
@@ -72,7 +72,7 @@ public static class MathHelper
     /// </returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method ensures a number stays within a certain range.
+    /// <b>For Beginners:</b> This method ensures a number stays within a certain range.
     /// 
     /// For example, if you have a value of 15, but want to keep it between 0 and 10,
     /// Clamp(15, 0, 10) will return 10 (the maximum allowed).
@@ -102,7 +102,7 @@ public static class MathHelper
     /// <returns>The value of the Bessel function I₀(x).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Bessel functions are special mathematical functions that appear in many 
+    /// <b>For Beginners:</b> Bessel functions are special mathematical functions that appear in many 
     /// AI and physics problems, especially those involving circular or cylindrical shapes.
     /// 
     /// The modified Bessel function I₀(x) is used in probability distributions (like the 
@@ -141,7 +141,7 @@ public static class MathHelper
     /// <returns>The Gamma function value Γ(x).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Gamma function is an extension of the factorial function to real numbers.
+    /// <b>For Beginners:</b> The Gamma function is an extension of the factorial function to real numbers.
     /// While factorial (n!) is only defined for positive integers, the Gamma function works for 
     /// almost any real number.
     /// 
@@ -198,7 +198,7 @@ public static class MathHelper
     /// <exception cref="ArgumentException">Thrown when x is not positive.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: Bessel functions are special mathematical functions that appear in many 
+    /// <b>For Beginners:</b> Bessel functions are special mathematical functions that appear in many 
     /// physics and engineering problems, especially those involving wave propagation, heat 
     /// conduction in cylindrical objects, and electromagnetic waves. This particular Bessel 
     /// function (K) is used when modeling damped oscillations or exponential decay in a system.
@@ -275,7 +275,7 @@ public static class MathHelper
     /// <exception cref="DivideByZeroException">Thrown when the input value is zero.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: The reciprocal of a number is simply 1 divided by that number. 
+    /// <b>For Beginners:</b> The reciprocal of a number is simply 1 divided by that number. 
     /// For example, the reciprocal of 4 is 1/4 or 0.25, and the reciprocal of 0.5 is 1/0.5 or 2.
     /// Reciprocals are useful in many mathematical operations, especially when you need to 
     /// convert division into multiplication.
@@ -300,7 +300,7 @@ public static class MathHelper
     /// <returns>The sinc of the input value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The sinc function is a mathematical function that appears frequently in 
+    /// <b>For Beginners:</b> The sinc function is a mathematical function that appears frequently in 
     /// signal processing and Fourier analysis. It's defined as sin(πx)/(πx) for x ≠ 0, and 1 for x = 0.
     /// The sinc function creates a wave that gradually diminishes as you move away from the center,
     /// making it useful for filtering and interpolation in digital signal processing.
@@ -328,7 +328,7 @@ public static class MathHelper
     /// <exception cref="DivideByZeroException">Thrown when y is zero.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: The modulo operation finds the remainder after division of one number by another.
+    /// <b>For Beginners:</b> The modulo operation finds the remainder after division of one number by another.
     /// For example, 7 modulo 3 equals 1 because 7 divided by 3 is 2 with a remainder of 1.
     /// This is useful in many programming scenarios, like determining if a number is even or odd,
     /// or when you need to cycle through a range of values (like hours on a clock).
@@ -356,7 +356,7 @@ public static class MathHelper
     /// <returns>True if the value is an integer; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method checks if a number has any decimal/fractional part.
+    /// <b>For Beginners:</b> This method checks if a number has any decimal/fractional part.
     /// For example, 5.0 is an integer (returns true), while 5.1 is not (returns false).
     /// This is useful when you need to ensure a value is a whole number before performing
     /// certain operations that only work with integers.
@@ -377,7 +377,7 @@ public static class MathHelper
     /// <returns>The sigmoid of the input value (between 0 and 1).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The sigmoid function is one of the most important functions in machine learning.
+    /// <b>For Beginners:</b> The sigmoid function is one of the most important functions in machine learning.
     /// It transforms any input value into a number between 0 and 1, creating an S-shaped curve.
     /// This is especially useful in neural networks and logistic regression where you need to 
     /// convert a raw score into a probability or make a binary decision (like yes/no classification).
@@ -400,7 +400,7 @@ public static class MathHelper
     /// <returns>True if the absolute difference between a and b is less than the tolerance; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: When working with decimal numbers in computers, exact equality comparisons 
+    /// <b>For Beginners:</b> When working with decimal numbers in computers, exact equality comparisons 
     /// can be problematic due to tiny rounding errors. This method allows you to check if two 
     /// numbers are "close enough" to be considered equal by specifying how much difference 
     /// you're willing to accept.
@@ -421,7 +421,7 @@ public static class MathHelper
     /// <returns>True if the values are approximately equal; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is a simplified version of the AlmostEqual method that uses a 
+    /// <b>For Beginners:</b> This is a simplified version of the AlmostEqual method that uses a 
     /// pre-defined small tolerance value (0.00000001). Use this when you want to check if 
     /// two numbers are practically the same without specifying the exact tolerance.
     /// </para>
@@ -441,7 +441,7 @@ public static class MathHelper
     /// <returns>The value of the Bessel function J_nu(x).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Bessel functions are special mathematical functions that appear in many 
+    /// <b>For Beginners:</b> Bessel functions are special mathematical functions that appear in many 
     /// physics and engineering problems, especially those involving wave propagation, heat 
     /// conduction in cylindrical objects, and vibrations. This particular Bessel function (J) 
     /// is used when modeling oscillations or waves in a system. Think of it as a more complex 
@@ -601,7 +601,7 @@ public static class MathHelper
     /// <returns>The factorial of n as type T.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The factorial of a number (written as n!) is the product of all positive 
+    /// <b>For Beginners:</b> The factorial of a number (written as n!) is the product of all positive 
     /// integers less than or equal to n. For example, 5! = 5 × 4 × 3 × 2 × 1 = 120.
     /// Factorials are used in many probability and statistics calculations.
     /// </para>
@@ -629,7 +629,7 @@ public static class MathHelper
     /// <returns>The value of Pi as type T.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Pi (π) is a fundamental mathematical constant representing the ratio of a 
+    /// <b>For Beginners:</b> Pi (π) is a fundamental mathematical constant representing the ratio of a 
     /// circle's circumference to its diameter, approximately equal to 3.14159. It appears in many 
     /// mathematical formulas, especially those involving circles, waves, and periodic functions.
     /// </para>
@@ -647,7 +647,7 @@ public static class MathHelper
     /// <returns>The sine of the specified angle as type T.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The sine function is a fundamental trigonometric function that relates the 
+    /// <b>For Beginners:</b> The sine function is a fundamental trigonometric function that relates the 
     /// angles of a right triangle to the ratios of the lengths of its sides. In the context of 
     /// a unit circle, sine represents the y-coordinate of a point on the circle at a given angle.
     /// The input angle must be in radians, not degrees (2π radians = 360 degrees).
@@ -666,7 +666,7 @@ public static class MathHelper
     /// <returns>The cosine of the specified angle as type T.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The cosine function is a fundamental trigonometric function that relates the 
+    /// <b>For Beginners:</b> The cosine function is a fundamental trigonometric function that relates the 
     /// angles of a right triangle to the ratios of the lengths of its sides. In the context of 
     /// a unit circle, cosine represents the x-coordinate of a point on the circle at a given angle.
     /// The input angle must be in radians, not degrees (2π radians = 360 degrees).
@@ -685,7 +685,7 @@ public static class MathHelper
     /// <returns>The hyperbolic tangent of the specified value as type T.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The hyperbolic tangent (tanh) is a function commonly used in neural networks 
+    /// <b>For Beginners:</b> The hyperbolic tangent (tanh) is a function commonly used in neural networks 
     /// as an activation function. Unlike the regular tangent function, which can grow infinitely large, 
     /// tanh always outputs values between -1 and 1. This makes it useful for creating models that need 
     /// to predict values within a specific range. The function has an S-shape (sigmoid) and maps any 
@@ -710,7 +710,7 @@ public static class MathHelper
     /// <exception cref="ArgumentOutOfRangeException">Thrown when x is less than or equal to zero.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: The base-2 logarithm (log₂) tells you what power you need to raise 2 to in order 
+    /// <b>For Beginners:</b> The base-2 logarithm (log₂) tells you what power you need to raise 2 to in order 
     /// to get a specific number. For example, log₂(8) = 3 because 2³ = 8. Base-2 logarithms are commonly 
     /// used in computer science and information theory because computers use binary (base-2) number systems.
     /// </para>
@@ -731,7 +731,7 @@ public static class MathHelper
     /// <returns>The smaller of the two values.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method simply compares two numbers and returns whichever one is smaller.
+    /// <b>For Beginners:</b> This method simply compares two numbers and returns whichever one is smaller.
     /// For example, Min(5, 10) would return 5.
     /// </para>
     /// </remarks>
@@ -749,7 +749,7 @@ public static class MathHelper
     /// <returns>The larger of the two values.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method simply compares two numbers and returns whichever one is larger.
+    /// <b>For Beginners:</b> This method simply compares two numbers and returns whichever one is larger.
     /// For example, Max(5, 10) would return 10.
     /// </para>
     /// </remarks>
@@ -766,7 +766,7 @@ public static class MathHelper
     /// <returns>The arc cosine of the specified value, in radians.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The arc cosine function is the inverse of the cosine function. While cosine 
+    /// <b>For Beginners:</b> The arc cosine function is the inverse of the cosine function. While cosine 
     /// takes an angle and returns a value between -1 and 1, arc cosine takes a value between -1 and 1 
     /// and returns the corresponding angle in radians. For example, since cos(0) = 1, arccos(1) = 0.
     /// This is useful when you know the cosine value and need to find the original angle.
@@ -792,7 +792,7 @@ public static class MathHelper
     /// <exception cref="ArgumentOutOfRangeException">Thrown when x is less than -1 or greater than 1.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: The arc sine function is the inverse of the sine function. While sine 
+    /// <b>For Beginners:</b> The arc sine function is the inverse of the sine function. While sine 
     /// takes an angle and returns a value between -1 and 1, arc sine takes a value between -1 and 1 
     /// and returns the corresponding angle in radians. For example, since sin(π/2) = 1, arcsin(1) = π/2.
     /// This is useful when you know the sine value and need to find the original angle.
@@ -824,7 +824,7 @@ public static class MathHelper
     /// <returns>The arc tangent of the specified value, in radians.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The arc tangent function is the inverse of the tangent function. While tangent 
+    /// <b>For Beginners:</b> The arc tangent function is the inverse of the tangent function. While tangent 
     /// takes an angle and returns a ratio, arc tangent takes a ratio and returns the corresponding 
     /// angle in radians. For example, since tan(0) = 0, arctan(0) = 0.
     /// </para>
@@ -863,7 +863,7 @@ public static class MathHelper
     /// <returns>The error function value for the specified input.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The error function (erf) is a special mathematical function that appears in 
+    /// <b>For Beginners:</b> The error function (erf) is a special mathematical function that appears in 
     /// probability, statistics, and partial differential equations. It describes the probability that 
     /// a random variable with normal distribution will fall within a certain range.
     /// </para>
@@ -916,7 +916,7 @@ public static class MathHelper
     /// </exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: In linear regression, the y-intercept is the value of the dependent variable 
+    /// <b>For Beginners:</b> In linear regression, the y-intercept is the value of the dependent variable 
     /// when all independent variables are zero. It represents the baseline value of your prediction 
     /// before considering any features.
     /// </para>

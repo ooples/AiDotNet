@@ -6,7 +6,7 @@ namespace AiDotNet.Interfaces;
 /// <remarks>
 /// This interface represents a machine learning model that has been trained and is ready to use.
 /// 
-/// For Beginners: Think of a predictive model like a calculator that has been specially programmed
+/// <b>For Beginners:</b> Think of a predictive model like a calculator that has been specially programmed
 /// to solve a specific type of problem. After you've "trained" it with examples (like showing it
 /// houses and their prices), it can make educated guesses about new examples (predicting prices
 /// for houses it hasn't seen before).
@@ -24,7 +24,7 @@ public interface IPredictiveModel<T> : IModelSerializer
     /// <remarks>
     /// This is the primary function of a predictive model - taking new data and generating predictions.
     /// 
-    /// For Beginners: This is where the magic happens! After your model has learned patterns from
+    /// <b>For Beginners:</b> This is where the magic happens! After your model has learned patterns from
     /// training data, this method lets you feed it new information and get predictions back.
     /// 
     /// For example:
@@ -49,7 +49,7 @@ public interface IPredictiveModel<T> : IModelSerializer
     /// <remarks>
     /// This method provides access to information about how the model was created and how well it performs.
     /// 
-    /// For Beginners: This method gives you a "report card" for your model. It tells you:
+    /// <b>For Beginners:</b> This method gives you a "report card" for your model. It tells you:
     /// - How accurate the model is
     /// - What settings were used to create it
     /// - When it was trained

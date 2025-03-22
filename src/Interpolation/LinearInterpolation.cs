@@ -7,7 +7,7 @@ namespace AiDotNet.Interpolation;
 /// Linear interpolation is the simplest form of interpolation, connecting data points with straight lines.
 /// It estimates values between known data points by assuming a straight line between them.
 /// 
-/// For Beginners: Linear interpolation is like drawing straight lines between dots on a graph.
+/// <b>For Beginners:</b> Linear interpolation is like drawing straight lines between dots on a graph.
 /// If you have two points (like one at x=1, y=10 and another at x=3, y=20), and you want to know
 /// what the y-value would be at x=2, linear interpolation would give you y=15 because it's exactly
 /// halfway between the two known points. It's the simplest and most intuitive way to estimate values
@@ -37,7 +37,7 @@ public class LinearInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// This constructor initializes the interpolator with your data points.
     /// 
-    /// For Beginners: When you create a linear interpolator, you provide the x-coordinates
+    /// <b>For Beginners:</b> When you create a linear interpolator, you provide the x-coordinates
     /// and corresponding y-values of your known data points. The interpolator will then be
     /// ready to estimate y-values for any x-coordinate you specify later by drawing straight
     /// lines between your known points.
@@ -64,7 +64,7 @@ public class LinearInterpolation<T> : IInterpolation<T>
     /// This method calculates the y-value at any x-coordinate by finding the two nearest known points
     /// and drawing a straight line between them.
     /// 
-    /// For Beginners: Once you've set up the interpolator with your known points, this method
+    /// <b>For Beginners:</b> Once you've set up the interpolator with your known points, this method
     /// lets you ask "What would the y-value be at this specific x-coordinate?" It finds the two
     /// known points that are closest to your target x-coordinate (one on each side), draws a straight
     /// line between them, and then determines where on that line your target x-coordinate falls.
@@ -99,7 +99,7 @@ public class LinearInterpolation<T> : IInterpolation<T>
     /// This method uses binary search to efficiently find which pair of known points
     /// the target x-coordinate falls between.
     /// 
-    /// For Beginners: Before we can interpolate, we need to know which two known points
+    /// <b>For Beginners:</b> Before we can interpolate, we need to know which two known points
     /// to draw a line between. This method efficiently finds the right pair of points by
     /// using a technique called "binary search" (like when you search for a word in a dictionary
     /// by repeatedly dividing the book in half). It returns the index of the known point

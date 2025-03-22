@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Bent Identity activation function is a smoother alternative to the ReLU function.
+/// <b>For Beginners:</b> The Bent Identity activation function is a smoother alternative to the ReLU function.
 /// It behaves similarly to a linear function for positive inputs but has a gentle curve for negative inputs.
 /// This helps prevent the "dying neuron" problem that can occur with ReLU, where neurons can get stuck
 /// outputting zero.
@@ -35,7 +35,7 @@ public class BentIdentityActivation<T> : ActivationFunctionBase<T>
     /// <returns>The activated output value using the Bent Identity function.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms an input value using the formula:
+    /// <b>For Beginners:</b> This method transforms an input value using the formula:
     /// f(x) = ((√(x² + 1) - 1) / 2) + x
     /// 
     /// The function adds a non-linear component to the identity function (x),
@@ -59,7 +59,7 @@ public class BentIdentityActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value at the input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative measures how much the Bent Identity function's output changes
+    /// <b>For Beginners:</b> The derivative measures how much the Bent Identity function's output changes
     /// when its input changes slightly. This is used during neural network training to determine
     /// how to adjust weights.
     /// 

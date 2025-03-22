@@ -7,7 +7,7 @@
 /// <remarks>
 /// This class uses the IQR method, a robust statistical technique for identifying outliers.
 /// 
-/// For beginners: Outliers are unusual data points that are significantly different from most of your data.
+/// <b>For Beginners:</b> Outliers are unusual data points that are significantly different from most of your data.
 /// These unusual points can negatively affect your machine learning models. The IQR method is a common
 /// statistical approach that uses quartiles (which divide your data into four equal parts) to identify
 /// which data points should be considered outliers.
@@ -25,7 +25,7 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
     /// If not specified, a default value of 1.5 is used, which is the standard in statistics.
     /// </param>
     /// <remarks>
-    /// For beginners: The IQR multiplier determines how strict the outlier detection will be.
+    /// <b>For Beginners:</b> The IQR multiplier determines how strict the outlier detection will be.
     /// The standard value of 1.5 means that any data point below Q1 - 1.5*IQR or above Q3 + 1.5*IQR
     /// is considered an outlier. A higher multiplier (like 2.0 or 3.0) will be more lenient and
     /// identify fewer outliers, while a lower value will be stricter.
@@ -60,7 +60,7 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
     /// 3. It defines the lower bound as Q1 - (multiplier × IQR) and upper bound as Q3 + (multiplier × IQR)
     /// 4. Any data point outside these bounds for any feature is considered an outlier
     /// 
-    /// For beginners: This method examines each feature (column) in your data separately.
+    /// <b>For Beginners:</b> This method examines each feature (column) in your data separately.
     /// It finds the range where the middle 50% of your data falls (the IQR), then extends this range
     /// in both directions by a factor of your multiplier. Any data point that falls outside this
     /// extended range for ANY feature is considered an outlier and removed from both inputs and outputs.

@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on classification tasks,
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on classification tasks,
 /// especially when some classes are more important than others or appear less frequently in your data.
 /// 
 /// Cross Entropy Loss is a common way to measure how well a classification model is performing.
@@ -39,7 +39,7 @@ public class WeightedCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBas
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: These weights determine how important each class is when evaluating your model.
+    /// <b>For Beginners:</b> These weights determine how important each class is when evaluating your model.
     /// 
     /// - Higher weight = More important class (errors on this class are penalized more)
     /// - Lower weight = Less important class (errors on this class are penalized less)
@@ -63,7 +63,7 @@ public class WeightedCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBas
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Weighted Cross Entropy Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Weighted Cross Entropy Loss
     /// to evaluate your model's performance on classification tasks.
     /// 
     /// The parameters:
@@ -92,7 +92,7 @@ public class WeightedCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBas
     /// <returns>The calculated Weighted Cross Entropy Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Weighted Cross Entropy Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Weighted Cross Entropy Loss.
     /// 
     /// It works by:
     /// 1. Checking if the weights are properly set up (creating default weights if needed)

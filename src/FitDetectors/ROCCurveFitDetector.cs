@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps determine how well your classification model performs.
+/// <b>For Beginners:</b> This class helps determine how well your classification model performs.
 /// It uses something called an "ROC curve" which is a way to visualize how good your model is at 
 /// distinguishing between positive cases (like "yes, this email is spam") and negative cases 
 /// (like "no, this email is not spam").
@@ -31,7 +31,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: AUC stands for "Area Under the Curve" and is a value between 0 and 1.
+    /// <b>For Beginners:</b> AUC stands for "Area Under the Curve" and is a value between 0 and 1.
     /// It measures how well your model can distinguish between classes. The higher the AUC,
     /// the better your model is at predicting the correct classes.
     /// 
@@ -51,7 +51,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Custom options for the detector, or null to use default options.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the constructor that creates a new ROC curve detector.
+    /// <b>For Beginners:</b> This is the constructor that creates a new ROC curve detector.
     /// You can provide custom settings through the options parameter, or leave it as null
     /// to use the default settings.
     /// </para>
@@ -70,7 +70,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// <exception cref="ArgumentNullException">Thrown when evaluationData is null.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method that analyzes your model's performance.
+    /// <b>For Beginners:</b> This is the main method that analyzes your model's performance.
     /// It takes your model's predictions and the actual correct answers, then:
     /// 
     /// 1. Creates an ROC curve (a special graph that shows how well your model distinguishes between classes)
@@ -115,7 +115,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>The determined fit type (GoodFit, Moderate, PoorFit, or VeryPoorFit).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method looks at the AUC value (which measures how good your model is)
+    /// <b>For Beginners:</b> This method looks at the AUC value (which measures how good your model is)
     /// and categorizes your model into one of four groups:
     /// 
     /// - GoodFit: Your model performs very well (high AUC)
@@ -145,7 +145,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how sure the detector is about its assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how sure the detector is about its assessment of your model.
     /// It uses the AUC value and multiplies it by a scaling factor to get a confidence score.
     /// 
     /// The higher the AUC, the more confident the detector is in its assessment.
@@ -169,7 +169,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations as strings.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method provides practical advice on how to improve your model based on
+    /// <b>For Beginners:</b> This method provides practical advice on how to improve your model based on
     /// how well it's currently performing.
     /// 
     /// - For good models: Suggestions for fine-tuning to make small improvements

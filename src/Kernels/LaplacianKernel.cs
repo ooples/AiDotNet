@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// for data that has sparse features or when you want to be less sensitive to outliers.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Laplacian kernel is like a "similarity detector" that gives higher values when points are close
 /// together and lower values when they're far apart.
 /// </para>
@@ -38,7 +38,7 @@ public class LaplacianKernel<T> : IKernelFunction<T>
     /// The bandwidth parameter that controls how quickly similarity decreases with distance.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of the '_sigma' parameter as a "sensitivity knob" for distance.
+    /// <b>For Beginners:</b> Think of the '_sigma' parameter as a "sensitivity knob" for distance.
     /// 
     /// A larger value of '_sigma' makes the kernel less sensitive to distance, meaning even points
     /// that are somewhat far apart will still have a meaningful similarity score.
@@ -62,7 +62,7 @@ public class LaplacianKernel<T> : IKernelFunction<T>
     /// <param name="sigma">The bandwidth parameter that controls how quickly similarity decreases with distance. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Laplacian kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Laplacian kernel for use. You can optionally
     /// provide a value for the 'sigma' parameter, which controls how the kernel behaves.
     /// </para>
     /// <para>
@@ -94,7 +94,7 @@ public class LaplacianKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Laplacian kernel formula.
     /// </para>
     /// <para>

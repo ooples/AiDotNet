@@ -6,7 +6,7 @@ namespace AiDotNet.Caching;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: A gradient cache is like a memory bank that stores pre-calculated mathematical operations
+/// <b>For Beginners:</b> A gradient cache is like a memory bank that stores pre-calculated mathematical operations
 /// that are frequently used during machine learning model training.
 /// 
 /// In machine learning, "gradients" are calculations that show how much a model's error would change
@@ -38,7 +38,7 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     /// <returns>The cached gradient model if found; otherwise, null.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method works like looking up a word in a dictionary. You provide a key (like a word),
+    /// <b>For Beginners:</b> This method works like looking up a word in a dictionary. You provide a key (like a word),
     /// and it returns the corresponding gradient model (like the definition) if it exists in the cache.
     /// 
     /// If the key doesn't exist in the cache, the method returns null, indicating that the gradient
@@ -58,7 +58,7 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     /// <param name="gradient">The gradient model to cache.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method saves a gradient model in the cache so it can be retrieved later.
+    /// <b>For Beginners:</b> This method saves a gradient model in the cache so it can be retrieved later.
     /// 
     /// It's like writing down the answer to a complex math problem with a label (the key) so you can
     /// look it up quickly next time instead of solving the problem again.

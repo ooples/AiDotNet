@@ -7,7 +7,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: EMD breaks down a complex signal (like stock prices or temperature readings over time) 
+/// <b>For Beginners:</b> EMD breaks down a complex signal (like stock prices or temperature readings over time) 
 /// into simpler components called Intrinsic Mode Functions (IMFs). Think of it like separating 
 /// different instruments in a song - you can hear the whole song, but EMD helps you identify 
 /// the individual instruments playing together.
@@ -29,7 +29,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="threshold">Convergence threshold for the sifting process.</param>
     /// <param name="algorithm">The specific EMD algorithm variant to use.</param>
     /// <remarks>
-    /// For Beginners: This constructor sets up the EMD algorithm with your data and preferences.
+    /// <b>For Beginners:</b> This constructor sets up the EMD algorithm with your data and preferences.
     /// - timeSeries: Your data points over time (e.g., daily temperatures)
     /// - maxImf: How many components to break your data into (default: 10)
     /// - threshold: How precise you want the decomposition to be (smaller = more precise)
@@ -76,7 +76,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Implements the standard EMD algorithm to decompose the time series.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method extracts components from your data one by one, from fastest-changing 
+    /// <b>For Beginners:</b> This method extracts components from your data one by one, from fastest-changing 
     /// to slowest-changing patterns. It's like peeling layers from an onion, where each layer 
     /// represents a different pattern in your data.
     /// </remarks>
@@ -108,7 +108,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Implements the Ensemble EMD (EEMD) algorithm for more robust decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Standard EMD can sometimes mix different patterns together. EEMD solves this by:
+    /// <b>For Beginners:</b> Standard EMD can sometimes mix different patterns together. EEMD solves this by:
     /// 1. Adding small random noise to your data multiple times
     /// 2. Decomposing each noisy version
     /// 3. Averaging the results to get cleaner components
@@ -148,7 +148,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Implements the Complete Ensemble EMD (CEEMD) algorithm for enhanced decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: CEEMD is an improved version of EEMD that:
+    /// <b>For Beginners:</b> CEEMD is an improved version of EEMD that:
     /// 1. Adds noise in a more controlled way
     /// 2. Extracts one component at a time
     /// 3. Gradually reduces the noise level for each component
@@ -186,7 +186,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Implements Multivariate EMD (MEMD) for decomposing multiple related time series simultaneously.
     /// </summary>
     /// <remarks>
-    /// For Beginners: While standard EMD works on a single data series (like temperature over time),
+    /// <b>For Beginners:</b> While standard EMD works on a single data series (like temperature over time),
     /// MEMD can analyze multiple related series at once (like temperature, humidity, and pressure).
     /// 
     /// It finds patterns that exist across all your data series, similar to how you might identify
@@ -247,7 +247,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="amplitude">The amplitude of the noise to add.</param>
     /// <returns>A new signal with added white noise.</returns>
     /// <remarks>
-    /// For Beginners: This adds small random fluctuations to your data, like adding static to a clear radio signal.
+    /// <b>For Beginners:</b> This adds small random fluctuations to your data, like adding static to a clear radio signal.
     /// This helps ensemble methods (EEMD, CEEMD) better separate mixed patterns in your data.
     /// </remarks>
     private Vector<T> AddWhiteNoise(Vector<T> signal, double amplitude)
@@ -269,7 +269,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="signal">The input time series signal to decompose.</param>
     /// <returns>A list of Intrinsic Mode Functions extracted from the signal.</returns>
     /// <remarks>
-    /// For Beginners: This method breaks down a complex signal into simpler components called IMFs.
+    /// <b>For Beginners:</b> This method breaks down a complex signal into simpler components called IMFs.
     /// Think of it like separating different instruments in a music track - each IMF represents
     /// a different "frequency band" or pattern in your data.
     /// </remarks>
@@ -328,7 +328,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="imfs">The list of IMFs extracted from the signal.</param>
     /// <returns>The residual signal after removing all IMFs.</returns>
     /// <remarks>
-    /// For Beginners: The residual is what remains after extracting all patterns (IMFs) from your data.
+    /// <b>For Beginners:</b> The residual is what remains after extracting all patterns (IMFs) from your data.
     /// It typically represents the overall trend of your data.
     /// </remarks>
     private static Vector<T> CalculateResidual(Vector<T> original, List<Vector<T>> imfs)
@@ -350,7 +350,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="noiseAmplitude">The amplitude of white noise to add.</param>
     /// <returns>An IMF extracted using the CEEMD method.</returns>
     /// <remarks>
-    /// For Beginners: This method improves decomposition accuracy by adding controlled noise to multiple
+    /// <b>For Beginners:</b> This method improves decomposition accuracy by adding controlled noise to multiple
     /// copies of your signal and then averaging the results, which helps reduce artifacts.
     /// </remarks>
     private Vector<T> ExtractCEEMDImf(Vector<T> signal, int ensembleSize, double noiseAmplitude)
@@ -390,7 +390,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="numDirections">The number of projection directions to use.</param>
     /// <returns>A list of IMFs, one for each channel of the input signal.</returns>
     /// <remarks>
-    /// For Beginners: This handles decomposition of signals with multiple related measurements
+    /// <b>For Beginners:</b> This handles decomposition of signals with multiple related measurements
     /// (like 3D motion data or multiple sensor readings) by considering how they relate to each other.
     /// </remarks>
     private List<Vector<T>> ExtractMultivariateIMF(Matrix<T> signal, int numDirections)
@@ -429,7 +429,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="numDirections">The number of projection directions to use.</param>
     /// <returns>A list of projected signals.</returns>
     /// <remarks>
-    /// For Beginners: This is like looking at a 3D object from different angles to understand
+    /// <b>For Beginners:</b> This is like looking at a 3D object from different angles to understand
     /// its shape better. Each projection gives us a different view of the multivariate data.
     /// </remarks>
     private List<Vector<T>> ProjectSignal(Matrix<T> signal, int numDirections)
@@ -538,7 +538,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// 2. Is monotonic (consistently increasing or decreasing)
     /// 3. Has energy below the residual energy threshold
     /// 
-    /// For Beginners: This method checks if we've extracted all meaningful patterns from the data.
+    /// <b>For Beginners:</b> This method checks if we've extracted all meaningful patterns from the data.
     /// When what's left is just a simple trend (always going up, always going down, or nearly flat),
     /// we can stop the decomposition process.
     /// </remarks>
@@ -593,7 +593,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="signal">The signal to calculate energy for.</param>
     /// <returns>The average energy value.</returns>
     /// <remarks>
-    /// For Beginners: Energy here measures how much the signal varies or fluctuates.
+    /// <b>For Beginners:</b> Energy here measures how much the signal varies or fluctuates.
     /// A high energy signal has large ups and downs, while a low energy signal is more flat.
     /// </remarks>
     private T CalculateEnergy(Vector<T> signal)
@@ -613,7 +613,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="signal">The input signal to extract an IMF from.</param>
     /// <returns>The extracted IMF.</returns>
     /// <remarks>
-    /// For Beginners: This is the core process that isolates a single pattern from your data.
+    /// <b>For Beginners:</b> This is the core process that isolates a single pattern from your data.
     /// It works by repeatedly subtracting the average of the upper and lower envelopes until
     /// the result meets the criteria of an IMF (roughly equal number of peaks and zero crossings).
     /// </remarks>
@@ -641,7 +641,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="envelopeType">The type of envelope to compute (Upper or Lower).</param>
     /// <returns>The computed envelope vector.</returns>
     /// <remarks>
-    /// For Beginners: An envelope is like drawing a smooth line that connects all the peaks (upper envelope)
+    /// <b>For Beginners:</b> An envelope is like drawing a smooth line that connects all the peaks (upper envelope)
     /// or valleys (lower envelope) in your data. It helps identify the overall shape or trend.
     /// </remarks>
     private Vector<T> ComputeEnvelope(Vector<T> signal, EnvelopeType envelopeType)
@@ -736,7 +736,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="prevH">The previous iteration's IMF candidate.</param>
     /// <returns>True if the mean squared difference is below the threshold, false otherwise.</returns>
     /// <remarks>
-    /// For Beginners: This checks if further processing would make meaningful changes to our extracted pattern.
+    /// <b>For Beginners:</b> This checks if further processing would make meaningful changes to our extracted pattern.
     /// When consecutive iterations produce nearly identical results, we can stop the extraction process.
     /// </remarks>
     private bool IsMeanEnvelopeNearZero(Vector<T> h, Vector<T> prevH)
@@ -758,7 +758,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="imf">The IMF to check.</param>
     /// <returns>True if the IMF's energy is below the threshold, false otherwise.</returns>
     /// <remarks>
-    /// For Beginners: This method checks if an extracted pattern is significant enough to keep.
+    /// <b>For Beginners:</b> This method checks if an extracted pattern is significant enough to keep.
     /// If an IMF has very low energy (small fluctuations), it might just be noise or computational artifacts
     /// rather than a meaningful pattern in your data.
     /// </remarks>

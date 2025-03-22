@@ -10,7 +10,7 @@ namespace AiDotNet.ActivationFunctions;
 /// -1 (negative), 0 (zero), or 1 (positive). Unlike smooth activation functions, Sign has sharp transitions.
 /// </para>
 /// <para>
-/// For Beginners: The Sign function is like a simple categorizer that looks at a number and tells you if it's 
+/// <b>For Beginners:</b> The Sign function is like a simple categorizer that looks at a number and tells you if it's 
 /// negative (-1), zero (0), or positive (1). It's one of the simplest activation functions and is useful when 
 /// you want your neural network to make clear-cut decisions rather than produce probabilities or continuous values.
 /// However, because it has sharp "jumps" in its output and its derivative is zero almost everywhere, it's rarely 
@@ -31,7 +31,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The input value to activate.</param>
     /// <returns>-1 if input is negative, 1 if input is positive, 0 if input is zero.</returns>
     /// <remarks>
-    /// For Beginners: This method looks at a single number and returns:
+    /// <b>For Beginners:</b> This method looks at a single number and returns:
     /// - -1 if the number is negative (less than zero)
     /// - 1 if the number is positive (greater than zero)
     /// - 0 if the number is exactly zero
@@ -60,7 +60,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     /// this implementation returns 0 for all inputs.
     /// </para>
     /// <para>
-    /// For Beginners: The derivative tells us how much the output changes when we slightly change the input.
+    /// <b>For Beginners:</b> The derivative tells us how much the output changes when we slightly change the input.
     /// For the Sign function, the output doesn't change at all when you make small changes to the input
     /// (except exactly at zero). This is why we return 0 for all inputs. This property makes the Sign function
     /// problematic for gradient-based learning algorithms like backpropagation, as there's no useful gradient
@@ -80,7 +80,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The vector of input values.</param>
     /// <returns>A new vector with the Sign function applied to each element.</returns>
     /// <remarks>
-    /// For Beginners: This method applies the Sign function to a whole list of numbers at once.
+    /// <b>For Beginners:</b> This method applies the Sign function to a whole list of numbers at once.
     /// It processes each number in the list individually using the same Sign function and returns
     /// a new list with all the transformed values (-1, 0, or 1 for each element).
     /// </remarks>
@@ -106,7 +106,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     /// For the Sign function, this matrix contains all zeros since the derivative is 0 almost everywhere.
     /// </para>
     /// <para>
-    /// For Beginners: This method creates a matrix (a grid of numbers) that represents how sensitive each 
+    /// <b>For Beginners:</b> This method creates a matrix (a grid of numbers) that represents how sensitive each 
     /// output is to changes in the input. For the Sign function, this matrix is filled with zeros because 
     /// small changes to the input almost never change the output. This is another reason why the Sign function 
     /// isn't commonly used in neural networks that learn through backpropagation - it doesn't provide useful 
@@ -139,7 +139,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     /// This method processes each element in the tensor individually using the scalar Activate method.
     /// </para>
     /// <para>
-    /// For Beginners: A tensor is like a multi-dimensional array or a container for data with multiple dimensions.
+    /// <b>For Beginners:</b> A tensor is like a multi-dimensional array or a container for data with multiple dimensions.
     /// This method applies the Sign function to every single number in that container, regardless of its position
     /// or how many dimensions the container has. Each number is independently converted to -1, 0, or 1 based on
     /// whether it's negative, zero, or positive.
@@ -169,7 +169,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     /// The resulting tensor has an additional dimension that represents the Jacobian matrices for each input vector.
     /// </para>
     /// <para>
-    /// For Beginners: This method handles the derivative calculation for multi-dimensional data (tensors).
+    /// <b>For Beginners:</b> This method handles the derivative calculation for multi-dimensional data (tensors).
     /// It processes the data in batches, where each batch contains multiple vectors. For each vector, it calculates
     /// a matrix of derivatives (which for the Sign function is all zeros). The result is a higher-dimensional tensor
     /// that contains all these matrices. This is a more advanced operation that's used when working with batches of

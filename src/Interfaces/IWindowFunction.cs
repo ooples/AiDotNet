@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// Window functions are mathematical functions that are zero-valued outside of a chosen interval.
 /// They are applied to signals to reduce artifacts in spectral analysis and filter design.
 /// 
-/// For Beginners: Window functions are like special "lenses" that help us focus on specific parts
+/// <b>For Beginners:</b> Window functions are like special "lenses" that help us focus on specific parts
 /// of data while smoothly fading out the rest. 
 /// 
 /// Imagine you're taking a photo through a window:
@@ -34,7 +34,7 @@ public interface IWindowFunction<T>
     /// <remarks>
     /// This method generates a vector containing the window function values.
     /// 
-    /// For Beginners: This method creates an array of numbers that represent the "shape" of the window.
+    /// <b>For Beginners:</b> This method creates an array of numbers that represent the "shape" of the window.
     /// 
     /// For example, if you request a window of size 5:
     /// - A rectangular window might return [1, 1, 1, 1, 1]
@@ -55,7 +55,7 @@ public interface IWindowFunction<T>
     /// This method returns an enumeration value that identifies which specific window function
     /// is being used (e.g., Hamming, Hanning, Blackman, etc.).
     /// 
-    /// For Beginners: This tells you which "shape" of window is being used. Common window types include:
+    /// <b>For Beginners:</b> This tells you which "shape" of window is being used. Common window types include:
     /// 
     /// - Rectangular: The simplest window, like looking through a clear glass window with sharp edges
     /// - Hamming/Hanning: Bell-shaped windows that taper to near-zero at the edges

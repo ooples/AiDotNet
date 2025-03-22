@@ -10,7 +10,7 @@ namespace AiDotNet.Kernels;
 /// classification tasks. It measures similarity by finding the "overlap" between two vectors.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Histogram Intersection kernel is especially useful when your data represents frequencies, counts,
 /// or distributions (like histograms in image processing).
 /// </para>
@@ -40,7 +40,7 @@ public class HistogramIntersectionKernel<T> : IKernelFunction<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Histogram Intersection kernel for use. Unlike some other kernels,
+    /// <b>For Beginners:</b> This constructor sets up the Histogram Intersection kernel for use. Unlike some other kernels,
     /// this kernel doesn't have any parameters to adjust - it works the same way for all data.
     /// </para>
     /// <para>
@@ -66,7 +66,7 @@ public class HistogramIntersectionKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Histogram Intersection kernel formula.
     /// </para>
     /// <para>

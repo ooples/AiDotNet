@@ -11,7 +11,7 @@ namespace AiDotNet.Interpolation;
 /// analogous to the shape a thin metal plate would take if forced to pass through all the data points.
 /// </para>
 /// <para>
-/// For Beginners: Think of Thin Plate Spline interpolation like placing a flexible sheet of metal
+/// <b>For Beginners:</b> Think of Thin Plate Spline interpolation like placing a flexible sheet of metal
 /// over a set of pins (your data points) at different heights. The metal bends to touch all pins
 /// while maintaining the smoothest possible surface between them. This method is excellent for
 /// creating smooth surfaces from scattered measurements, such as elevation data or temperature
@@ -77,7 +77,7 @@ public class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     /// </exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor takes your 3D data points (x, y, and z coordinates) and
+    /// <b>For Beginners:</b> This constructor takes your 3D data points (x, y, and z coordinates) and
     /// prepares the interpolation algorithm. It checks that your data is valid (same number of
     /// x, y, and z values, and at least 3 points) and then calculates the necessary weights
     /// to create a smooth surface through all your points.
@@ -116,7 +116,7 @@ public class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     /// <returns>The interpolated z-value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the height (z-value) at any location (x,y) you specify,
+    /// <b>For Beginners:</b> This method finds the height (z-value) at any location (x,y) you specify,
     /// even if it's between or outside your original data points. It uses the smooth surface
     /// created by the Thin Plate Spline algorithm to determine this height.
     /// </para>
@@ -151,7 +151,7 @@ public class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method solves a system of mathematical equations to find the
+    /// <b>For Beginners:</b> This method solves a system of mathematical equations to find the
     /// optimal weights for creating a smooth surface through all your data points.
     /// </para>
     /// <para>
@@ -211,7 +211,7 @@ public class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     /// <returns>The distance between the two points.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates the straight-line distance between two points
+    /// <b>For Beginners:</b> This method calculates the straight-line distance between two points
     /// using the Pythagorean theorem (the square root of the sum of squared differences
     /// in x and y coordinates).
     /// </para>
@@ -234,7 +234,7 @@ public class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     /// <returns>The result of the radial basis function.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This function is a mathematical formula that determines how the
+    /// <b>For Beginners:</b> This function is a mathematical formula that determines how the
     /// influence of each data point spreads out in space. For Thin Plate Splines,
     /// this function is r² × log(r), where r is the distance from a point.
     /// </para>

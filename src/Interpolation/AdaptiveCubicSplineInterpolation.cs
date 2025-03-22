@@ -8,7 +8,7 @@ namespace AiDotNet.Interpolation;
 /// This class implements an intelligent interpolation strategy that combines the smoothness of natural 
 /// cubic splines with the shape-preserving properties of monotonic cubic splines.
 /// 
-/// For Beginners: Interpolation is like "connecting the dots" between data points to create a smooth curve.
+/// <b>For Beginners:</b> Interpolation is like "connecting the dots" between data points to create a smooth curve.
 /// 
 /// Imagine you have several points on a graph and want to draw a smooth line through them:
 /// - Natural cubic splines create very smooth curves but might overshoot or create waves where your data doesn't have them
@@ -65,7 +65,7 @@ public class AdaptiveCubicSplineInterpolation<T> : IInterpolation<T>
     /// This constructor creates both natural and monotonic spline interpolators and determines
     /// which one to use for each interval based on the provided threshold.
     /// 
-    /// For Beginners: This sets up the adaptive interpolation by:
+    /// <b>For Beginners:</b> This sets up the adaptive interpolation by:
     /// 1. Storing your data points (x and y values)
     /// 2. Creating two different interpolation methods (natural and monotonic)
     /// 3. Deciding which method works best for each segment of your data
@@ -95,7 +95,7 @@ public class AdaptiveCubicSplineInterpolation<T> : IInterpolation<T>
     /// the natural or monotonic spline interpolation based on what was determined to be
     /// best for that interval.
     /// 
-    /// For Beginners: This is the main method you'll use. Give it an x-value, and it will:
+    /// <b>For Beginners:</b> This is the main method you'll use. Give it an x-value, and it will:
     /// 1. Figure out which segment of your data the x-value falls into
     /// 2. Use the best interpolation method for that segment
     /// 3. Return the estimated y-value at that point

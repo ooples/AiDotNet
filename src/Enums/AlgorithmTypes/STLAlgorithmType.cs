@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: STL (Seasonal-Trend decomposition using LOESS) is a technique that breaks down time series data 
+/// <b>For Beginners:</b> STL (Seasonal-Trend decomposition using LOESS) is a technique that breaks down time series data 
 /// into three components: seasonal patterns, trend, and remainder (or residual).
 /// 
 /// Imagine you're analyzing monthly ice cream sales over several years:
@@ -47,7 +47,7 @@ public enum STLAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Standard STL algorithm is the original implementation that follows the classic approach 
+    /// <b>For Beginners:</b> The Standard STL algorithm is the original implementation that follows the classic approach 
     /// described by Cleveland et al. (1990).
     /// 
     /// Think of it as the "classic recipe" for STL decomposition:
@@ -93,7 +93,7 @@ public enum STLAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Robust STL algorithm is a variation designed to handle data with outliers or unusual 
+    /// <b>For Beginners:</b> The Robust STL algorithm is a variation designed to handle data with outliers or unusual 
     /// observations without letting them distort the overall decomposition.
     /// 
     /// Imagine you're trying to understand the pattern of daily website traffic, but occasionally there are huge 
@@ -140,7 +140,7 @@ public enum STLAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Fast STL algorithm is an optimized version that sacrifices some precision for 
+    /// <b>For Beginners:</b> The Fast STL algorithm is an optimized version that sacrifices some precision for 
     /// significant gains in computational speed, making it suitable for large datasets or real-time applications.
     /// 
     /// Think of it like using a blender instead of chopping vegetables by hand - you might lose some control 

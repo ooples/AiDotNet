@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: A Gaussian Process is a flexible machine learning approach that not only makes predictions 
+/// <b>For Beginners:</b> A Gaussian Process is a flexible machine learning approach that not only makes predictions 
 /// but also tells you how confident it is about each prediction.
 /// 
 /// Imagine you're trying to predict house prices in different neighborhoods:
@@ -34,7 +34,7 @@ public interface IGaussianProcess<T>
     /// <param name="X">The input features matrix, where each row represents an observation and each column represents a feature.</param>
     /// <param name="y">The target values vector corresponding to each observation in X.</param>
     /// <remarks>
-    /// For Beginners: This method teaches the model using your training data.
+    /// <b>For Beginners:</b> This method teaches the model using your training data.
     /// 
     /// The parameters:
     /// - X: Your input data organized as a matrix (a table of numbers)
@@ -60,7 +60,7 @@ public interface IGaussianProcess<T>
     /// <param name="x">The input feature vector for which to make a prediction.</param>
     /// <returns>A tuple containing the predicted mean value and the variance (uncertainty) of the prediction.</returns>
     /// <remarks>
-    /// For Beginners: This method makes a prediction and tells you how confident it is about that prediction.
+    /// <b>For Beginners:</b> This method makes a prediction and tells you how confident it is about that prediction.
     /// 
     /// The parameter:
     /// - x: The features of the new example you want to predict (like the size, location, and age of a house)
@@ -87,7 +87,7 @@ public interface IGaussianProcess<T>
     /// </summary>
     /// <param name="kernel">The new kernel function to use.</param>
     /// <remarks>
-    /// For Beginners: This method changes how the model measures similarity between data points.
+    /// <b>For Beginners:</b> This method changes how the model measures similarity between data points.
     /// 
     /// The parameter:
     /// - kernel: A function that determines how similar two data points are

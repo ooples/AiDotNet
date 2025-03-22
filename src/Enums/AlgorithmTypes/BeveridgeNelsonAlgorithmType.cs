@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Beveridge-Nelson decomposition is a technique used in economics and finance to separate 
+/// <b>For Beginners:</b> Beveridge-Nelson decomposition is a technique used in economics and finance to separate 
 /// time series data (like stock prices or GDP over time) into two main components:
 /// 
 /// 1. Permanent Component (Trend) - The long-lasting changes that persist indefinitely
@@ -29,7 +29,7 @@ public enum BeveridgeNelsonAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Standard approach implements the original Beveridge-Nelson method as described
+    /// <b>For Beginners:</b> The Standard approach implements the original Beveridge-Nelson method as described
     /// in their 1981 paper. It uses statistical techniques to identify which changes in your data are
     /// likely to be permanent and which are likely to be temporary.
     /// 
@@ -48,7 +48,7 @@ public enum BeveridgeNelsonAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: ARIMA stands for AutoRegressive Integrated Moving Average, which is a popular
+    /// <b>For Beginners:</b> ARIMA stands for AutoRegressive Integrated Moving Average, which is a popular
     /// statistical method for analyzing and forecasting time series data.
     /// 
     /// This approach combines the Beveridge-Nelson decomposition with ARIMA modeling to better capture
@@ -69,7 +69,7 @@ public enum BeveridgeNelsonAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Multivariate approach allows you to analyze multiple related time series at once,
+    /// <b>For Beginners:</b> The Multivariate approach allows you to analyze multiple related time series at once,
     /// taking into account how they influence each other.
     /// 
     /// Imagine you're analyzing both unemployment rates and inflation - these economic indicators affect

@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used in the matrix.</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: SVD is a way to break down a matrix into three simpler matrices (U, S, and V^T).
+/// <b>For Beginners:</b> SVD is a way to break down a matrix into three simpler matrices (U, S, and V^T).
 /// Think of it like factoring a number, but for matrices. This decomposition is useful for data
 /// compression, noise reduction, and solving systems of equations.
 /// </para>
@@ -18,7 +18,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The U matrix represents the output space of the transformation.
+    /// <b>For Beginners:</b> The U matrix represents the output space of the transformation.
     /// It contains information about patterns in the rows of your original data.
     /// </para>
     /// </remarks>
@@ -29,7 +29,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The S vector contains the "strength" of each pattern found in the data.
+    /// <b>For Beginners:</b> The S vector contains the "strength" of each pattern found in the data.
     /// Larger values indicate more important patterns. These values are always positive
     /// and are typically arranged in descending order.
     /// </para>
@@ -41,7 +41,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The V^T matrix represents the input space of the transformation.
+    /// <b>For Beginners:</b> The V^T matrix represents the input space of the transformation.
     /// It contains information about patterns in the columns of your original data.
     /// </para>
     /// </remarks>
@@ -93,7 +93,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the values of x that best satisfy the equation Ax = b.
+    /// <b>For Beginners:</b> This method finds the values of x that best satisfy the equation Ax = b.
     /// SVD is particularly useful for solving systems that might not have an exact solution
     /// or when A is not a square matrix. It provides the best approximate solution in these cases.
     /// </para>
@@ -128,7 +128,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the U, S, and V^T components of the decomposition.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Golub-Reinsch algorithm is the standard approach for computing SVD.
+    /// <b>For Beginners:</b> The Golub-Reinsch algorithm is the standard approach for computing SVD.
     /// It works by first converting the matrix to a simpler form (bidiagonal) and then
     /// iteratively refining it until we get the diagonal form we need.
     /// </para>
@@ -170,7 +170,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="VT">The right orthogonal matrix transposed</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: Bidiagonalization transforms a matrix into a simpler form with non-zero values 
+    /// <b>For Beginners:</b> Bidiagonalization transforms a matrix into a simpler form with non-zero values 
     /// only on the main diagonal and the diagonal above it. This makes it easier to compute the 
     /// singular values in the next steps of SVD.
     /// </para>
@@ -265,7 +265,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="VT">The right orthogonal matrix transposed</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes a matrix that already has most elements set to zero
+    /// <b>For Beginners:</b> This method takes a matrix that already has most elements set to zero
     /// (from the bidiagonalization step) and further simplifies it to have non-zero values 
     /// only on the main diagonal. These diagonal values become our singular values.
     /// </para>
@@ -331,7 +331,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="VT">The right orthogonal matrix (transposed) to be updated</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method implements a mathematical technique called the "Golub-Kahan SVD step" 
+    /// <b>For Beginners:</b> This method implements a mathematical technique called the "Golub-Kahan SVD step" 
     /// which helps find the singular values of a matrix. Think of it as a specialized algorithm that 
     /// gradually refines our approximation of the matrix's important characteristics. The method works 
     /// on a simplified form of the matrix (called bidiagonal) where most values are zero except along 
@@ -402,7 +402,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the U matrix, singular values S, and VT matrix</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Jacobi method is an iterative approach to find the SVD. It works by 
+    /// <b>For Beginners:</b> The Jacobi method is an iterative approach to find the SVD. It works by 
     /// repeatedly applying small rotations to eliminate off-diagonal elements. This is like 
     /// gradually untangling the relationships in your data until you find the core patterns 
     /// (singular values) and their associated directions (singular vectors).
@@ -493,7 +493,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the U matrix, singular values S, and VT matrix</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Randomized SVD is a faster approach for large matrices. Instead of processing 
+    /// <b>For Beginners:</b> Randomized SVD is a faster approach for large matrices. Instead of processing 
     /// the entire matrix, it creates a smaller random projection of the data that preserves the most 
     /// important information. This is like creating a quick sketch of a large image that captures 
     /// the main features while ignoring minor details.
@@ -594,7 +594,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the U matrix, singular values S, and VT matrix</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the standard SVD algorithm that works in two main steps:
+    /// <b>For Beginners:</b> This is the standard SVD algorithm that works in two main steps:
     /// 1. Bidiagonalization - transforms the matrix into a simpler form with non-zero values only on the main diagonal and one adjacent diagonal
     /// 2. Diagonalization - further simplifies the matrix to extract the singular values
     /// 
@@ -708,7 +708,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="colEnd">Ending column index</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Householder transformation is a mathematical operation that reflects vectors 
+    /// <b>For Beginners:</b> A Householder transformation is a mathematical operation that reflects vectors 
     /// across a plane. In SVD, we use it to systematically zero out elements in our matrix. This helps 
     /// simplify the matrix structure step by step until we can easily extract the singular values.
     /// </para>
@@ -757,7 +757,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the U matrix, singular values S, and VT matrix</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Power iteration is like repeatedly applying a transformation to find the 
+    /// <b>For Beginners:</b> Power iteration is like repeatedly applying a transformation to find the 
     /// dominant patterns in your data. Imagine shaking a box of mixed items - after enough shaking, 
     /// the heaviest items (dominant patterns) will settle to the bottom. This method finds singular 
     /// values one by one, from largest to smallest.
@@ -813,7 +813,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the U matrix, singular values S, and VT matrix</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Truncated SVD is like creating a compressed version of your data that keeps 
+    /// <b>For Beginners:</b> Truncated SVD is like creating a compressed version of your data that keeps 
     /// only the most important patterns. This is similar to image compression where you keep the 
     /// main features while discarding less noticeable details. It's useful for dimensionality 
     /// reduction and speeding up calculations.
@@ -851,7 +851,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the U matrix, singular values S, and VT matrix</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The divide-and-conquer approach breaks down a large problem into smaller, 
+    /// <b>For Beginners:</b> The divide-and-conquer approach breaks down a large problem into smaller, 
     /// more manageable pieces. It's like solving a large puzzle by first solving smaller sections 
     /// and then combining them. This method divides the matrix into four smaller matrices, computes 
     /// SVD for each, and then combines the results.
@@ -925,7 +925,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The inverse of the matrix</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Matrix inversion is like finding the opposite operation. If a matrix represents 
+    /// <b>For Beginners:</b> Matrix inversion is like finding the opposite operation. If a matrix represents 
     /// a transformation (like scaling, rotating, or skewing data), its inverse undoes that transformation. 
     /// SVD provides a stable way to compute the inverse even for matrices that are nearly singular 
     /// (matrices that almost don't have an inverse).

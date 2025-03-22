@@ -5,7 +5,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Wavelet decomposition is like breaking down a complex signal (like music)
+/// <b>For Beginners:</b> Wavelet decomposition is like breaking down a complex signal (like music)
 /// into different frequency bands. Think of it as separating bass, mid-range, and treble in music.
 /// This helps identify patterns at different time scales - from long-term trends to short-term fluctuations.
 /// </para>
@@ -38,7 +38,7 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the wavelet decomposition with your time series data.
+    /// <b>For Beginners:</b> This constructor sets up the wavelet decomposition with your time series data.
     /// Think of it as preparing your toolbox before analyzing the data. You can choose:
     /// - How many levels to break down the data (like zooming in multiple times)
     /// - Which wavelet function to use (different shapes for different analysis needs)
@@ -87,7 +87,7 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: DWT is like repeatedly splitting your data into two parts:
+    /// <b>For Beginners:</b> DWT is like repeatedly splitting your data into two parts:
     /// - A smoothed version (approximation) that captures the overall shape
     /// - The details that were removed during smoothing
     /// 
@@ -163,7 +163,7 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: MODWT is an enhanced version of the basic wavelet transform.
+    /// <b>For Beginners:</b> MODWT is an enhanced version of the basic wavelet transform.
     /// Unlike the standard DWT, it:
     /// - Preserves the original data length at each level
     /// - Handles any data length (not just powers of 2)
@@ -244,7 +244,7 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: SWT is a variation of wavelet transform that's particularly useful
+    /// <b>For Beginners:</b> SWT is a variation of wavelet transform that's particularly useful
     /// for pattern recognition and noise reduction. Unlike standard DWT:
     /// - It keeps the same data length at each level
     /// - It's shift-invariant (the results don't change if you shift your data)
@@ -297,7 +297,7 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method performs one level of the SWT decomposition. It takes your data
+    /// <b>For Beginners:</b> This method performs one level of the SWT decomposition. It takes your data
     /// and creates two new sets of values:
     /// - Detail coefficients (wj): These capture the high-frequency changes or "details" in your data
     /// - Approximation coefficients (vj): These capture the low-frequency components or overall "shape"
@@ -339,7 +339,7 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method "stretches" a filter by inserting zeros between its values.
+    /// <b>For Beginners:</b> This method "stretches" a filter by inserting zeros between its values.
     /// For example, if your filter is [1, 2, 3] and j=2, the result would be [1, 0, 2, 0, 3].
     /// 
     /// This is a key part of the SWT algorithm that allows it to analyze data at different scales

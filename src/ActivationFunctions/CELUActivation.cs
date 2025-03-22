@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The CELU activation function is an improved version of the popular ReLU function.
+/// <b>For Beginners:</b> The CELU activation function is an improved version of the popular ReLU function.
 /// While ReLU simply turns negative values to zero (which can cause "dead neurons"), CELU replaces
 /// negative values with a smooth exponential curve that approaches a negative limit.
 /// 
@@ -33,7 +33,7 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     /// <param name="alpha">The alpha parameter that controls the negative saturation value. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: The alpha parameter determines how steeply the function curves for negative inputs
+    /// <b>For Beginners:</b> The alpha parameter determines how steeply the function curves for negative inputs
     /// and what negative value it will approach as inputs become more negative.
     /// 
     /// - A larger alpha (e.g., 2.0) means the function can reach more negative values
@@ -62,7 +62,7 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     /// <returns>The activated output value using the CELU function.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms an input value using the formula:
+    /// <b>For Beginners:</b> This method transforms an input value using the formula:
     /// f(x) = max(0, x) + min(0, α * (exp(x/α) - 1))
     /// 
     /// In simpler terms:
@@ -92,7 +92,7 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value at the input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative measures how much the CELU function's output changes
+    /// <b>For Beginners:</b> The derivative measures how much the CELU function's output changes
     /// when its input changes slightly. This is used during neural network training to determine
     /// how to adjust weights.
     /// 

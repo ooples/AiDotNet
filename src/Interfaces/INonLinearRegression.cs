@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// This interface extends IFullModel to provide specialized capabilities for non-linear regression,
 /// which is used to model relationships that don't follow a straight line.
 /// 
-/// For Beginners: Non-linear regression helps you find patterns in data that follow curves instead of straight lines.
+/// <b>For Beginners:</b> Non-linear regression helps you find patterns in data that follow curves instead of straight lines.
 /// 
 /// What is non-linear regression?
 /// - Linear regression finds relationships that follow straight lines (like y = mx + b)

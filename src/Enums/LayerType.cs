@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Neural networks are composed of layers of artificial neurons that process information.
+/// <b>For Beginners:</b> Neural networks are composed of layers of artificial neurons that process information.
 /// Think of a neural network as an assembly line in a factory, where each layer is a workstation that 
 /// performs a specific task on the data before passing it to the next layer.
 /// 
@@ -25,7 +25,7 @@ public enum LayerType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Pooling layers work like summarizers - they take a group of nearby values 
+    /// <b>For Beginners:</b> Pooling layers work like summarizers - they take a group of nearby values 
     /// and combine them into a single value, making the data smaller and more manageable.
     /// 
     /// Think of it as:
@@ -51,7 +51,7 @@ public enum LayerType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Convolutional layers are like pattern detectors that scan across data 
+    /// <b>For Beginners:</b> Convolutional layers are like pattern detectors that scan across data 
     /// (especially images) looking for specific features.
     /// 
     /// Think of it as:
@@ -77,7 +77,7 @@ public enum LayerType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Fully Connected layers (also called Dense layers) connect every input to every output, 
+    /// <b>For Beginners:</b> Fully Connected layers (also called Dense layers) connect every input to every output, 
     /// allowing the network to combine all available information to make decisions.
     /// 
     /// Think of it as:

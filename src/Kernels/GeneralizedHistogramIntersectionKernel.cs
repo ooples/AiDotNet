@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// the "overlap" between two vectors, with an additional parameter (beta) to control the influence of this overlap.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Histogram Intersection kernel is especially useful when your data represents frequencies, counts,
 /// or distributions (like histograms in image processing).
 /// </para>
@@ -31,7 +31,7 @@ public class GeneralizedHistogramIntersectionKernel<T> : IKernelFunction<T>
     /// The parameter that controls the influence of the intersection values.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of beta as a "weighting knob" for your similarity measurement.
+    /// <b>For Beginners:</b> Think of beta as a "weighting knob" for your similarity measurement.
     /// 
     /// When beta equals 1.0 (the default), this is the standard Histogram Intersection kernel
     /// that simply sums the minimum values between corresponding elements.
@@ -58,7 +58,7 @@ public class GeneralizedHistogramIntersectionKernel<T> : IKernelFunction<T>
     /// <param name="beta">The parameter that controls the influence of intersection values. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Generalized Histogram Intersection kernel with your chosen settings.
+    /// <b>For Beginners:</b> This constructor sets up the Generalized Histogram Intersection kernel with your chosen settings.
     /// If you don't specify any settings, it will use a default value of 1.0 for beta,
     /// which gives you the standard Histogram Intersection kernel.
     /// </para>
@@ -90,7 +90,7 @@ public class GeneralizedHistogramIntersectionKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Generalized Histogram Intersection kernel formula.
     /// </para>
     /// <para>

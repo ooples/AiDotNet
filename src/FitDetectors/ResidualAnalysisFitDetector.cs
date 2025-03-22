@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps you understand how well your model is performing by looking at 
+/// <b>For Beginners:</b> This class helps you understand how well your model is performing by looking at 
 /// the "residuals" - the differences between what your model predicted and the actual values.
 /// 
 /// Think of residuals like the errors your model makes. By analyzing these errors in different ways,
@@ -28,7 +28,7 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: These options control how strict or lenient the detector is when evaluating
+    /// <b>For Beginners:</b> These options control how strict or lenient the detector is when evaluating
     /// your model. They include thresholds for acceptable error rates and other statistical measures.
     /// </para>
     /// </remarks>
@@ -40,7 +40,7 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Configuration options for the detector. If null, default options will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the constructor that creates a new detector. You can provide custom options
+    /// <b>For Beginners:</b> This is the constructor that creates a new detector. You can provide custom options
     /// to control how strict the detector should be, or leave it as null to use the default settings.
     /// </para>
     /// </remarks>
@@ -56,7 +56,7 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method that examines your model's errors (residuals) and tells you
+    /// <b>For Beginners:</b> This is the main method that examines your model's errors (residuals) and tells you
     /// how well it's performing. It:
     /// 
     /// 1. Determines what type of fit your model has (good, overfit, underfit, etc.)
@@ -90,7 +90,7 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
     /// <returns>A FitType enum value indicating the quality of the model fit.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method examines your model's errors in detail to determine if your model has:
+    /// <b>For Beginners:</b> This method examines your model's errors in detail to determine if your model has:
     /// 
     /// - Good Fit: Your model makes small, random errors with no clear pattern
     /// - Unstable: Your model's errors show patterns that suggest problems (like autocorrelation)
@@ -179,7 +179,7 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how sure the detector is about its assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how sure the detector is about its assessment of your model.
     /// Think of it like a percentage of certainty.
     /// 
     /// The confidence is calculated by:

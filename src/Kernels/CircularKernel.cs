@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// defined by the sigma parameter.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Circular kernel is special because it has a clear "cutoff point" - if two data points are too far
 /// apart (farther than sigma), they're considered completely different (similarity = 0).
 /// </para>
@@ -31,7 +31,7 @@ public class CircularKernel<T> : IKernelFunction<T>
     /// The scaling parameter that controls the radius of influence for the kernel.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of sigma as the "neighborhood radius" for your similarity measurement.
+    /// <b>For Beginners:</b> Think of sigma as the "neighborhood radius" for your similarity measurement.
     /// Any two points that are farther apart than this radius will be considered completely dissimilar
     /// (they'll have a similarity value of 0).
     /// 
@@ -52,7 +52,7 @@ public class CircularKernel<T> : IKernelFunction<T>
     /// <param name="sigma">The scaling parameter that controls the radius of influence. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Circular kernel with your chosen settings.
+    /// <b>For Beginners:</b> This constructor sets up the Circular kernel with your chosen settings.
     /// If you don't specify any settings, it will use a default value of 1.0 for sigma,
     /// which works well for many problems.
     /// </para>
@@ -81,7 +81,7 @@ public class CircularKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Circular kernel formula.
     /// </para>
     /// <para>

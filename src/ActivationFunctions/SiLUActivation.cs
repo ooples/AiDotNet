@@ -10,7 +10,7 @@ namespace AiDotNet.ActivationFunctions;
 /// It was introduced in 2017 and has shown strong performance in deep neural networks.
 /// </para>
 /// <para>
-/// For Beginners: SiLU (or Swish) is a relatively new activation function that has become 
+/// <b>For Beginners:</b> SiLU (or Swish) is a relatively new activation function that has become 
 /// popular in modern neural networks. Unlike simpler functions like ReLU that either pass 
 /// a value through or block it, SiLU smoothly scales inputs based on their value. It keeps 
 /// most positive values, reduces small positive values, and allows some negative values to 
@@ -37,7 +37,7 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>
     /// The SiLU function multiplies the input by the sigmoid of the input: f(x) = x * sigmoid(x).
     /// </para>
     /// <para>
-    /// For Beginners: This method takes a number and transforms it using the SiLU formula.
+    /// <b>For Beginners:</b> This method takes a number and transforms it using the SiLU formula.
     /// First, it calculates the sigmoid of the input (a value between 0 and 1), then multiplies
     /// the original input by this sigmoid value. This creates a smooth curve that:
     /// - For large positive values: outputs approximately the same value (since sigmoid approaches 1)
@@ -65,7 +65,7 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>
     /// This derivative is used during the backpropagation phase of neural network training.
     /// </para>
     /// <para>
-    /// For Beginners: The derivative tells us how much the output changes when we slightly change the input.
+    /// <b>For Beginners:</b> The derivative tells us how much the output changes when we slightly change the input.
     /// This information is crucial for training neural networks because it guides how the network's weights
     /// should be adjusted. The SiLU derivative has a nice property: it's non-zero for most input values,
     /// which helps prevent the "dying neuron" problem that can occur with simpler activation functions like ReLU.

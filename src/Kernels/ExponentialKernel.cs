@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// instead of the L2 norm (Euclidean distance squared).
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Exponential kernel is like a "similarity detector" that gives higher values when points are close
 /// together and lower values when they're far apart.
 /// </para>
@@ -32,7 +32,7 @@ public class ExponentialKernel<T> : IKernelFunction<T>
     /// The scaling parameter that controls how quickly similarity decreases with distance.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of sigma as a "sensitivity knob" for your similarity measurement.
+    /// <b>For Beginners:</b> Think of sigma as a "sensitivity knob" for your similarity measurement.
     /// A smaller sigma makes the kernel more sensitive to differences between data points,
     /// causing similarity to drop off more quickly with distance.
     /// 
@@ -55,7 +55,7 @@ public class ExponentialKernel<T> : IKernelFunction<T>
     /// <param name="sigma">The scaling parameter that controls how quickly similarity decreases with distance. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Exponential kernel with your chosen settings.
+    /// <b>For Beginners:</b> This constructor sets up the Exponential kernel with your chosen settings.
     /// If you don't specify any settings, it will use a default value of 1.0 for sigma,
     /// which works well for many problems.
     /// </para>
@@ -82,7 +82,7 @@ public class ExponentialKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Exponential kernel formula.
     /// </para>
     /// <para>

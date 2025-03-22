@@ -5,7 +5,7 @@ namespace AiDotNet.Enums;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Interpolation is like "filling in the blanks" between known data points. 
+/// <b>For Beginners:</b> Interpolation is like "filling in the blanks" between known data points. 
 /// Imagine you have temperature readings from several weather stations across a city, and you 
 /// want to estimate the temperature at locations between these stations. Interpolation methods 
 /// are different mathematical techniques to make these estimates.
@@ -25,7 +25,7 @@ public enum Interpolation2DType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Bilinear interpolation is like drawing straight lines between your known points 
+    /// <b>For Beginners:</b> Bilinear interpolation is like drawing straight lines between your known points 
     /// and using those lines to estimate values in between.
     /// 
     /// Think of it as:
@@ -48,7 +48,7 @@ public enum Interpolation2DType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Bicubic interpolation creates a smoother surface than bilinear by using curved lines 
+    /// <b>For Beginners:</b> Bicubic interpolation creates a smoother surface than bilinear by using curved lines 
     /// instead of straight lines between points.
     /// 
     /// Think of it as:
@@ -71,7 +71,7 @@ public enum Interpolation2DType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Thin Plate Spline interpolation creates a smooth surface that passes through all your data points 
+    /// <b>For Beginners:</b> Thin Plate Spline interpolation creates a smooth surface that passes through all your data points 
     /// while minimizing the overall "bending" of the surface.
     /// 
     /// Think of it as:
@@ -94,7 +94,7 @@ public enum Interpolation2DType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Kriging is an advanced method that considers how data points relate to each other 
+    /// <b>For Beginners:</b> Kriging is an advanced method that considers how data points relate to each other 
     /// based on distance and direction. It was originally developed for mining and geology applications.
     /// 
     /// Think of it as:
@@ -117,7 +117,7 @@ public enum Interpolation2DType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Shepard's Method calculates values based on the idea that nearby points 
+    /// <b>For Beginners:</b> Shepard's Method calculates values based on the idea that nearby points 
     /// should have more influence than distant points.
     /// 
     /// Think of it as:
@@ -140,7 +140,7 @@ public enum Interpolation2DType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Moving Least Squares creates a smooth surface by fitting small, simple 
+    /// <b>For Beginners:</b> Moving Least Squares creates a smooth surface by fitting small, simple 
     /// mathematical functions to groups of nearby points.
     /// 
     /// Think of it as:
@@ -163,7 +163,7 @@ public enum Interpolation2DType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: MultiQuadratic interpolation uses special mathematical functions that 
+    /// <b>For Beginners:</b> MultiQuadratic interpolation uses special mathematical functions that 
     /// create smooth hills and valleys centered at each data point.
     /// 
     /// Think of it as:
@@ -186,7 +186,7 @@ public enum Interpolation2DType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Cubic Convolution is similar to bicubic interpolation but uses a wider range 
+    /// <b>For Beginners:</b> Cubic Convolution is similar to bicubic interpolation but uses a wider range 
     /// of neighboring points to calculate each value.
     /// 
     /// Think of it as:

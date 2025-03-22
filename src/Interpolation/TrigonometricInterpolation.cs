@@ -11,7 +11,7 @@
 /// wave forms, or any data that repeats over a fixed interval.
 /// </para>
 /// <para>
-/// For Beginners: Think of trigonometric interpolation like finding a musical chord that matches a set of notes.
+/// <b>For Beginners:</b> Think of trigonometric interpolation like finding a musical chord that matches a set of notes.
 /// Just as a complex sound can be broken down into simple sine waves of different frequencies (harmonics),
 /// this method breaks down your data into simple wave patterns. It works best when your data has a repeating
 /// pattern, like daily temperature cycles, seasonal sales data, or sound waves. The interpolation creates
@@ -61,7 +61,7 @@ public class TrigonometricInterpolation<T> : IInterpolation<T>
     /// </exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor takes your data points (x and y coordinates) and prepares the
+    /// <b>For Beginners:</b> This constructor takes your data points (x and y coordinates) and prepares the
     /// interpolation algorithm. The x-values represent positions (like time points) and the y-values
     /// represent measurements at those positions (like temperature readings).
     /// </para>
@@ -116,7 +116,7 @@ public class TrigonometricInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the y-value at any x-position you specify, even if it's
+    /// <b>For Beginners:</b> This method finds the y-value at any x-position you specify, even if it's
     /// between your original data points. It uses the trigonometric formula (a sum of sine and
     /// cosine waves) that was calculated to fit your data.
     /// </para>
@@ -153,7 +153,7 @@ public class TrigonometricInterpolation<T> : IInterpolation<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method does the mathematical heavy lifting to find the "recipe" for
+    /// <b>For Beginners:</b> This method does the mathematical heavy lifting to find the "recipe" for
     /// recreating your data using sine and cosine waves. It calculates how much of each wave
     /// frequency to include in the final mix.
     /// </para>

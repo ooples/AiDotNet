@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps determine if your machine learning model is a good fit for your data
+/// <b>For Beginners:</b> This class helps determine if your machine learning model is a good fit for your data
 /// by using special metrics called "information criteria" (AIC and BIC). These metrics help balance
 /// how well your model performs against how complex it is. A good model should explain your data well
 /// without being unnecessarily complicated.
@@ -23,7 +23,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: These options control how strict or lenient the detector is when evaluating your model.
+    /// <b>For Beginners:</b> These options control how strict or lenient the detector is when evaluating your model.
     /// They include thresholds that determine when a model is considered to be overfitting, underfitting, etc.
     /// </para>
     /// </remarks>
@@ -35,7 +35,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector. If not provided, default settings will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the constructor that creates a new detector. You can provide custom settings
+    /// <b>For Beginners:</b> This is the constructor that creates a new detector. You can provide custom settings
     /// through the options parameter, or just let it use the default settings if you're not sure what to change.
     /// </para>
     /// </remarks>
@@ -51,7 +51,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the fit type, confidence level, and recommendations for improvement.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method you'll use. It takes your model's performance data and:
+    /// <b>For Beginners:</b> This is the main method you'll use. It takes your model's performance data and:
     /// 1. Figures out if your model is a good fit, overfitting, underfitting, etc.
     /// 2. Calculates how confident it is in that assessment
     /// 3. Provides specific recommendations to improve your model
@@ -82,7 +82,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// <returns>The determined fit type (GoodFit, Overfit, Underfit, HighVariance, or Unstable).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method looks at the AIC and BIC values (information criteria metrics) from your
+    /// <b>For Beginners:</b> This method looks at the AIC and BIC values (information criteria metrics) from your
     /// training, validation, and test data. It then compares these values to determine if your model:
     /// 
     /// - Is a good fit (balanced performance across all datasets)
@@ -138,7 +138,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how confident the detector is in its assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how confident the detector is in its assessment of your model.
     /// The confidence is based on how consistent the AIC and BIC values are across your different datasets.
     /// 
     /// If the values are very similar across training, validation, and test sets, the confidence will be high.
@@ -179,7 +179,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of string recommendations for improving the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a list of practical suggestions to help you improve your model
+    /// <b>For Beginners:</b> This method creates a list of practical suggestions to help you improve your model
     /// based on what type of fit was detected. Think of it as personalized advice for your specific situation:
     /// 
     /// - If your model has a "Good Fit", it suggests you're ready to use the model or make minor improvements.

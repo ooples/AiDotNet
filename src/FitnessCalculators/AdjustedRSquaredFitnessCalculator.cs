@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps you evaluate how well your model fits the data using 
+/// <b>For Beginners:</b> This calculator helps you evaluate how well your model fits the data using 
 /// a metric called "Adjusted R-Squared."
 /// 
 /// Regular R-Squared (also called the coefficient of determination) measures how well your model 
@@ -33,7 +33,7 @@ public class AdjustedRSquaredFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Adjusted R-Squared
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Adjusted R-Squared
     /// to evaluate your model.
     /// 
     /// The "dataSetType" parameter lets you choose which data to evaluate:
@@ -57,7 +57,7 @@ public class AdjustedRSquaredFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The Adjusted R-Squared value for the specified dataset.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method extracts the Adjusted R-Squared value from your model's
+    /// <b>For Beginners:</b> This method extracts the Adjusted R-Squared value from your model's
     /// prediction statistics. This value tells you how well your model fits the data while
     /// accounting for the number of features used.
     /// 

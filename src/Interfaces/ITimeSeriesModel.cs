@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// Time series models analyze sequential data points collected over time to identify patterns
 /// and make predictions about future values.
 /// 
-/// For Beginners: A time series model helps you predict future values based on past data that
+/// <b>For Beginners:</b> A time series model helps you predict future values based on past data that
 /// was collected in sequence over time. For example:
 /// 
 /// - Predicting tomorrow's temperature based on weather patterns from the past week
@@ -30,7 +30,7 @@ public interface ITimeSeriesModel<T> : IModelSerializer
     /// <remarks>
     /// This method fits the model to the provided input-output pairs to learn patterns in the data.
     /// 
-    /// For Beginners: Training is how the model "learns" from your historical data. You provide:
+    /// <b>For Beginners:</b> Training is how the model "learns" from your historical data. You provide:
     /// 
     /// - x: Your input features organized in rows and columns. For time series, these are often
     ///   previous values and possibly other related variables. For example, to predict tomorrow's
@@ -52,7 +52,7 @@ public interface ITimeSeriesModel<T> : IModelSerializer
     /// <remarks>
     /// This method applies the patterns learned during training to make predictions on new data.
     /// 
-    /// For Beginners: After your model has learned from historical data, you can use this method
+    /// <b>For Beginners:</b> After your model has learned from historical data, you can use this method
     /// to make predictions for new situations. You provide:
     /// 
     /// - input: New data points that you want predictions for, formatted the same way as your
@@ -73,7 +73,7 @@ public interface ITimeSeriesModel<T> : IModelSerializer
     /// <remarks>
     /// This method measures how well the model's predictions match actual values on data it hasn't seen during training.
     /// 
-    /// For Beginners: This method helps you check how accurate your model is. You provide:
+    /// <b>For Beginners:</b> This method helps you check how accurate your model is. You provide:
     /// 
     /// - xTest: Input data that the model hasn't seen during training
     /// - yTest: The actual correct values for those inputs

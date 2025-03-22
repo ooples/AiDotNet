@@ -10,7 +10,7 @@
 /// that emphasizes smaller values. It's defined as: softmin(x_i) = exp(-x_i) / sum(exp(-x_j)) for all j in the vector.
 /// </para>
 /// <para>
-/// For Beginners: While Softmax emphasizes the largest values in a vector, Softmin does the opposite - it gives
+/// <b>For Beginners:</b> While Softmax emphasizes the largest values in a vector, Softmin does the opposite - it gives
 /// more weight to smaller values. Think of it as a "smooth minimum" function. For example, if you have scores
 /// [5, 2, 8], Softmax would highlight 8 (the maximum), but Softmin would highlight 2 (the minimum).
 /// 
@@ -33,7 +33,7 @@ public class SoftminActivation<T> : ActivationFunctionBase<T>
     /// It cannot be applied to a single scalar value in isolation.
     /// </para>
     /// <para>
-    /// For Beginners: Like Softmax, Softmin needs to see all numbers at once to calculate its output.
+    /// <b>For Beginners:</b> Like Softmax, Softmin needs to see all numbers at once to calculate its output.
     /// This is because each output value depends on all input values. This method returns false to indicate
     /// that you should only use Softmin with vectors (arrays of numbers), not individual values.
     /// </para>
@@ -51,7 +51,7 @@ public class SoftminActivation<T> : ActivationFunctionBase<T>
     /// and finally divides each by the sum of all exponentials to ensure the output values sum to 1.
     /// </para>
     /// <para>
-    /// For Beginners: This method transforms a list of numbers into probabilities by:
+    /// <b>For Beginners:</b> This method transforms a list of numbers into probabilities by:
     /// 1. Flipping the sign of each number (making positive numbers negative and vice versa)
     /// 2. Calculating e^x for each of these negated numbers
     /// 3. Adding up all these e^x values to get a total
@@ -82,7 +82,7 @@ public class SoftminActivation<T> : ActivationFunctionBase<T>
     /// - For off-diagonal elements (i≠j): J[i,j] = -softmin(x_i) * softmin(x_j)
     /// </para>
     /// <para>
-    /// For Beginners: The derivative of Softmin shows how the output probabilities change when you slightly
+    /// <b>For Beginners:</b> The derivative of Softmin shows how the output probabilities change when you slightly
     /// change each input value. This creates a grid (matrix) where each cell shows how changing one input
     /// affects one output.
     /// 

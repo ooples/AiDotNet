@@ -11,7 +11,7 @@
 /// certain machine learning algorithms.
 /// </para>
 /// <para>
-/// For Beginners: A complex number has two parts - a real part and an imaginary part.
+/// <b>For Beginners:</b> A complex number has two parts - a real part and an imaginary part.
 /// The real part is just like a regular number you're familiar with. The imaginary part
 /// is multiplied by "i", which represents the square root of -1 (a number that doesn't
 /// exist in the real number system).
@@ -35,7 +35,7 @@ public readonly struct Complex<T>
     /// Provides numeric operations for the type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows us to perform math operations
+    /// <b>For Beginners:</b> This is a helper object that allows us to perform math operations
     /// regardless of what numeric type (like double, float, decimal) we're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -45,7 +45,7 @@ public readonly struct Complex<T>
     /// Gets the real part of the complex number.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is the regular number part of a complex number.
+    /// <b>For Beginners:</b> This is the regular number part of a complex number.
     /// For example, in "3 + 2i", the real part is 3.
     /// </remarks>
     public T Real { get; }
@@ -54,7 +54,7 @@ public readonly struct Complex<T>
     /// Gets the imaginary part of the complex number.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is the part that's multiplied by "i" in a complex number.
+    /// <b>For Beginners:</b> This is the part that's multiplied by "i" in a complex number.
     /// For example, in "3 + 2i", the imaginary part is 2.
     /// </remarks>
     public T Imaginary { get; }
@@ -65,7 +65,7 @@ public readonly struct Complex<T>
     /// <param name="real">The real part of the complex number.</param>
     /// <param name="imaginary">The imaginary part of the complex number.</param>
     /// <remarks>
-    /// For Beginners: This is how you create a new complex number. You provide the real part
+    /// <b>For Beginners:</b> This is how you create a new complex number. You provide the real part
     /// (a regular number) and the imaginary part (the coefficient of i).
     /// 
     /// Example: To create the complex number 3 + 2i, you would write:
@@ -89,7 +89,7 @@ public readonly struct Complex<T>
     /// in the complex plane.
     /// </para>
     /// <para>
-    /// For Beginners: The magnitude is like the "size" of the complex number. It's calculated
+    /// <b>For Beginners:</b> The magnitude is like the "size" of the complex number. It's calculated
     /// using the Pythagorean theorem: sqrt(real² + imaginary²).
     /// </para>
     /// <para>
@@ -112,7 +112,7 @@ public readonly struct Complex<T>
     /// connecting the origin to the complex number in the complex plane.
     /// </para>
     /// <para>
-    /// For Beginners: The phase is the angle that the complex number makes with the positive
+    /// <b>For Beginners:</b> The phase is the angle that the complex number makes with the positive
     /// x-axis when plotted on a 2D graph. It's measured in radians (a full circle is 2π radians
     /// or about 6.28 radians).
     /// </para>
@@ -144,7 +144,7 @@ public readonly struct Complex<T>
     /// adding their imaginary parts together.
     /// </para>
     /// <para>
-    /// For Beginners: To add two complex numbers, you simply add their real parts together
+    /// <b>For Beginners:</b> To add two complex numbers, you simply add their real parts together
     /// and their imaginary parts together.
     /// </para>
     /// <para>
@@ -167,7 +167,7 @@ public readonly struct Complex<T>
     /// subtracting their imaginary parts.
     /// </para>
     /// <para>
-    /// For Beginners: To subtract one complex number from another, you subtract the real parts
+    /// <b>For Beginners:</b> To subtract one complex number from another, you subtract the real parts
     /// and subtract the imaginary parts.
     /// </para>
     /// <para>
@@ -189,7 +189,7 @@ public readonly struct Complex<T>
     /// Multiplication of complex numbers follows the distributive property and the rule that i² = -1.
     /// </para>
     /// <para>
-    /// For Beginners: Multiplying complex numbers is a bit more involved than addition or subtraction.
+    /// <b>For Beginners:</b> Multiplying complex numbers is a bit more involved than addition or subtraction.
     /// The formula is:
     /// (a + bi) * (c + di) = (ac - bd) + (ad + bc)i
     /// </para>
@@ -220,7 +220,7 @@ public readonly struct Complex<T>
     /// by the complex conjugate of the denominator, which converts the denominator to a real number.
     /// </para>
     /// <para>
-    /// For Beginners: Dividing complex numbers is one of the more complicated operations.
+    /// <b>For Beginners:</b> Dividing complex numbers is one of the more complicated operations.
     /// We can't directly divide complex numbers, so we use a special technique:
     /// </para>
     /// <para>
@@ -253,7 +253,7 @@ public readonly struct Complex<T>
     /// <param name="right">The second complex number to compare.</param>
     /// <returns>True if the complex numbers are equal; otherwise, false.</returns>
     /// <remarks>
-    /// For Beginners: This checks if two complex numbers have the same real part and the same
+    /// <b>For Beginners:</b> This checks if two complex numbers have the same real part and the same
     /// imaginary part. If both parts match, the complex numbers are considered equal.
     /// </remarks>
     public static bool operator ==(Complex<T> left, Complex<T> right)
@@ -266,7 +266,7 @@ public readonly struct Complex<T>
     /// <param name="right">The second complex number to compare.</param>
     /// <returns>True if the complex numbers are not equal; otherwise, false.</returns>
     /// <remarks>
-    /// For Beginners: This checks if two complex numbers are different. If either the real part
+    /// <b>For Beginners:</b> This checks if two complex numbers are different. If either the real part
     /// or the imaginary part (or both) are different, the complex numbers are not equal.
     /// </remarks>
     public static bool operator !=(Complex<T> left, Complex<T> right)
@@ -278,7 +278,7 @@ public readonly struct Complex<T>
     /// <param name="obj">The object to compare with.</param>
     /// <returns>True if the objects are equal; otherwise, false.</returns>
     /// <remarks>
-    /// For Beginners: This method checks if this complex number equals another object.
+    /// <b>For Beginners:</b> This method checks if this complex number equals another object.
     /// It first checks if the other object is a complex number, and if so, compares their values.
     /// </remarks>
     public override bool Equals(object? obj)
@@ -290,7 +290,7 @@ public readonly struct Complex<T>
     /// <param name="other">The complex number to compare with.</param>
     /// <returns>True if the complex numbers are equal; otherwise, false.</returns>
     /// <remarks>
-    /// For Beginners: This method checks if two complex numbers have the same real and imaginary parts.
+    /// <b>For Beginners:</b> This method checks if two complex numbers have the same real and imaginary parts.
     /// If both parts match exactly, the complex numbers are considered equal.
     /// </remarks>
     public bool Equals(Complex<T> other)
@@ -301,7 +301,7 @@ public readonly struct Complex<T>
     /// </summary>
     /// <returns>A hash code for the current object.</returns>
     /// <remarks>
-    /// For Beginners: A hash code is a numeric value that is used to identify an object in collections
+    /// <b>For Beginners:</b> A hash code is a numeric value that is used to identify an object in collections
     /// like dictionaries and hash sets. You don't need to call this method directly in most cases.
     /// </remarks>
     public override int GetHashCode()
@@ -324,7 +324,7 @@ public readonly struct Complex<T>
     /// The complex conjugate of a complex number (a + bi) is (a - bi).
     /// </para>
     /// <para>
-    /// For Beginners: The conjugate of a complex number keeps the real part the same but changes
+    /// <b>For Beginners:</b> The conjugate of a complex number keeps the real part the same but changes
     /// the sign of the imaginary part. For example, the conjugate of (3 + 2i) is (3 - 2i).
     /// </para>
     /// <para>
@@ -341,7 +341,7 @@ public readonly struct Complex<T>
     /// </summary>
     /// <returns>A string that represents the complex number in the format "a + bi".</returns>
     /// <remarks>
-    /// For Beginners: This method converts the complex number to a readable text format.
+    /// <b>For Beginners:</b> This method converts the complex number to a readable text format.
     /// For example, a complex number with Real = 3 and Imaginary = 2 would be displayed as "3 + 2i".
     /// </remarks>
     public override string ToString()
@@ -359,7 +359,7 @@ public readonly struct Complex<T>
     /// using the formulas: real = magnitude * cos(phase) and imaginary = magnitude * sin(phase).
     /// </para>
     /// <para>
-    /// For Beginners: There are two ways to represent complex numbers:
+    /// <b>For Beginners:</b> There are two ways to represent complex numbers:
     /// </para>
     /// <para>
     /// 1. Rectangular form: a + bi (using real and imaginary parts)

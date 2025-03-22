@@ -11,7 +11,7 @@
 /// softmax(x_i) = exp(x_i) / sum(exp(x_j)) for all j in the vector.
 /// </para>
 /// <para>
-/// For Beginners: Softmax is commonly used in the output layer of neural networks for classification problems.
+/// <b>For Beginners:</b> Softmax is commonly used in the output layer of neural networks for classification problems.
 /// Think of it as a way to convert raw scores (called "logits") into probabilities. For example, if you're 
 /// classifying images into 3 categories (cat, dog, bird), the neural network might output raw scores like 
 /// [2.5, 1.2, 0.8]. Softmax converts these to probabilities like [0.65, 0.22, 0.13], which sum to 1.0 (or 100%).
@@ -34,7 +34,7 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// of all exponentials to ensure the output values sum to 1.
     /// </para>
     /// <para>
-    /// For Beginners: This method transforms a list of numbers into probabilities by:
+    /// <b>For Beginners:</b> This method transforms a list of numbers into probabilities by:
     /// 1. Calculating e^x for each number (which makes all values positive)
     /// 2. Adding up all these e^x values to get a total
     /// 3. Dividing each e^x by this total
@@ -64,7 +64,7 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// - For off-diagonal elements (i≠j): J[i,j] = -softmax(x_i) * softmax(x_j)
     /// </para>
     /// <para>
-    /// For Beginners: The derivative of Softmax is more complex than other activation functions because
+    /// <b>For Beginners:</b> The derivative of Softmax is more complex than other activation functions because
     /// changing one input affects all outputs. This method creates a grid (matrix) that shows how each 
     /// output probability changes when you slightly change each input value.
     /// 
@@ -107,7 +107,7 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// It cannot be applied to a single scalar value in isolation.
     /// </para>
     /// <para>
-    /// For Beginners: Unlike functions like ReLU or Sigmoid that can work on single numbers,
+    /// <b>For Beginners:</b> Unlike functions like ReLU or Sigmoid that can work on single numbers,
     /// Softmax needs to see all numbers at once to calculate probabilities. This is because
     /// each output probability depends on all input values. This method returns false to indicate
     /// that you should only use Softmax with vectors (arrays of numbers), not individual values.

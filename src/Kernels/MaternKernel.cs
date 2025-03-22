@@ -10,7 +10,7 @@
 /// by introducing a parameter that controls the smoothness of the resulting function.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Matérn kernel is particularly useful because it lets you control exactly how "smooth" your model's
 /// predictions will be.
 /// </para>
@@ -40,7 +40,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// Controls the smoothness of the kernel function.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The '_nu' parameter determines how smooth your model's predictions will be.
+    /// <b>For Beginners:</b> The '_nu' parameter determines how smooth your model's predictions will be.
     /// 
     /// Think of it as a "smoothness knob":
     /// - Lower values (like 0.5) create rougher, less smooth predictions that can change quickly
@@ -60,7 +60,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// Controls how quickly the similarity decreases with distance between points.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The '_length' parameter (also called the length scale) controls how far apart
+    /// <b>For Beginners:</b> The '_length' parameter (also called the length scale) controls how far apart
     /// two points can be while still being considered similar.
     /// 
     /// Think of it as a "distance vision" parameter:
@@ -85,7 +85,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// <param name="length">Controls how quickly similarity decreases with distance. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Matérn kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Matérn kernel for use. You can optionally
     /// provide values for the two parameters that control how the kernel behaves.
     /// </para>
     /// <para>
@@ -118,7 +118,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Matérn kernel formula.
     /// </para>
     /// <para>
@@ -161,7 +161,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// <param name="x">The input value.</param>
     /// <returns>The value of the modified Bessel function.</returns>
     /// <remarks>
-    /// For Beginners: This is a helper method that implements a special mathematical function
+    /// <b>For Beginners:</b> This is a helper method that implements a special mathematical function
     /// needed for the Matérn kernel calculation. You don't need to understand the details of this
     /// function to use the Matérn kernel effectively.
     /// </remarks>
@@ -199,7 +199,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// <param name="x">The input value.</param>
     /// <returns>The value of the modified Bessel function.</returns>
     /// <remarks>
-    /// For Beginners: This is a specialized mathematical helper method used internally by the kernel.
+    /// <b>For Beginners:</b> This is a specialized mathematical helper method used internally by the kernel.
     /// It uses a mathematical technique called "series expansion" to calculate the Bessel function
     /// when the input value is small.
     /// </remarks>
@@ -241,7 +241,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// which is more efficient and numerically stable for large input values.
     /// </para>
     /// <para>
-    /// For Beginners: This is a specialized mathematical helper method used internally by the kernel.
+    /// <b>For Beginners:</b> This is a specialized mathematical helper method used internally by the kernel.
     /// It uses a mathematical technique called "asymptotic expansion" to calculate the Bessel function
     /// when the input value is large.
     /// </para>

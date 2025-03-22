@@ -6,7 +6,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
-/// For beginners: LDL decomposition breaks down a symmetric matrix into simpler parts:
+/// <b>For Beginners:</b> LDL decomposition breaks down a symmetric matrix into simpler parts:
 /// - L: A lower triangular matrix (has values only on and below the diagonal)
 /// - D: A diagonal matrix (has values only on the diagonal)
 /// 
@@ -29,7 +29,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// The lower triangular matrix L from the decomposition.
     /// </summary>
     /// <remarks>
-    /// For beginners: This is a matrix where all elements above the diagonal are zero.
+    /// <b>For Beginners:</b> This is a matrix where all elements above the diagonal are zero.
     /// The diagonal elements are all set to 1.
     /// </remarks>
     public Matrix<T> L { get; private set; }
@@ -38,7 +38,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// The diagonal matrix D from the decomposition, stored as a vector of the diagonal elements.
     /// </summary>
     /// <remarks>
-    /// For beginners: Instead of storing a full matrix with zeros everywhere except the diagonal,
+    /// <b>For Beginners:</b> Instead of storing a full matrix with zeros everywhere except the diagonal,
     /// we just store the diagonal values in a vector for efficiency.
     /// </remarks>
     public Vector<T> D { get; private set; }
@@ -50,7 +50,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="algorithm">The algorithm to use for decomposition (default is Cholesky).</param>
     /// <exception cref="ArgumentException">Thrown when the matrix is not square.</exception>
     /// <remarks>
-    /// For beginners: This constructor takes your original matrix and immediately performs
+    /// <b>For Beginners:</b> This constructor takes your original matrix and immediately performs
     /// the decomposition using the specified algorithm.
     /// </remarks>
     public LdlDecomposition(Matrix<T> matrix, LdlAlgorithmType algorithm = LdlAlgorithmType.Cholesky)
@@ -72,7 +72,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="algorithm">The algorithm to use for decomposition (default is Cholesky).</param>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
     /// <remarks>
-    /// For beginners: This method does the actual work of breaking down the original matrix
+    /// <b>For Beginners:</b> This method does the actual work of breaking down the original matrix
     /// into the L and D components. Different algorithms may be more efficient for different
     /// types of matrices.
     /// </remarks>
@@ -95,7 +95,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// Performs LDL decomposition using the Cholesky-based algorithm.
     /// </summary>
     /// <remarks>
-    /// For beginners: This method implements a variant of the Cholesky decomposition algorithm
+    /// <b>For Beginners:</b> This method implements a variant of the Cholesky decomposition algorithm
     /// that produces the LDL factorization. It works by:
     /// 1. Computing each diagonal element of D
     /// 2. Setting the diagonal of L to 1
@@ -137,7 +137,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// Performs LDL decomposition using the Crout algorithm.
     /// </summary>
     /// <remarks>
-    /// For beginners: The Crout algorithm is another method for computing the LDL decomposition.
+    /// <b>For Beginners:</b> The Crout algorithm is another method for computing the LDL decomposition.
     /// It follows a similar approach to the Cholesky-based algorithm but may be more numerically
     /// stable for certain types of matrices.
     /// 
@@ -180,7 +180,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x.</returns>
     /// <exception cref="ArgumentException">Thrown when the vector length doesn't match the matrix dimensions.</exception>
     /// <remarks>
-    /// For beginners: This method finds the values of x that satisfy the equation Ax = b.
+    /// <b>For Beginners:</b> This method finds the values of x that satisfy the equation Ax = b.
     /// It uses the LDL decomposition to solve this in three steps:
     /// 
     /// 1. Forward substitution: Solve Ly = b for y
@@ -232,7 +232,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <returns>The inverse of the original matrix A.</returns>
     /// <remarks>
-    /// For beginners: The inverse of a matrix A is another matrix A⁻¹ such that when multiplied 
+    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A⁻¹ such that when multiplied 
     /// together, they give the identity matrix (A × A⁻¹ = I).
     /// 
     /// This method computes the inverse by:
@@ -269,7 +269,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <returns>A tuple containing the lower triangular matrix L and the diagonal vector D.</returns>
     /// <remarks>
-    /// For beginners: This method provides direct access to the two components of the LDL decomposition:
+    /// <b>For Beginners:</b> This method provides direct access to the two components of the LDL decomposition:
     /// - L: The lower triangular matrix with 1s on the diagonal
     /// - D: The diagonal elements stored as a vector
     /// 

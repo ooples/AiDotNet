@@ -6,7 +6,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: A neural network is a computing system inspired by the human brain. It consists of 
+/// <b>For Beginners:</b> A neural network is a computing system inspired by the human brain. It consists of 
 /// interconnected "layers" of artificial neurons that process information and learn patterns from data.
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
@@ -17,7 +17,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// The collection of layers that make up this neural network.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Layers are the building blocks of neural networks. Each layer contains 
+    /// <b>For Beginners:</b> Layers are the building blocks of neural networks. Each layer contains 
     /// neurons that process information and pass it to the next layer. A typical network has 
     /// an input layer (receives data), hidden layers (process data), and an output layer (produces results).
     /// </remarks>
@@ -27,7 +27,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// The architecture definition for this neural network.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The architecture defines the structure of your neural network - how many layers it has,
+    /// <b>For Beginners:</b> The architecture defines the structure of your neural network - how many layers it has,
     /// how many neurons are in each layer, and how they're connected. Think of it as the blueprint for your network.
     /// </remarks>
     protected readonly NeuralNetworkArchitecture<T> Architecture;
@@ -41,7 +41,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// Stores the input values for each layer during forward pass.
     /// </summary>
     /// <remarks>
-    /// For Beginners: When data flows through the network, we need to remember what values went into each layer.
+    /// <b>For Beginners:</b> When data flows through the network, we need to remember what values went into each layer.
     /// This is necessary for the learning process (backpropagation).
     /// </remarks>
     protected Dictionary<int, Tensor<T>> _layerInputs = [];
@@ -50,7 +50,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// Stores the output values from each layer during forward pass.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Similar to layer inputs, we also need to remember what values came out of each layer
+    /// <b>For Beginners:</b> Similar to layer inputs, we also need to remember what values came out of each layer
     /// during the learning process.
     /// </remarks>
     protected Dictionary<int, Tensor<T>> _layerOutputs = [];
@@ -64,7 +64,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// Indicates whether the network is currently in training mode.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Neural networks behave differently during training versus when they're making predictions.
+    /// <b>For Beginners:</b> Neural networks behave differently during training versus when they're making predictions.
     /// In training mode, the network keeps track of additional information needed for learning.
     /// </remarks>
     protected bool IsTrainingMode = true;
@@ -73,7 +73,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// Indicates whether this network supports training (learning from data).
     /// </summary>
     /// <remarks>
-    /// For Beginners: Not all neural networks can learn. Some are designed only for making predictions
+    /// <b>For Beginners:</b> Not all neural networks can learn. Some are designed only for making predictions
     /// with pre-set parameters. This property tells you if the network can learn from data.
     /// </remarks>
     public virtual bool SupportsTraining => false;
@@ -96,7 +96,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <returns>A vector containing all parameters of the network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Neural networks learn by adjusting their "parameters" (also called weights and biases).
+    /// <b>For Beginners:</b> Neural networks learn by adjusting their "parameters" (also called weights and biases).
     /// This method collects all those adjustable values into a single list so they can be updated during training.
     /// </para>
     /// </remarks>
@@ -131,7 +131,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <returns>The gradients of the loss with respect to the network inputs.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Backpropagation is how neural networks learn. After making a prediction, the network
+    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. After making a prediction, the network
     /// calculates how wrong it was (the error). Then it works backward through the layers to figure out
     /// how each parameter contributed to that error. This method handles that backward flow of information.
     /// </para>
@@ -172,7 +172,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <returns>The output of the network.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method passes data through the network from input to output, but also
+    /// <b>For Beginners:</b> This method passes data through the network from input to output, but also
     /// remembers all the intermediate values. This is necessary for the learning process, as the network
     /// needs to know these values when figuring out how to improve.
     /// </para>
@@ -207,7 +207,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </summary>
     /// <returns>The total parameter count.</returns>
     /// <remarks>
-    /// For Beginners: This tells you how many adjustable values (weights and biases) your neural network has.
+    /// <b>For Beginners:</b> This tells you how many adjustable values (weights and biases) your neural network has.
     /// More complex networks typically have more parameters and can learn more complex patterns, but also
     /// require more data to train effectively.
     /// </remarks>
@@ -221,7 +221,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </summary>
     /// <param name="layers">The layers to validate.</param>
     /// <remarks>
-    /// For Beginners: Not all combinations of layers make a valid neural network. This method checks that
+    /// <b>For Beginners:</b> Not all combinations of layers make a valid neural network. This method checks that
     /// the layers can properly connect to each other (like making sure puzzle pieces fit together).
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown when the layer configuration is invalid.</exception>
@@ -272,7 +272,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <returns>True if the layer can be used as an input layer; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The input layer is the first layer of your neural network. It receives the raw data 
+    /// <b>For Beginners:</b> The input layer is the first layer of your neural network. It receives the raw data 
     /// you want to process (like image pixels or text features). This method checks if a layer is suitable 
     /// to be the first layer in your network.
     /// </para>
@@ -309,7 +309,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <returns>True if the layer can be used as an output layer; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The output layer is the last layer of your neural network. It produces the final result 
+    /// <b>For Beginners:</b> The output layer is the last layer of your neural network. It produces the final result 
     /// (like a prediction or classification). This method checks if a layer is suitable to be the final layer 
     /// in your network. Different tasks need different types of output layers - for example, image classification 
     /// might use a Softmax activation, while regression might use a linear activation.
@@ -353,7 +353,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <returns>True if the layers can be connected; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Neural networks work by connecting layers in sequence. For two layers to connect properly, 
+    /// <b>For Beginners:</b> Neural networks work by connecting layers in sequence. For two layers to connect properly, 
     /// the output of one layer must match what the next layer expects as input. This is like making sure puzzle 
     /// pieces fit together. This method checks if two layers can be properly connected.
     /// </para>
@@ -401,7 +401,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <returns>The gradients of the loss with respect to the network inputs.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Backpropagation is how neural networks learn. This method takes both the network's inputs 
+    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. This method takes both the network's inputs 
     /// and the error gradients from the output, then calculates how to adjust the network's internal values to 
     /// reduce errors. Think of it as the network figuring out which knobs to turn (and by how much) to get better results.
     /// </para>
@@ -444,7 +444,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <returns>A vector containing all parameter gradients.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: When a neural network learns, it needs to know how to adjust each of its internal values 
+    /// <b>For Beginners:</b> When a neural network learns, it needs to know how to adjust each of its internal values 
     /// (parameters). These adjustments are called "gradients" - they tell the network which direction and how much 
     /// to change each parameter. This method collects all those adjustment values into a single list.
     /// </para>
@@ -478,7 +478,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// Initializes the layers of the neural network based on the architecture.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method sets up all the layers in your neural network according to the architecture 
+    /// <b>For Beginners:</b> This method sets up all the layers in your neural network according to the architecture 
     /// you've defined. It's like assembling the parts of your network before you can use it.
     /// </remarks>
     protected abstract void InitializeLayers();
@@ -489,7 +489,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <param name="input">The input data to process.</param>
     /// <returns>The network's prediction.</returns>
     /// <remarks>
-    /// For Beginners: This is the main method you'll use to get results from your trained neural network. 
+    /// <b>For Beginners:</b> This is the main method you'll use to get results from your trained neural network. 
     /// You provide some input data (like an image or text), and the network processes it through all its 
     /// layers to produce an output (like a classification or prediction).
     /// </remarks>
@@ -501,7 +501,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <param name="parameters">The new parameter values to set.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: During training, a neural network's internal values (parameters) get adjusted to improve 
+    /// <b>For Beginners:</b> During training, a neural network's internal values (parameters) get adjusted to improve 
     /// its performance. This method allows you to update all those values at once by providing a complete set 
     /// of new parameters.
     /// </para>
@@ -517,7 +517,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </summary>
     /// <param name="writer">The binary writer to save to.</param>
     /// <remarks>
-    /// For Beginners: This method saves your trained neural network to a file so you can use it later 
+    /// <b>For Beginners:</b> This method saves your trained neural network to a file so you can use it later 
     /// without having to train it again. It's like saving your progress in a video game.
     /// </remarks>
     public abstract void Serialize(BinaryWriter writer);
@@ -527,7 +527,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </summary>
     /// <param name="reader">The binary reader to load from.</param>
     /// <remarks>
-    /// For Beginners: This method loads a previously saved neural network from a file. It's like loading 
+    /// <b>For Beginners:</b> This method loads a previously saved neural network from a file. It's like loading 
     /// a saved game so you can continue where you left off, without having to start over.
     /// </remarks>
     public abstract void Deserialize(BinaryReader reader);
@@ -538,7 +538,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <param name="isTraining">True to enable training mode; false to enable inference mode.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: Neural networks behave differently during training versus when making predictions.
+    /// <b>For Beginners:</b> Neural networks behave differently during training versus when making predictions.
     /// </para>
     /// <para>
     /// When in training mode (isTraining = true):

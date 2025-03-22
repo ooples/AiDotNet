@@ -5,7 +5,7 @@ namespace AiDotNet.Interfaces;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: This interface extends the regular tree-based model interface to add
+/// <b>For Beginners:</b> This interface extends the regular tree-based model interface to add
 /// asynchronous (async) capabilities.
 /// 
 /// Tree-based models are machine learning algorithms that make decisions using a tree-like
@@ -34,7 +34,7 @@ public interface IAsyncTreeBasedModel<T> : ITreeBasedModel<T>
     /// <param name="y">The vector of target values corresponding to each sample in the input matrix.</param>
     /// <returns>A Task representing the asynchronous training operation.</returns>
     /// <remarks>
-    /// For Beginners: This method teaches the model to make predictions based on your data,
+    /// <b>For Beginners:</b> This method teaches the model to make predictions based on your data,
     /// but does it asynchronously (in the background).
     /// 
     /// Parameters explained:
@@ -59,7 +59,7 @@ public interface IAsyncTreeBasedModel<T> : ITreeBasedModel<T>
     /// <param name="input">The matrix of input features for which to make predictions.</param>
     /// <returns>A Task containing a vector of predicted values, one for each row in the input matrix.</returns>
     /// <remarks>
-    /// For Beginners: After your model is trained, this method uses it to make predictions
+    /// <b>For Beginners:</b> After your model is trained, this method uses it to make predictions
     /// on new data asynchronously (in the background).
     /// 
     /// The input parameter is a matrix (table) of features, similar to what you used during training,

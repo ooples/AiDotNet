@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing when you're
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing when you're
 /// trying to predict probability distributions (like when your model needs to assign probabilities
 /// to different possible outcomes).
 /// 
@@ -43,7 +43,7 @@ public class KullbackLeiblerDivergenceFitnessCalculator<T> : FitnessCalculatorBa
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use KL Divergence
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use KL Divergence
     /// to evaluate your model's performance, which is especially good for tasks where your model
     /// is predicting probabilities across multiple categories.
     /// 
@@ -72,7 +72,7 @@ public class KullbackLeiblerDivergenceFitnessCalculator<T> : FitnessCalculatorBa
     /// <returns>The calculated KL Divergence score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using KL Divergence.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using KL Divergence.
     /// 
     /// It works by:
     /// 1. Taking the probability distributions your model predicted

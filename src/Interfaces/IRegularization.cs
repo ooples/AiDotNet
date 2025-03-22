@@ -7,7 +7,7 @@
 /// Regularization helps prevent overfitting by adding constraints to the model,
 /// typically by penalizing large coefficient values.
 /// 
-/// For Beginners: Regularization is like adding training wheels to your AI model.
+/// <b>For Beginners:</b> Regularization is like adding training wheels to your AI model.
 /// 
 /// Imagine you're teaching a child to recognize dogs. If you only show them pictures of
 /// German Shepherds, they might think only German Shepherds are dogs (this is "overfitting").
@@ -30,7 +30,7 @@ public interface IRegularization<T>
     /// <remarks>
     /// This method modifies the input features to help prevent overfitting.
     /// 
-    /// For Beginners: This method prepares your input data for regularization by
+    /// <b>For Beginners:</b> This method prepares your input data for regularization by
     /// applying transformations that will help the model focus on the most important patterns.
     /// 
     /// Depending on the regularization type, this might:
@@ -50,7 +50,7 @@ public interface IRegularization<T>
     /// <remarks>
     /// This method adjusts the model coefficients (weights) according to the regularization strategy.
     /// 
-    /// For Beginners: Model coefficients are the "importance weights" your model assigns to different features.
+    /// <b>For Beginners:</b> Model coefficients are the "importance weights" your model assigns to different features.
     /// This method helps keep these weights from getting too large, which can cause overfitting.
     /// 
     /// For example:
@@ -69,7 +69,7 @@ public interface IRegularization<T>
     /// <remarks>
     /// This method modifies the gradient used in optimization algorithms to account for regularization.
     /// 
-    /// For Beginners: When a model is learning (training), it follows a "gradient" that tells it
+    /// <b>For Beginners:</b> When a model is learning (training), it follows a "gradient" that tells it
     /// which direction to adjust its parameters to improve. This method modifies that gradient
     /// to include the regularization constraints.
     /// 
@@ -90,7 +90,7 @@ public interface IRegularization<T>
     /// <remarks>
     /// This method returns the configuration settings for the regularization technique.
     /// 
-    /// For Beginners: This method lets you check what regularization settings are being used.
+    /// <b>For Beginners:</b> This method lets you check what regularization settings are being used.
     /// The options typically include:
     /// 
     /// - The type of regularization (L1, L2, Elastic Net, etc.)

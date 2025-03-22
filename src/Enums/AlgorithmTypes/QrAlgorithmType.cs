@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: QR decomposition is a fundamental technique in linear algebra that breaks down a matrix into 
+/// <b>For Beginners:</b> QR decomposition is a fundamental technique in linear algebra that breaks down a matrix into 
 /// two components: Q (an orthogonal matrix) and R (an upper triangular matrix).
 /// 
 /// Think of it like breaking down a complex movement (like throwing a ball) into two simpler movements:
@@ -40,7 +40,7 @@ public enum QrAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Gram-Schmidt process is like creating a set of perfectly perpendicular directions 
+    /// <b>For Beginners:</b> The Gram-Schmidt process is like creating a set of perfectly perpendicular directions 
     /// from a set of possibly overlapping directions.
     /// 
     /// Imagine you're in a room and want to describe locations using "forward/backward," "left/right," and 
@@ -74,7 +74,7 @@ public enum QrAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Householder method uses special transformations called "reflections" to gradually 
+    /// <b>For Beginners:</b> The Householder method uses special transformations called "reflections" to gradually 
     /// transform a matrix into triangular form.
     /// 
     /// Imagine you have a mirror and you're using it to reflect light onto specific targets. A Householder 
@@ -110,7 +110,7 @@ public enum QrAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Givens method uses a series of simple rotations to gradually transform a matrix 
+    /// <b>For Beginners:</b> The Givens method uses a series of simple rotations to gradually transform a matrix 
     /// into triangular form.
     /// 
     /// Think of it like carefully turning a combination lock: you make one precise rotation at a time, each 
@@ -146,7 +146,7 @@ public enum QrAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Modified Gram-Schmidt process is an improved version of the classical Gram-Schmidt 
+    /// <b>For Beginners:</b> The Modified Gram-Schmidt process is an improved version of the classical Gram-Schmidt 
     /// that addresses numerical stability issues.
     /// 
     /// Imagine you're building a house: the classical Gram-Schmidt is like measuring and cutting all your lumber 
@@ -181,7 +181,7 @@ public enum QrAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Iterative Gram-Schmidt method takes the modified Gram-Schmidt process and repeats it 
+    /// <b>For Beginners:</b> The Iterative Gram-Schmidt method takes the modified Gram-Schmidt process and repeats it 
     /// multiple times to achieve even better numerical accuracy.
     /// 
     /// Think of it like cleaning a window: the first pass removes most of the dirt, but you might go over it 

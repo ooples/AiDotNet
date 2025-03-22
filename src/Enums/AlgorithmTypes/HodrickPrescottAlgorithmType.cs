@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: The Hodrick-Prescott filter (HP filter) is a mathematical tool used to separate a time series 
+/// <b>For Beginners:</b> The Hodrick-Prescott filter (HP filter) is a mathematical tool used to separate a time series 
 /// into two components: a smooth trend component and a cyclical component.
 /// 
 /// Imagine you're looking at a chart of stock prices that goes up and down every day but also has a general 
@@ -40,7 +40,7 @@ public enum HodrickPrescottAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Matrix Method solves the HP filter problem directly using matrix algebra.
+    /// <b>For Beginners:</b> The Matrix Method solves the HP filter problem directly using matrix algebra.
     /// 
     /// Think of this as solving a complex puzzle in one go by setting up all the pieces and relationships 
     /// at once. It creates a large system of equations and solves them simultaneously.
@@ -69,7 +69,7 @@ public enum HodrickPrescottAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Iterative Method solves the HP filter problem by making repeated passes through 
+    /// <b>For Beginners:</b> The Iterative Method solves the HP filter problem by making repeated passes through 
     /// the data, gradually improving the solution until it converges.
     /// 
     /// Imagine cleaning a dirty floor by mopping it multiple times - each pass gets it a little cleaner 
@@ -100,7 +100,7 @@ public enum HodrickPrescottAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Kalman Filter Method implements the HP filter using a statistical technique 
+    /// <b>For Beginners:</b> The Kalman Filter Method implements the HP filter using a statistical technique 
     /// called a Kalman filter, which is designed to estimate unknown variables from noisy measurements.
     /// 
     /// Imagine you're trying to track the position of a moving object, but your radar gives slightly 
@@ -131,7 +131,7 @@ public enum HodrickPrescottAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Wavelet Method uses special mathematical functions called wavelets to break down 
+    /// <b>For Beginners:</b> The Wavelet Method uses special mathematical functions called wavelets to break down 
     /// the time series into different frequency components.
     /// 
     /// Imagine you have a song with bass, mid-range, and treble frequencies. Wavelets are like having special 
@@ -162,7 +162,7 @@ public enum HodrickPrescottAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Frequency Domain Method transforms the time series data into its frequency components 
+    /// <b>For Beginners:</b> The Frequency Domain Method transforms the time series data into its frequency components 
     /// using a mathematical technique called the Fourier transform.
     /// 
     /// Imagine a prism splitting white light into a rainbow of different colors (frequencies). Similarly, 
@@ -193,7 +193,7 @@ public enum HodrickPrescottAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The State Space Method represents the time series using a special mathematical framework 
+    /// <b>For Beginners:</b> The State Space Method represents the time series using a special mathematical framework 
     /// that tracks how hidden "states" of a system evolve over time.
     /// 
     /// Imagine you're tracking a car's journey. You can't see the car directly, but you have sensors that give 

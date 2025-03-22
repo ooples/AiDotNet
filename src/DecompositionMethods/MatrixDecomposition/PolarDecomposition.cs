@@ -11,7 +11,7 @@
 /// and P is positive semi-definite.
 /// </para>
 /// <para>
-/// For Beginners: Think of Polar Decomposition as breaking down a transformation into two simpler steps:
+/// <b>For Beginners:</b> Think of Polar Decomposition as breaking down a transformation into two simpler steps:
 /// first a rotation/reflection (U), and then a stretching/scaling (P). This is similar to how polar 
 /// coordinates break down a point into an angle and a distance.
 /// </para>
@@ -29,7 +29,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// Gets the orthogonal factor of the decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This matrix represents the rotation/reflection part of the transformation.
+    /// <b>For Beginners:</b> This matrix represents the rotation/reflection part of the transformation.
     /// It preserves angles and distances when applied to vectors.
     /// </remarks>
     public Matrix<T> U { get; private set; }
@@ -38,7 +38,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// Gets the positive semi-definite factor of the decomposition.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This matrix represents the stretching/scaling part of the transformation.
+    /// <b>For Beginners:</b> This matrix represents the stretching/scaling part of the transformation.
     /// It may change the length of vectors but in a symmetric way.
     /// </remarks>
     public Matrix<T> P { get; private set; }
@@ -49,7 +49,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="algorithm">The algorithm to use for the decomposition.</param>
     /// <remarks>
-    /// For Beginners: This creates a new polar decomposition of your matrix using the specified algorithm.
+    /// <b>For Beginners:</b> This creates a new polar decomposition of your matrix using the specified algorithm.
     /// If you're not sure which algorithm to use, the default (SVD) is generally reliable but may be slower.
     /// </remarks>
     public PolarDecomposition(Matrix<T> matrix, PolarAlgorithmType algorithm = PolarAlgorithmType.SVD)
@@ -70,7 +70,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// Different algorithms have different trade-offs in terms of speed, accuracy, and stability.
     /// </para>
     /// <para>
-    /// For Beginners: This method calculates the U and P matrices using one of several methods.
+    /// <b>For Beginners:</b> This method calculates the U and P matrices using one of several methods.
     /// Each method has its strengths and weaknesses:
     /// - SVD: Most accurate but can be slow
     /// - Newton-Schulz: Fast for matrices close to orthogonal
@@ -111,7 +111,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// This method computes U = U_svd * V_svd^T and P = V_svd * Σ * V_svd^T.
     /// </para>
     /// <para>
-    /// For Beginners: This is the most reliable method for polar decomposition. It works by first
+    /// <b>For Beginners:</b> This is the most reliable method for polar decomposition. It works by first
     /// breaking down the matrix using another technique (SVD) and then recombining the pieces to
     /// get our U and P matrices. It's like taking apart a watch, organizing the pieces, and then
     /// reassembling them in a different way.
@@ -135,7 +135,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// is close to orthogonal.
     /// </para>
     /// <para>
-    /// For Beginners: This method finds U and P through a series of approximations that get better
+    /// <b>For Beginners:</b> This method finds U and P through a series of approximations that get better
     /// with each step. It's like homing in on a target by making adjustments based on how far off
     /// you are. This method works well when your matrix is already close to being a pure rotation.
     /// </para>
@@ -195,7 +195,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// matrix inversions at each step.
     /// </para>
     /// <para>
-    /// For Beginners: This is another iterative method like Newton-Schulz, but it converges faster
+    /// <b>For Beginners:</b> This is another iterative method like Newton-Schulz, but it converges faster
     /// (gets to the right answer in fewer steps). The trade-off is that each step is more complex
     /// and computationally expensive. It's like taking bigger, more carefully calculated steps
     /// toward your destination.
@@ -250,7 +250,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// This method uses successive QR decompositions to iteratively compute the polar factors.
     /// </para>
     /// <para>
-    /// For Beginners: This method finds U and P by repeatedly breaking down the matrix using a technique
+    /// <b>For Beginners:</b> This method finds U and P by repeatedly breaking down the matrix using a technique
     /// called QR decomposition, then recombining the pieces in a special way. With each iteration, we get
     /// closer to the correct answer. It's like refining a rough sketch into a detailed drawing through
     /// multiple passes.
@@ -302,7 +302,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// and then reverses the scaling through squaring.
     /// </para>
     /// <para>
-    /// For Beginners: This method handles matrices that might be difficult to decompose directly.
+    /// <b>For Beginners:</b> This method handles matrices that might be difficult to decompose directly.
     /// First, we "scale down" the matrix to make it easier to work with (like zooming out on a map).
     /// Then we perform our calculations on this simpler version. Finally, we "scale back up" to get
     /// our answer for the original matrix (zooming back in). This approach is especially good for
@@ -371,7 +371,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// This method solves the system by first solving Px = b, then computing y = U^T * x.
     /// </para>
     /// <para>
-    /// For Beginners: When you have an equation Ax = b and want to find x, this method uses the
+    /// <b>For Beginners:</b> When you have an equation Ax = b and want to find x, this method uses the
     /// polar decomposition to break this into simpler steps. Since A = UP, we can rewrite the equation
     /// as UPx = b. We first solve Px = b' for x, then compute the final answer using U. This is often
     /// more stable than solving the original equation directly.
@@ -395,7 +395,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// Since A = UP, the inverse is A^(-1) = P^(-1) * U^T.
     /// </para>
     /// <para>
-    /// For Beginners: The inverse of a matrix is like the reciprocal of a number - when you multiply
+    /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number - when you multiply
     /// a matrix by its inverse, you get the identity matrix (similar to how 5 × 1/5 = 1). This method
     /// finds the inverse by using the special properties of the polar decomposition, which makes the
     /// calculation more reliable than directly inverting the original matrix.
@@ -414,7 +414,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <returns>A tuple containing the orthogonal factor U and the positive semi-definite factor P.</returns>
     /// <remarks>
-    /// For Beginners: This method simply gives you back the two matrices that make up the polar
+    /// <b>For Beginners:</b> This method simply gives you back the two matrices that make up the polar
     /// decomposition. You can use these matrices separately for various calculations or to better
     /// understand the properties of your original matrix.
     /// </remarks>

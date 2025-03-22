@@ -14,7 +14,7 @@ namespace AiDotNet.Kernels;
 /// represents the similarity between corresponding dimensions of the input vectors.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are to each other.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are to each other.
 /// Think of it like a special measuring tape that works in complex data spaces. The ANOVA kernel is particularly
 /// useful when you want to analyze how different factors (variables) contribute to the overall variation in your data.
 /// </para>
@@ -30,7 +30,7 @@ public class ANOVAKernel<T> : IKernelFunction<T>
     /// The width parameter that controls the influence of distance between points.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of sigma as a "zoom level" for the similarity measurement. A smaller sigma means
+    /// <b>For Beginners:</b> Think of sigma as a "zoom level" for the similarity measurement. A smaller sigma means
     /// the kernel is more sensitive to small differences between data points, while a larger sigma makes
     /// the kernel more tolerant of differences.
     /// </remarks>
@@ -40,7 +40,7 @@ public class ANOVAKernel<T> : IKernelFunction<T>
     /// The polynomial degree parameter that controls the complexity of the kernel.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The degree determines how "complex" the patterns the kernel can capture are.
+    /// <b>For Beginners:</b> The degree determines how "complex" the patterns the kernel can capture are.
     /// Higher degrees can capture more complex relationships but might also lead to overfitting
     /// (where the model learns noise in the data rather than the true pattern).
     /// </remarks>
@@ -58,7 +58,7 @@ public class ANOVAKernel<T> : IKernelFunction<T>
     /// <param name="degree">The polynomial degree parameter that controls the complexity of the kernel. Default is 2.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the ANOVA kernel with your chosen settings. If you don't
+    /// <b>For Beginners:</b> This constructor sets up the ANOVA kernel with your chosen settings. If you don't
     /// specify any settings, it will use default values that work reasonably well for many problems.
     /// </para>
     /// <para>
@@ -86,7 +86,7 @@ public class ANOVAKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the ANOVA kernel formula.
     /// </para>
     /// <para>

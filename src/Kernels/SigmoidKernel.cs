@@ -11,7 +11,7 @@
 /// relationships in data.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Sigmoid kernel is special because it can capture certain types of relationships that other
 /// kernels can't. It's inspired by how neurons in artificial neural networks work.
 /// </para>
@@ -48,7 +48,7 @@ public class SigmoidKernel<T> : IKernelFunction<T>
     /// The scaling parameter that controls the steepness of the sigmoid curve.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The alpha parameter controls how steep the S-curve is:
+    /// <b>For Beginners:</b> The alpha parameter controls how steep the S-curve is:
     /// 
     /// Think of it like this:
     /// - Larger alpha values (e.g., 2.0): Make the curve steeper, creating sharper transitions
@@ -62,7 +62,7 @@ public class SigmoidKernel<T> : IKernelFunction<T>
     /// The shifting parameter that moves the sigmoid curve horizontally.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The c parameter shifts the S-curve left or right:
+    /// <b>For Beginners:</b> The c parameter shifts the S-curve left or right:
     /// 
     /// Think of it like this:
     /// - Positive c values: Shift the curve to the left
@@ -77,7 +77,7 @@ public class SigmoidKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -90,7 +90,7 @@ public class SigmoidKernel<T> : IKernelFunction<T>
     /// <param name="c">The shifting parameter that moves the sigmoid curve horizontally. Default is 0.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Sigmoid kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Sigmoid kernel for use. You can optionally
     /// provide values for the alpha and c parameters:
     /// </para>
     /// <para>
@@ -130,7 +130,7 @@ public class SigmoidKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Sigmoid kernel formula.
     /// </para>
     /// <para>

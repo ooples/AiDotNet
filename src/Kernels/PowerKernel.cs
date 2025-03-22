@@ -10,7 +10,7 @@ namespace AiDotNet.Kernels;
 /// rather than how similar they are. It's sometimes called the "negative distance kernel."
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures relationships between data points.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures relationships between data points.
 /// While most kernels measure similarity (higher values mean more similar points), the Power kernel is special
 /// because it measures dissimilarity - higher values (less negative) mean the points are more different from each other.
 /// </para>
@@ -41,7 +41,7 @@ public class PowerKernel<T> : IKernelFunction<T>
     /// The degree parameter that controls how the distance affects the kernel value.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The degree determines how strongly the distance between points affects the result.
+    /// <b>For Beginners:</b> The degree determines how strongly the distance between points affects the result.
     /// 
     /// Think of it like this:
     /// - degree = 1.0: The effect is directly proportional to distance
@@ -57,7 +57,7 @@ public class PowerKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -69,7 +69,7 @@ public class PowerKernel<T> : IKernelFunction<T>
     /// <param name="degree">The degree parameter that controls how distance affects the kernel value. Default is 2.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Power kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Power kernel for use. You can optionally
     /// provide a value for the degree parameter:
     /// </para>
     /// <para>
@@ -102,7 +102,7 @@ public class PowerKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the dissimilarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how different they are from each other using the Power kernel formula.
     /// </para>
     /// <para>

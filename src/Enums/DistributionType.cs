@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Probability distributions are mathematical functions that describe how likely different outcomes are.
+/// <b>For Beginners:</b> Probability distributions are mathematical functions that describe how likely different outcomes are.
 /// 
 /// Think of a probability distribution like a recipe for how values are spread out:
 /// - Some distributions create values clustered around a central point (like Normal)
@@ -62,7 +62,7 @@ public enum DistributionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Laplace distribution (also called the double exponential distribution) looks similar 
+    /// <b>For Beginners:</b> The Laplace distribution (also called the double exponential distribution) looks similar 
     /// to the Normal distribution but has a sharper peak and heavier tails.
     /// 
     /// Think of it as a more "extreme" version of the Normal distribution:
@@ -93,7 +93,7 @@ public enum DistributionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Student's t-distribution (often just called t-distribution) looks similar to the 
+    /// <b>For Beginners:</b> The Student's t-distribution (often just called t-distribution) looks similar to the 
     /// Normal distribution but has heavier tails, meaning extreme values are more likely.
     /// 
     /// Think of it as a Normal distribution that's more forgiving of outliers:
@@ -125,7 +125,7 @@ public enum DistributionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The LogNormal distribution applies to data whose logarithm follows a Normal distribution.
+    /// <b>For Beginners:</b> The LogNormal distribution applies to data whose logarithm follows a Normal distribution.
     /// 
     /// Think of it as what happens when you take normally distributed data and exponentiate it (e^x):
     /// - It's always positive (never zero or negative)
@@ -157,7 +157,7 @@ public enum DistributionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Exponential distribution models the time between independent events that occur at a constant average rate.
+    /// <b>For Beginners:</b> The Exponential distribution models the time between independent events that occur at a constant average rate.
     /// 
     /// Think of it as describing how long you wait for something to happen when the chance of it happening 
     /// at any moment stays the same:
@@ -189,7 +189,7 @@ public enum DistributionType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Weibull distribution is a versatile distribution often used to model lifetimes and failure rates.
+    /// <b>For Beginners:</b> The Weibull distribution is a versatile distribution often used to model lifetimes and failure rates.
     /// 
     /// Think of it as a flexible distribution that can take many different shapes:
     /// - It can look like an Exponential distribution

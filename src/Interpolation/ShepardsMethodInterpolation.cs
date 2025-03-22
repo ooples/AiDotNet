@@ -10,7 +10,7 @@
 /// a smooth surface passing through all the provided data points.
 /// </para>
 /// <para>
-/// For Beginners: Imagine you have several points with known heights (like hills on a landscape).
+/// <b>For Beginners:</b> Imagine you have several points with known heights (like hills on a landscape).
 /// Shepard's Method helps you estimate the height at any other location by considering all known points,
 /// but giving more importance to the closest ones. It's like saying "this unknown point is probably
 /// more similar to nearby points than to faraway points." The power parameter controls how quickly
@@ -62,7 +62,7 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// </exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor takes your 3D data points (x, y, and z values) and prepares
+    /// <b>For Beginners:</b> This constructor takes your 3D data points (x, y, and z values) and prepares
     /// the interpolation algorithm. It checks that your data is valid (same number of x, y, and z values)
     /// and sets up the power parameter.
     /// </para>
@@ -96,7 +96,7 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// <returns>The interpolated z-value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the height (z-value) at any location (x,y) you specify,
+    /// <b>For Beginners:</b> This method finds the height (z-value) at any location (x,y) you specify,
     /// even if it's between or outside your original data points.
     /// </para>
     /// <para>
@@ -144,7 +144,7 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// <returns>The distance between the two points.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates the straight-line distance between two points
+    /// <b>For Beginners:</b> This method calculates the straight-line distance between two points
     /// using the Pythagorean theorem (a² + b² = c²).
     /// </para>
     /// <para>

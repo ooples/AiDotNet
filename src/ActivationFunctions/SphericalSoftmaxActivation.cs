@@ -11,7 +11,7 @@
 /// This can help improve numerical stability and performance in certain neural network architectures.
 /// </para>
 /// <para>
-/// For Beginners: Spherical Softmax is a special version of the Softmax function that's often used in the
+/// <b>For Beginners:</b> Spherical Softmax is a special version of the Softmax function that's often used in the
 /// output layer of neural networks for classification tasks. 
 /// 
 /// The standard Softmax converts a vector of numbers into probabilities that sum to 1, but it can sometimes
@@ -38,7 +38,7 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// all elements in a vector together to compute the probability distribution.
     /// </para>
     /// <para>
-    /// For Beginners: This method returning false means that Spherical Softmax cannot work on just one number at a time.
+    /// <b>For Beginners:</b> This method returning false means that Spherical Softmax cannot work on just one number at a time.
     /// It needs to see all the values together (like all scores for different classes) to normalize them properly
     /// and convert them into probabilities.
     /// </para>
@@ -58,7 +58,7 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// 3. Divides each element by the sum of all exponential values
     /// </para>
     /// <para>
-    /// For Beginners: This method transforms a vector of numbers (like scores for different classes) into 
+    /// <b>For Beginners:</b> This method transforms a vector of numbers (like scores for different classes) into 
     /// probabilities that add up to 1. Here's how it works step by step:
     /// 
     /// 1. First, it calculates the "length" of the input vector (called the L2 norm)
@@ -109,7 +109,7 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// For Spherical Softmax, the Jacobian combines the derivatives of both the normalization step and the softmax step.
     /// </para>
     /// <para>
-    /// For Beginners: The derivative of Spherical Softmax is quite complex because it involves two transformations:
+    /// <b>For Beginners:</b> The derivative of Spherical Softmax is quite complex because it involves two transformations:
     /// first normalizing the vector to the unit sphere, and then applying softmax.
     /// 
     /// This method returns a "Jacobian matrix" which shows how each output value changes when each input value changes.

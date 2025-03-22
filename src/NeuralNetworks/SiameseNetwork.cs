@@ -8,7 +8,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: A Siamese Network is a special type of neural network designed to compare two inputs
+/// <b>For Beginners:</b> A Siamese Network is a special type of neural network designed to compare two inputs
 /// and determine how similar they are to each other.
 /// 
 /// Imagine you have two photos and want to know if they show the same person. A Siamese Network
@@ -47,7 +47,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// <param name="architecture">The neural network architecture defining the structure of the shared subnetwork.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up your Siamese Network with the specified architecture.
+    /// <b>For Beginners:</b> This constructor sets up your Siamese Network with the specified architecture.
     /// 
     /// The architecture defines the structure of the shared subnetwork that will process each input.
     /// The constructor creates:
@@ -87,7 +87,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A vector containing a single value between 0 and 1, where higher values indicate greater similarity.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two inputs (like two images) and tells you how similar they are.
+    /// <b>For Beginners:</b> This method takes two inputs (like two images) and tells you how similar they are.
     /// 
     /// The process works in three steps:
     /// 1. Each input is processed through the same neural network to create an "embedding"
@@ -119,7 +119,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// <returns>The embedding vector representing the input's features.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method processes a single input (like an image) and returns its
+    /// <b>For Beginners:</b> This method processes a single input (like an image) and returns its
     /// "embedding" - a compact representation of its key features.
     /// 
     /// Unlike the PredictPair method which compares two inputs, this method just processes
@@ -172,7 +172,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// <param name="parameters">The vector containing all parameters for the network.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method updates the internal values (weights and biases) of the neural network
+    /// <b>For Beginners:</b> This method updates the internal values (weights and biases) of the neural network
     /// during training.
     /// 
     /// The parameters vector contains all the numbers that define how the network processes inputs.
@@ -204,7 +204,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method saves your trained network to a file so you can use it later
+    /// <b>For Beginners:</b> This method saves your trained network to a file so you can use it later
     /// without having to train it again.
     /// 
     /// It saves all the important information about your network:
@@ -233,7 +233,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method loads a previously saved network from a file.
+    /// <b>For Beginners:</b> This method loads a previously saved network from a file.
     /// 
     /// Instead of training a new network from scratch (which can take a lot of time),
     /// you can load a network that was already trained and saved.
@@ -261,7 +261,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// <returns>The total count of parameters in both the subnetwork and output layer.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method tells you how many numbers (parameters) define your neural network.
+    /// <b>For Beginners:</b> This method tells you how many numbers (parameters) define your neural network.
     /// 
     /// Neural networks learn by adjusting these parameters during training. The parameter count gives you 
     /// an idea of how complex your model is:

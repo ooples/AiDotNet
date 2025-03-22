@@ -6,7 +6,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// <typeparam name="T">The numeric type used for calculations</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Time series decomposition is like breaking down a complex signal (like sales data over time) 
+/// <b>For Beginners:</b> Time series decomposition is like breaking down a complex signal (like sales data over time) 
 /// into simpler parts that are easier to understand. The additive model assumes these components add up to form 
 /// the original data: Original = Trend + Seasonal + Residual.
 /// </para>
@@ -29,7 +29,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="timeSeries">The time series data to decompose</param>
     /// <param name="algorithm">The algorithm to use for decomposition (defaults to MovingAverage)</param>
     /// <remarks>
-    /// For Beginners: When you create this object, it automatically decomposes your time series data
+    /// <b>For Beginners:</b> When you create this object, it automatically decomposes your time series data
     /// using the algorithm you specify (or MovingAverage if you don't specify one).
     /// </remarks>
     public AdditiveDecomposition(Vector<T> timeSeries, AdditiveDecompositionAlgorithmType algorithm = AdditiveDecompositionAlgorithmType.MovingAverage)
@@ -64,7 +64,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Decomposes the time series using the Moving Average method
     /// </summary>
     /// <remarks>
-    /// For Beginners: Moving Average is like taking the average of a sliding window of data points.
+    /// <b>For Beginners:</b> Moving Average is like taking the average of a sliding window of data points.
     /// It helps smooth out short-term fluctuations and highlight longer-term trends.
     /// </remarks>
     private void DecomposeMovingAverage()
@@ -83,7 +83,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Decomposes the time series using the Exponential Smoothing method
     /// </summary>
     /// <remarks>
-    /// For Beginners: Exponential Smoothing gives more weight to recent observations and less weight
+    /// <b>For Beginners:</b> Exponential Smoothing gives more weight to recent observations and less weight
     /// to older observations. It's like having a better memory of recent events compared to distant ones.
     /// </remarks>
     private void DecomposeExponentialSmoothing()
@@ -102,7 +102,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Decomposes the time series using the Seasonal and Trend decomposition using Loess (STL) method
     /// </summary>
     /// <remarks>
-    /// For Beginners: STL is a sophisticated method that can handle complex seasonal patterns that change over time.
+    /// <b>For Beginners:</b> STL is a sophisticated method that can handle complex seasonal patterns that change over time.
     /// It uses a technique called "Loess" (locally estimated scatterplot smoothing) which fits simple models
     /// to small chunks of data to build a more complex and accurate overall model.
     /// </remarks>
@@ -186,7 +186,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="period">The seasonal period</param>
     /// <returns>The smoothed data</returns>
     /// <remarks>
-    /// For Beginners: This method breaks down the data into "subseries" based on the seasonal period.
+    /// <b>For Beginners:</b> This method breaks down the data into "subseries" based on the seasonal period.
     /// For example, with monthly data (period=12), it creates 12 subseries: all January values, all February values, etc.
     /// Each subseries is then smoothed separately to better capture the seasonal pattern.
     /// </remarks>
@@ -222,7 +222,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="period">The period used to determine the window size</param>
     /// <returns>The filtered data</returns>
     /// <remarks>
-    /// For Beginners: A low-pass filter removes high-frequency variations (rapid changes) and keeps
+    /// <b>For Beginners:</b> A low-pass filter removes high-frequency variations (rapid changes) and keeps
     /// low-frequency variations (slow changes). It's like blurring a photo to remove fine details
     /// but keep the overall shapes. This helps isolate the trend component.
     /// </remarks>
@@ -258,7 +258,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="windowSize">The size of the window to use for smoothing</param>
     /// <returns>A smoothed version of the input data</returns>
     /// <remarks>
-    /// For Beginners: LOESS smoothing is like drawing a smooth curve through noisy data points.
+    /// <b>For Beginners:</b> LOESS smoothing is like drawing a smooth curve through noisy data points.
     /// It works by looking at a small "window" of nearby points around each position and calculating
     /// a weighted average, giving more importance to closer points. This helps reveal underlying
     /// patterns by reducing noise in the data.
@@ -326,7 +326,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="x">The normalized distance value (0-1)</param>
     /// <returns>The weight value, with higher weights for smaller distances</returns>
     /// <remarks>
-    /// For Beginners: This function determines how much influence each nearby point has
+    /// <b>For Beginners:</b> This function determines how much influence each nearby point has
     /// when calculating a smoothed value. Points that are closer get higher weights (more influence),
     /// while points farther away get lower weights (less influence). Points beyond a certain
     /// distance get zero weight (no influence).
@@ -348,7 +348,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="weightedPoints">List of points with their distances, weights, and values</param>
     /// <returns>The weighted average value</returns>
     /// <remarks>
-    /// For Beginners: This method calculates an average where some values count more than others.
+    /// <b>For Beginners:</b> This method calculates an average where some values count more than others.
     /// Each data point is multiplied by its weight, then all these weighted values are added up
     /// and divided by the sum of all weights. This gives more importance to points with higher weights.
     /// </remarks>
@@ -371,7 +371,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <returns>A vector containing the trend component of the time series</returns>
     /// <remarks>
-    /// For Beginners: A moving average calculates the average of a "window" of data points
+    /// <b>For Beginners:</b> A moving average calculates the average of a "window" of data points
     /// that moves through the time series. For each position, it averages the values of nearby
     /// points (both before and after). This smooths out short-term fluctuations and highlights
     /// longer-term trends.
@@ -406,7 +406,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="trend">The trend component previously calculated</param>
     /// <returns>A vector containing the seasonal component of the time series</returns>
     /// <remarks>
-    /// For Beginners: This method finds repeating patterns in your data by:
+    /// <b>For Beginners:</b> This method finds repeating patterns in your data by:
     /// 1. Removing the trend (subtracting it from the original data)
     /// 2. Grouping what's left by season (e.g., all Januaries together)
     /// 3. Calculating the average pattern for each season
@@ -453,7 +453,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <returns>A vector containing the trend component of the time series</returns>
     /// <remarks>
-    /// For Beginners: Exponential smoothing calculates a trend by giving more weight to recent
+    /// <b>For Beginners:</b> Exponential smoothing calculates a trend by giving more weight to recent
     /// observations and less weight to older ones. It's like having a better memory of recent events.
     /// 
     /// The alpha parameter (between 0 and 1) controls how quickly the influence of past observations
@@ -484,7 +484,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="trend">The trend component previously calculated</param>
     /// <returns>A vector containing the seasonal component of the time series</returns>
     /// <remarks>
-    /// For Beginners: This method identifies repeating patterns in your data (like higher sales in December)
+    /// <b>For Beginners:</b> This method identifies repeating patterns in your data (like higher sales in December)
     /// using exponential smoothing. It works by:
     /// 
     /// 1. First calculating initial seasonal values by subtracting the trend from the original data

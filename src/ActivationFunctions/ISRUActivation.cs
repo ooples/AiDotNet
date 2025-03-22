@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The ISRU (Inverse Square Root Unit) activation function is designed to:
+/// <b>For Beginners:</b> The ISRU (Inverse Square Root Unit) activation function is designed to:
 /// 
 /// - Keep the output values bounded (they never grow too large)
 /// - Preserve the sign of the input (positive inputs give positive outputs, negative inputs give negative outputs)
@@ -40,7 +40,7 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// </param>
     /// <remarks>
     /// <para>
-    /// For Beginners: The alpha parameter determines the "steepness" of the ISRU function:
+    /// <b>For Beginners:</b> The alpha parameter determines the "steepness" of the ISRU function:
     /// 
     /// - With alpha = 1.0 (default), you get the standard ISRU behavior
     /// - With smaller alpha values (e.g., 0.5), the function changes more gradually
@@ -69,7 +69,7 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// <returns>The transformed value after applying the ISRU function.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms an input value using the formula:
+    /// <b>For Beginners:</b> This method transforms an input value using the formula:
     /// 
     /// f(x) = x / sqrt(1 + α·x²)
     /// 
@@ -102,7 +102,7 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value at the specified input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how much the output changes when we slightly change the input.
+    /// <b>For Beginners:</b> The derivative tells us how much the output changes when we slightly change the input.
     /// This information is crucial during neural network training.
     /// 
     /// For the ISRU function, the derivative is calculated using:

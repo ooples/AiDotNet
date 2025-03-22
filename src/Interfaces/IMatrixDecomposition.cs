@@ -8,7 +8,7 @@
 /// making it easier to solve mathematical problems like linear equations or matrix inversion.
 /// Common decompositions include LU, QR, Cholesky, and SVD (Singular Value Decomposition).
 /// 
-/// For Beginners: Think of matrix decomposition like breaking down a complex number into factors.
+/// <b>For Beginners:</b> Think of matrix decomposition like breaking down a complex number into factors.
 /// 
 /// For example, the number 12 can be broken down into 3 × 4, making it easier to work with.
 /// Similarly, matrix decomposition breaks down a complex matrix into simpler parts that are
@@ -35,7 +35,7 @@ public interface IMatrixDecomposition<T>
     /// The original matrix used to create this decomposition.
     /// </value>
     /// <remarks>
-    /// For Beginners: This property simply gives you access to the original matrix that was broken down.
+    /// <b>For Beginners:</b> This property simply gives you access to the original matrix that was broken down.
     /// 
     /// It's like keeping a copy of the original puzzle while you're working with its pieces.
     /// Sometimes you need to refer back to the original matrix for various calculations or to
@@ -50,7 +50,7 @@ public interface IMatrixDecomposition<T>
     /// This method efficiently finds the solution vector x without explicitly calculating
     /// the inverse of matrix A, which is computationally expensive and numerically unstable.
     /// 
-    /// For Beginners: This method solves equations of the form "Ax = b" where:
+    /// <b>For Beginners:</b> This method solves equations of the form "Ax = b" where:
     /// - A is your matrix (like a transformation or system of equations)
     /// - b is a known vector (like a set of results or outcomes)
     /// - x is what you're trying to find (like the unknown variables)
@@ -80,7 +80,7 @@ public interface IMatrixDecomposition<T>
     /// Not all matrices have inverses - only square matrices with non-zero determinants are invertible.
     /// Matrix decompositions provide efficient ways to compute inverses when they exist.
     /// 
-    /// For Beginners: The inverse of a matrix is similar to the reciprocal of a number.
+    /// <b>For Beginners:</b> The inverse of a matrix is similar to the reciprocal of a number.
     /// 
     /// Just as 5 × (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix
     /// (which is like the number 1 in matrix form, with 1's on the diagonal and 0's elsewhere).

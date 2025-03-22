@@ -8,7 +8,7 @@ namespace AiDotNet.Interpolation;
 /// while also matching specified derivatives (slopes) at those points. This provides more
 /// control over the shape of the curve compared to simpler interpolation methods.
 /// 
-/// For Beginners: This class helps you estimate values between known data points when you
+/// <b>For Beginners:</b> This class helps you estimate values between known data points when you
 /// know not only the values at certain points but also how quickly those values are changing
 /// (the slopes) at those points. Imagine drawing a smooth curve through dots on a graph,
 /// but also controlling which direction the curve is heading as it passes through each dot.
@@ -45,7 +45,7 @@ public class HermiteInterpolation<T> : IInterpolation<T>
     /// The constructor initializes the interpolation with the provided data points and their
     /// corresponding slopes.
     /// 
-    /// For Beginners: When you create a new HermiteInterpolation object, you need to provide
+    /// <b>For Beginners:</b> When you create a new HermiteInterpolation object, you need to provide
     /// three pieces of information: the x-coordinates of your points, the y-coordinates of your
     /// points, and the slopes at each point. The slope tells the interpolation how the curve
     /// should approach and leave each point. If you don't know the slopes, you might want to
@@ -75,7 +75,7 @@ public class HermiteInterpolation<T> : IInterpolation<T>
     /// This method finds the interval containing the x-value and evaluates the Hermite
     /// polynomial at that point.
     /// 
-    /// For Beginners: This is the main method you'll use after creating the interpolation.
+    /// <b>For Beginners:</b> This is the main method you'll use after creating the interpolation.
     /// Give it any x-value within your data range, and it will return the estimated y-value
     /// at that point. The estimate is based on the cubic Hermite polynomials that respect
     /// both the values and slopes at your original data points. This creates a smooth curve
@@ -135,7 +135,7 @@ public class HermiteInterpolation<T> : IInterpolation<T>
     /// This method uses binary search to efficiently find which pair of data points
     /// contains the given x-value.
     /// 
-    /// For Beginners: This helper method finds which two original data points the new
+    /// <b>For Beginners:</b> This helper method finds which two original data points the new
     /// x-value falls between. It uses a technique called binary search, which is much
     /// faster than checking each interval one by one, especially when you have many
     /// data points.

@@ -4,7 +4,7 @@
 /// Specifies the direction of feature selection in stepwise regression and other statistical models.
 /// </summary>
 /// <remarks>
-/// For Beginners: Stepwise methods help AI decide which information is important to consider.
+/// <b>For Beginners:</b> Stepwise methods help AI decide which information is important to consider.
 /// 
 /// Imagine you're trying to predict house prices. There are many factors that could affect the price:
 /// square footage, number of bedrooms, location, age of the house, etc. But using too many factors
@@ -23,7 +23,7 @@ public enum StepwiseMethod
     /// Starts with no features and adds them one at a time based on their statistical significance.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is like building a team by starting with no players and adding the best
+    /// <b>For Beginners:</b> This is like building a team by starting with no players and adding the best
     /// available player one at a time.
     /// 
     /// How it works:
@@ -46,7 +46,7 @@ public enum StepwiseMethod
     /// Starts with all features and removes them one at a time based on their lack of statistical significance.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is like starting with all players on a team and removing the least
+    /// <b>For Beginners:</b> This is like starting with all players on a team and removing the least
     /// valuable players one by one.
     /// 
     /// How it works:

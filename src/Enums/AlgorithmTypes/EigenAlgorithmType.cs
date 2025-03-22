@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Eigenvalues and eigenvectors are special numbers and vectors associated with a matrix 
+/// <b>For Beginners:</b> Eigenvalues and eigenvectors are special numbers and vectors associated with a matrix 
 /// that help us understand the matrix's fundamental properties and behavior.
 /// 
 /// Think of a matrix as a transformation that changes the position, scale, or rotation of points in space. 
@@ -35,7 +35,7 @@ public enum EigenAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The QR algorithm is one of the most widely used methods for finding all eigenvalues 
+    /// <b>For Beginners:</b> The QR algorithm is one of the most widely used methods for finding all eigenvalues 
     /// and eigenvectors of a matrix.
     /// 
     /// It works by repeatedly decomposing the matrix into a product of two matrices (Q and R) and then 
@@ -57,7 +57,7 @@ public enum EigenAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Power Iteration method is a simple approach that finds the largest eigenvalue 
+    /// <b>For Beginners:</b> The Power Iteration method is a simple approach that finds the largest eigenvalue 
     /// (in absolute value) and its corresponding eigenvector.
     /// 
     /// It works by repeatedly multiplying the matrix by a vector. After many iterations, this vector will 
@@ -79,7 +79,7 @@ public enum EigenAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Jacobi method finds eigenvalues by gradually making the off-diagonal elements 
+    /// <b>For Beginners:</b> The Jacobi method finds eigenvalues by gradually making the off-diagonal elements 
     /// of the matrix smaller and smaller through a series of rotations.
     /// 
     /// Imagine you have a wobbly table and you're trying to make it stable by adjusting one leg at a time. 

@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used in calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Neural networks are computing systems inspired by the human brain. They process information
+/// <b>For Beginners:</b> Neural networks are computing systems inspired by the human brain. They process information
 /// through interconnected nodes (neurons) that transform input data using mathematical functions.
 /// This helper class provides those mathematical functions needed to build neural networks.
 /// </para>
@@ -25,7 +25,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The maximum of x and 0.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: ReLU is one of the most popular activation functions in neural networks.
+    /// <b>For Beginners:</b> ReLU is one of the most popular activation functions in neural networks.
     /// It simply outputs the input directly if it's positive, otherwise, it outputs zero.
     /// Think of it as a function that "turns on" only for positive values.
     /// </para>
@@ -39,7 +39,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>1 if x is greater than 0, otherwise 0.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how the function changes at a specific point.
+    /// <b>For Beginners:</b> The derivative tells us how the function changes at a specific point.
     /// For ReLU, the derivative is 1 for positive inputs (the function increases at a constant rate)
     /// and 0 for negative inputs (the function doesn't change).
     /// </para>
@@ -53,7 +53,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>A value between 0 and 1.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Sigmoid function transforms any input into a value between 0 and 1.
+    /// <b>For Beginners:</b> The Sigmoid function transforms any input into a value between 0 and 1.
     /// It's shaped like an S-curve and is useful when you need to predict probabilities.
     /// Large negative inputs become close to 0, and large positive inputs become close to 1.
     /// </para>
@@ -67,7 +67,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The derivative value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative of the Sigmoid function is highest at x=0 and approaches zero
+    /// <b>For Beginners:</b> The derivative of the Sigmoid function is highest at x=0 and approaches zero
     /// as x gets very large or very small. This means the function changes most rapidly near x=0.
     /// </para>
     /// </remarks>
@@ -84,7 +84,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>A value between -1 and 1.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: TanH is similar to Sigmoid but outputs values between -1 and 1 instead of 0 and 1.
+    /// <b>For Beginners:</b> TanH is similar to Sigmoid but outputs values between -1 and 1 instead of 0 and 1.
     /// It's often preferred over Sigmoid because it's zero-centered, which can help with learning.
     /// </para>
     /// </remarks>
@@ -101,7 +101,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The derivative value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative of TanH is highest at x=0 and approaches zero
+    /// <b>For Beginners:</b> The derivative of TanH is highest at x=0 and approaches zero
     /// as x gets very large or very small, similar to Sigmoid's derivative.
     /// </para>
     /// </remarks>
@@ -118,7 +118,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>A vector where all elements sum to 1.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Softmax converts a vector of numbers into a vector of probabilities that sum to 1.
+    /// <b>For Beginners:</b> Softmax converts a vector of numbers into a vector of probabilities that sum to 1.
     /// It's commonly used in the output layer of neural networks for multi-class classification problems.
     /// Larger input values result in larger probabilities relative to other values.
     /// </para>
@@ -138,7 +138,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The Jacobian matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Jacobian matrix represents how each output of the Softmax function
+    /// <b>For Beginners:</b> The Jacobian matrix represents how each output of the Softmax function
     /// changes with respect to each input. This is more complex than a simple derivative because
     /// Softmax outputs multiple values that are all interdependent.
     /// </para>
@@ -178,7 +178,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The input value unchanged.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Linear activation function simply returns the input without any transformation.
+    /// <b>For Beginners:</b> The Linear activation function simply returns the input without any transformation.
     /// It's useful in regression problems or when you want the raw output of a neuron.
     /// </para>
     /// </remarks>
@@ -191,7 +191,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>Always returns 1.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative of a linear function is constant.
+    /// <b>For Beginners:</b> The derivative of a linear function is constant.
     /// Since the Linear activation function has a slope of 1 everywhere, its derivative is always 1.
     /// </para>
     /// </remarks>
@@ -205,7 +205,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>x if x > 0, otherwise alpha * x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Leaky ReLU is an improved version of ReLU that allows a small gradient
+    /// <b>For Beginners:</b> Leaky ReLU is an improved version of ReLU that allows a small gradient
     /// when the input is negative. This helps prevent "dying ReLU" problem where neurons can
     /// get stuck during training. Instead of outputting zero for negative inputs, it outputs
     /// a small negative value.
@@ -221,7 +221,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>1 if x > 0, otherwise alpha.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative of Leaky ReLU is 1 for positive inputs and alpha for negative inputs.
+    /// <b>For Beginners:</b> The derivative of Leaky ReLU is 1 for positive inputs and alpha for negative inputs.
     /// This means the function changes at a constant rate in both regions, but at different rates.
     /// </para>
     /// </remarks>
@@ -235,7 +235,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>x if x > 0, otherwise alpha * (e^x - 1).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: ELU is an activation function that, like ReLU, returns the input directly for positive values.
+    /// <b>For Beginners:</b> ELU is an activation function that, like ReLU, returns the input directly for positive values.
     /// For negative inputs, it returns a smooth curve that approaches -alpha as the input becomes more negative.
     /// This helps prevent "dying neurons" (a problem with ReLU) while still providing the benefits of non-linearity.
     /// </para>
@@ -250,7 +250,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>1 if x > 0, otherwise ELU(x, alpha) + alpha.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how much the ELU function changes when its input changes slightly.
+    /// <b>For Beginners:</b> The derivative tells us how much the ELU function changes when its input changes slightly.
     /// This is essential for training neural networks through backpropagation.
     /// </para>
     /// </remarks>
@@ -263,7 +263,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The SELU activation of x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: SELU is a variant of ELU that includes specific scaling factors (alpha and scale).
+    /// <b>For Beginners:</b> SELU is a variant of ELU that includes specific scaling factors (alpha and scale).
     /// These values are carefully chosen to ensure that the neural network self-normalizes during training,
     /// which helps with training stability and can eliminate the need for batch normalization.
     /// </para>
@@ -283,7 +283,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The derivative of SELU at point x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This calculates how much the SELU function changes when its input changes slightly.
+    /// <b>For Beginners:</b> This calculates how much the SELU function changes when its input changes slightly.
     /// The specific values of alpha and scale are chosen to maintain self-normalization properties.
     /// </para>
     /// </remarks>
@@ -302,7 +302,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>ln(1 + e^x)</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Softplus is a smooth approximation of the ReLU function.
+    /// <b>For Beginners:</b> Softplus is a smooth approximation of the ReLU function.
     /// Unlike ReLU which has a sharp corner at x=0, Softplus transitions smoothly,
     /// which can be beneficial for some neural network applications.
     /// </para>
@@ -316,7 +316,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The derivative of Softplus at point x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative of Softplus is actually the sigmoid function,
+    /// <b>For Beginners:</b> The derivative of Softplus is actually the sigmoid function,
     /// which means it smoothly transitions from 0 to 1 as x increases.
     /// </para>
     /// </remarks>
@@ -329,7 +329,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>x / (1 + |x|)</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: SoftSign is similar to the tanh function but approaches its asymptotes more slowly.
+    /// <b>For Beginners:</b> SoftSign is similar to the tanh function but approaches its asymptotes more slowly.
     /// This can help with the vanishing gradient problem in deep networks.
     /// The function maps inputs to values between -1 and 1.
     /// </para>
@@ -343,7 +343,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The derivative of SoftSign at point x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This calculates how much the SoftSign function changes when its input changes slightly.
+    /// <b>For Beginners:</b> This calculates how much the SoftSign function changes when its input changes slightly.
     /// The derivative approaches zero as |x| gets larger, but more slowly than tanh.
     /// </para>
     /// </remarks>
@@ -360,7 +360,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>x * sigmoid(x)</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Swish is a newer activation function developed by researchers at Google.
+    /// <b>For Beginners:</b> Swish is a newer activation function developed by researchers at Google.
     /// It's similar to ReLU but smoother and has been shown to outperform ReLU in some deep networks.
     /// It multiplies the input by the sigmoid of the input.
     /// </para>
@@ -374,7 +374,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The derivative of Swish at point x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This calculates how much the Swish function changes when its input changes slightly.
+    /// <b>For Beginners:</b> This calculates how much the Swish function changes when its input changes slightly.
     /// The formula looks complex but is essential for training neural networks that use Swish activation.
     /// </para>
     /// </remarks>
@@ -391,7 +391,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The GELU activation of x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: GELU is an activation function used in modern transformer models like BERT.
+    /// <b>For Beginners:</b> GELU is an activation function used in modern transformer models like BERT.
     /// It can be thought of as a smoother version of ReLU that weights inputs by their value.
     /// Inputs near zero are suppressed, while larger positive inputs are passed through almost unchanged.
     /// </para>
@@ -412,7 +412,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The derivative of GELU at point x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This calculates how much the GELU function changes when its input changes slightly.
+    /// <b>For Beginners:</b> This calculates how much the GELU function changes when its input changes slightly.
     /// The formula is complex but necessary for training neural networks that use GELU activation.
     /// </para>
     /// </remarks>
@@ -434,7 +434,7 @@ public static class NeuralNetworkHelper<T>
     /// <returns>The mean squared error.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Mean Squared Error is one of the most common loss functions used in regression problems.
+    /// <b>For Beginners:</b> Mean Squared Error is one of the most common loss functions used in regression problems.
     /// It calculates the average of the squared differences between predicted and actual values.
     /// Squaring the differences ensures that larger errors have a proportionally larger effect on the total loss.
     /// </para>

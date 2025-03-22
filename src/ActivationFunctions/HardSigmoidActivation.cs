@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Hard Sigmoid is a simplified version of the standard Sigmoid function.
+/// <b>For Beginners:</b> The Hard Sigmoid is a simplified version of the standard Sigmoid function.
 /// 
 /// While the regular Sigmoid creates an S-shaped curve that smoothly transitions from 0 to 1,
 /// the Hard Sigmoid uses straight lines to approximate this curve, making it:
@@ -40,7 +40,7 @@ public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
     /// <returns>The transformed value, constrained between 0 and 1.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms any input number into a value between 0 and 1:
+    /// <b>For Beginners:</b> This method transforms any input number into a value between 0 and 1:
     /// 
     /// 1. It adds 1 to the input
     /// 2. It multiplies the result by 0.5
@@ -72,7 +72,7 @@ public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value (0.5 if input is between -1 and 1, otherwise 0).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how much the output changes when the input changes slightly.
+    /// <b>For Beginners:</b> The derivative tells us how much the output changes when the input changes slightly.
     /// 
     /// For Hard Sigmoid:
     /// - If input is between -1 and 1: derivative = 0.5 (the slope of the line)

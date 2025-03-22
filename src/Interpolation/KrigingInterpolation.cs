@@ -8,7 +8,7 @@
 /// based on the spatial correlation between known data points. It's particularly useful
 /// for creating smooth surfaces from scattered data points.
 /// 
-/// For Beginners: Kriging is like predicting the height of a landscape at any point
+/// <b>For Beginners:</b> Kriging is like predicting the height of a landscape at any point
 /// when you only know the heights at certain locations. It works by assuming that points
 /// closer together are more likely to have similar values than points far apart.
 /// This method is widely used in geography, mining, and environmental science.
@@ -55,7 +55,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// The nugget parameter of the variogram model, representing measurement error or micro-scale variation.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The nugget represents the "noise" in your data - small variations that occur
+    /// <b>For Beginners:</b> The nugget represents the "noise" in your data - small variations that occur
     /// even when measuring the same location multiple times.
     /// </remarks>
     private T _nugget;
@@ -64,7 +64,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// The sill parameter of the variogram model, representing the maximum variance between points.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The sill is like the "ceiling" of difference between any two points in your data,
+    /// <b>For Beginners:</b> The sill is like the "ceiling" of difference between any two points in your data,
     /// no matter how far apart they are.
     /// </remarks>
     private T _sill;
@@ -73,7 +73,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// The range parameter of the variogram model, representing the distance at which points become uncorrelated.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The range tells you how far apart two points can be before they stop influencing each other.
+    /// <b>For Beginners:</b> The range tells you how far apart two points can be before they stop influencing each other.
     /// Beyond this distance, knowing the value at one point doesn't help predict the value at the other.
     /// </remarks>
     private T _range;
@@ -85,7 +85,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// This constructor initializes the Kriging interpolator with your data points and
     /// automatically calculates the necessary parameters for interpolation.
     /// 
-    /// For Beginners: When you create a Kriging interpolator, you provide the locations (x,y)
+    /// <b>For Beginners:</b> When you create a Kriging interpolator, you provide the locations (x,y)
     /// and values (z) of your known data points. The constructor then analyzes the data to
     /// understand the spatial patterns and prepares the model for making predictions at new locations.
     /// </remarks>
@@ -124,7 +124,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// This method predicts the value at any point using the Kriging algorithm.
     /// 
-    /// For Beginners: Once you've set up the Kriging model with your known data points,
+    /// <b>For Beginners:</b> Once you've set up the Kriging model with your known data points,
     /// this method lets you ask "What would the value be at this specific location?"
     /// It uses the spatial patterns detected in your data to make the best possible guess.
     /// </remarks>
@@ -157,7 +157,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// This method builds and solves the Kriging system of equations to determine
     /// the optimal weights for each known data point.
     /// 
-    /// For Beginners: Kriging needs to figure out how much influence each known point
+    /// <b>For Beginners:</b> Kriging needs to figure out how much influence each known point
     /// should have when predicting values at new locations. This method calculates those
     /// influence factors (weights) by solving a system of equations that takes into account
     /// the spatial relationships between all points.
@@ -196,7 +196,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// This method analyzes the spatial relationships in the data to determine
     /// the nugget, sill, and range parameters of the variogram model.
     /// 
-    /// For Beginners: To make accurate predictions, Kriging needs to understand
+    /// <b>For Beginners:</b> To make accurate predictions, Kriging needs to understand
     /// how values change with distance in your specific dataset. This method analyzes
     /// your data to figure out these patterns. It groups pairs of points by distance,
     /// calculates how different their values tend to be, and fits a mathematical model
@@ -251,7 +251,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// This method uses linear regression to fit an exponential model to the experimental variogram data,
     /// which helps determine how spatial correlation changes with distance between points.
     /// 
-    /// For Beginners: This method is like finding the best mathematical formula that describes
+    /// <b>For Beginners:</b> This method is like finding the best mathematical formula that describes
     /// how values become more different as points get farther apart. It's similar to drawing
     /// the best-fitting line through scattered points on a graph, but using a special curve
     /// shape (exponential) that works well for spatial data. The results help the algorithm
@@ -300,7 +300,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// This method computes the straight-line distance between two points using the Pythagorean theorem.
     /// 
-    /// For Beginners: This calculates how far apart two points are in a straight line,
+    /// <b>For Beginners:</b> This calculates how far apart two points are in a straight line,
     /// just like measuring the distance between two pins on a map with a ruler.
     /// It uses the familiar formula from geometry: distance = √((x₂-x₁)² + (y₂-y₁)²).
     /// </remarks>

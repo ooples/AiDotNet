@@ -7,7 +7,7 @@ namespace AiDotNet.Helpers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: A linear system is a collection of linear equations with the same variables.
+/// <b>For Beginners:</b> A linear system is a collection of linear equations with the same variables.
 /// For example: 2x + 3y = 5 and 4x - y = 1 form a linear system. In matrix form, this is written as Ax = b,
 /// where A is the coefficient matrix, x is the vector of variables we're solving for, and b is the vector of constants.
 /// This helper class provides different ways to solve for x given A and b.
@@ -27,7 +27,7 @@ public static class MatrixSolutionHelper
     /// <exception cref="ArgumentException">Thrown when the decomposition type is not recognized.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method solves equations of the form Ax = b, where A is a matrix, and b is a vector.
+    /// <b>For Beginners:</b> This method solves equations of the form Ax = b, where A is a matrix, and b is a vector.
     /// Think of it like solving multiple equations at once. The "decomposition type" is just the mathematical
     /// approach used to solve the system. Different approaches work better for different types of problems.
     /// For example:
@@ -65,7 +65,7 @@ public static class MatrixSolutionHelper
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method is useful when you've already decomposed your matrix A
+    /// <b>For Beginners:</b> This method is useful when you've already decomposed your matrix A
     /// and want to solve for multiple different b vectors without repeating the decomposition.
     /// This is more efficient because matrix decomposition is usually the most time-consuming part
     /// of solving a linear system.
@@ -85,7 +85,7 @@ public static class MatrixSolutionHelper
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Cramer's rule is a method that uses determinants to solve linear systems.
+    /// <b>For Beginners:</b> Cramer's rule is a method that uses determinants to solve linear systems.
     /// For each variable xi, it replaces the i-th column of matrix A with vector b,
     /// then divides the determinant of this new matrix by the determinant of A.
     /// While elegant mathematically, it's generally not efficient for large systems
@@ -119,7 +119,7 @@ public static class MatrixSolutionHelper
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Gram-Schmidt process converts a set of vectors into a set of
+    /// <b>For Beginners:</b> The Gram-Schmidt process converts a set of vectors into a set of
     /// orthogonal vectors (vectors at right angles to each other). This decomposition
     /// is similar to QR decomposition and is useful for solving linear systems because
     /// orthogonal vectors make calculations simpler. It's particularly useful in machine
@@ -141,7 +141,7 @@ public static class MatrixSolutionHelper
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The normal equations approach transforms the original system Ax = b
+    /// <b>For Beginners:</b> The normal equations approach transforms the original system Ax = b
     /// into A^T·A·x = A^T·b (where A^T is the transpose of A). This creates a symmetric,
     /// positive-definite matrix that can be solved efficiently using Cholesky decomposition.
     /// This method is commonly used in linear regression and least squares problems where
@@ -169,7 +169,7 @@ public static class MatrixSolutionHelper
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Hessenberg decomposition transforms a matrix into a form that's
+    /// <b>For Beginners:</b> Hessenberg decomposition transforms a matrix into a form that's
     /// almost triangular (zeros below the first subdiagonal). This is often an intermediate
     /// step in eigenvalue calculations and can be used to solve linear systems more efficiently
     /// than working with the original matrix. It's particularly useful for certain types of
@@ -191,7 +191,7 @@ public static class MatrixSolutionHelper
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Schur decomposition factors a matrix A into Q·T·Q^H, where Q is unitary
+    /// <b>For Beginners:</b> Schur decomposition factors a matrix A into Q·T·Q^H, where Q is unitary
     /// (its inverse equals its conjugate transpose), T is upper triangular, and Q^H is the
     /// conjugate transpose of Q. This decomposition is useful for calculating eigenvalues and
     /// can be used to solve linear systems. It's particularly valuable in stability analysis
@@ -213,7 +213,7 @@ public static class MatrixSolutionHelper
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Eigenvalue decomposition breaks down a matrix into special vectors (eigenvectors) 
+    /// <b>For Beginners:</b> Eigenvalue decomposition breaks down a matrix into special vectors (eigenvectors) 
     /// and values (eigenvalues) that represent the matrix's fundamental characteristics. 
     /// Think of it like finding the "natural directions" and "stretching factors" of the matrix.
     /// </para>

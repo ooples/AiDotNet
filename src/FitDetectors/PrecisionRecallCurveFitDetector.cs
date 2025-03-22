@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps you understand how well your classification model is performing
+/// <b>For Beginners:</b> This class helps you understand how well your classification model is performing
 /// by analyzing two important metrics:
 /// 
 /// 1. AUC (Area Under the Curve): A number between 0 and 1 that tells you how well your model can
@@ -29,7 +29,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: AUC (Area Under the Curve) is a value between 0 and 1 that measures how well
+    /// <b>For Beginners:</b> AUC (Area Under the Curve) is a value between 0 and 1 that measures how well
     /// your model can distinguish between classes. Think of it as a grade for your model's ability
     /// to separate positive examples from negative ones.
     /// 
@@ -47,7 +47,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The F1 Score is a single number between 0 and 1 that combines two important metrics:
+    /// <b>For Beginners:</b> The F1 Score is a single number between 0 and 1 that combines two important metrics:
     /// 
     /// 1. Precision: Out of all the items your model predicted as positive, how many were actually positive?
     ///    (Like: "When my model says it's a cat, how often is it really a cat?")
@@ -67,7 +67,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Configuration options for the detector. If null, default options will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the constructor that creates a new detector. You can provide custom options
+    /// <b>For Beginners:</b> This is the constructor that creates a new detector. You can provide custom options
     /// to control how the detector evaluates your model, or leave it as null to use the default settings.
     /// 
     /// The options control things like what threshold values determine a "good" AUC or F1 Score.
@@ -86,7 +86,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// <exception cref="ArgumentNullException">Thrown when evaluationData is null.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method that examines your model's performance and tells you
+    /// <b>For Beginners:</b> This is the main method that examines your model's performance and tells you
     /// how well it's doing. It:
     /// 
     /// 1. Calculates the AUC and F1 Score from your model's predictions
@@ -130,7 +130,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>A FitType enum value indicating the quality of the model fit.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method looks at your model's AUC and F1 Score and decides if your model is:
+    /// <b>For Beginners:</b> This method looks at your model's AUC and F1 Score and decides if your model is:
     /// 
     /// - Good Fit: Both AUC and F1 Score are above the thresholds you set (or the default thresholds)
     /// - Poor Fit: Both AUC and F1 Score are below the thresholds
@@ -162,7 +162,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how confident we are in our assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how confident we are in our assessment of your model.
     /// 
     /// It combines the AUC and F1 Score using weights that you can customize in the options.
     /// By default, both metrics are weighted equally.
@@ -185,7 +185,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations as strings.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method provides practical advice on how to improve your model based on its current performance.
+    /// <b>For Beginners:</b> This method provides practical advice on how to improve your model based on its current performance.
     /// 
     /// The recommendations are tailored to the specific fit type:
     /// 

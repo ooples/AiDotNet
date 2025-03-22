@@ -8,7 +8,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float)</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: UDU' decomposition is a way to break down a complex matrix into simpler parts.
+/// <b>For Beginners:</b> UDU' decomposition is a way to break down a complex matrix into simpler parts.
 /// Think of it like factoring a number (e.g., 12 = 3 × 4). This decomposition is particularly
 /// useful for solving systems of linear equations and for numerical stability in calculations.
 /// </para>
@@ -27,7 +27,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An upper triangular matrix has non-zero values only on and above the main diagonal
+    /// <b>For Beginners:</b> An upper triangular matrix has non-zero values only on and above the main diagonal
     /// (the diagonal from top-left to bottom-right). All values below this diagonal are zero.
     /// </para>
     /// </remarks>
@@ -38,7 +38,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A diagonal matrix has non-zero values only along its main diagonal.
+    /// <b>For Beginners:</b> A diagonal matrix has non-zero values only along its main diagonal.
     /// We store it as a vector to save memory since all other values are zero.
     /// </para>
     /// </remarks>
@@ -52,7 +52,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// <exception cref="ArgumentException">Thrown when the matrix is not square</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor takes your original matrix and immediately breaks it down
+    /// <b>For Beginners:</b> This constructor takes your original matrix and immediately breaks it down
     /// into the U and D components. You can choose between two different methods (algorithms)
     /// for doing this decomposition.
     /// </para>
@@ -95,7 +95,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Crout algorithm is one method for breaking down a matrix into simpler parts.
+    /// <b>For Beginners:</b> The Crout algorithm is one method for breaking down a matrix into simpler parts.
     /// It works by calculating the elements of U and D in a specific order, starting from the top-left
     /// and working across rows and down columns.
     /// </para>
@@ -134,7 +134,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Doolittle algorithm is another method for matrix decomposition.
+    /// <b>For Beginners:</b> The Doolittle algorithm is another method for matrix decomposition.
     /// It's similar to Crout but processes the matrix in a slightly different order.
     /// Different algorithms may be more efficient or stable depending on the specific matrix.
     /// </para>
@@ -176,7 +176,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// <exception cref="ArgumentException">Thrown when the length of vector b doesn't match the matrix dimensions</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the values of x in the equation Ax = b.
+    /// <b>For Beginners:</b> This method finds the values of x in the equation Ax = b.
     /// Think of it like solving for x in the equation 3x = 6 (where x = 2),
     /// but with matrices instead of simple numbers. The decomposition makes
     /// this process more efficient by breaking it into three simpler steps:
@@ -227,7 +227,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The inverse of matrix A</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The inverse of a matrix is like the reciprocal of a number. Just as 1/3 is the
+    /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/3 is the
     /// reciprocal of 3 (because 3 × 1/3 = 1), the inverse of a matrix A is another matrix that,
     /// when multiplied by A, gives the identity matrix (the matrix equivalent of the number 1).
     /// This method finds the inverse by solving multiple equation systems, one for each column.
@@ -258,7 +258,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A tuple containing the U matrix and D vector that represent the decomposition factors</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method gives you direct access to the two main components of the decomposition:
+    /// <b>For Beginners:</b> This method gives you direct access to the two main components of the decomposition:
     /// the U matrix and the D vector. These are the "building blocks" that, when combined properly,
     /// can reconstruct your original matrix. Think of it like getting the individual ingredients
     /// that went into making a cake. You might need these separate components for further

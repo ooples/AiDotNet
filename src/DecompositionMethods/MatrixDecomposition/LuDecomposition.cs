@@ -405,7 +405,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
     /// This method does not use pivoting, so it may be less numerically stable for some matrices.
     /// </para>
     /// <para>
-    /// For Beginners: Crout's method is a way to break down a complex matrix into simpler parts.
+    /// <b>For Beginners:</b> Crout's method is a way to break down a complex matrix into simpler parts.
     /// Think of it like factoring a number (e.g., 12 = 3 × 4). Here, we're factoring a matrix into 
     /// two triangular matrices - one with values only below the diagonal (L) and one with values 
     /// only above the diagonal and 1's on the diagonal itself (U). This makes solving equations much easier.
@@ -475,7 +475,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
     /// when solving linear systems.
     /// </para>
     /// <para>
-    /// For Beginners: When we rearrange rows in our matrix during decomposition, we need to 
+    /// <b>For Beginners:</b> When we rearrange rows in our matrix during decomposition, we need to 
     /// make the same changes to our right-hand side vector. This method does that rearrangement.
     /// It's like if you reordered the questions in a test, you'd need to reorder the answers too!
     /// </para>
@@ -503,7 +503,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
     /// is lower triangular. It works by solving for one variable at a time, starting from the first.
     /// </para>
     /// <para>
-    /// For Beginners: Forward substitution is like solving a cascade of simple equations.
+    /// <b>For Beginners:</b> Forward substitution is like solving a cascade of simple equations.
     /// Since L is lower triangular (has zeros above the diagonal), we can solve for the first 
     /// variable directly, then use that to solve for the second, and so on. It's like a domino 
     /// effect where each solution helps us find the next one.
@@ -537,7 +537,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
     /// is upper triangular. It works by solving for one variable at a time, starting from the last.
     /// </para>
     /// <para>
-    /// For Beginners: Back substitution is like solving a waterfall of equations from bottom to top.
+    /// <b>For Beginners:</b> Back substitution is like solving a waterfall of equations from bottom to top.
     /// Since U is upper triangular (has zeros below the diagonal), we can solve for the last 
     /// variable directly, then use that to solve for the second-to-last, and so on. It's the 
     /// reverse process of forward substitution, working backwards through our variables.

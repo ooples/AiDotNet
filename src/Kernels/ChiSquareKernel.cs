@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// used in computer vision and document classification tasks.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Chi-Square kernel is especially good at comparing data that represents counts or frequencies,
 /// like how often words appear in documents or how many pixels of each color are in an image.
 /// </para>
@@ -38,7 +38,7 @@ public class ChiSquareKernel<T> : IKernelFunction<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Chi-Square kernel with the necessary
+    /// <b>For Beginners:</b> This constructor sets up the Chi-Square kernel with the necessary
     /// mathematical operations for your chosen numeric type.
     /// </para>
     /// <para>
@@ -60,7 +60,7 @@ public class ChiSquareKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Chi-Square kernel formula.
     /// </para>
     /// <para>

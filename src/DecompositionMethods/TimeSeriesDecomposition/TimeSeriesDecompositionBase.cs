@@ -5,7 +5,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Time series decomposition is like taking apart a complex toy to see its individual pieces.
+/// <b>For Beginners:</b> Time series decomposition is like taking apart a complex toy to see its individual pieces.
 /// It breaks down a sequence of data points (like daily sales, monthly temperatures, etc.) into simpler
 /// components that are easier to understand. Common components include:
 /// - Trend: The long-term direction (going up, down, or staying flat)
@@ -31,7 +31,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Think of this as a container that holds all the separate pieces
+    /// <b>For Beginners:</b> Think of this as a container that holds all the separate pieces
     /// after we've taken apart our time series. Each piece (trend, seasonal pattern, etc.)
     /// is stored with a label so we can easily retrieve it later.
     /// </para>
@@ -105,7 +105,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A vector is simply a list of numbers in a specific order.
+    /// <b>For Beginners:</b> A vector is simply a list of numbers in a specific order.
     /// For time series data, each number typically represents a value at a specific point in time.
     /// </para>
     /// </remarks>
@@ -128,7 +128,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A matrix is like a table or grid of numbers with rows and columns.
+    /// <b>For Beginners:</b> A matrix is like a table or grid of numbers with rows and columns.
     /// In time series analysis, a matrix might store multiple related series or different 
     /// versions of the same series (e.g., seasonal patterns for different years).
     /// </para>
@@ -162,7 +162,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The residual is what's left over after we remove the main patterns from our data.
+    /// <b>For Beginners:</b> The residual is what's left over after we remove the main patterns from our data.
     /// Think of it like this:
     /// Original data = Trend + Seasonal pattern + Residual
     /// 

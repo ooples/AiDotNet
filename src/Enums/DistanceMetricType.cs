@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Distance metrics are ways to measure how similar or different two data points are.
+/// <b>For Beginners:</b> Distance metrics are ways to measure how similar or different two data points are.
 /// 
 /// Think of distance metrics like different ways to measure the distance between two cities:
 /// - As the crow flies (straight line)
@@ -86,7 +86,7 @@ public enum DistanceMetricType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Cosine similarity measures the angle between two vectors, ignoring their magnitude (length).
+    /// <b>For Beginners:</b> Cosine similarity measures the angle between two vectors, ignoring their magnitude (length).
     /// 
     /// Think of it as comparing the direction two people are facing, regardless of how far they've walked.
     /// Two people facing north are similar (cosine = 1), even if one walked 1 mile and the other 100 miles.
@@ -116,7 +116,7 @@ public enum DistanceMetricType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Jaccard distance measures how different two sets are by comparing what they have in common 
+    /// <b>For Beginners:</b> Jaccard distance measures how different two sets are by comparing what they have in common 
     /// versus what they don't.
     /// 
     /// Think of it as comparing two shopping lists:
@@ -148,7 +148,7 @@ public enum DistanceMetricType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Hamming distance counts how many positions have different values when comparing two strings 
+    /// <b>For Beginners:</b> Hamming distance counts how many positions have different values when comparing two strings 
     /// or sequences of equal length.
     /// 
     /// Think of it as comparing two multiple-choice tests and counting how many answers are different.
@@ -182,7 +182,7 @@ public enum DistanceMetricType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Mahalanobis distance is an advanced metric that takes into account how variables 
+    /// <b>For Beginners:</b> Mahalanobis distance is an advanced metric that takes into account how variables 
     /// are related to each other (their correlations).
     /// 
     /// Unlike Euclidean distance, which treats all dimensions equally, Mahalanobis distance:

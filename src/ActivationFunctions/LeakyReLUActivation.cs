@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Leaky ReLU activation function is a variation of the standard ReLU function.
+/// <b>For Beginners:</b> The Leaky ReLU activation function is a variation of the standard ReLU function.
 /// 
 /// How it works:
 /// - For positive inputs (x > 0): It returns the input unchanged (like a straight line)
@@ -36,7 +36,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// </param>
     /// <remarks>
     /// <para>
-    /// For Beginners: The alpha parameter determines how much of the negative inputs "leak through":
+    /// <b>For Beginners:</b> The alpha parameter determines how much of the negative inputs "leak through":
     /// 
     /// - With alpha = 0.01 (default), negative inputs are multiplied by 0.01 (reduced to 1% of their value)
     /// - With alpha = 0.1, negative inputs are multiplied by 0.1 (reduced to 10% of their value)
@@ -67,7 +67,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// </returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms an input value using the formula:
+    /// <b>For Beginners:</b> This method transforms an input value using the formula:
     /// 
     /// f(x) = x        if x > 0
     /// f(x) = α * x    if x ≤ 0
@@ -89,7 +89,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The input vector.</param>
     /// <returns>A new vector with the Leaky ReLU function applied to each element.</returns>
     /// <remarks>
-    /// For Beginners: This method applies the Leaky ReLU function to each value in a collection (vector)
+    /// <b>For Beginners:</b> This method applies the Leaky ReLU function to each value in a collection (vector)
     /// of inputs. It processes each number individually using the same rules as the single-value version.
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
@@ -104,7 +104,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <returns>1 if the input is positive, or alpha if the input is negative or zero.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how much the output changes when we slightly change the input.
+    /// <b>For Beginners:</b> The derivative tells us how much the output changes when we slightly change the input.
     /// This information is crucial during neural network training.
     /// 
     /// For the Leaky ReLU function, the derivative is very simple:
@@ -127,7 +127,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <returns>A diagonal matrix containing the derivatives for each input value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how the output vector changes when we slightly change each input value.
+    /// <b>For Beginners:</b> This method calculates how the output vector changes when we slightly change each input value.
     /// 
     /// The result is a special matrix called a "Jacobian matrix" where:
     /// - Values on the main diagonal (top-left to bottom-right) are the derivatives for each input

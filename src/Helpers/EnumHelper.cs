@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: This helper class contains methods that make it easier to work with enums in C#.
+/// <b>For Beginners:</b> This helper class contains methods that make it easier to work with enums in C#.
 /// 
 /// An enum (short for "enumeration") is a special type in programming that represents a set of 
 /// named constants. Think of it like a predefined list of options.
@@ -26,7 +26,7 @@ public static class EnumHelper
     /// <returns>A list containing all enum values, excluding the ignored value if specified.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method gives you a list of all the options defined in an enum.
+    /// <b>For Beginners:</b> This method gives you a list of all the options defined in an enum.
     /// 
     /// For example, if you have an enum for Colors (Red, Green, Blue), this method would return
     /// a list containing Red, Green, and Blue.

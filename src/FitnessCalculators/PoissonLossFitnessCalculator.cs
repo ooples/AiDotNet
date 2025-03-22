@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on count-based prediction tasks,
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on count-based prediction tasks,
 /// which are problems where you're predicting the number of times something happens in a fixed interval.
 /// 
 /// Poisson Loss is designed specifically for problems where:
@@ -53,7 +53,7 @@ public class PoissonLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Poisson Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Poisson Loss
     /// to evaluate your model's performance on count-based prediction problems.
     /// 
     /// Parameter:
@@ -83,7 +83,7 @@ public class PoissonLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated Poisson Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Poisson Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Poisson Loss.
     /// 
     /// It works by comparing your model's predictions to the actual values and calculating
     /// a score that represents how far off your predictions are. The calculation is specifically

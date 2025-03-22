@@ -10,7 +10,7 @@
 /// which is theoretically perfect for band-limited signals.
 /// </para>
 /// <para>
-/// For Beginners: Sinc interpolation is like creating a smooth curve through your data points
+/// <b>For Beginners:</b> Sinc interpolation is like creating a smooth curve through your data points
 /// that preserves the frequency characteristics of your original data. It's particularly good
 /// for signals like audio or sensor data where you want to maintain the original frequencies
 /// when filling in gaps between known points. Think of it as drawing a curve that not only passes
@@ -56,7 +56,7 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// </exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor takes your data points (x and y values) and prepares
+    /// <b>For Beginners:</b> This constructor takes your data points (x and y values) and prepares
     /// the interpolation algorithm. It checks that your data is valid (same number of x and y values)
     /// and sets up the cutoff frequency.
     /// </para>
@@ -93,7 +93,7 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the y-value at any x-location you specify,
+    /// <b>For Beginners:</b> This method finds the y-value at any x-location you specify,
     /// even if it's between or outside your original data points.
     /// </para>
     /// <para>
@@ -130,7 +130,7 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// <returns>The Sinc function value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Sinc function is a special mathematical function that looks like
+    /// <b>For Beginners:</b> The Sinc function is a special mathematical function that looks like
     /// a wave with a peak at zero and smaller oscillations that diminish as you move away from zero.
     /// </para>
     /// <para>

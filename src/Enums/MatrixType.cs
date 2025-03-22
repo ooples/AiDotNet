@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: A matrix is a rectangular array of numbers arranged in rows and columns.
+/// <b>For Beginners:</b> A matrix is a rectangular array of numbers arranged in rows and columns.
 /// Different types of matrices have special properties that make them useful for specific
 /// calculations or applications. This enum lists the various matrix types supported by the library.
 /// </para>
@@ -22,7 +22,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A square matrix has the same number of rows and columns, like a square.
+    /// <b>For Beginners:</b> A square matrix has the same number of rows and columns, like a square.
     /// Example: A 3×3 matrix has 3 rows and 3 columns.
     /// </para>
     /// </remarks>
@@ -33,7 +33,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A diagonal matrix has numbers only along the diagonal from top-left to bottom-right,
+    /// <b>For Beginners:</b> A diagonal matrix has numbers only along the diagonal from top-left to bottom-right,
     /// with zeros everywhere else.
     /// 
     /// Example:
@@ -49,7 +49,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An identity matrix is a special diagonal matrix with 1s along the diagonal
+    /// <b>For Beginners:</b> An identity matrix is a special diagonal matrix with 1s along the diagonal
     /// and 0s everywhere else. It works like the number 1 in multiplication - multiplying any matrix
     /// by the identity matrix leaves it unchanged.
     /// 
@@ -66,7 +66,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A symmetric matrix is like a mirror image across its diagonal. The value at
+    /// <b>For Beginners:</b> A symmetric matrix is like a mirror image across its diagonal. The value at
     /// position (row 2, column 5) equals the value at (row 5, column 2).
     /// 
     /// Example:
@@ -82,7 +82,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: In a skew-symmetric matrix, the diagonal elements are always zero, and the elements
+    /// <b>For Beginners:</b> In a skew-symmetric matrix, the diagonal elements are always zero, and the elements
     /// on opposite sides of the diagonal are negatives of each other. If position (row 1, column 2) has value 5,
     /// then position (row 2, column 1) has value -5.
     /// 
@@ -99,7 +99,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An upper triangular matrix has values on or above the diagonal, with all values
+    /// <b>For Beginners:</b> An upper triangular matrix has values on or above the diagonal, with all values
     /// below the diagonal being zero. It forms a triangle shape in the upper part of the matrix.
     /// 
     /// Example:
@@ -115,7 +115,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A lower triangular matrix has values on or below the diagonal, with all values
+    /// <b>For Beginners:</b> A lower triangular matrix has values on or below the diagonal, with all values
     /// above the diagonal being zero. It forms a triangle shape in the lower part of the matrix.
     /// 
     /// Example:
@@ -131,7 +131,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A rectangular matrix has a different number of rows and columns, like a rectangle.
+    /// <b>For Beginners:</b> A rectangular matrix has a different number of rows and columns, like a rectangle.
     /// Example: A 2×3 matrix has 2 rows and 3 columns.
     /// </para>
     /// </remarks>
@@ -142,7 +142,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A zero matrix contains only zeros in all positions.
+    /// <b>For Beginners:</b> A zero matrix contains only zeros in all positions.
     /// 
     /// Example:
     /// [0 0 0]
@@ -156,7 +156,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A scalar matrix is a diagonal matrix where all the diagonal values are the same number.
+    /// <b>For Beginners:</b> A scalar matrix is a diagonal matrix where all the diagonal values are the same number.
     /// 
     /// Example:
     /// [5 0 0]
@@ -171,7 +171,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An upper bidiagonal matrix has values only on the main diagonal and the diagonal
+    /// <b>For Beginners:</b> An upper bidiagonal matrix has values only on the main diagonal and the diagonal
     /// immediately above it, with zeros everywhere else.
     /// 
     /// Example:
@@ -187,7 +187,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A lower bidiagonal matrix has values only on the main diagonal and the diagonal
+    /// <b>For Beginners:</b> A lower bidiagonal matrix has values only on the main diagonal and the diagonal
     /// immediately below it, with zeros everywhere else.
     /// 
     /// Example:
@@ -203,7 +203,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A tridiagonal matrix has values only on the main diagonal and the diagonals
+    /// <b>For Beginners:</b> A tridiagonal matrix has values only on the main diagonal and the diagonals
     /// immediately above and below it, with zeros everywhere else.
     /// 
     /// Example:
@@ -219,7 +219,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A band matrix has non-zero values only within a certain "band" around the diagonal,
+    /// <b>For Beginners:</b> A band matrix has non-zero values only within a certain "band" around the diagonal,
     /// with zeros everywhere else. It's a generalization of tridiagonal matrices to include more diagonals.
     /// 
     /// Example of a band matrix with bandwidth 2:
@@ -237,7 +237,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Hermitian matrix is the complex number equivalent of a symmetric matrix.
+    /// <b>For Beginners:</b> A Hermitian matrix is the complex number equivalent of a symmetric matrix.
     /// For real matrices, Hermitian and symmetric are the same thing. For complex matrices,
     /// the elements across the diagonal are complex conjugates of each other (same real part,
     /// opposite imaginary part).
@@ -252,7 +252,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A skew-Hermitian matrix is the complex number equivalent of a skew-symmetric matrix.
+    /// <b>For Beginners:</b> A skew-Hermitian matrix is the complex number equivalent of a skew-symmetric matrix.
     /// The diagonal elements are purely imaginary (or zero), and elements across the diagonal are negative
     /// complex conjugates of each other.
     /// 
@@ -266,7 +266,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An orthogonal matrix preserves lengths and angles when it multiplies a vector.
+    /// <b>For Beginners:</b> An orthogonal matrix preserves lengths and angles when it multiplies a vector.
     /// It represents rotations and reflections in space. The columns (and rows) of an orthogonal matrix
     /// form a set of perpendicular unit vectors.
     /// 
@@ -280,7 +280,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A unitary matrix is the complex number equivalent of an orthogonal matrix.
+    /// <b>For Beginners:</b> A unitary matrix is the complex number equivalent of an orthogonal matrix.
     /// It preserves lengths and angles in complex vector spaces. For real matrices, unitary and
     /// orthogonal are the same thing.
     /// 
@@ -294,7 +294,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A singular matrix cannot be inverted (no inverse exists). This happens when
+    /// <b>For Beginners:</b> A singular matrix cannot be inverted (no inverse exists). This happens when
     /// the determinant is zero, which means the matrix equations don't have unique solutions.
     /// 
     /// Think of it as a transformation that "flattens" space in at least one dimension, losing information
@@ -308,7 +308,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A non-singular matrix can be inverted (has an inverse). This means any transformation
+    /// <b>For Beginners:</b> A non-singular matrix can be inverted (has an inverse). This means any transformation
     /// performed by this matrix can be undone. It's like being able to trace your steps backward after
     /// a journey. Non-singular matrices have non-zero determinants.
     /// </para>
@@ -320,7 +320,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A positive definite matrix has special properties that make it useful in optimization
+    /// <b>For Beginners:</b> A positive definite matrix has special properties that make it useful in optimization
     /// and statistics. A key characteristic is that when you multiply this matrix with any non-zero vector,
     /// the result is always positive. These matrices represent "bowl-shaped" surfaces that have a clear minimum point.
     /// </para>
@@ -332,7 +332,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A positive semi-definite matrix is similar to a positive definite matrix, but allows
+    /// <b>For Beginners:</b> A positive semi-definite matrix is similar to a positive definite matrix, but allows
     /// for some eigenvalues to be zero. When multiplied with any vector, the result is always non-negative.
     /// These matrices are common in statistics and machine learning, especially in covariance matrices.
     /// </para>
@@ -344,7 +344,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An orthogonal projection matrix "projects" vectors onto a specific subspace.
+    /// <b>For Beginners:</b> An orthogonal projection matrix "projects" vectors onto a specific subspace.
     /// Think of it like a shadow cast by an object onto a wall - the projection matrix represents
     /// this shadow-casting process. These matrices are used in data analysis to reduce dimensions
     /// while preserving important information.
@@ -357,7 +357,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An idempotent matrix has the property that multiplying it by itself gives the same matrix.
+    /// <b>For Beginners:</b> An idempotent matrix has the property that multiplying it by itself gives the same matrix.
     /// That is, A² = A. This is like a light switch that's already on - flipping it again doesn't change anything.
     /// Projection matrices are examples of idempotent matrices.
     /// </para>
@@ -369,7 +369,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An involutory matrix is its own inverse. When you multiply it by itself, you get
+    /// <b>For Beginners:</b> An involutory matrix is its own inverse. When you multiply it by itself, you get
     /// the identity matrix. It's like applying a transformation and then applying it again to get back
     /// to where you started. Reflection matrices are common examples.
     /// </para>
@@ -381,7 +381,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A stochastic matrix (also called a probability matrix) has non-negative entries
+    /// <b>For Beginners:</b> A stochastic matrix (also called a probability matrix) has non-negative entries
     /// with each row summing to 1. These matrices represent transition probabilities in Markov chains,
     /// where each row shows the probability of moving from one state to others.
     /// </para>
@@ -393,7 +393,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A doubly stochastic matrix has non-negative entries where both every row and every column
+    /// <b>For Beginners:</b> A doubly stochastic matrix has non-negative entries where both every row and every column
     /// sum to 1. These matrices are used in assignment problems and represent balanced distributions.
     /// </para>
     /// </remarks>
@@ -404,7 +404,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A permutation matrix rearranges the order of elements in a vector when multiplied with it.
+    /// <b>For Beginners:</b> A permutation matrix rearranges the order of elements in a vector when multiplied with it.
     /// It's like shuffling a deck of cards in a specific way. Each row and column has exactly one 1, with the rest being 0s.
     /// </para>
     /// </remarks>
@@ -415,7 +415,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An adjacency matrix represents connections in a network or graph. If element (i,j) is 1,
+    /// <b>For Beginners:</b> An adjacency matrix represents connections in a network or graph. If element (i,j) is 1,
     /// it means there's a connection from node i to node j. These matrices are used in social networks,
     /// transportation systems, and computer networks to show how elements are connected.
     /// </para>
@@ -427,7 +427,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: An incidence matrix shows how objects of one type (like people) relate to objects
+    /// <b>For Beginners:</b> An incidence matrix shows how objects of one type (like people) relate to objects
     /// of another type (like events). In graph theory, it shows how edges connect to vertices.
     /// For example, if row i has a 1 in column j, it means vertex i is connected to edge j.
     /// </para>
@@ -439,7 +439,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Laplacian matrix combines information about connections and degrees (number of connections)
+    /// <b>For Beginners:</b> A Laplacian matrix combines information about connections and degrees (number of connections)
     /// in a graph. It's used to find important properties of networks, like how well-connected they are
     /// or how information flows through them. These matrices are used in image processing, clustering,
     /// and network analysis.
@@ -452,7 +452,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Toeplitz matrix has the same value along each diagonal. The value depends only on
+    /// <b>For Beginners:</b> A Toeplitz matrix has the same value along each diagonal. The value depends only on
     /// how far the diagonal is from the main diagonal. These matrices appear in signal processing and
     /// when solving certain differential equations.
     /// 
@@ -470,7 +470,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Hankel matrix has constant values along anti-diagonals (diagonals that run from
+    /// <b>For Beginners:</b> A Hankel matrix has constant values along anti-diagonals (diagonals that run from
     /// bottom-left to top-right). These matrices appear in control theory and signal processing applications.
     /// 
     /// Example:
@@ -487,7 +487,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A circulant matrix is created by taking the first row and shifting it to the right
+    /// <b>For Beginners:</b> A circulant matrix is created by taking the first row and shifting it to the right
     /// in each subsequent row. It's like a circular pattern where elements wrap around. These matrices
     /// are used in signal processing, especially in dealing with periodic signals.
     /// 
@@ -505,7 +505,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A block matrix is divided into rectangular sections called blocks or submatrices.
+    /// <b>For Beginners:</b> A block matrix is divided into rectangular sections called blocks or submatrices.
     /// This structure makes it easier to work with large matrices by treating each block as a single element.
     /// Block matrices are useful in parallel computing and when dealing with matrices that have a natural
     /// block structure.
@@ -518,7 +518,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A sparse matrix contains mostly zeros, with relatively few non-zero elements.
+    /// <b>For Beginners:</b> A sparse matrix contains mostly zeros, with relatively few non-zero elements.
     /// These matrices are stored efficiently by only recording the positions and values of non-zero elements.
     /// Sparse matrices are common in large-scale problems like social networks, web links, or 3D simulations.
     /// </para>
@@ -530,7 +530,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A dense matrix has most of its elements filled with non-zero values.
+    /// <b>For Beginners:</b> A dense matrix has most of its elements filled with non-zero values.
     /// Unlike sparse matrices, dense matrices don't have a special storage format since most elements
     /// need to be stored anyway. These matrices typically represent fully connected systems or relationships.
     /// </para>
@@ -542,7 +542,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A partitioned matrix is divided into sections to make certain calculations easier.
+    /// <b>For Beginners:</b> A partitioned matrix is divided into sections to make certain calculations easier.
     /// Unlike block matrices (which are about storage and structure), partitioning is about breaking down
     /// a problem into smaller parts. This approach is used in solving systems of equations and in matrix
     /// decomposition methods.
@@ -555,7 +555,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A companion matrix is a special form that represents a polynomial in matrix form.
+    /// <b>For Beginners:</b> A companion matrix is a special form that represents a polynomial in matrix form.
     /// It's used to find polynomial roots and in control systems. The matrix has a specific pattern with
     /// 1s along the first subdiagonal and the coefficients of a polynomial in the last column.
     /// 
@@ -572,7 +572,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Vandermonde matrix is created by taking a set of values and raising each value to 
+    /// <b>For Beginners:</b> A Vandermonde matrix is created by taking a set of values and raising each value to 
     /// different powers. For example, if we have values [a, b, c], the matrix would look like:
     /// [1    1    1  ]
     /// [a    b    c  ]
@@ -588,7 +588,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Hilbert matrix has elements defined by the formula 1/(i+j-1), where i is the row number
+    /// <b>For Beginners:</b> A Hilbert matrix has elements defined by the formula 1/(i+j-1), where i is the row number
     /// and j is the column number. For example, a 3×3 Hilbert matrix looks like:
     /// [1    1/2   1/3]
     /// [1/2  1/3   1/4]
@@ -604,7 +604,7 @@ public enum MatrixType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Cauchy matrix is formed from two sets of numbers [x₁, x₂, ...] and [y₁, y₂, ...].
+    /// <b>For Beginners:</b> A Cauchy matrix is formed from two sets of numbers [x₁, x₂, ...] and [y₁, y₂, ...].
     /// Each element (i,j) equals 1/(xᵢ + yⱼ). These matrices appear in interpolation problems and numerical analysis.
     /// 
     /// Example: If x = [1, 2, 3] and y = [4, 5, 6], the Cauchy matrix would be:

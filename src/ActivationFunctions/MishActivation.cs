@@ -6,7 +6,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Mish activation function is a smooth, non-monotonic function that helps neural networks
+/// <b>For Beginners:</b> The Mish activation function is a smooth, non-monotonic function that helps neural networks
 /// learn complex patterns. It was introduced in 2019 and has shown good performance in many applications.
 /// 
 /// Mathematically, Mish is defined as: f(x) = x * tanh(softplus(x))
@@ -36,7 +36,7 @@ public class MishActivation<T> : ActivationFunctionBase<T>
     /// <returns>The activated output value using the Mish function.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms a single number using the Mish formula:
+    /// <b>For Beginners:</b> This method transforms a single number using the Mish formula:
     /// 
     /// 1. First, it calculates softplus(x) = ln(1 + e^x)
     /// 2. Then, it calculates tanh(softplus(x))
@@ -63,7 +63,7 @@ public class MishActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value at the input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how much the Mish function's output changes when we
+    /// <b>For Beginners:</b> The derivative tells us how much the Mish function's output changes when we
     /// slightly change the input. This is essential for training neural networks.
     /// 
     /// The formula for the Mish derivative is complex (as you can see from the code), but what's

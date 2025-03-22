@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// For Beginners: This interface helps measure how "fit" or effective your machine learning model is.
+/// <b>For Beginners:</b> This interface helps measure how "fit" or effective your machine learning model is.
 /// 
 /// In machine learning, we need a way to measure how good our model is at making predictions.
 /// This is similar to how we might grade a test - we need a scoring system.
@@ -29,7 +29,7 @@ public interface IFitnessCalculator<T>
     /// <param name="evaluationData">Data containing model performance metrics on training and validation datasets.</param>
     /// <returns>A fitness score representing how well the model performs.</returns>
     /// <remarks>
-    /// For Beginners: This method grades your model based on detailed performance information.
+    /// <b>For Beginners:</b> This method grades your model based on detailed performance information.
     /// 
     /// The input parameter:
     /// - evaluationData: Contains various measurements about how your model performed on different data
@@ -52,7 +52,7 @@ public interface IFitnessCalculator<T>
     /// <param name="dataSet">Statistical information about model performance on a dataset.</param>
     /// <returns>A fitness score representing how well the model performs.</returns>
     /// <remarks>
-    /// For Beginners: This method grades your model based on simplified performance statistics.
+    /// <b>For Beginners:</b> This method grades your model based on simplified performance statistics.
     /// 
     /// The input parameter:
     /// - dataSet: Contains basic statistics about how your model performed
@@ -71,7 +71,7 @@ public interface IFitnessCalculator<T>
     /// Indicates whether higher fitness scores represent better performance.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This property tells you whether bigger numbers mean better performance.
+    /// <b>For Beginners:</b> This property tells you whether bigger numbers mean better performance.
     /// 
     /// Different metrics work in opposite ways:
     /// - For some metrics like accuracy, higher is better (95% accuracy is better than 90%)
@@ -92,7 +92,7 @@ public interface IFitnessCalculator<T>
     /// <param name="bestFitness">The best fitness score found so far.</param>
     /// <returns>True if the current fitness score is better than the best fitness score; otherwise, false.</returns>
     /// <remarks>
-    /// For Beginners: This method compares two scores and tells you if the new one is better.
+    /// <b>For Beginners:</b> This method compares two scores and tells you if the new one is better.
     /// 
     /// When comparing models, you need to know which one performs better. This method handles
     /// the comparison logic for you, taking into account whether higher or lower scores are better.

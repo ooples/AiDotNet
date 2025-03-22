@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps you evaluate how well your model is learning to predict vectors that point in the same direction.
+/// <b>For Beginners:</b> This calculator helps you evaluate how well your model is learning to predict vectors that point in the same direction.
 /// 
 /// Cosine Similarity measures the angle between two vectors (sets of numbers), ignoring their length or magnitude.
 /// It's like comparing the direction two people are facing, without caring how far away they are standing.
@@ -33,7 +33,7 @@ public class CosineSimilarityLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Cosine Similarity Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Cosine Similarity Loss
     /// to evaluate your model's performance on tasks where the direction of vectors is important.
     /// 
     /// The "dataSetType" parameter lets you choose which data to evaluate:
@@ -57,7 +57,7 @@ public class CosineSimilarityLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The Cosine Similarity Loss value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model's predictions align with the actual values
+    /// <b>For Beginners:</b> This method calculates how well your model's predictions align with the actual values
     /// in terms of direction, regardless of magnitude.
     /// 
     /// The method works by:

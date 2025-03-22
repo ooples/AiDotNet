@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps you evaluate how well your model is learning to determine if two items are similar or different.
+/// <b>For Beginners:</b> This calculator helps you evaluate how well your model is learning to determine if two items are similar or different.
 /// 
 /// Contrastive Loss is used in "similarity learning" - a type of machine learning where the goal is to learn 
 /// which items are similar and which are different. Some common applications include:
@@ -31,7 +31,7 @@ public class ContrastiveLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The margin is like a "safe distance" that we want to maintain between items that are different.
+    /// <b>For Beginners:</b> The margin is like a "safe distance" that we want to maintain between items that are different.
     /// 
     /// - If two items are similar, we want their distance to be close to 0
     /// - If two items are different, we want their distance to be at least as large as this margin value
@@ -48,7 +48,7 @@ public class ContrastiveLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Contrastive Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Contrastive Loss
     /// to evaluate your model's performance on similarity learning tasks.
     /// 
     /// The "margin" parameter sets the minimum distance we want between dissimilar items.
@@ -76,7 +76,7 @@ public class ContrastiveLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The average Contrastive Loss value across all pairs.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is learning to determine similarity between pairs of items.
+    /// <b>For Beginners:</b> This method calculates how well your model is learning to determine similarity between pairs of items.
     /// 
     /// The method works by:
     /// 1. Splitting the input data into pairs (first half and second half)
@@ -114,7 +114,7 @@ public class ContrastiveLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>A tuple containing two vectors, each representing half of the original vector.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This helper method takes a long list of values and splits it into two equal parts.
+    /// <b>For Beginners:</b> This helper method takes a long list of values and splits it into two equal parts.
     /// 
     /// In similarity learning, we work with pairs of items. This method helps organize the data by:
     /// - Taking the first half of the values as the first item in each pair
@@ -150,7 +150,7 @@ public class ContrastiveLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>1 if the samples are the same, 0 if they are different.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This helper method looks at two items and decides if they should be considered similar or different.
+    /// <b>For Beginners:</b> This helper method looks at two items and decides if they should be considered similar or different.
     /// 
     /// It returns:
     /// - 1 (one) if the items are the same or similar

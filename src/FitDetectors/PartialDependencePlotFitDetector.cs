@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: A Partial Dependence Plot (PDP) helps you understand how each feature in your data
+/// <b>For Beginners:</b> A Partial Dependence Plot (PDP) helps you understand how each feature in your data
 /// affects your model's predictions. It shows the relationship between a feature and the predicted outcome
 /// while accounting for the effects of all other features. This detector uses these plots to determine if
 /// your model is learning appropriate patterns from your data.
@@ -25,7 +25,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Configuration options for the detector. If null, default options will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new PDP fit detector. You can customize how it works by providing
+    /// <b>For Beginners:</b> This constructor creates a new PDP fit detector. You can customize how it works by providing
     /// options, or just use the default settings which work well for most cases.
     /// </para>
     /// </remarks>
@@ -41,7 +41,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method examines your model to determine if it's learning the right patterns from your data.
+    /// <b>For Beginners:</b> This method examines your model to determine if it's learning the right patterns from your data.
     /// It creates special plots (PDPs) that show how each feature affects your model's predictions, then uses these
     /// plots to decide if your model is:
     /// - Overfitting: Your model is "memorizing" the training data instead of learning general patterns
@@ -77,7 +77,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>The detected fit type.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method analyzes your model's performance to determine if it has learned
+    /// <b>For Beginners:</b> This method analyzes your model's performance to determine if it has learned
     /// the right patterns from your data. It calculates PDPs and uses them to classify your model's fit.
     /// </para>
     /// </remarks>
@@ -94,7 +94,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>The detected fit type.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method looks at how "wiggly" or "smooth" the relationship is between each feature
+    /// <b>For Beginners:</b> This method looks at how "wiggly" or "smooth" the relationship is between each feature
     /// and your model's predictions. If these relationships are too complex (very wiggly), your model might be
     /// overfitting. If they're too simple (very flat), your model might be underfitting.
     /// 
@@ -129,7 +129,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>A value between 0 and 1 representing the confidence level.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how confident we are in our assessment of your model's fit.
+    /// <b>For Beginners:</b> This method calculates how confident we are in our assessment of your model's fit.
     /// A value closer to 1 means we're very confident in our assessment, while a value closer to 0
     /// means we're less certain. The confidence is based on how far the nonlinearity scores are from
     /// the threshold for overfitting.
@@ -158,7 +158,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>A dictionary mapping feature names to their partial dependence plots.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a special plot for each feature in your data. Each plot shows
+    /// <b>For Beginners:</b> This method creates a special plot for each feature in your data. Each plot shows
     /// how that feature affects your model's predictions when all other features are held constant.
     /// 
     /// For example, if you have a feature "age" in your data, the partial dependence plot would show
@@ -190,7 +190,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>A vector representing the partial dependence plot for the feature.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a plot showing how a single feature affects your model's predictions.
+    /// <b>For Beginners:</b> This method creates a plot showing how a single feature affects your model's predictions.
     /// It works by:
     /// 1. Finding all unique values of the feature in your dataset
     /// 2. For each unique value:
@@ -228,7 +228,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>A modified copy of the feature matrix with the specified feature set to the same value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a "what-if" version of your dataset. It takes your original data
+    /// <b>For Beginners:</b> This method creates a "what-if" version of your dataset. It takes your original data
     /// and changes just one feature (column) so that it has the same value for every row. This helps us
     /// isolate the effect of that specific feature on your model's predictions.
     /// 
@@ -256,7 +256,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of nonlinearity scores corresponding to each feature.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method measures how "wiggly" or complex the relationship is between each feature
+    /// <b>For Beginners:</b> This method measures how "wiggly" or complex the relationship is between each feature
     /// and your model's predictions. A higher score means the relationship is more complex (has more ups and downs),
     /// while a lower score means the relationship is simpler (more like a straight line).
     /// 
@@ -284,7 +284,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>A measure of nonlinearity (variability) in the plot.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how "wiggly" a single feature's relationship is with your model's
+    /// <b>For Beginners:</b> This method calculates how "wiggly" a single feature's relationship is with your model's
     /// predictions. It works by:
     /// 1. Finding the difference between adjacent points in the plot
     /// 2. Taking the absolute value of these differences (making them all positive)
@@ -314,7 +314,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations as strings.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a list of practical suggestions to improve your model based on
+    /// <b>For Beginners:</b> This method creates a list of practical suggestions to improve your model based on
     /// whether it's overfitting (too complex), underfitting (too simple), or has a good fit.
     /// It first calculates partial dependence plots to understand how each feature affects your model,
     /// then uses this information to provide targeted recommendations.
@@ -334,7 +334,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations as strings.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method provides specific advice to improve your model based on its current performance.
+    /// <b>For Beginners:</b> This method provides specific advice to improve your model based on its current performance.
     /// The recommendations are tailored to whether your model is:
     /// 
     /// - Overfitting: Your model is too complex and has "memorized" the training data instead of learning general patterns.

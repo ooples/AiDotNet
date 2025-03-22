@@ -8,7 +8,7 @@ namespace AiDotNet.Helpers;
 /// <typeparam name="T">The numeric type used for matrix elements.</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: A matrix is a rectangular array of numbers arranged in rows and columns.
+/// <b>For Beginners:</b> A matrix is a rectangular array of numbers arranged in rows and columns.
 /// Matrices are fundamental in machine learning for representing data, transformations, and 
 /// mathematical operations.
 /// </para>
@@ -28,7 +28,7 @@ public static class MatrixHelper<T>
     /// <exception cref="ArgumentException">Thrown when the matrix is not square.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: The determinant is a special number calculated from a square matrix.
+    /// <b>For Beginners:</b> The determinant is a special number calculated from a square matrix.
     /// It tells us important information about the matrix, such as whether it has an inverse.
     /// If the determinant is zero, the matrix doesn't have an inverse.
     /// </para>
@@ -74,7 +74,7 @@ public static class MatrixHelper<T>
     /// <returns>A new matrix with the specified row and column removed.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A submatrix is created by removing a specific row and column from a matrix.
+    /// <b>For Beginners:</b> A submatrix is created by removing a specific row and column from a matrix.
     /// This is commonly used in determinant calculations and other matrix operations.
     /// </para>
     /// </remarks>
@@ -116,7 +116,7 @@ public static class MatrixHelper<T>
     /// <returns>The matrix in Hessenberg form.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Hessenberg matrix is almost triangular - it has zeros below the first 
+    /// <b>For Beginners:</b> A Hessenberg matrix is almost triangular - it has zeros below the first 
     /// subdiagonal. Converting a matrix to Hessenberg form is often a first step in calculating 
     /// eigenvalues, which are important values that help us understand the behavior of linear 
     /// transformations in machine learning algorithms.
@@ -152,7 +152,7 @@ public static class MatrixHelper<T>
     /// <returns>A vector containing the diagonal elements of the matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The diagonal of a matrix consists of the elements where the row index equals 
+    /// <b>For Beginners:</b> The diagonal of a matrix consists of the elements where the row index equals 
     /// the column index (top-left to bottom-right). In many AI algorithms, the diagonal elements 
     /// have special significance, such as representing variances in covariance matrices.
     /// </para>
@@ -177,7 +177,7 @@ public static class MatrixHelper<T>
     /// <returns>A matrix representing the outer product of the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The outer product of two vectors results in a matrix. If you have a vector 
+    /// <b>For Beginners:</b> The outer product of two vectors results in a matrix. If you have a vector 
     /// of size n and another of size m, their outer product is an n×m matrix where each element 
     /// is the product of the corresponding elements from each vector. This operation is used in 
     /// various machine learning algorithms, including neural networks for weight updates.
@@ -206,7 +206,7 @@ public static class MatrixHelper<T>
     /// <returns>The length of the hypotenuse.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The hypotenuse is the longest side of a right triangle, opposite to the right angle.
+    /// <b>For Beginners:</b> The hypotenuse is the longest side of a right triangle, opposite to the right angle.
     /// This method calculates it using a numerically stable algorithm that avoids overflow or underflow
     /// issues that can occur with a direct application of the Pythagorean theorem (a² + b² = c²).
     /// </para>
@@ -244,7 +244,7 @@ public static class MatrixHelper<T>
     /// <returns>The Euclidean norm of the values.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Euclidean norm is a way to measure the "length" or "magnitude" of a vector.
+    /// <b>For Beginners:</b> The Euclidean norm is a way to measure the "length" or "magnitude" of a vector.
     /// It's calculated as the square root of the sum of the squares of all values. In a 2D space,
     /// this is equivalent to finding the hypotenuse of a right triangle using the Pythagorean theorem.
     /// </para>
@@ -272,7 +272,7 @@ public static class MatrixHelper<T>
     /// <returns>True if the matrix is in upper Hessenberg form, false otherwise.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: An upper Hessenberg matrix is almost triangular - it has zeros below the first 
+    /// <b>For Beginners:</b> An upper Hessenberg matrix is almost triangular - it has zeros below the first 
     /// subdiagonal. This is an intermediate form used in many eigenvalue algorithms, making computations 
     /// more efficient than working with a full matrix.
     /// </para>
@@ -300,7 +300,7 @@ public static class MatrixHelper<T>
     /// <returns>A matrix with orthogonal columns.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Orthogonalization means making vectors perpendicular to each other. 
+    /// <b>For Beginners:</b> Orthogonalization means making vectors perpendicular to each other. 
     /// The Gram-Schmidt process takes a set of vectors and creates a new set where each vector 
     /// is perpendicular (orthogonal) to all previous vectors. This is important in many machine 
     /// learning algorithms that need independent features or basis vectors.
@@ -340,7 +340,7 @@ public static class MatrixHelper<T>
     /// <returns>A tuple containing the cosine and sine values of the rotation.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Givens rotation is a way to zero out specific elements in a matrix.
+    /// <b>For Beginners:</b> A Givens rotation is a way to zero out specific elements in a matrix.
     /// It's like rotating a 2D coordinate system to make one component become zero.
     /// This is useful in many numerical algorithms to simplify matrices step by step.
     /// </para>
@@ -372,7 +372,7 @@ public static class MatrixHelper<T>
     /// <param name="kEnd">The ending column index for the rotation.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method applies a rotation to two rows of a matrix. It's like
+    /// <b>For Beginners:</b> This method applies a rotation to two rows of a matrix. It's like
     /// mixing two rows together in specific proportions (determined by c and s) to create
     /// new rows. This is commonly used to zero out specific elements in numerical algorithms.
     /// </para>
@@ -397,7 +397,7 @@ public static class MatrixHelper<T>
     /// <returns>The transformed matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Householder transformation is a way to reflect vectors across a plane.
+    /// <b>For Beginners:</b> A Householder transformation is a way to reflect vectors across a plane.
     /// In matrix operations, it's used to introduce zeros in specific parts of a matrix.
     /// This is a key step in many algorithms that decompose matrices into simpler forms.
     /// </para>
@@ -442,7 +442,7 @@ public static class MatrixHelper<T>
     /// <returns>A Householder vector that can be used for reflection.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Householder vector defines a reflection plane that, when applied to the
+    /// <b>For Beginners:</b> A Householder vector defines a reflection plane that, when applied to the
     /// original vector, zeros out all but the first component. This is useful in many matrix
     /// decomposition algorithms to systematically simplify matrices.
     /// </para>
@@ -488,7 +488,7 @@ public static class MatrixHelper<T>
     /// <returns>A tuple containing the dominant eigenvalue and its corresponding eigenvector.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: An eigenvalue and eigenvector are special values and vectors associated with a matrix.
+    /// <b>For Beginners:</b> An eigenvalue and eigenvector are special values and vectors associated with a matrix.
     /// When you multiply a matrix by its eigenvector, you get the same vector scaled by the eigenvalue.
     /// The power iteration method repeatedly multiplies the matrix by a vector and normalizes it until
     /// it converges to the eigenvector with the largest eigenvalue (the dominant one). This is useful
@@ -561,7 +561,7 @@ public static class MatrixHelper<T>
     /// <returns>The spectral norm of the matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The spectral norm measures the maximum "stretching" that a matrix can cause
+    /// <b>For Beginners:</b> The spectral norm measures the maximum "stretching" that a matrix can cause
     /// when applied to a vector. It's the largest singular value of the matrix, which indicates
     /// how much the matrix can amplify a vector in any direction. In machine learning, this helps
     /// understand the stability of algorithms and the conditioning of data.
@@ -600,7 +600,7 @@ public static class MatrixHelper<T>
     /// <returns>True if the matrix is invertible, false otherwise.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: An invertible matrix is one that has an inverse - another matrix that, when
+    /// <b>For Beginners:</b> An invertible matrix is one that has an inverse - another matrix that, when
     /// multiplied with the original, gives the identity matrix. For a matrix to be invertible, it must
     /// be square (same number of rows and columns) and have a non-zero determinant. In machine learning,
     /// invertible matrices are important for solving linear systems and in algorithms like linear regression.
@@ -628,7 +628,7 @@ public static class MatrixHelper<T>
     /// <returns>The inverse of the matrix.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: Matrix inversion is like finding the reciprocal of a number, but for matrices.
+    /// <b>For Beginners:</b> Matrix inversion is like finding the reciprocal of a number, but for matrices.
     /// This method uses a decomposition (a way of breaking down a matrix into simpler parts) to
     /// efficiently compute the inverse. Matrix inversion is used in many machine learning algorithms,
     /// especially in linear regression and when solving systems of linear equations.
@@ -663,7 +663,7 @@ public static class MatrixHelper<T>
     /// <param name="actualVector">The right-hand side vector of the system.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: A tridiagonal matrix is a special type of matrix where non-zero elements
+    /// <b>For Beginners:</b> A tridiagonal matrix is a special type of matrix where non-zero elements
     /// are only on the main diagonal and the diagonals directly above and below it. This method
     /// efficiently solves equations of the form Ax = b, where A is a tridiagonal matrix.
     /// Tridiagonal systems appear in many numerical methods for differential equations and
@@ -719,7 +719,7 @@ public static class MatrixHelper<T>
     /// <param name="actualVector">The vector to multiply with the matrix.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: A band diagonal matrix is a matrix where non-zero elements are concentrated
+    /// <b>For Beginners:</b> A band diagonal matrix is a matrix where non-zero elements are concentrated
     /// around the main diagonal within a certain "band". This method efficiently multiplies such
     /// a matrix with a vector without processing all the zero elements outside the band.
     /// Band matrices often arise when discretizing differential equations and in image processing
@@ -749,7 +749,7 @@ public static class MatrixHelper<T>
     /// <returns>The Hat Matrix that projects the dependent variable onto the fitted values.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Hat Matrix is an important concept in regression analysis. It "puts a hat" on 
+    /// <b>For Beginners:</b> The Hat Matrix is an important concept in regression analysis. It "puts a hat" on 
     /// your data, transforming your actual observed values into predicted values. Mathematically, it's 
     /// calculated as H = X(X'X)^(-1)X', where X is your feature matrix, X' is its transpose, and ^(-1) 
     /// means matrix inverse.

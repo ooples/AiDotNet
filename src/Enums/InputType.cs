@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Dimensionality refers to how many separate values are used to represent each data point.
+/// <b>For Beginners:</b> Dimensionality refers to how many separate values are used to represent each data point.
 /// Think of dimensions like coordinates - a 1D point needs just one number (like a position on a line),
 /// a 2D point needs two numbers (like a position on a map), and a 3D point needs three numbers
 /// (like a position in a room).
@@ -18,7 +18,7 @@ public enum InputType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: One-dimensional data means each data point is represented by a single number.
+    /// <b>For Beginners:</b> One-dimensional data means each data point is represented by a single number.
     /// 
     /// Examples:
     /// - A list of temperatures (each day has one temperature value)
@@ -36,7 +36,7 @@ public enum InputType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Two-dimensional data means each data point has two values associated with it.
+    /// <b>For Beginners:</b> Two-dimensional data means each data point has two values associated with it.
     /// 
     /// Examples:
     /// - Coordinates on a map (latitude and longitude)
@@ -55,7 +55,7 @@ public enum InputType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Three-dimensional data means each data point has three values associated with it.
+    /// <b>For Beginners:</b> Three-dimensional data means each data point has three values associated with it.
     /// 
     /// Examples:
     /// - 3D coordinates in space (x, y, z)

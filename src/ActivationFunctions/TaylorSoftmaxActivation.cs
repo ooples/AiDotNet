@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Taylor Softmax function is a variation of the standard Softmax function that uses a mathematical
+/// <b>For Beginners:</b> The Taylor Softmax function is a variation of the standard Softmax function that uses a mathematical
 /// technique called "Taylor series expansion" to approximate the exponential function. This makes it computationally
 /// more efficient while maintaining similar behavior to the standard Softmax.
 /// 
@@ -37,7 +37,7 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <param name="order">The order of the Taylor series approximation. Default is 2.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: The "order" parameter determines how accurate the approximation will be.
+    /// <b>For Beginners:</b> The "order" parameter determines how accurate the approximation will be.
     /// 
     /// Think of it like drawing a curve:
     /// - Order 1: You're approximating with a straight line (very rough)
@@ -70,7 +70,7 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector of probabilities that sum to 1.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms a vector of any numbers into a vector of probabilities
+    /// <b>For Beginners:</b> This method transforms a vector of any numbers into a vector of probabilities
     /// (positive numbers that sum to 1). It does this in three steps:
     /// 
     /// 1. It approximates e^x for each input value using the Taylor series approximation
@@ -101,7 +101,7 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A matrix of partial derivatives.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative of the Softmax function is more complex than most activation functions
+    /// <b>For Beginners:</b> The derivative of the Softmax function is more complex than most activation functions
     /// because changing one input affects all outputs. This method calculates how each output probability
     /// changes with respect to each input value.
     /// 
@@ -148,7 +148,7 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>An approximation of e^x.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method approximates the exponential function (e^x) using a mathematical
+    /// <b>For Beginners:</b> This method approximates the exponential function (e^x) using a mathematical
     /// technique called a Taylor series. Instead of calculating the exact value of e^x, which can be
     /// computationally expensive, it uses a sum of simpler terms to get close to the right answer.
     /// 

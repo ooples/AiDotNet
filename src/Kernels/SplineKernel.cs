@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// which are piecewise polynomial functions used to create smooth curves.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Spline kernel is special because it's designed to create smooth transitions between data points,
 /// similar to how a flexible ruler (a physical spline) creates a smooth curve when bent to pass through
 /// a set of points.
@@ -44,7 +44,7 @@ public class SplineKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -55,7 +55,7 @@ public class SplineKernel<T> : IKernelFunction<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Spline kernel for use. Unlike some other
+    /// <b>For Beginners:</b> This constructor sets up the Spline kernel for use. Unlike some other
     /// kernels, the Spline kernel doesn't have any parameters that you need to set - it works
     /// right out of the box.
     /// </para>
@@ -86,7 +86,7 @@ public class SplineKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Spline kernel formula.
     /// </para>
     /// <para>

@@ -10,7 +10,7 @@ namespace AiDotNet.ActivationFunctions;
 /// It produces output that is always positive and approaches the ReLU function (max(0,x)) but with a smooth transition at x=0.
 /// </para>
 /// <para>
-/// For Beginners: SoftPlus is like a "softer" version of the popular ReLU activation function. 
+/// <b>For Beginners:</b> SoftPlus is like a "softer" version of the popular ReLU activation function. 
 /// While ReLU outputs exactly 0 for any negative input and keeps positive values unchanged,
 /// SoftPlus creates a smooth curve that's very close to ReLU but without the sharp corner at x=0.
 /// 
@@ -33,7 +33,7 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
     /// independently to each individual value.
     /// </para>
     /// <para>
-    /// For Beginners: This method returning true means that SoftPlus can work on one number at a time.
+    /// <b>For Beginners:</b> This method returning true means that SoftPlus can work on one number at a time.
     /// Each input value is transformed independently without needing to know about other values.
     /// </para>
     /// </remarks>
@@ -49,7 +49,7 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
     /// Computes ln(1 + e^x) where x is the input value and ln is the natural logarithm.
     /// </para>
     /// <para>
-    /// For Beginners: This method transforms an input number using the SoftPlus formula:
+    /// <b>For Beginners:</b> This method transforms an input number using the SoftPlus formula:
     /// 1. Calculate e raised to the power of your input (e^x)
     /// 2. Add 1 to that result (1 + e^x)
     /// 3. Take the natural logarithm of that sum (ln(1 + e^x))
@@ -78,7 +78,7 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
     /// This derivative is always between 0 and 1.
     /// </para>
     /// <para>
-    /// For Beginners: The derivative tells us how quickly the SoftPlus function is changing at any point.
+    /// <b>For Beginners:</b> The derivative tells us how quickly the SoftPlus function is changing at any point.
     /// It's calculated as 1 / (1 + e^(-x)), which is actually the sigmoid function.
     /// 
     /// This derivative has these important properties:

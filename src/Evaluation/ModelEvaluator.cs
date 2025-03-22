@@ -5,7 +5,7 @@ namespace AiDotNet.Evaluation;
 /// </summary>
 /// <typeparam name="T">The numeric data type used in the model (e.g., float, double).</typeparam>
 /// <remarks>
-/// For Beginners: The ModelEvaluator helps you understand how well your AI model is performing.
+/// <b>For Beginners:</b> The ModelEvaluator helps you understand how well your AI model is performing.
 /// It calculates metrics like accuracy and error rates that tell you if your model is making
 /// good predictions or if it needs improvement.
 /// 
@@ -17,7 +17,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// Configuration options for prediction statistics calculations.
     /// </summary>
     /// <remarks>
-    /// For Beginners: These options control how detailed the evaluation of your model will be,
+    /// <b>For Beginners:</b> These options control how detailed the evaluation of your model will be,
     /// such as how confident we want to be in our results and how many steps to use when
     /// analyzing how the model learns.
     /// </remarks>
@@ -28,7 +28,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// </summary>
     /// <param name="predictionOptions">Optional configuration for prediction statistics. If not provided, default options will be used.</param>
     /// <remarks>
-    /// For Beginners: This creates a new evaluator that will test how well your AI model works.
+    /// <b>For Beginners:</b> This creates a new evaluator that will test how well your AI model works.
     /// You can customize how it evaluates by providing options, or just use the default settings.
     /// </remarks>
     public ModelEvaluator(PredictionStatsOptions? predictionOptions = null)
@@ -42,7 +42,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// <param name="input">The input data containing the model and datasets to evaluate.</param>
     /// <returns>A comprehensive evaluation of the model's performance across all datasets.</returns>
     /// <remarks>
-    /// For Beginners: This method tests your AI model on three different sets of data:
+    /// <b>For Beginners:</b> This method tests your AI model on three different sets of data:
     /// 1. Training data - the data your model learned from
     /// 2. Validation data - data used to fine-tune your model
     /// 3. Test data - completely new data to see how well your model generalizes
@@ -71,7 +71,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// <param name="X">The input feature matrix where each row represents a data point and each column represents a feature.</param>
     /// <returns>A vector of predictions, one for each row in the input matrix.</returns>
     /// <remarks>
-    /// For Beginners: This method takes your AI model and a set of input data,
+    /// <b>For Beginners:</b> This method takes your AI model and a set of input data,
     /// then generates predictions for each data point. It processes each row of your data
     /// one by one and returns all the predictions as a collection.
     /// </remarks>
@@ -94,7 +94,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// <param name="model">The model used to make predictions.</param>
     /// <returns>A collection of statistics about the dataset and model performance.</returns>
     /// <remarks>
-    /// For Beginners: This method analyzes how well your model performs on a specific dataset.
+    /// <b>For Beginners:</b> This method analyzes how well your model performs on a specific dataset.
     /// It calculates:
     /// - How accurate the predictions are
     /// - Basic statistics about the actual values
@@ -127,7 +127,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// <param name="featureCount">The number of features used in the model.</param>
     /// <returns>Statistics about prediction errors.</returns>
     /// <remarks>
-    /// For Beginners: This method measures how far off your model's predictions are from the actual values.
+    /// <b>For Beginners:</b> This method measures how far off your model's predictions are from the actual values.
     /// It calculates metrics like:
     /// - Mean Squared Error (MSE): The average of the squared differences between predictions and actual values
     /// - Root Mean Squared Error (RMSE): The square root of MSE, which gives an error measure in the same units as your data
@@ -146,7 +146,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// <param name="values">The vector of values to analyze.</param>
     /// <returns>Basic statistical measures such as mean, median, and standard deviation.</returns>
     /// <remarks>
-    /// For Beginners: This method calculates common statistics about a set of numbers, such as:
+    /// <b>For Beginners:</b> This method calculates common statistics about a set of numbers, such as:
     /// - Mean (average): The sum of all values divided by the count
     /// - Median: The middle value when all values are sorted
     /// - Standard Deviation: A measure of how spread out the values are
@@ -167,7 +167,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// <param name="featureCount">The number of features used in the model.</param>
     /// <returns>Advanced statistics about prediction quality.</returns>
     /// <remarks>
-    /// For Beginners: This method calculates more sophisticated metrics about your model's performance:
+    /// <b>For Beginners:</b> This method calculates more sophisticated metrics about your model's performance:
     /// - R-squared: A measure between 0 and 1 that indicates how well your model explains the variation in the data
     /// - Adjusted R-squared: R-squared adjusted for the number of features in your model
     /// - Confidence intervals: Ranges that likely contain the true values
@@ -195,7 +195,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// <param name="normInfo">Information about how the data was normalized.</param>
     /// <returns>Statistics about the model's structure and characteristics.</returns>
     /// <remarks>
-    /// For Beginners: This method analyzes the model itself rather than its predictions.
+    /// <b>For Beginners:</b> This method analyzes the model itself rather than its predictions.
     /// It examines properties like:
     /// - Model complexity: How many parameters or features the model uses
     /// - Feature importance: Which input features have the most influence on predictions

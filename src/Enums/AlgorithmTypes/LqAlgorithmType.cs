@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: LQ decomposition is a way to break down a matrix into two simpler parts that make 
+/// <b>For Beginners:</b> LQ decomposition is a way to break down a matrix into two simpler parts that make 
 /// calculations much easier and faster.
 /// 
 /// Imagine you have a complex recipe (the matrix) that you need to follow. LQ decomposition breaks this recipe 
@@ -45,7 +45,7 @@ public enum LqAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Householder method uses special mathematical operations called "reflections" 
+    /// <b>For Beginners:</b> The Householder method uses special mathematical operations called "reflections" 
     /// to gradually transform the original matrix into the L and Q components.
     /// 
     /// Imagine you're folding origami - each fold (reflection) transforms your paper in a specific way. 
@@ -77,7 +77,7 @@ public enum LqAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Gram-Schmidt method works by taking the rows of your matrix and making them 
+    /// <b>For Beginners:</b> The Gram-Schmidt method works by taking the rows of your matrix and making them 
     /// perpendicular (orthogonal) to each other, one at a time.
     /// 
     /// Imagine you're arranging furniture in a room. You place the first piece wherever you want. For the 
@@ -109,7 +109,7 @@ public enum LqAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Givens method uses a series of simple rotations to gradually transform the 
+    /// <b>For Beginners:</b> The Givens method uses a series of simple rotations to gradually transform the 
     /// original matrix into the L and Q components.
     /// 
     /// Imagine you're adjusting the position of a picture frame on a wall. Instead of moving it all at once, 

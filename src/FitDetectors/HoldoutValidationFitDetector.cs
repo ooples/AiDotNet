@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps you determine if your machine learning model is performing well
+/// <b>For Beginners:</b> This class helps you determine if your machine learning model is performing well
 /// by comparing how it performs on different subsets of your data:
 /// - Training data: The data used to build the model
 /// - Validation data: A separate set of data used to tune the model
@@ -31,7 +31,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector. If null, default settings are used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new detector with either custom settings you provide
+    /// <b>For Beginners:</b> This constructor creates a new detector with either custom settings you provide
     /// or default settings if you don't specify any. These settings control thresholds for determining
     /// if your model is overfitting, underfitting, etc.
     /// </para>
@@ -48,7 +48,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method you'll use to evaluate your model. It:
+    /// <b>For Beginners:</b> This is the main method you'll use to evaluate your model. It:
     /// 1. Determines what type of fit your model has (good, overfit, underfit, etc.)
     /// 2. Calculates how confident it is in this assessment
     /// 3. Generates practical recommendations to improve your model
@@ -79,7 +79,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>The classified fit type of the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method examines how your model performs on different data sets and
+    /// <b>For Beginners:</b> This method examines how your model performs on different data sets and
     /// classifies it into one of several categories:
     /// 
     /// - Overfit: Your model has "memorized" the training data rather than learning general patterns.
@@ -138,7 +138,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A value between 0 and 1 representing the confidence level.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how confident the detector is in its assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how confident the detector is in its assessment of your model.
     /// The confidence is based on how consistent your model's performance is between the validation
     /// and test sets.
     /// 
@@ -173,7 +173,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of string recommendations for model improvement.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a list of practical suggestions to help you improve your model
+    /// <b>For Beginners:</b> This method creates a list of practical suggestions to help you improve your model
     /// based on how it's currently performing. The recommendations are tailored to the specific issues
     /// detected in your model:
     /// 

@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This class helps you understand which features (input variables) in your model are most 
+/// <b>For Beginners:</b> This class helps you understand which features (input variables) in your model are most 
 /// important for making predictions. It uses something called "Shapley values" from game theory to 
 /// fairly distribute the "credit" for predictions among all your features.
 /// 
@@ -37,7 +37,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Configuration options for the detector. If null, default options will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the constructor that creates a new Shapley value detector.
+    /// <b>For Beginners:</b> This is the constructor that creates a new Shapley value detector.
     /// You can customize how it works by providing options, or just use the default settings.
     /// </para>
     /// </remarks>
@@ -54,7 +54,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <returns>A result object containing the fit type, confidence level, and recommendations.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This is the main method that examines your model and tells you if it's a good fit.
+    /// <b>For Beginners:</b> This is the main method that examines your model and tells you if it's a good fit.
     /// It calculates how important each feature is, determines if your model is overfitting or underfitting,
     /// and gives you specific recommendations on how to improve it.
     /// </para>
@@ -90,7 +90,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <returns>The determined fit type (Overfit, Underfit, or GoodFit).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method looks at your model's performance and decides if it's:
+    /// <b>For Beginners:</b> This method looks at your model's performance and decides if it's:
     /// - Overfitting: Your model is "memorizing" the training data rather than learning general patterns
     /// - Underfitting: Your model is too simple to capture the patterns in your data
     /// - Good fit: Your model has found the right balance
@@ -110,7 +110,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <returns>The determined fit type (Overfit, Underfit, or GoodFit).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method analyzes how many features are actually important to your model.
+    /// <b>For Beginners:</b> This method analyzes how many features are actually important to your model.
     /// - If only a few features matter a lot, it might be overfitting (focusing too much on specific patterns)
     /// - If too many features matter equally, it might be underfitting (not finding specific patterns)
     /// - If there's a good balance of important features, it's likely a good fit
@@ -159,7 +159,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <returns>A value representing the confidence level of the fit detection.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method tells you how confident the detector is about its assessment.
+    /// <b>For Beginners:</b> This method tells you how confident the detector is about its assessment.
     /// A higher value means more confidence in the fit type determination.
     /// 
     /// The confidence is based on how clearly the feature importance is distributed:
@@ -206,7 +206,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <returns>Dictionary mapping feature names to their calculated Shapley values.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how much each feature contributes to your model's predictions.
+    /// <b>For Beginners:</b> This method calculates how much each feature contributes to your model's predictions.
     /// 
     /// Shapley values come from game theory and provide a fair way to distribute "credit" among features.
     /// The process works by:
@@ -253,7 +253,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of feature names used in the model.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method simply extracts the names of all the input variables (features) 
+    /// <b>For Beginners:</b> This method simply extracts the names of all the input variables (features) 
     /// that your model uses to make predictions. Think of it as getting a list of all the 
     /// different pieces of information your model considers when making a decision.
     /// </para>
@@ -271,7 +271,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <returns>A performance metric (R² score) for the model using only the specified features.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method measures how well your model performs when using only certain features.
+    /// <b>For Beginners:</b> This method measures how well your model performs when using only certain features.
     /// 
     /// Imagine you have a recipe (your model) that uses 10 ingredients (features). This method lets you 
     /// test how good the recipe would be if you only used, say, 5 specific ingredients. It helps 
@@ -299,7 +299,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <returns>A matrix where each column represents a feature and each row represents a data point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method organizes your data in a format that the model can use for making predictions.
+    /// <b>For Beginners:</b> This method organizes your data in a format that the model can use for making predictions.
     /// 
     /// Think of a spreadsheet: each row represents one data point (like a person or a house), and 
     /// each column represents one feature (like age, height, or number of bedrooms). This method 
@@ -334,7 +334,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations as strings.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates a list of suggestions to help you improve your model.
+    /// <b>For Beginners:</b> This method creates a list of suggestions to help you improve your model.
     /// 
     /// It first calculates how important each feature is (using Shapley values), then passes this 
     /// information along with the fit type to another method that creates specific recommendations.
@@ -357,7 +357,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendations as strings.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method creates specific advice for improving your model based on:
+    /// <b>For Beginners:</b> This method creates specific advice for improving your model based on:
     /// 1. Whether your model is overfitting, underfitting, or has a good fit
     /// 2. Which features are most and least important to your model
     /// 

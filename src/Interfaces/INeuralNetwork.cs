@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// This interface provides methods for making predictions, updating model parameters,
 /// saving and loading models, and controlling training behavior.
 /// 
-/// For Beginners: A neural network is a type of machine learning model inspired by the human brain.
+/// <b>For Beginners:</b> A neural network is a type of machine learning model inspired by the human brain.
 /// 
 /// Think of a neural network as a system that learns patterns:
 /// - It's made up of interconnected "neurons" (small computing units)
@@ -36,7 +36,7 @@ public interface INeuralNetwork<T>
     /// <remarks>
     /// This method processes the input data through the neural network and returns the predicted output.
     /// 
-    /// For Beginners: This is like asking the neural network a question and getting its answer.
+    /// <b>For Beginners:</b> This is like asking the neural network a question and getting its answer.
     /// 
     /// When you call this method:
     /// - You provide some input data (like an image, text, or measurements)
@@ -65,7 +65,7 @@ public interface INeuralNetwork<T>
     /// This method replaces the current parameters of the neural network with new ones,
     /// typically used during training or when fine-tuning a model.
     /// 
-    /// For Beginners: This is like updating the neural network's knowledge.
+    /// <b>For Beginners:</b> This is like updating the neural network's knowledge.
     /// 
     /// Neural networks learn by adjusting their parameters (weights and biases):
     /// - Parameters determine how the network processes information
@@ -92,7 +92,7 @@ public interface INeuralNetwork<T>
     /// This method writes the neural network's architecture and parameters to a binary stream,
     /// allowing the model to be saved to a file or other storage medium.
     /// 
-    /// For Beginners: This is like saving your neural network to a file.
+    /// <b>For Beginners:</b> This is like saving your neural network to a file.
     /// 
     /// When you call this method:
     /// - The neural network's structure and all its learned knowledge are converted to binary data
@@ -119,7 +119,7 @@ public interface INeuralNetwork<T>
     /// This method reads the neural network's architecture and parameters from a binary stream,
     /// restoring a previously saved model.
     /// 
-    /// For Beginners: This is like loading a saved neural network from a file.
+    /// <b>For Beginners:</b> This is like loading a saved neural network from a file.
     /// 
     /// When you call this method:
     /// - The neural network reads its structure and learned knowledge from binary data
@@ -145,7 +145,7 @@ public interface INeuralNetwork<T>
     /// <remarks>
     /// This method returns a vector containing all the parameters that define the neural network's behavior.
     /// 
-    /// For Beginners: This is like looking at the neural network's current knowledge.
+    /// <b>For Beginners:</b> This is like looking at the neural network's current knowledge.
     /// 
     /// Neural networks store their knowledge in parameters (weights and biases):
     /// - These parameters determine how the network processes information
@@ -173,7 +173,7 @@ public interface INeuralNetwork<T>
     /// This method toggles the neural network's internal state between training and inference modes,
     /// which can affect how certain layers behave.
     /// 
-    /// For Beginners: This is like switching the neural network between "learning mode" and "working mode".
+    /// <b>For Beginners:</b> This is like switching the neural network between "learning mode" and "working mode".
     /// 
     /// Some neural network components behave differently during training versus prediction:
     /// - Dropout layers: randomly deactivate neurons during training to prevent overfitting,

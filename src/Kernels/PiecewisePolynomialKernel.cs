@@ -10,7 +10,7 @@
 /// that becomes exactly zero when points are far enough apart.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The Piecewise Polynomial kernel is special because it has a "cutoff distance" - if two points are
 /// farther apart than this distance, the kernel says they have zero similarity.
 /// </para>
@@ -36,7 +36,7 @@ public class PiecewisePolynomialKernel<T> : IKernelFunction<T>
     /// The degree of the polynomial used in the kernel function.
     /// </summary>
     /// <remarks>
-    /// For Beginners: The degree controls the "smoothness" of the kernel function.
+    /// <b>For Beginners:</b> The degree controls the "smoothness" of the kernel function.
     /// Higher values create a smoother function that decreases more gradually as points get farther apart.
     /// The default value is 3, which works well for many applications.
     /// </remarks>
@@ -46,7 +46,7 @@ public class PiecewisePolynomialKernel<T> : IKernelFunction<T>
     /// The cutoff distance parameter that determines when the kernel value becomes zero.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This parameter sets the maximum distance between points where they're still
+    /// <b>For Beginners:</b> This parameter sets the maximum distance between points where they're still
     /// considered to have some similarity. If points are farther apart than this value, the kernel
     /// will return zero (meaning "no similarity").
     /// 
@@ -59,7 +59,7 @@ public class PiecewisePolynomialKernel<T> : IKernelFunction<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is a helper object that allows the kernel to perform mathematical
+    /// <b>For Beginners:</b> This is a helper object that allows the kernel to perform mathematical
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
@@ -72,7 +72,7 @@ public class PiecewisePolynomialKernel<T> : IKernelFunction<T>
     /// <param name="c">The cutoff distance parameter. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Piecewise Polynomial kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Piecewise Polynomial kernel for use. You can optionally
     /// provide values for:
     /// </para>
     /// <para>
@@ -110,7 +110,7 @@ public class PiecewisePolynomialKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Piecewise Polynomial kernel formula.
     /// </para>
     /// <para>

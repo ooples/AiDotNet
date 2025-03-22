@@ -6,7 +6,7 @@ namespace AiDotNet.FitDetectors;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Gradient Boosting is a machine learning technique that builds multiple simple models 
+/// <b>For Beginners:</b> Gradient Boosting is a machine learning technique that builds multiple simple models 
 /// (usually decision trees) sequentially, with each new model trying to correct the errors made by 
 /// previous models. This detector helps you understand if your gradient boosting model is:
 /// - Learning the data well (good fit)
@@ -27,7 +27,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// <param name="options">Optional configuration settings for the detector. If not provided, default settings will be used.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: When you create this detector, you can customize how it works by providing options.
+    /// <b>For Beginners:</b> When you create this detector, you can customize how it works by providing options.
     /// If you don't provide any options, it will use reasonable default settings.
     /// </para>
     /// </remarks>
@@ -44,7 +44,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="evaluationData"/> is null.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method examines how your model performs on both training data (data it learned from) 
+    /// <b>For Beginners:</b> This method examines how your model performs on both training data (data it learned from) 
     /// and validation data (new data it hasn't seen before). It then tells you if your model is a good fit,
     /// provides a confidence score (how sure it is about its assessment), and gives you specific recommendations
     /// to improve your model.
@@ -78,7 +78,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// <returns>A classification of the model fit quality (GoodFit, Moderate, PoorFit, or VeryPoorFit).</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method compares how well your model performs on training data versus validation data.
+    /// <b>For Beginners:</b> This method compares how well your model performs on training data versus validation data.
     /// If the errors are similar, it's likely a good fit. If the model performs much better on training data
     /// than validation data, it may be overfitting (memorizing the training data rather than learning general patterns).
     /// </para>
@@ -114,7 +114,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// <returns>A confidence value between 0 and 1, where higher values indicate greater confidence.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how confident the detector is about its assessment of your model.
+    /// <b>For Beginners:</b> This method calculates how confident the detector is about its assessment of your model.
     /// It looks at the difference between training and validation errors, relative to the training error.
     /// The confidence is higher when training and validation errors are close to each other.
     /// </para>
@@ -147,7 +147,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// <returns>A list of recommendation strings.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method provides practical advice on how to improve your model based on its current performance.
+    /// <b>For Beginners:</b> This method provides practical advice on how to improve your model based on its current performance.
     /// Different recommendations are given depending on whether your model is:
     /// - Good fit: Already performing well, but might benefit from fine-tuning
     /// - Moderate fit: Performing okay, but could be improved with adjustments
@@ -203,7 +203,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// <returns>A dictionary of performance metrics with their names as keys.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method collects important metrics that help you understand your model's performance:
+    /// <b>For Beginners:</b> This method collects important metrics that help you understand your model's performance:
     /// - MSE (Mean Squared Error): Measures prediction accuracy; lower values are better
     /// - R² (R-squared): Measures how well your model explains the variation in data; values closer to 1 are better
     /// </para>

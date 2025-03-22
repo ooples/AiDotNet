@@ -1287,7 +1287,7 @@ public class Tensor<T> : IEnumerable<T>
     /// <param name="other">The tensor to multiply with.</param>
     /// <returns>A new tensor containing the element-wise product.</returns>
     /// <remarks>
-    /// For beginners: This method multiplies each element in this tensor with the corresponding element in the other tensor.
+    /// <b>For Beginners:</b> This method multiplies each element in this tensor with the corresponding element in the other tensor.
     /// 
     /// Broadcasting allows tensors of different shapes to be multiplied together by automatically expanding
     /// smaller dimensions to match larger ones. For example, you can multiply a 3×4 tensor with a 1×4 tensor
@@ -1586,7 +1586,7 @@ public class Tensor<T> : IEnumerable<T>
     /// Thrown when the tensor is not 3D or when the matrix rows don't match the last dimension of the tensor.
     /// </exception>
     /// <remarks>
-    /// For beginners: This operation performs matrix multiplication between each 2D slice of the 3D tensor
+    /// <b>For Beginners:</b> This operation performs matrix multiplication between each 2D slice of the 3D tensor
     /// and the provided matrix. Think of it as applying the same transformation (represented by the matrix)
     /// to each 2D slice of your 3D data.
     /// 
@@ -1628,7 +1628,7 @@ public class Tensor<T> : IEnumerable<T>
     /// Thrown when either tensor is not 2D or when the inner dimensions don't match.
     /// </exception>
     /// <remarks>
-    /// For beginners: Matrix multiplication is a fundamental operation in linear algebra and machine learning.
+    /// <b>For Beginners:</b> Matrix multiplication is a fundamental operation in linear algebra and machine learning.
     /// 
     /// For two matrices A and B to be multiplied:
     /// - The number of columns in A must equal the number of rows in B
@@ -1660,7 +1660,7 @@ public class Tensor<T> : IEnumerable<T>
     /// Thrown when the permutation array length doesn't match the tensor rank or contains invalid values.
     /// </exception>
     /// <remarks>
-    /// For beginners: Transposing a tensor means rearranging its dimensions.
+    /// <b>For Beginners:</b> Transposing a tensor means rearranging its dimensions.
     /// 
     /// For example, with a 2D tensor (matrix), transposing swaps rows and columns.
     /// For higher-dimensional tensors, you can specify exactly how you want to rearrange the dimensions.

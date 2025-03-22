@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// than the Gaussian kernel as points get farther apart.
 /// </para>
 /// <para>
-/// For Beginners: A kernel function is a mathematical tool that measures how similar two data points are.
+/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
 /// The T-Student kernel is like a "similarity detector" that gives higher values when points are close
 /// together and lower values when they're far apart, but it's more tolerant of occasional large distances
 /// than some other kernels.
@@ -33,7 +33,7 @@ public class GeneralizedTStudentKernel<T> : IKernelFunction<T>
     /// The degree parameter that controls how quickly similarity decreases with distance.
     /// </summary>
     /// <remarks>
-    /// For Beginners: Think of the degree parameter as controlling how "forgiving" your similarity
+    /// <b>For Beginners:</b> Think of the degree parameter as controlling how "forgiving" your similarity
     /// measure is about distance.
     /// 
     /// A smaller degree value makes the kernel more tolerant of large distances, meaning even points
@@ -58,7 +58,7 @@ public class GeneralizedTStudentKernel<T> : IKernelFunction<T>
     /// <param name="degree">The parameter that controls how quickly similarity decreases with distance. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the Generalized T-Student kernel with your chosen settings.
+    /// <b>For Beginners:</b> This constructor sets up the Generalized T-Student kernel with your chosen settings.
     /// If you don't specify any settings, it will use a default value of 1.0 for the degree parameter,
     /// which works well for many problems.
     /// </para>
@@ -91,7 +91,7 @@ public class GeneralizedTStudentKernel<T> : IKernelFunction<T>
     /// <returns>The kernel value representing the similarity between the two vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes two data points (represented as vectors) and calculates
+    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
     /// how similar they are to each other using the Generalized T-Student kernel formula.
     /// </para>
     /// <para>

@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Multiplicative algorithms are special methods used when analyzing data that changes over time 
+/// <b>For Beginners:</b> Multiplicative algorithms are special methods used when analyzing data that changes over time 
 /// (time series data), especially when the pattern of change depends on the current value.
 /// 
 /// Think about the difference between:
@@ -37,7 +37,7 @@ public enum MultiplicativeAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: A Geometric Moving Average (GMA) is like a regular moving average, but instead of adding 
+    /// <b>For Beginners:</b> A Geometric Moving Average (GMA) is like a regular moving average, but instead of adding 
     /// values and dividing (arithmetic mean), it multiplies values and takes the nth root (geometric mean).
     /// 
     /// Imagine you're tracking the growth of an investment:
@@ -71,7 +71,7 @@ public enum MultiplicativeAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Multiplicative Exponential Smoothing is a forecasting method that works well for data 
+    /// <b>For Beginners:</b> Multiplicative Exponential Smoothing is a forecasting method that works well for data 
     /// with trends and seasonal patterns that change proportionally to the overall level.
     /// 
     /// Imagine a retail store where sales increase during holidays. If overall sales double over five years, 
@@ -107,7 +107,7 @@ public enum MultiplicativeAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: Log-Transformed STL is a technique that first converts your data using logarithms, 
+    /// <b>For Beginners:</b> Log-Transformed STL is a technique that first converts your data using logarithms, 
     /// then applies a powerful decomposition method to separate different patterns in your time series.
     /// 
     /// Imagine you have a photo that contains multiple layers (background, people, objects). STL is like 

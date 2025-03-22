@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: A sampling layer (also called pooling layer) is like a summarizer for images. 
+/// <b>For Beginners:</b> A sampling layer (also called pooling layer) is like a summarizer for images. 
 /// It takes a group of pixels and combines them into a single value, making the image smaller 
 /// while keeping the important information. This helps the neural network focus on what matters 
 /// and reduces computation.
@@ -29,7 +29,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// Gets the size of the pooling window.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is how many pixels the layer looks at together in each step.
+    /// <b>For Beginners:</b> This is how many pixels the layer looks at together in each step.
     /// For example, a pool size of 2 means it looks at 2×2 squares of pixels at once.
     /// </remarks>
     public int PoolSize { get; private set; }
@@ -38,7 +38,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// Gets the step size when moving the pooling window across the input.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This is how many pixels the layer moves each time it takes a sample.
+    /// <b>For Beginners:</b> This is how many pixels the layer moves each time it takes a sample.
     /// If strides = 2, it moves 2 pixels to the right or down after each operation.
     /// </remarks>
     public int Strides { get; private set; }
@@ -47,7 +47,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// Gets the type of sampling/pooling operation performed by this layer.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This determines how the layer combines multiple values into one:
+    /// <b>For Beginners:</b> This determines how the layer combines multiple values into one:
     /// - Max: Takes the largest value (like finding the brightest pixel)
     /// - Average: Takes the average of all values (like finding the general brightness)
     /// - L2Norm: A special mathematical way that emphasizes larger values
@@ -58,7 +58,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// Indicates whether this layer supports training (updating through backpropagation).
     /// </summary>
     /// <remarks>
-    /// For Beginners: This tells if the layer can learn from its mistakes. Sampling layers
+    /// <b>For Beginners:</b> This tells if the layer can learn from its mistakes. Sampling layers
     /// don't have parameters to learn, but they do participate in the learning process
     /// by passing information backward.
     /// </remarks>
@@ -78,7 +78,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// <param name="strides">The step size when moving the pooling window.</param>
     /// <param name="samplingType">The type of sampling operation to perform.</param>
     /// <remarks>
-    /// For Beginners: This sets up the sampling layer with your chosen settings.
+    /// <b>For Beginners:</b> This sets up the sampling layer with your chosen settings.
     /// - inputShape: The dimensions of your input data (like image size)
     /// - poolSize: How many pixels to look at together
     /// - strides: How far to move after each operation
@@ -102,7 +102,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// <param name="strides">The step size when moving the pooling window.</param>
     /// <returns>The calculated output shape.</returns>
     /// <remarks>
-    /// For Beginners: This calculates how big the output will be after pooling.
+    /// <b>For Beginners:</b> This calculates how big the output will be after pooling.
     /// The formula is: (input_size - pool_size) / strides + 1
     /// 
     /// For example, if you have a 10×10 image with pool_size=2 and strides=2,
@@ -120,7 +120,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// Sets up the appropriate forward and backward computation strategies based on the sampling type.
     /// </summary>
     /// <remarks>
-    /// For Beginners: This method chooses the right algorithm based on whether you selected
+    /// <b>For Beginners:</b> This method chooses the right algorithm based on whether you selected
     /// Max, Average, or L2Norm pooling. Each type needs different calculations for both the
     /// forward pass (processing data) and backward pass (learning).
     /// </remarks>
@@ -152,7 +152,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// <returns>The output tensor after sampling/pooling.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the forward strategy is not set.</exception>
     /// <remarks>
-    /// For Beginners: This is where the actual pooling happens. The layer takes your input
+    /// <b>For Beginners:</b> This is where the actual pooling happens. The layer takes your input
     /// (like an image) and applies the pooling operation you selected (Max, Average, or L2Norm)
     /// to make a smaller version that keeps the important features.
     /// </remarks>
@@ -174,7 +174,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// <returns>The gradient to pass to the previous layer.</returns>
     /// <exception cref="InvalidOperationException">Thrown when backward strategy is not set or Forward hasn't been called.</exception>
     /// <remarks>
-    /// For Beginners: This is part of how neural networks learn. When the network makes a mistake,
+    /// <b>For Beginners:</b> This is part of how neural networks learn. When the network makes a mistake,
     /// it needs to figure out how each layer contributed to that mistake. This method helps pass
     /// that information backward through the sampling layer to the previous layers.
     /// 
@@ -201,7 +201,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// <param name="input">The input tensor.</param>
     /// <returns>The output tensor after max pooling.</returns>
     /// <remarks>
-    /// For Beginners: Max pooling looks at each group of pixels and keeps only the strongest/brightest one.
+    /// <b>For Beginners:</b> Max pooling looks at each group of pixels and keeps only the strongest/brightest one.
     /// For example, if you have four pixels with values [2,5,1,3], max pooling would keep only the 5.
     /// 
     /// This helps the network focus on the most prominent features, like edges or specific patterns.
@@ -255,7 +255,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// <returns>The gradient to pass to the previous layer.</returns>
     /// <exception cref="InvalidOperationException">Thrown when called before MaxPoolForward.</exception>
     /// <remarks>
-    /// For Beginners: During max pooling, only the maximum value from each window was kept.
+    /// <b>For Beginners:</b> During max pooling, only the maximum value from each window was kept.
     /// When we go backward, we need to send the gradient only to those maximum values that
     /// contributed to the output, while all other values receive zero gradient.
     /// 
@@ -302,7 +302,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// <param name="input">The input tensor.</param>
     /// <returns>The output tensor after average pooling.</returns>
     /// <remarks>
-    /// For Beginners: Average pooling takes the average value of each window of pixels.
+    /// <b>For Beginners:</b> Average pooling takes the average value of each window of pixels.
     /// For example, if you have four pixels with values [2,5,1,3], average pooling would
     /// produce (2+5+1+3)/4 = 2.75.
     /// 
@@ -350,7 +350,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// <param name="outputGradient">The gradient from the next layer.</param>
     /// <returns>The gradient to pass to the previous layer.</returns>
     /// <remarks>
-    /// For Beginners: In average pooling, each input value contributed equally to the output.
+    /// <b>For Beginners:</b> In average pooling, each input value contributed equally to the output.
     /// When going backward, we distribute the gradient equally to all input positions that
     /// contributed to each output value.
     /// 
@@ -392,7 +392,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// <param name="input">The input tensor.</param>
     /// <returns>The output tensor after L2 norm pooling.</returns>
     /// <remarks>
-    /// For Beginners: L2 norm pooling (also called root-mean-square pooling) is like taking
+    /// <b>For Beginners:</b> L2 norm pooling (also called root-mean-square pooling) is like taking
     /// the "energy" of each window of pixels. It works by:
     /// 1. Squaring each value (multiplying it by itself)
     /// 2. Adding up all the squared values
@@ -445,7 +445,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// <returns>The gradient to pass to the previous layer.</returns>
     /// <exception cref="InvalidOperationException">Thrown when called before Forward pass.</exception>
     /// <remarks>
-    /// For Beginners: In L2 norm pooling, each input value contributed proportionally to its
+    /// <b>For Beginners:</b> In L2 norm pooling, each input value contributed proportionally to its
     /// magnitude. When going backward, we distribute the gradient to each input position based
     /// on how much that position contributed to the L2 norm.
     /// 
@@ -496,7 +496,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="learningRate">The learning rate that controls how much to adjust parameters.</param>
     /// <remarks>
-    /// For Beginners: This method is part of the neural network training process.
+    /// <b>For Beginners:</b> This method is part of the neural network training process.
     /// Normally, layers with trainable parameters (like weights) would update them here.
     /// However, sampling/pooling layers don't have any trainable parameters, so this method
     /// doesn't need to do anything.
@@ -514,7 +514,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="writer">The binary writer to write the data to.</param>
     /// <remarks>
-    /// For Beginners: This method saves the layer's settings (like pool size and stride)
+    /// <b>For Beginners:</b> This method saves the layer's settings (like pool size and stride)
     /// so that you can reload the exact same layer later. It's like saving your game
     /// progress so you can continue from where you left off.
     /// 
@@ -534,7 +534,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="reader">The binary reader to read the data from.</param>
     /// <remarks>
-    /// For Beginners: This method loads previously saved settings for the layer.
+    /// <b>For Beginners:</b> This method loads previously saved settings for the layer.
     /// It's the counterpart to Serialize - if Serialize is like saving your game,
     /// Deserialize is like loading that saved game.
     /// 
@@ -557,7 +557,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>An empty collection since sampling layers don't use activation functions.</returns>
     /// <remarks>
-    /// For Beginners: Activation functions are mathematical operations that determine
+    /// <b>For Beginners:</b> Activation functions are mathematical operations that determine
     /// the output of a neural network node. They introduce non-linearity, which helps
     /// neural networks learn complex patterns.
     /// 
@@ -576,7 +576,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>An empty vector since sampling layers have no trainable parameters.</returns>
     /// <remarks>
-    /// For Beginners: Trainable parameters are values that the neural network adjusts
+    /// <b>For Beginners:</b> Trainable parameters are values that the neural network adjusts
     /// during learning to improve its performance. Common examples are weights and biases
     /// in dense or convolutional layers.
     /// 
@@ -597,7 +597,7 @@ public class SamplingLayer<T> : LayerBase<T>
     /// This method clears any cached data from previous forward passes, 
     /// essentially "wiping the slate clean" for the layer.
     /// 
-    /// For Beginners: Neural network layers sometimes need to remember information
+    /// <b>For Beginners:</b> Neural network layers sometimes need to remember information
     /// from previous calculations (like what the input was or which values were
     /// the maximum). This method helps "forget" that information when we want to
     /// start fresh, such as when processing a new batch of data or when reusing

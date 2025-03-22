@@ -4,7 +4,7 @@
 /// Provides extension methods for matrix decomposition operations, enhancing their functionality.
 /// </summary>
 /// <remarks>
-/// For Beginners: Matrix decomposition is a way to break down complex matrices into simpler components,
+/// <b>For Beginners:</b> Matrix decomposition is a way to break down complex matrices into simpler components,
 /// making certain mathematical operations easier. This class adds helpful methods to work with these
 /// decompositions in your AI applications.
 /// 
@@ -20,7 +20,7 @@ public static class MatrixDecompositionExtensions
     /// <param name="decomposition">The original matrix decomposition to convert.</param>
     /// <returns>A complex-valued version of the original matrix decomposition.</returns>
     /// <remarks>
-    /// For Beginners: Complex numbers are numbers with both a real part and an "imaginary" part.
+    /// <b>For Beginners:</b> Complex numbers are numbers with both a real part and an "imaginary" part.
     /// They're useful in advanced mathematics and certain AI algorithms.
     /// 
     /// This method takes a regular matrix decomposition (using normal numbers) and converts it to

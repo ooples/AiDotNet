@@ -6,7 +6,7 @@ namespace AiDotNet.Interpolation;
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double, decimal).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Spline interpolation creates a smooth curve that passes through all your data points.
+/// <b>For Beginners:</b> Spline interpolation creates a smooth curve that passes through all your data points.
 /// Unlike simpler methods, it ensures the curve is not just continuous but also has continuous first and 
 /// second derivatives, making it appear very smooth and natural.
 /// </para>
@@ -69,7 +69,7 @@ public class NotAKnotSplineInterpolation<T> : IInterpolation<T>
     /// </exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor takes two vectors (arrays) of equal length:
+    /// <b>For Beginners:</b> This constructor takes two vectors (arrays) of equal length:
     /// - The x vector contains the input values (like time points, positions, etc.)
     /// - The y vector contains the corresponding output values
     /// </para>
@@ -114,7 +114,7 @@ public class NotAKnotSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value at the specified x-value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method takes an x-value and returns the estimated y-value based on the smooth curve
+    /// <b>For Beginners:</b> This method takes an x-value and returns the estimated y-value based on the smooth curve
     /// that was created from your data points.
     /// </para>
     /// <para>
@@ -149,7 +149,7 @@ public class NotAKnotSplineInterpolation<T> : IInterpolation<T>
     /// This method sets up and solves a system of equations to find the coefficients for the cubic spline.
     /// </para>
     /// <para>
-    /// For Beginners: This is the "behind the scenes" math that makes the interpolation work. It calculates
+    /// <b>For Beginners:</b> This is the "behind the scenes" math that makes the interpolation work. It calculates
     /// the formula for the smooth curve that will pass through all your data points.
     /// </para>
     /// <para>
@@ -220,7 +220,7 @@ public class NotAKnotSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The index of the interval where the x-value belongs.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method determines which segment of the curve should be used for interpolation.
+    /// <b>For Beginners:</b> This method determines which segment of the curve should be used for interpolation.
     /// </para>
     /// <para>
     /// Think of it like this: if you have data points at x = [1, 3, 5, 7], and you want to find the y-value
@@ -250,7 +250,7 @@ public class NotAKnotSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The result of x raised to the specified power.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates x raised to a power. For example:
+    /// <b>For Beginners:</b> This method calculates x raised to a power. For example:
     /// - Power(2, 3) = 2³ = 2 × 2 × 2 = 8
     /// - Power(5, 2) = 5² = 5 × 5 = 25
     /// </para>

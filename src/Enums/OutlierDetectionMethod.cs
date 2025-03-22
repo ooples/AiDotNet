@@ -5,7 +5,7 @@ namespace AiDotNet.Enums;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: Outliers are data points that differ significantly from other observations in your dataset.
+/// <b>For Beginners:</b> Outliers are data points that differ significantly from other observations in your dataset.
 /// Think of them as unusual values that stand out from the pattern - like if most people in a classroom are 
 /// between 5'0" and 6'0" tall, someone who is 7'5" would be an outlier. Detecting outliers is important because 
 /// they can skew your analysis or cause your AI model to learn incorrect patterns. These methods help you 
@@ -20,7 +20,7 @@ public enum OutlierDetectionMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Z-Score method measures how far away a data point is from the average (mean) 
+    /// <b>For Beginners:</b> The Z-Score method measures how far away a data point is from the average (mean) 
     /// in terms of standard deviations. Standard deviation is just a measure of how spread out the data is.
     /// 
     /// Imagine a classroom where the average height is 5'6" with a standard deviation of 2 inches. 
@@ -40,7 +40,7 @@ public enum OutlierDetectionMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The IQR (Interquartile Range) method is like focusing on the middle 50% of your data 
+    /// <b>For Beginners:</b> The IQR (Interquartile Range) method is like focusing on the middle 50% of your data 
     /// and then identifying values that fall too far outside this range.
     /// 
     /// Here's how it works:
@@ -61,7 +61,7 @@ public enum OutlierDetectionMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: The Combined method uses both Z-Score and IQR approaches together for more reliable 
+    /// <b>For Beginners:</b> The Combined method uses both Z-Score and IQR approaches together for more reliable 
     /// outlier detection. A data point is flagged as an outlier only if both methods identify it as unusual.
     /// 
     /// This is like getting a second opinion - if only one doctor thinks something is wrong but another 

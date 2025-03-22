@@ -8,7 +8,7 @@ namespace AiDotNet.Interfaces;
 /// during the training process of machine learning models. Caching these results can significantly
 /// improve performance by avoiding redundant calculations.
 /// 
-/// For Beginners: Think of model caching like saving your progress in a video game.
+/// <b>For Beginners:</b> Think of model caching like saving your progress in a video game.
 /// 
 /// When training machine learning models, the computer performs many calculations in steps:
 /// - These calculations can be time-consuming and resource-intensive
@@ -36,7 +36,7 @@ public interface IModelCache<T>
     /// This method looks up and returns cached calculation results from a previous optimization step.
     /// If no data exists for the given key, it returns null.
     /// 
-    /// For Beginners: This is like opening a saved file from your computer.
+    /// <b>For Beginners:</b> This is like opening a saved file from your computer.
     /// 
     /// When training a machine learning model:
     /// - The model goes through many steps of calculations
@@ -64,7 +64,7 @@ public interface IModelCache<T>
     /// This method saves the current state and calculations from an optimization step
     /// so they can be retrieved later, avoiding the need to recalculate them.
     /// 
-    /// For Beginners: This is like saving your work to a file on your computer.
+    /// <b>For Beginners:</b> This is like saving your work to a file on your computer.
     /// 
     /// During model training:
     /// - The model performs complex calculations at each step
@@ -92,7 +92,7 @@ public interface IModelCache<T>
     /// This method deletes all previously cached optimization data, freeing up memory
     /// and ensuring that future retrievals will start fresh.
     /// 
-    /// For Beginners: This is like emptying your recycle bin or clearing your browser cache.
+    /// <b>For Beginners:</b> This is like emptying your recycle bin or clearing your browser cache.
     /// 
     /// Sometimes you need to start fresh:
     /// - When you've made significant changes to your model

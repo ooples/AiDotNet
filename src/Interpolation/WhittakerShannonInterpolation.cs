@@ -11,7 +11,7 @@
 /// is at least twice the highest frequency in the function.
 /// </para>
 /// <para>
-/// For Beginners: Think of this interpolation like recreating a smooth curve from a series of dots.
+/// <b>For Beginners:</b> Think of this interpolation like recreating a smooth curve from a series of dots.
 /// Imagine you have a photograph that's been converted to a grid of pixels. This method helps you
 /// "zoom in" between those pixels to create a smoother, higher-resolution image. It works best when
 /// your data points are evenly spaced (like pixels in a digital image) and when the underlying pattern
@@ -47,7 +47,7 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
     /// <exception cref="ArgumentException">Thrown when the input vectors have different lengths.</exception>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor takes your data points (x and y coordinates) and prepares the
+    /// <b>For Beginners:</b> This constructor takes your data points (x and y coordinates) and prepares the
     /// interpolation algorithm. The x-values represent positions (like time points in a signal) and
     /// the y-values represent measurements at those positions (like amplitude values in a sound wave).
     /// </para>
@@ -79,7 +79,7 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method finds the y-value at any x-position you specify, even if it's
+    /// <b>For Beginners:</b> This method finds the y-value at any x-position you specify, even if it's
     /// between your original data points. It uses a special mathematical function called the "sinc function"
     /// to create a smooth curve that passes through all your original data points.
     /// </para>
@@ -114,7 +114,7 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
     /// <returns>The sinc function value.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The sinc function is a special mathematical function that looks like a wave
+    /// <b>For Beginners:</b> The sinc function is a special mathematical function that looks like a wave
     /// with a peak at x=0 and diminishing oscillations as you move away from the center.
     /// </para>
     /// <para>
@@ -141,7 +141,7 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
     /// <returns>True if the data points are uniformly sampled; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method checks if your x-values are evenly spaced, which is important for
+    /// <b>For Beginners:</b> This method checks if your x-values are evenly spaced, which is important for
     /// this interpolation method to work correctly. "Evenly spaced" means that the distance between
     /// consecutive x-values is constant.
     /// </para>

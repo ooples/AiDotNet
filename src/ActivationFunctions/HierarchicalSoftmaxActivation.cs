@@ -6,7 +6,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: Hierarchical Softmax is an efficient alternative to the standard Softmax function,
+/// <b>For Beginners:</b> Hierarchical Softmax is an efficient alternative to the standard Softmax function,
 /// especially when dealing with a large number of output classes (like thousands of words in language models).
 /// 
 /// While regular Softmax calculates probabilities for all possible classes at once (which can be slow
@@ -48,7 +48,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <param name="numClasses">The number of output classes to support.</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor sets up the hierarchical structure needed for efficient probability calculation.
+    /// <b>For Beginners:</b> This constructor sets up the hierarchical structure needed for efficient probability calculation.
     /// 
     /// It creates a binary tree where:
     /// - The number of levels (tree depth) is calculated based on the number of classes
@@ -80,7 +80,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector containing probabilities for each output class.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method converts your neural network's raw output (numbers) into probabilities
+    /// <b>For Beginners:</b> This method converts your neural network's raw output (numbers) into probabilities
     /// that sum to approximately 1, making them suitable for classification tasks.
     /// 
     /// For each possible class:
@@ -110,7 +110,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A Jacobian matrix containing the partial derivatives.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative tells us how much the output probabilities change when we slightly
+    /// <b>For Beginners:</b> The derivative tells us how much the output probabilities change when we slightly
     /// change each input value. This information is essential during neural network training.
     /// 
     /// This method:
@@ -194,7 +194,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>The probability value for the specified class.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how likely a specific class is, given the input.
+    /// <b>For Beginners:</b> This method calculates how likely a specific class is, given the input.
     /// 
     /// It works by:
     /// 1. Starting at the root (top) of the tree

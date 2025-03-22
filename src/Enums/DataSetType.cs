@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// For Beginners: In machine learning, we typically split our data into different sets for different purposes.
+/// <b>For Beginners:</b> In machine learning, we typically split our data into different sets for different purposes.
 /// 
 /// Think of it like learning to cook:
 /// - Training data is like practicing recipes while learning (the model learns from this data)

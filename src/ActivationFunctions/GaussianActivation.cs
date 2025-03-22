@@ -6,7 +6,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: The Gaussian activation function is based on the bell-shaped curve that you might 
+/// <b>For Beginners:</b> The Gaussian activation function is based on the bell-shaped curve that you might 
 /// recognize from statistics (the "normal distribution" or "bell curve"). 
 /// 
 /// Key properties of the Gaussian activation function:
@@ -39,7 +39,7 @@ public class GaussianActivation<T> : ActivationFunctionBase<T>
     /// <returns>The activated output value using the Gaussian function.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method transforms an input value using the formula:
+    /// <b>For Beginners:</b> This method transforms an input value using the formula:
     /// f(x) = exp(-x²)
     /// 
     /// In simpler terms:
@@ -65,7 +65,7 @@ public class GaussianActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative value at the input point.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: The derivative measures how much the Gaussian function's output changes
+    /// <b>For Beginners:</b> The derivative measures how much the Gaussian function's output changes
     /// when its input changes slightly. This is used during neural network training to determine
     /// how to adjust weights.
     /// 

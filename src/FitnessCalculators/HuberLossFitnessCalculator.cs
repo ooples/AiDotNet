@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing, especially for regression tasks
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing, especially for regression tasks
 /// (where you're predicting continuous values like prices, temperatures, etc.).
 /// 
 /// Huber Loss is a special type of loss function that combines two popular approaches:
@@ -42,7 +42,7 @@ public class HuberLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For Beginners: This parameter (delta) controls where Huber Loss switches from behaving like
+    /// <b>For Beginners:</b> This parameter (delta) controls where Huber Loss switches from behaving like
     /// Mean Squared Error to behaving like Mean Absolute Error.
     /// 
     /// - For errors smaller than delta: The loss function is quadratic (like MSE)
@@ -69,7 +69,7 @@ public class HuberLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Huber Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Huber Loss
     /// to evaluate your model's performance, which is especially good for regression problems
     /// where you might have some unusual data points (outliers).
     /// 
@@ -100,7 +100,7 @@ public class HuberLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated Huber Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Huber Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Huber Loss.
     /// 
     /// It works by:
     /// 1. Taking the predictions your model made

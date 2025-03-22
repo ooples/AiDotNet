@@ -6,7 +6,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// For Beginners: This calculator helps evaluate how well your model is performing on classification tasks,
+/// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on classification tasks,
 /// especially when you're trying to decide if something belongs to a category or not (binary classification).
 /// 
 /// Squared Hinge Loss is a variation of Hinge Loss that puts even more emphasis on getting predictions right.
@@ -42,7 +42,7 @@ public class SquaredHingeLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <param name="dataSetType">The type of dataset to use for fitness calculation (default is Validation).</param>
     /// <remarks>
     /// <para>
-    /// For Beginners: This constructor creates a new calculator that will use Squared Hinge Loss
+    /// <b>For Beginners:</b> This constructor creates a new calculator that will use Squared Hinge Loss
     /// to evaluate your model's performance on classification tasks.
     /// 
     /// The parameter:
@@ -67,7 +67,7 @@ public class SquaredHingeLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// <returns>The calculated Squared Hinge Loss score.</returns>
     /// <remarks>
     /// <para>
-    /// For Beginners: This method calculates how well your model is performing using Squared Hinge Loss.
+    /// <b>For Beginners:</b> This method calculates how well your model is performing using Squared Hinge Loss.
     /// 
     /// It works by:
     /// 1. Taking the predictions your model made
