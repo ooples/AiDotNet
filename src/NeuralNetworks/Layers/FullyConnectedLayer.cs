@@ -375,7 +375,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
 
             var outputVector = _weights.Multiply(inputVector).Add(_biases);
-            outputVector = ApplyActivationToVector(outputVector);
+            outputVector = ApplyActivation(outputVector);
 
             for (int j = 0; j < outputSize; j++)
             {

@@ -394,10 +394,10 @@ public static class LayerHelper<T>
     private static IEnumerable<ILayer<T>> CreateResidualBlock(int inputDepth, int outputDepth, int height, int width, bool isFirstInBlock)
     {
         // Create the skip connection with the appropriate inner layer
-        ILayer<T>? skipInnerLayer = null;
+        ILayer<T>? innerLayer = null;
         if (isFirstInBlock && inputDepth != outputDepth)
         {
-            skipInnerLayer = new ConvolutionalLayer<T>(
+            innerLayer = new ConvolutionalLayer<T>(
                 inputDepth: inputDepth,
                 outputDepth: outputDepth,
                 kernelSize: 1,
@@ -409,7 +409,11 @@ public static class LayerHelper<T>
             );
         }
 
-        yield return new SkipConnectionLayer<T>(skipInnerLayer, new IdentityActivation<T>() as IActivationFunction<T>);
+       yield return new ResidualLayer<T>(
+            inputShape: [outputDepth, height, width],
+            innerLayer: innerLayer,
+            activation: new IdentityActivation<T>()
+        );
 
         yield return new ConvolutionalLayer<T>(
             inputDepth: inputDepth,
@@ -802,48 +806,55 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultVAELayers(NeuralNetworkArchitecture<T> architecture, int latentSize)
     {
         var inputShape = architecture.GetInputShape();
-
         if (inputShape == null || inputShape.Length == 0)
         {
             throw new InvalidOperationException("Input shape must be specified for VAE.");
         }
 
-        int inputSize = inputShape[0];
+        int inputDepth = inputShape[0];
+        int inputHeight = inputShape.Length > 1 ? inputShape[1] : 1;
+        int inputWidth = inputShape.Length > 2 ? inputShape[2] : 1;
 
         // Encoder layers
-        int[] encoderSizes = { inputSize / 2, inputSize / 4 };
+        yield return new DenseLayer<T>(inputDepth * inputHeight * inputWidth, (inputDepth * inputHeight * inputWidth) / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
-        for (int i = 0; i < encoderSizes.Length; i++)
-        {
-            int outputSize = encoderSizes[i];
-            yield return new DenseLayer<T>(inputSize, outputSize, new LeakyReLUActivation<T>() as IActivationFunction<T>);
-            inputSize = outputSize;
-        }
+        // Pooling layer to reduce dimensions
+        yield return new PoolingLayer<T>(
+            inputDepth: inputDepth,
+            inputHeight: inputHeight,
+            inputWidth: inputWidth,
+            poolSize: 2,
+            stride: 2,
+            type: PoolingType.Average
+        );
+
+        // Calculate new dimensions after pooling
+        int pooledDepth = inputDepth;
+        int pooledHeight = (inputHeight - 2) / 2 + 1;
+        int pooledWidth = (inputWidth - 2) / 2 + 1;
+        int pooledSize = pooledDepth * pooledHeight * pooledWidth;
+
+        yield return new DenseLayer<T>(pooledSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
         // Latent space layers
         int encoderOutputSize = latentSize * 2; // For mean and log variance
-        yield return new DenseLayer<T>(inputSize, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(pooledSize / 2, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Mean and LogVariance layers
         yield return new MeanLayer<T>([encoderOutputSize], axis: 0);
         yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
 
-        // Add a SamplingLayer before the latent space
-        yield return new SamplingLayer<T>([1, inputSize, 1], 2, 2, SamplingType.Average);
-
         // Decoder layers
-        int[] decoderSizes = [.. encoderSizes.Reverse()];
-        inputSize = latentSize;
+        yield return new DenseLayer<T>(latentSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(pooledSize / 2, pooledSize, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+    
+        // Add an Upsampling layer to match the pooling in the encoder
+        yield return new UpsamplingLayer<T>([pooledDepth, pooledHeight, pooledWidth], 2);
 
-        for (int i = 0; i < decoderSizes.Length; i++)
-        {
-            int outputSize = decoderSizes[i];
-            yield return new DenseLayer<T>(inputSize, outputSize, new LeakyReLUActivation<T>() as IActivationFunction<T>);
-            inputSize = outputSize;
-        }
+        yield return new DenseLayer<T>(inputDepth * inputHeight * inputWidth, (inputDepth * inputHeight * inputWidth) / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
         // Output layer
-        yield return new DenseLayer<T>(inputSize, inputShape[0], new SigmoidActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>((inputDepth * inputHeight * inputWidth) / 2, inputDepth * inputHeight * inputWidth, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>

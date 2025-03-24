@@ -34,7 +34,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
 
         bool hasMeanLayer = false;
         bool hasLogVarianceLayer = false;
-        bool hasSamplingLayer = false;
+        bool hasPoolingLayer = false;
 
         for (int i = 0; i < layers.Count; i++)
         {
@@ -46,9 +46,9 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
             {
                 hasLogVarianceLayer = true;
             }
-            else if (layers[i] is SamplingLayer<T>)
+            else if (layers[i] is PoolingLayer<T>)
             {
-                hasSamplingLayer = true;
+                hasPoolingLayer = true;
             }
         }
 
@@ -62,9 +62,9 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Custom VAE layers must include a LogVarianceLayer.");
         }
 
-        if (!hasSamplingLayer)
+        if (!hasPoolingLayer)
         {
-            throw new InvalidOperationException("Custom VAE layers must include a SamplingLayer for the reparameterization trick.");
+            throw new InvalidOperationException("Custom VAE layers must include a PoolingLayer for the reparameterization trick.");
         }
     }
 

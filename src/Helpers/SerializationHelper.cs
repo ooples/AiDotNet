@@ -363,6 +363,41 @@ public static class SerializationHelper<T>
     }
 
     /// <summary>
+    /// Serializes a tensor to a binary stream.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <param name="tensor">The tensor to serialize.</param>
+    /// <remarks>
+    /// <para>
+    /// This helper method writes a tensor's shape and values to a binary stream. It first writes the rank (number
+    /// of dimensions), then each dimension size, and finally all the tensor values as doubles.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves a tensor's structure and values to a file.
+    /// 
+    /// When saving a tensor:
+    /// - First, it saves how many dimensions the tensor has (its rank)
+    /// - Then, it saves the size of each dimension
+    /// - Finally, it saves all the actual values
+    /// 
+    /// This format ensures that when loading, the tensor can be reconstructed
+    /// with exactly the same shape and values.
+    /// </para>
+    /// </remarks>
+    public static void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
+    {
+        writer.Write(tensor.Shape.Length);
+        foreach (var dim in tensor.Shape)
+        {
+            writer.Write(dim);
+        }
+
+        foreach (var value in tensor)
+        {
+            writer.Write(Convert.ToDouble(value));
+        }
+    }
+
+    /// <summary>
     /// Serializes a vector to a binary format.
     /// </summary>
     /// <param name="writer">The binary writer to write the serialized data to.</param>
@@ -409,6 +444,46 @@ public static class SerializationHelper<T>
         }
 
         return vector;
+    }
+
+    /// <summary>
+    /// Deserializes a tensor from a binary stream.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <returns>The deserialized tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This helper method reads a tensor's shape and values from a binary stream. It first reads the rank (number
+    /// of dimensions), then each dimension size, creates a tensor with that shape, and finally reads all the values.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a tensor's structure and values from a file.
+    /// 
+    /// When loading a tensor:
+    /// - First, it reads how many dimensions the tensor has
+    /// - Then, it reads the size of each dimension
+    /// - It creates a new tensor with that shape
+    /// - Finally, it reads all the values and fills the tensor
+    /// 
+    /// This process reverses the serialization process, reconstructing the tensor
+    /// exactly as it was when saved.
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> DeserializeTensor(BinaryReader reader)
+    {
+        int rank = reader.ReadInt32();
+        int[] shape = new int[rank];
+        for (int i = 0; i < rank; i++)
+        {
+            shape[i] = reader.ReadInt32();
+        }
+
+        var tensor = new Tensor<T>(shape);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+
+        return tensor;
     }
 
     /// <summary>
