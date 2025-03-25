@@ -33,10 +33,10 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
     /// Q1 is the first quartile (25th percentile) and Q3 is the third quartile (75th percentile).
     /// The IQR is the range between Q1 and Q3, representing the middle 50% of your data.
     /// </remarks>
-    public IQROutlierRemoval(T? iqrMultiplier = default)
+    public IQROutlierRemoval(double iqrMultiplier = 1.5)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _iqrMultiplier = iqrMultiplier ?? GetDefaultMultiplier();
+        _iqrMultiplier = _numOps.FromDouble(iqrMultiplier);
     }
 
     /// <summary>
@@ -98,14 +98,5 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
         }
 
         return (new Matrix<T>(cleanedInputs), new Vector<T>(cleanedOutputs));
-    }
-
-    /// <summary>
-    /// Gets the default multiplier value for the IQR outlier detection.
-    /// </summary>
-    /// <returns>The default IQR multiplier value (1.5).</returns>
-    private T GetDefaultMultiplier()
-    {
-        return _numOps.FromDouble(1.5);
     }
 }

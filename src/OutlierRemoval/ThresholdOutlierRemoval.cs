@@ -30,10 +30,10 @@ public class ThresholdOutlierRemoval<T> : IOutlierRemoval<T>
     /// the median deviation from the median are considered outliers. If your data naturally
     /// has more variation, you might want to use a higher threshold.
     /// </remarks>
-    public ThresholdOutlierRemoval(T? threshold = default)
+    public ThresholdOutlierRemoval(double threshold = 3)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _threshold = threshold ?? GetDefaultThreshold();
+        _threshold = _numOps.FromDouble(threshold);
     }
 
     /// <summary>
@@ -89,14 +89,5 @@ public class ThresholdOutlierRemoval<T> : IOutlierRemoval<T>
         }
 
         return (new Matrix<T>(cleanedInputs), new Vector<T>(cleanedOutputs));
-    }
-
-    /// <summary>
-    /// Gets the default threshold value for outlier detection.
-    /// </summary>
-    /// <returns>The default threshold value (3.0).</returns>
-    private T GetDefaultThreshold()
-    {
-        return _numOps.FromDouble(3.0);
     }
 }
