@@ -1,12 +1,91 @@
-﻿
-namespace AiDotNet.Regression;
+﻿namespace AiDotNet.Regression;
 
+/// <summary>
+/// Implements a Gaussian Process Regression model, which is a non-parametric, probabilistic approach 
+/// to regression that provides uncertainty estimates along with predictions.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Gaussian Process Regression (GPR) is a flexible, non-parametric approach to regression that models
+/// the target function as a sample from a Gaussian process. It provides not only predictions but also
+/// uncertainty estimates, making it suitable for applications where quantifying prediction uncertainty
+/// is important. The model is defined by a kernel function that determines the covariance between any
+/// two points in the input space.
+/// </para>
+/// <para><b>For Beginners:</b> A Gaussian Process Regression model is like a sophisticated way to draw smooth curves through data points.
+/// 
+/// Unlike simpler models that assume a specific shape (like a straight line or parabola), Gaussian Process Regression:
+/// - Adapts to fit the data without assuming a predefined shape
+/// - Provides not just predictions but also how confident it is in each prediction
+/// - Works well with small to medium-sized datasets
+/// - Can capture complex patterns in the data
+/// 
+/// You can think of it as drawing a smooth curve through your data points, where the model considers
+/// all possible curves that could fit your data and chooses the most likely one based on how similar
+/// input points are to each other (defined by a "kernel function").
+/// 
+/// A unique advantage of this model is that it tells you not just what the prediction is, but also
+/// how certain or uncertain that prediction is - like saying "I predict the value is about 42, 
+/// and I'm pretty confident it's between 40 and 44."
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
 {
+    /// <summary>
+    /// The kernel matrix (also known as the covariance matrix) that represents the similarity between all training points.
+    /// </summary>
     private Matrix<T> _kernelMatrix;
+    
+    /// <summary>
+    /// The vector of coefficients used for making predictions.
+    /// </summary>
     private Vector<T> _alpha;
+    
+    /// <summary>
+    /// Gets the configuration options specific to Gaussian Process Regression.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property provides access to the configuration options that control the Gaussian Process Regression
+    /// algorithm, such as kernel parameters, noise level, and optimization settings.
+    /// </para>
+    /// </remarks>
     private new GaussianProcessRegressionOptions Options { get; }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GaussianProcessRegression{T}"/> class.
+    /// </summary>
+    /// <param name="options">Optional configuration options for the Gaussian Process Regression algorithm.</param>
+    /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new Gaussian Process Regression model with the specified options and regularization
+    /// strategy. If no options are provided, default values are used. If no regularization is specified, no regularization
+    /// is applied.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how you create a new Gaussian Process Regression model.
+    /// 
+    /// When creating a model, you can specify:
+    /// - Options: Controls settings like kernel parameters and how much to trust the training data
+    /// - Regularization: Helps prevent the model from becoming too complex
+    /// 
+    /// If you don't specify these parameters, the model will use reasonable default settings.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Create a Gaussian Process Regression model with default settings
+    /// var gpr = new GaussianProcessRegression&lt;double&gt;();
+    /// 
+    /// // Create a model with custom options
+    /// var options = new GaussianProcessRegressionOptions { 
+    ///     NoiseLevel = 0.1,
+    ///     OptimizeHyperparameters = true
+    /// };
+    /// var customGpr = new GaussianProcessRegression&lt;double&gt;(options);
+    /// ```
+    /// </para>
+    /// </remarks>
     public GaussianProcessRegression(GaussianProcessRegressionOptions? options = null, IRegularization<T>? regularization = null)
         : base(options, regularization)
     {
@@ -15,6 +94,31 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         _alpha = new Vector<T>(0);
     }
 
+    /// <summary>
+    /// Optimizes the Gaussian Process model based on the provided training data.
+    /// </summary>
+    /// <param name="x">A matrix where each row represents a sample and each column represents a feature.</param>
+    /// <param name="y">A vector of target values corresponding to each sample in x.</param>
+    /// <remarks>
+    /// <para>
+    /// This method builds the Gaussian Process Regression model by computing the kernel matrix, optimizing
+    /// hyperparameters if requested, and solving for the alpha coefficients that will be used for making
+    /// predictions. The kernel matrix represents the similarity or covariance between all pairs of training
+    /// points.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the model how to make predictions using your data.
+    /// 
+    /// During this process:
+    /// 1. The model calculates how similar each data point is to every other data point
+    /// 2. It creates a "kernel matrix" that represents these similarities
+    /// 3. If requested, it automatically tunes the model parameters to better fit your data
+    /// 4. It solves a mathematical equation to find the best coefficients for making predictions
+    /// 5. It stores these coefficients and the training data for later use
+    /// 
+    /// This is a key step that prepares the model to make accurate predictions with appropriate
+    /// uncertainty estimates.
+    /// </para>
+    /// </remarks>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
@@ -56,6 +160,11 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         Alphas = _alpha;
     }
 
+    /// <summary>
+    /// Optimizes the hyperparameters of the Gaussian Process model using gradient ascent on the marginal log-likelihood.
+    /// </summary>
+    /// <param name="x">The feature matrix of training samples.</param>
+    /// <param name="y">The target vector of training samples.</param>
     private void OptimizeHyperparameters(Matrix<T> x, Vector<T> y)
     {
         int maxIterations = Options.MaxIterations;
@@ -105,6 +214,13 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         Options.SignalVariance = signalVariance;
     }
 
+    /// <summary>
+    /// Computes the kernel matrix for a given set of samples using the specified hyperparameters.
+    /// </summary>
+    /// <param name="x">The feature matrix of samples.</param>
+    /// <param name="lengthScale">The length scale hyperparameter of the RBF kernel.</param>
+    /// <param name="signalVariance">The signal variance hyperparameter of the RBF kernel.</param>
+    /// <returns>The computed kernel matrix.</returns>
     private Matrix<T> ComputeKernelMatrix(Matrix<T> x, double lengthScale, double signalVariance)
     {
         int n = x.Rows;
@@ -123,6 +239,14 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         return K;
     }
 
+    /// <summary>
+    /// Computes the RBF (Radial Basis Function) kernel value between two feature vectors.
+    /// </summary>
+    /// <param name="x1">The first feature vector.</param>
+    /// <param name="x2">The second feature vector.</param>
+    /// <param name="lengthScale">The length scale hyperparameter of the RBF kernel.</param>
+    /// <param name="signalVariance">The signal variance hyperparameter of the RBF kernel.</param>
+    /// <returns>The computed kernel value.</returns>
     private T RBFKernel(Vector<T> x1, Vector<T> x2, double lengthScale, double signalVariance)
     {
         T squaredDistance = x1.Subtract(x2).PointwiseMultiply(x1.Subtract(x2)).Sum();
@@ -130,6 +254,12 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
             NumOps.Exp(NumOps.Divide(NumOps.Negate(squaredDistance), NumOps.FromDouble(2 * lengthScale * lengthScale))));
     }
 
+    /// <summary>
+    /// Computes the log marginal likelihood of the Gaussian Process model.
+    /// </summary>
+    /// <param name="K">The kernel matrix.</param>
+    /// <param name="y">The target vector.</param>
+    /// <returns>The computed log marginal likelihood.</returns>
     private double ComputeLogLikelihood(Matrix<T> K, Vector<T> y)
     {
         var choleskyDecomposition = new CholeskyDecomposition<T>(K);
@@ -144,6 +274,15 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         return -0.5 * Convert.ToDouble(y.DotProduct(alpha)) - 0.5 * logDeterminant - 0.5 * K.Rows * Math.Log(2 * Math.PI);
     }
 
+    /// <summary>
+    /// Computes the gradients of the log marginal likelihood with respect to the hyperparameters.
+    /// </summary>
+    /// <param name="x">The feature matrix of training samples.</param>
+    /// <param name="y">The target vector of training samples.</param>
+    /// <param name="K">The kernel matrix.</param>
+    /// <param name="lengthScale">The current length scale hyperparameter.</param>
+    /// <param name="signalVariance">The current signal variance hyperparameter.</param>
+    /// <returns>A tuple containing the gradients with respect to length scale and signal variance.</returns>
     private (double gradLengthScale, double gradSignalVariance) ComputeGradients(Matrix<T> x, Vector<T> y, Matrix<T> K, double lengthScale, double signalVariance)
     {
         var choleskyDecomposition = new CholeskyDecomposition<T>(K);
@@ -160,6 +299,14 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         return (gradLengthScale, gradSignalVariance);
     }
 
+    /// <summary>
+    /// Computes the derivative of the kernel matrix with respect to the specified hyperparameter.
+    /// </summary>
+    /// <param name="x">The feature matrix of samples.</param>
+    /// <param name="lengthScale">The current length scale hyperparameter.</param>
+    /// <param name="signalVariance">The current signal variance hyperparameter.</param>
+    /// <param name="isLengthScale">True if computing derivative with respect to length scale, false for signal variance.</param>
+    /// <returns>The computed derivative matrix.</returns>
     private Matrix<T> ComputeKernelMatrixDerivative(Matrix<T> x, double lengthScale, double signalVariance, bool isLengthScale)
     {
         int n = x.Rows;
@@ -178,6 +325,15 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         return dK;
     }
 
+    /// <summary>
+    /// Computes the derivative of the RBF kernel with respect to the specified hyperparameter.
+    /// </summary>
+    /// <param name="x1">The first feature vector.</param>
+    /// <param name="x2">The second feature vector.</param>
+    /// <param name="lengthScale">The current length scale hyperparameter.</param>
+    /// <param name="signalVariance">The current signal variance hyperparameter.</param>
+    /// <param name="isLengthScale">True if computing derivative with respect to length scale, false for signal variance.</param>
+    /// <returns>The computed derivative value.</returns>
     private T RBFKernelDerivative(Vector<T> x1, Vector<T> x2, double lengthScale, double signalVariance, bool isLengthScale)
     {
         T squaredDistance = x1.Subtract(x2).PointwiseMultiply(x1.Subtract(x2)).Sum();
@@ -193,6 +349,39 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         }
     }
 
+    /// <summary>
+    /// Gets metadata about the Gaussian Process Regression model and its configuration.
+    /// </summary>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the model, including its type and configuration options. This information
+    /// can be useful for model management, comparison, and documentation purposes. The metadata includes the noise
+    /// level, hyperparameter optimization settings, and current hyperparameter values.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information about your Gaussian Process Regression model.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Gaussian Process Regression)
+    /// - Noise level: How much random noise is assumed in the data
+    /// - Whether hyperparameter optimization was performed
+    /// - Length scale: How quickly the correlation between points falls off with distance
+    /// - Signal variance: The overall variance of the process
+    /// 
+    /// This information is helpful when:
+    /// - Comparing different models
+    /// - Documenting your model's configuration
+    /// - Troubleshooting model performance
+    /// - Understanding the model's behavior
+    /// 
+    /// Example:
+    /// ```csharp
+    /// var metadata = gpr.GetModelMetadata();
+    /// Console.WriteLine($"Model type: {metadata.ModelType}");
+    /// Console.WriteLine($"Length scale: {metadata.AdditionalInfo["LengthScale"]}");
+    /// ```
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();
@@ -206,6 +395,10 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         return metadata;
     }
 
+    /// <summary>
+    /// Gets the model type of the Gaussian Process Regression model.
+    /// </summary>
+    /// <returns>The model type enumeration value.</returns>
     protected override ModelType GetModelType()
     {
         return ModelType.GaussianProcessRegression;

@@ -1,14 +1,129 @@
 namespace AiDotNet.Regression;
 
+/// <summary>
+/// Implements an Extremely Randomized Trees regression model, which is an ensemble method that uses multiple decision trees
+/// with additional randomization for improved prediction accuracy and reduced overfitting.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Extremely Randomized Trees (also known as Extra Trees) is an ensemble method that builds multiple decision trees
+/// and averages their predictions to improve accuracy and reduce overfitting. Unlike Random Forests, which use the best
+/// split for each feature, Extra Trees selects random thresholds for each feature and chooses the best among these
+/// random thresholds, adding an additional layer of randomization that can further reduce variance.
+/// </para>
+/// <para><b>For Beginners:</b> This model works like a committee of decision trees that vote on predictions.
+/// 
+/// While a single decision tree might make mistakes due to its specific structure, 
+/// a group of different trees can work together to make more reliable predictions:
+/// 
+/// - Each tree sees a random subset of the training data
+/// - Each tree uses random thresholds for making decisions
+/// - The final prediction is the average of all individual tree predictions
+/// 
+/// The key advantage is that by adding extra randomness in how the trees are built,
+/// the model avoids "memorizing" the training data and becomes better at generalizing
+/// to new data. This is similar to how asking many different people for their opinion
+/// often leads to better decisions than relying on just one person.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
+    /// <summary>
+    /// The configuration options for the Extremely Randomized Trees algorithm.
+    /// </summary>
     private readonly ExtremelyRandomizedTreesRegressionOptions _options;
+    
+    /// <summary>
+    /// Collection of individual decision trees that make up the ensemble.
+    /// </summary>
     private List<DecisionTreeRegression<T>> _trees;
+    
+    /// <summary>
+    /// Random number generator used for bootstrapping and feature selection.
+    /// </summary>
     private Random _random;
 
+    /// <summary>
+    /// Gets the number of trees in the ensemble model.
+    /// </summary>
+    /// <value>
+    /// The number of decision trees used in the ensemble.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property returns the number of individual decision trees that make up the Extremely Randomized Trees
+    /// ensemble. A larger number of trees typically improves prediction accuracy but increases training and
+    /// prediction time.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many individual decision trees work together in this model.
+    /// 
+    /// Think of it as the size of your "committee of experts":
+    /// - A small number (10-50): Faster to train but might be less accurate
+    /// - A medium number (50-200): Good balance of accuracy and speed
+    /// - A large number (200+): More accurate but slower to train and use
+    /// 
+    /// Unlike a single decision tree model, which has just one tree, ensemble methods like
+    /// Extremely Randomized Trees use multiple trees working together to make better predictions.
+    /// The final prediction is the average of what all these trees predict.
+    /// </para>
+    /// </remarks>
     public override int NumberOfTrees => _options.NumberOfTrees;
+
+    /// <summary>
+    /// Gets the maximum depth of the decision trees in the ensemble.
+    /// </summary>
+    /// <value>
+    /// The maximum number of levels in each tree, from the root to the deepest leaf.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property returns the maximum depth of the individual decision trees in the ensemble. This is one of the
+    /// most important parameters for controlling the complexity of the model. Deeper trees can capture more complex
+    /// patterns but are more prone to overfitting.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you how many levels of questions each tree in the ensemble can ask.
+    /// 
+    /// Just like with a single decision tree:
+    /// - A smaller MaxDepth (e.g., 3-5): Creates simpler trees that might miss some patterns but are less likely to memorize the training data
+    /// - A larger MaxDepth (e.g., 10-20): Creates more complex trees that can capture detailed patterns but might learn noise in the training data
+    /// 
+    /// One advantage of ensemble methods is that you can often use slightly deeper trees than you would with a single decision tree,
+    /// because the averaging of multiple trees helps prevent overfitting.
+    /// </para>
+    /// </remarks>
     public override int MaxDepth => _options.MaxDepth;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExtremelyRandomizedTreesRegression{T}"/> class.
+    /// </summary>
+    /// <param name="options">Configuration options for the Extremely Randomized Trees algorithm.</param>
+    /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new Extremely Randomized Trees regression model with the specified options and
+    /// regularization strategy. The options control parameters such as the number of trees, maximum tree depth,
+    /// and feature selection. If no regularization is specified, no regularization is applied.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how you create a new Extremely Randomized Trees model.
+    /// 
+    /// You need to provide:
+    /// - options: Controls how the ensemble works (like how many trees to use, how deep each tree can be)
+    /// - regularization: Optional setting to help prevent the model from "memorizing" the training data
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Create options for an Extra Trees model with 100 trees
+    /// var options = new ExtremelyRandomizedTreesRegressionOptions {
+    ///     NumberOfTrees = 100,
+    ///     MaxDepth = 10
+    /// };
+    /// 
+    /// // Create the model
+    /// var extraTrees = new ExtremelyRandomizedTreesRegression&lt;double&gt;(options);
+    /// ```
+    /// </para>
+    /// </remarks>
     public ExtremelyRandomizedTreesRegression(ExtremelyRandomizedTreesRegressionOptions options, IRegularization<T>? regularization = null)
         : base(options, regularization)
     {
@@ -17,6 +132,37 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         _random = new Random(_options.Seed ?? Environment.TickCount);
     }
 
+    /// <summary>
+    /// Asynchronously trains the Extremely Randomized Trees model using the provided input features and target values.
+    /// </summary>
+    /// <param name="x">A matrix where each row represents a sample and each column represents a feature.</param>
+    /// <param name="y">A vector of target values corresponding to each sample in x.</param>
+    /// <returns>A task representing the asynchronous training operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds the Extremely Randomized Trees ensemble by training multiple decision trees in parallel.
+    /// Each tree is trained on a randomly sampled subset of the training data (bootstrap sampling). The trees
+    /// are built with additional randomization in feature selection and threshold determination. The level of
+    /// parallelism can be controlled through the options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the model how to make predictions using your data.
+    /// 
+    /// During training:
+    /// 1. The model creates multiple decision trees (as specified in NumberOfTrees)
+    /// 2. Each tree is given a random sample of your training data (some examples may be repeated, others left out)
+    /// 3. Each tree learns independently but with extra randomness in how it makes decisions
+    /// 4. The trees are trained in parallel to save time (using multiple CPU cores)
+    /// 
+    /// The "Async" in the name means this method can run without blocking other operations in your program,
+    /// which is especially helpful when training large models that take significant time.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Train the model
+    /// await extraTrees.TrainAsync(features, targets);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
         _trees.Clear();
@@ -38,6 +184,41 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         _trees = await ParallelProcessingHelper.ProcessTasksInParallel(treeTasks, _options.MaxDegreeOfParallelism);
     }
 
+    /// <summary>
+    /// Asynchronously predicts target values for the provided input features using the trained ensemble model.
+    /// </summary>
+    /// <param name="input">A matrix where each row represents a sample to predict and each column represents a feature.</param>
+    /// <returns>A task that returns a vector of predicted values corresponding to each input sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method predicts target values for new input data by averaging the predictions from all decision trees
+    /// in the ensemble. Each tree's prediction is computed in parallel, and the results are then averaged to form
+    /// the final prediction. Any specified regularization is applied to both the input data and the predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method uses your trained model to make predictions on new data.
+    /// 
+    /// The prediction process:
+    /// 1. Each individual tree in the ensemble makes its own prediction
+    /// 2. These predictions happen in parallel to save time
+    /// 3. The final prediction is the average of all the individual tree predictions
+    /// 
+    /// For example, if you're predicting house prices and have 100 trees:
+    /// - Tree 1 predicts: $250,000
+    /// - Tree 2 predicts: $275,000
+    /// - ...
+    /// - Tree 100 predicts: $260,000
+    /// - Final prediction: Average of all 100 predictions
+    /// 
+    /// The "Async" in the name means this method returns a Task, allowing your program to do other things
+    /// while waiting for predictions to complete.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Make predictions
+    /// var predictions = await extraTrees.PredictAsync(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
         var regularizedInput = Regularization.RegularizeMatrix(input);
@@ -57,6 +238,12 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         return Regularization.RegularizeCoefficients(regularizedPredictions);
     }
 
+    /// <summary>
+    /// Creates a random sample of the training data with replacement (bootstrap sampling).
+    /// </summary>
+    /// <param name="x">The feature matrix to sample from.</param>
+    /// <param name="y">The target vector to sample from.</param>
+    /// <returns>A tuple containing the sampled feature matrix and target vector.</returns>
     private (Matrix<T> sampledX, Vector<T> sampledY) SampleWithReplacement(Matrix<T> x, Vector<T> y)
     {
         var sampledIndices = new List<int>();
@@ -71,6 +258,11 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         return (sampledX, sampledY);
     }
 
+    /// <summary>
+    /// Calculates the average feature importances across all trees in the ensemble.
+    /// </summary>
+    /// <param name="numFeatures">The number of features in the model.</param>
+    /// <returns>A task representing the asynchronous calculation operation.</returns>
     protected override async Task CalculateFeatureImportancesAsync(int numFeatures)
     {
         FeatureImportances = new Vector<T>(new T[numFeatures]);
@@ -86,6 +278,38 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         }
     }
 
+    /// <summary>
+    /// Gets metadata about the Extremely Randomized Trees model and its configuration.
+    /// </summary>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the model, including its type, number of trees, maximum tree depth,
+    /// and feature importances if available. This information can be useful for model management, comparison,
+    /// and documentation purposes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information about your Extremely Randomized Trees model.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Extremely Randomized Trees)
+    /// - How many trees are in the ensemble
+    /// - Maximum depth of each tree
+    /// - How important each feature is for making predictions (if available)
+    /// 
+    /// This information is helpful when:
+    /// - Comparing different models
+    /// - Documenting your model's configuration
+    /// - Troubleshooting model performance
+    /// - Understanding which features have the biggest impact on predictions
+    /// 
+    /// Example:
+    /// ```csharp
+    /// var metadata = extraTrees.GetModelMetadata();
+    /// Console.WriteLine($"Model type: {metadata.ModelType}");
+    /// Console.WriteLine($"Number of trees: {metadata.AdditionalInfo["NumberOfTrees"]}");
+    /// ```
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>
@@ -107,6 +331,42 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         return metadata;
     }
 
+    /// <summary>
+    /// Serializes the Extremely Randomized Trees model to a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts the Extremely Randomized Trees model into a byte array that can be stored in a file,
+    /// database, or transmitted over a network. The serialized data includes the model's configuration options,
+    /// feature importances, and all individual decision trees in the ensemble.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+    /// 
+    /// Serialization allows you to:
+    /// - Save your model to a file
+    /// - Store your model in a database
+    /// - Send your model over a network
+    /// - Keep your model for later use without having to retrain it
+    /// 
+    /// The serialized data includes:
+    /// - All the model's settings (like number of trees and maximum depth)
+    /// - The importance of each feature
+    /// - Every individual decision tree in the ensemble
+    /// 
+    /// Because Extremely Randomized Trees models contain multiple trees, the serialized data
+    /// can be quite large compared to a single decision tree model.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Serialize the model
+    /// byte[] modelData = extraTrees.Serialize();
+    /// 
+    /// // Save to a file
+    /// File.WriteAllBytes("extraTrees.model", modelData);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using var ms = new MemoryStream();
@@ -140,6 +400,43 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// Loads a previously serialized Extremely Randomized Trees model from a byte array.
+    /// </summary>
+    /// <param name="modelData">The byte array containing the serialized model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs an Extremely Randomized Trees model from a byte array that was previously created
+    /// using the Serialize method. It restores the model's configuration options, feature importances, and all
+    /// individual decision trees in the ensemble, allowing the model to be used for predictions without retraining.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+    /// 
+    /// Deserialization allows you to:
+    /// - Load a model that was saved earlier
+    /// - Use a model without having to retrain it
+    /// - Share models between different applications
+    /// 
+    /// When you deserialize an Extremely Randomized Trees model:
+    /// - All settings are restored
+    /// - Feature importances are recovered
+    /// - All individual trees in the ensemble are reconstructed
+    /// - The model is ready to make predictions immediately
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Load from a file
+    /// byte[] modelData = File.ReadAllBytes("extraTrees.model");
+    /// 
+    /// // Deserialize the model
+    /// var extraTrees = new ExtremelyRandomizedTreesRegression&lt;double&gt;(options);
+    /// extraTrees.Deserialize(modelData);
+    /// 
+    /// // Now you can use the model for predictions
+    /// var predictions = await extraTrees.PredictAsync(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] modelData)
     {
         using var ms = new MemoryStream(modelData);

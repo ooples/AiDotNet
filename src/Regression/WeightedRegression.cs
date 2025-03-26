@@ -8,17 +8,72 @@ namespace AiDotNet.Regression;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
-/// Weighted regression is useful when:
-/// - Some data points are more reliable than others
-/// - You want to give more importance to certain observations
-/// - You're dealing with heteroscedastic data (data with varying levels of noise)
+/// <para>
+/// Weighted regression extends standard regression by allowing each data point to have a different level
+/// of influence on the model. This is particularly useful in scenarios where data points have varying
+/// reliability, importance, or error variance.
+/// </para>
+/// <para><b>For Beginners:</b> Weighted regression is like giving different voting power to different data points.
 /// 
-/// The weights determine how much each data point influences the final model.
-/// Higher weights mean more influence, lower weights mean less influence.
+/// Think of it like this:
+/// - Regular regression treats all data points equally - each point gets one "vote" on where the line should go
+/// - Weighted regression lets some points have more "votes" than others
+/// - Points with higher weights have more influence on the final model
+/// - Points with lower weights have less influence
+/// 
+/// For example, if you're predicting house prices:
+/// - Recent sales might get higher weights because they reflect current market conditions better
+/// - Unusual properties might get lower weights to prevent them from skewing the model
+/// - More reliable measurements might get higher weights than less reliable ones
+/// 
+/// This helps you build models that focus more on the data points you trust or care about most.
+/// </para>
 /// </remarks>
 public class WeightedRegression<T> : RegressionBase<T>
 {
+    /// <summary>
+    /// The weights assigned to each data point, determining their influence on the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector contains the weight for each observation in the training data. Each weight determines
+    /// how much influence its corresponding data point has during the model fitting process.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores how important each data point is.
+    /// 
+    /// The weights determine:
+    /// - How much each point influences the final model
+    /// - Higher weights = more influence
+    /// - Lower weights = less influence
+    /// - Zero weight = point is completely ignored
+    /// 
+    /// Think of weights like adjusting the volume for different speakers in a discussion - 
+    /// you can turn up the volume for those with important information and turn down the volume
+    /// for those who might be less reliable.
+    /// </para>
+    /// </remarks>
     private readonly Vector<T> _weights;
+    
+    /// <summary>
+    /// The polynomial order for feature expansion.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This integer determines the highest power to which the input features will be raised during polynomial
+    /// feature expansion. A value of 1 means linear features only, 2 adds squared terms, 3 adds cubic terms, and so on.
+    /// </para>
+    /// <para><b>For Beginners:</b> This determines how complex the patterns can be that the model looks for.
+    /// 
+    /// The order value controls:
+    /// - Order 1: The model only looks for straight-line relationships (linear)
+    /// - Order 2: The model can also detect curved relationships (quadratic)
+    /// - Order 3: The model can detect even more complex curves (cubic)
+    /// - And so on...
+    /// 
+    /// Higher orders can fit more complex patterns but may also be more prone to overfitting
+    /// (fitting the noise rather than the true pattern).
+    /// </para>
+    /// </remarks>
     private readonly int _order;
 
     /// <summary>
@@ -36,8 +91,19 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// Thrown when the options parameter is null or doesn't contain weights.
     /// </exception>
     /// <remarks>
-    /// <b>For Beginners:</b> Think of weights as a way to tell the model "pay more attention to these points 
-    /// and less attention to those points" when finding the best fit line.
+    /// <para>
+    /// This constructor initializes a new weighted regression model with the specified options and regularization.
+    /// The weights vector must be provided in the options, as it's a fundamental component of weighted regression.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up your weighted regression model with your chosen settings.
+    /// 
+    /// When creating a weighted regression model:
+    /// - You must provide weights for each data point (how important each point is)
+    /// - You can specify the order (complexity) of the model
+    /// - You can add regularization to prevent overfitting (making the model too specific to training data)
+    /// 
+    /// If you don't provide weights, you'll get an error because weights are essential to weighted regression.
+    /// </para>
     /// </remarks>
     public WeightedRegression(WeightedRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
         : base(options, regularization)
@@ -56,14 +122,22 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// The target values vector where each element corresponds to a row in the input matrix.
     /// </param>
     /// <remarks>
-    /// This method:
-    /// 1. Expands the features to the specified polynomial order
-    /// 2. Adds a constant column for the intercept if specified in the options
-    /// 3. Applies the weights to give different importance to each data point
-    /// 4. Solves the weighted least squares equation to find the optimal coefficients
+    /// <para>
+    /// This method implements the weighted least squares algorithm to find the optimal coefficients for the model.
+    /// It first expands the features to the specified polynomial order, then applies the weights to give different
+    /// importance to each data point, and finally solves the weighted normal equations to find the coefficients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the model to recognize patterns in your data, respecting
+    /// the importance of each point.
     /// 
-    /// <b>For Beginners:</b> Training means finding the best line (or curve) that fits your data points,
-    /// while taking into account how important each point is (based on its weight).
+    /// During training:
+    /// - The features are expanded based on the order (to capture more complex patterns)
+    /// - The weights are applied to each data point (giving more influence to higher-weighted points)
+    /// - The model solves a complex equation to find the best fit considering these weights
+    /// - If you included an intercept, it finds both the slope(s) and the y-intercept
+    /// 
+    /// After training is complete, the model can make predictions for new data points.
+    /// </para>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
@@ -100,8 +174,22 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// A vector of predicted values, one for each row in the input matrix.
     /// </returns>
     /// <remarks>
-    /// <b>For Beginners:</b> Once the model is trained, this method uses the discovered pattern (equation)
-    /// to predict outcomes for new data points.
+    /// <para>
+    /// This method generates predictions for new data points using the coefficients learned during training.
+    /// It first expands the input features to the same polynomial order used during training, then applies
+    /// the base class prediction method to calculate the output values.
+    /// </para>
+    /// <para><b>For Beginners:</b> Once the model is trained, this method uses the discovered patterns
+    /// to predict outcomes for new data.
+    /// 
+    /// When making predictions:
+    /// - The new data is transformed the same way as during training (expanded to polynomial features)
+    /// - The model applies the equation it learned to generate predictions
+    /// - Each input row gets one predicted value
+    /// 
+    /// Note that the weights only matter during training - when predicting, all we need are the 
+    /// patterns (coefficients) the model discovered.
+    /// </para>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
@@ -116,6 +204,28 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// <returns>
     /// A new matrix with expanded polynomial features.
     /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method transforms the input features by adding polynomial terms up to the order specified
+    /// in the model options. For each original feature, it generates additional features representing
+    /// the feature raised to powers from 1 to the specified order.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method enriches your data to help find more complex patterns.
+    /// 
+    /// Feature expansion adds new columns to your data:
+    /// - Original features: x
+    /// - If order = 2: Adds x²
+    /// - If order = 3: Adds x² and x³
+    /// - And so on...
+    /// 
+    /// For example, if your original data has one feature (height) and order = 2:
+    /// - Original: [5]
+    /// - Expanded: [5, 25] (height and height-squared)
+    /// 
+    /// This allows the model to detect non-linear relationships (curves) in your data,
+    /// even though the model itself is linear.
+    /// </para>
+    /// </remarks>
     private Matrix<T> ExpandFeatures(Matrix<T> x)
     {
         var expandedX = new Matrix<T>(x.Rows, x.Columns * _order);
@@ -138,6 +248,17 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// Gets the type of regression model.
     /// </summary>
     /// <returns>The model type identifier for weighted regression.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method identifies the type of this regression model as weighted regression, which
+    /// helps with model type checking and serialization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method simply identifies what kind of model this is.
+    /// 
+    /// It returns a label that identifies this as a weighted regression model, which helps the system
+    /// recognize and handle it correctly when saving, loading, or processing models.
+    /// </para>
+    /// </remarks>
     protected override ModelType GetModelType()
     {
         return ModelType.WeightedRegression;
