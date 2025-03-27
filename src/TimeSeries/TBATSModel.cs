@@ -1,15 +1,87 @@
 namespace AiDotNet.TimeSeries;
 
+/// <summary>
+/// Implements the TBATS (Trigonometric, Box-Cox transform, ARMA errors, Trend, and Seasonal components) model
+/// for complex time series forecasting with multiple seasonal patterns.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// The TBATS model is an advanced exponential smoothing method that can handle multiple seasonal patterns
+/// of different lengths. It uses trigonometric functions to model seasonality, Box-Cox transformations
+/// to handle non-linearity, and ARMA processes to model residual correlations.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b>
+/// TBATS is like a Swiss Army knife for time series forecasting. It can handle complex data with:
+/// 
+/// - Multiple seasonal patterns (e.g., daily, weekly, and yearly patterns all at once)
+/// - Non-linear growth (using Box-Cox transformations)
+/// - Autocorrelated errors (using ARMA models)
+/// 
+/// For example, if you're analyzing hourly electricity demand, TBATS can simultaneously model:
+/// - Daily patterns (people use more electricity during the day than at night)
+/// - Weekly patterns (usage differs on weekdays versus weekends)
+/// - Yearly patterns (more electricity is used for heating in winter or cooling in summer)
+/// 
+/// This makes TBATS particularly useful for complex forecasting problems where simpler methods fail.
+/// </para>
+/// </remarks>
 public class TBATSModel<T> : TimeSeriesModelBase<T>
 {
+    /// <summary>
+    /// Configuration options for the TBATS model.
+    /// </summary>
     private TBATSModelOptions<T> _tbatsOptions;
+
+    /// <summary>
+    /// The level component of the time series, representing the current base value.
+    /// </summary>
     private Vector<T> _level;
+
+    /// <summary>
+    /// The trend component of the time series, representing the rate of change.
+    /// </summary>
     private Vector<T> _trend;
+
+    /// <summary>
+    /// The seasonal components of the time series, one for each seasonal period.
+    /// </summary>
     private List<Vector<T>> _seasonalComponents;
+
+    /// <summary>
+    /// The autoregressive (AR) coefficients for the ARMA error model.
+    /// </summary>
     private Vector<T> _arCoefficients;
+
+    /// <summary>
+    /// The moving average (MA) coefficients for the ARMA error model.
+    /// </summary>
     private Vector<T> _maCoefficients;
+
+    /// <summary>
+    /// The Box-Cox transformation parameter for handling non-linearity.
+    /// </summary>
     private T _boxCoxLambda;
 
+    /// <summary>
+    /// Initializes a new instance of the TBATSModel class with optional configuration options.
+    /// </summary>
+    /// <param name="options">The configuration options for the TBATS model. If null, default options are used.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// When you create a TBATS model, you can customize it with various options:
+    /// 
+    /// - Seasonal periods: The lengths of different seasonal patterns (e.g., 7 for weekly, 12 for monthly)
+    /// - ARMA order: How many past observations and errors to consider for the error model
+    /// - Box-Cox lambda: A parameter that controls the non-linear transformation (0 = log transform)
+    /// - Max iterations: How long the model should try to improve its estimates
+    /// - Tolerance: When to stop training (when improvements become smaller than this value)
+    /// 
+    /// The constructor initializes all the components that will be estimated during training.
+    /// </para>
+    /// </remarks>
     public TBATSModel(TBATSModelOptions<T>? options = null) : base(options ?? new TBATSModelOptions<T>())
     {
         _tbatsOptions = (TBATSModelOptions<T>)_options;
@@ -26,6 +98,32 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         _boxCoxLambda = NumOps.FromDouble(_tbatsOptions.BoxCoxLambda);
     }
 
+    /// <summary>
+    /// Trains the TBATS model using the provided input data and target values.
+    /// </summary>
+    /// <param name="x">The input features matrix (not used in TBATS).</param>
+    /// <param name="y">The time series data to model.</param>
+    /// <remarks>
+    /// <para>
+    /// The training process iteratively estimates all components of the model (level, trend, seasonal patterns,
+    /// and ARMA coefficients) until convergence or the maximum number of iterations is reached.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Training a TBATS model is like teaching a chef to recreate a complex recipe by analyzing its ingredients:
+    /// 
+    /// 1. First, the model makes initial guesses about each component (level, trend, seasonal patterns)
+    /// 2. Then it iteratively refines these guesses by:
+    ///    - Updating the level, trend, and seasonal components
+    ///    - Estimating the ARMA coefficients for the remaining patterns in the errors
+    ///    - Checking if the model has improved significantly
+    /// 3. It stops when either:
+    ///    - The improvements become very small (less than the tolerance)
+    ///    - It reaches the maximum number of iterations
+    /// 
+    /// After training, the model will have learned the patterns in your data and can make predictions.
+    /// </para>
+    /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         // Initialize components
@@ -48,6 +146,27 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates the log-likelihood of the model given the observed data.
+    /// </summary>
+    /// <param name="y">The observed time series data.</param>
+    /// <returns>The log-likelihood value.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// The log-likelihood measures how well the model explains the observed data.
+    /// A higher value means the model fits the data better.
+    /// 
+    /// This method:
+    /// 1. Makes predictions using the current model parameters
+    /// 2. Calculates the errors between predictions and actual values
+    /// 3. Computes the log-likelihood based on these errors
+    /// 4. Adds a penalty for model complexity to prevent overfitting
+    /// 
+    /// During training, the model tries to maximize this value, which means finding
+    /// parameters that explain the data well without being unnecessarily complex.
+    /// </para>
+    /// </remarks>
     private T CalculateLogLikelihood(Vector<T> y)
     {
         T logLikelihood = NumOps.Zero;
@@ -70,6 +189,27 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return logLikelihood;
     }
 
+    /// <summary>
+    /// Generates forecasts using the trained TBATS model.
+    /// </summary>
+    /// <param name="input">The input matrix specifying the forecast horizon.</param>
+    /// <returns>A vector of forecasted values.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method predicts future values based on the patterns learned during training.
+    /// For each future time point, it:
+    /// 
+    /// 1. Starts with the current level (base value)
+    /// 2. Adds the trend component (growth or decline)
+    /// 3. Multiplies by each seasonal component (for daily, weekly, yearly patterns, etc.)
+    /// 4. Adds the ARMA effects (patterns in the errors)
+    /// 
+    /// The result is a forecast that captures multiple seasonal patterns and trends.
+    /// For example, if forecasting retail sales, it might predict higher values during
+    /// weekends and holiday seasons while still capturing the overall growth trend.
+    /// </para>
+    /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
         Vector<T> predictions = new Vector<T>(input.Rows);
@@ -100,6 +240,25 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return predictions;
     }
 
+    /// <summary>
+    /// Initializes all components of the TBATS model using robust methods.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates initial estimates for all components of the model:
+    /// 
+    /// 1. Level: Estimated using a robust moving median to handle outliers
+    /// 2. Trend: Estimated using robust linear regression (Theil-Sen estimator)
+    /// 3. Seasonal components: Estimated for each seasonal period using robust methods
+    /// 4. ARMA coefficients: Estimated using robust autocorrelations
+    /// 
+    /// These initial estimates are important because they give the model a good starting point
+    /// for its iterative refinement process. Using robust methods means the initialization
+    /// won't be thrown off by outliers or unusual data points.
+    /// </para>
+    /// </remarks>
     private void InitializeComponents(Vector<T> y)
     {
         int n = y.Length;
@@ -142,6 +301,27 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         InitializeARMACoefficientsRobust(y);
     }
 
+    /// <summary>
+    /// Performs robust linear regression using the Theil-Sen estimator.
+    /// </summary>
+    /// <param name="x">The independent variable values.</param>
+    /// <param name="y">The dependent variable values.</param>
+    /// <returns>A vector containing the intercept and slope.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Robust linear regression is a way to fit a line to data that isn't easily thrown off by outliers.
+    /// 
+    /// The Theil-Sen estimator works by:
+    /// 1. Calculating the slope between every possible pair of points
+    /// 2. Taking the median of all these slopes as the final slope estimate
+    /// 3. Calculating the intercept using the median of x and y values
+    /// 
+    /// This approach is much more resistant to outliers than ordinary least squares regression.
+    /// For example, if one data point is way off due to a measurement error, the Theil-Sen
+    /// estimator will still find a line that fits the majority of the data well.
+    /// </para>
+    /// </remarks>
     private Vector<T> RobustLinearRegression(Vector<T> x, Vector<T> y)
     {
         // Implement Theil-Sen estimator for robust linear regression
@@ -159,9 +339,31 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         T intercept = NumOps.Subtract(StatisticsHelper<T>.CalculateMedian(y), 
                                       NumOps.Multiply(medianSlope, StatisticsHelper<T>.CalculateMedian(x)));
 
-        return new Vector<T>(new T[] { intercept, medianSlope });
+                return new Vector<T>(new T[] { intercept, medianSlope });
     }
 
+    /// <summary>
+    /// Initializes a seasonal component using robust methods.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <param name="period">The seasonal period.</param>
+    /// <returns>A vector representing the seasonal component.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method extracts a seasonal pattern from the data using robust techniques that aren't
+    /// easily affected by outliers or unusual values.
+    /// 
+    /// It works by:
+    /// 1. Removing the trend from the data
+    /// 2. Grouping values by their position in the seasonal cycle (e.g., all Mondays together)
+    /// 3. Taking the median of each group to estimate the seasonal effect
+    /// 4. Normalizing the pattern so it represents multiplicative effects
+    /// 
+    /// For example, if analyzing weekly data, this might find that Saturdays typically have
+    /// sales 20% higher than average, while Tuesdays have sales 10% lower than average.
+    /// </para>
+    /// </remarks>
     private Vector<T> InitializeSeasonalComponentRobust(Vector<T> y, int period)
     {
         int n = y.Length;
@@ -195,6 +397,27 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return seasonal;
     }
 
+    /// <summary>
+    /// Initializes ARMA coefficients using robust methods.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method estimates the ARMA (AutoRegressive Moving Average) coefficients,
+    /// which capture patterns in the errors that aren't explained by the level, trend,
+    /// and seasonal components.
+    /// 
+    /// It uses robust methods to:
+    /// 1. Calculate autocorrelations that aren't easily affected by outliers
+    /// 2. Estimate AR coefficients using the Yule-Walker equations
+    /// 3. Estimate MA coefficients using the innovations algorithm
+    /// 
+    /// These coefficients help the model capture additional patterns like short-term
+    /// dependencies (e.g., if yesterday's sales were unexpectedly high, today's might
+    /// also be above the typical pattern).
+    /// </para>
+    /// </remarks>
     private void InitializeARMACoefficientsRobust(Vector<T> y)
     {
         int p = _tbatsOptions.ARMAOrder;
@@ -237,6 +460,28 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates robust autocorrelations that are less sensitive to outliers.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <param name="maxLag">The maximum lag to calculate autocorrelations for.</param>
+    /// <returns>An array of autocorrelation values.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Autocorrelation measures how similar a time series is to a delayed version of itself.
+    /// For example, lag-1 autocorrelation shows how similar each value is to the previous value.
+    /// 
+    /// This method calculates robust autocorrelations by:
+    /// 1. Centering the data around its median (not mean)
+    /// 2. Scaling by the median absolute deviation (not standard deviation)
+    /// 3. Taking the median (not mean) of the products of lagged values
+    /// 
+    /// This approach is much less affected by outliers than traditional autocorrelation.
+    /// It helps the model identify true patterns in the data even when there are unusual
+    /// observations that might distort standard calculations.
+    /// </para>
+    /// </remarks>
     private T[] CalculateRobustAutocorrelations(Vector<T> y, int maxLag)
     {
         T[] autocorrelations = new T[maxLag + 1];
@@ -261,6 +506,28 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return autocorrelations;
     }
 
+    /// <summary>
+    /// Calculates robust residuals using Huber's M-estimator.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <returns>A vector of robust residuals.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Residuals are the differences between the actual values and the model's predictions.
+    /// This method calculates residuals in a way that reduces the influence of outliers.
+    /// 
+    /// It works by:
+    /// 1. Calculating initial residuals (actual minus predicted)
+    /// 2. Applying Huber's M-estimator, which:
+    ///    - Keeps small residuals as they are
+    ///    - Shrinks large residuals to reduce their influence
+    /// 
+    /// This approach helps the model focus on the typical patterns in the data rather than
+    /// being distracted by unusual observations. It's like listening to the majority opinion
+    /// while not completely ignoring but tempering the extreme voices.
+    /// </para>
+    /// </remarks>
     private Vector<T> CalculateRobustResiduals(Vector<T> y)
     {
         Vector<T> residuals = new Vector<T>(y.Length);
@@ -289,6 +556,26 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return residuals;
     }
 
+    /// <summary>
+    /// Initializes a seasonal component using standard (non-robust) methods.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <param name="period">The seasonal period.</param>
+    /// <returns>A vector representing the seasonal component.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method extracts a seasonal pattern from the data using standard averaging techniques.
+    /// 
+    /// It works by:
+    /// 1. Grouping values by their position in the seasonal cycle (e.g., all Mondays together)
+    /// 2. Taking the average of each group to estimate the seasonal effect
+    /// 3. Normalizing the pattern so the average seasonal effect is 1.0
+    /// 
+    /// This approach is simpler and faster than the robust method but may be more affected by outliers.
+    /// It's suitable for clean data without many unusual observations.
+    /// </para>
+    /// </remarks>
     private Vector<T> InitializeSeasonalComponent(Vector<T> y, int period)
     {
         int n = y.Length;
@@ -317,6 +604,25 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return seasonal;
     }
 
+    /// <summary>
+    /// Initializes ARMA coefficients using standard (non-robust) methods.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method estimates the ARMA (AutoRegressive Moving Average) coefficients using
+    /// standard time series techniques.
+    /// 
+    /// It works by:
+    /// 1. Calculating standard autocorrelations
+    /// 2. Estimating AR coefficients using the Yule-Walker equations
+    /// 3. Estimating MA coefficients using the innovations algorithm
+    /// 
+    /// This approach is more traditional but may be affected by outliers in the data.
+    /// It's suitable for well-behaved time series without many unusual observations.
+    /// </para>
+    /// </remarks>
     private void InitializeARMACoefficients(Vector<T> y)
     {
         int p = _tbatsOptions.ARMAOrder;
@@ -357,6 +663,27 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates residuals between the observed values and the model's predictions.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <returns>A vector of residuals.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Residuals are what's left over after the model has made its predictions.
+    /// They represent the part of the data that the model hasn't explained.
+    /// 
+    /// This method simply:
+        /// 1. Makes predictions using the current model parameters
+    /// 2. Subtracts these predictions from the actual observed values
+    /// 
+    /// Analyzing residuals is important because:
+    /// - If they look like random noise, the model has captured the patterns well
+    /// - If they show patterns, the model might be missing something important
+    /// - The size of residuals indicates how accurate the model's predictions are
+    /// </para>
+    /// </remarks>
     private Vector<T> CalculateResiduals(Vector<T> y)
     {
         Vector<T> residuals = new Vector<T>(y.Length);
@@ -370,6 +697,32 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return residuals;
     }
 
+    /// <summary>
+    /// Updates the level, trend, and seasonal components based on the observed data.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method refines the model's components based on the observed data.
+    /// For each time point, it:
+    /// 
+    /// 1. Updates the level (base value) using a weighted average of:
+    ///    - The observation adjusted for seasonality
+    ///    - The previous level plus trend
+    /// 
+    /// 2. Updates the trend using a weighted average of:
+    ///    - The change in level
+    ///    - The previous trend
+    /// 
+    /// 3. Updates each seasonal component using a weighted average of:
+    ///    - The observation relative to the level
+    ///    - The previous seasonal value
+    /// 
+    /// The weights (0.1, 0.01, etc.) control how quickly the model adapts to changes.
+    /// Smaller weights mean the model changes more slowly and is more stable.
+    /// </para>
+    /// </remarks>
     private void UpdateComponents(Vector<T> y)
     {
         for (int t = 1; t < y.Length; t++)
@@ -420,6 +773,28 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the ARMA coefficients based on the observed data.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method refines the ARMA (AutoRegressive Moving Average) coefficients,
+    /// which capture patterns in the errors not explained by the level, trend, and seasonal components.
+    /// 
+    /// It works by:
+    /// 1. Calculating autocorrelations in the data
+    /// 2. Using the Durbin-Levinson algorithm to estimate AR coefficients
+    /// 3. Using the innovations algorithm to estimate MA coefficients
+    /// 
+    /// These coefficients help the model capture additional patterns like:
+    /// - Short-term dependencies (today's value depends on yesterday's)
+    /// - Error persistence (if we underestimated yesterday, we might underestimate today too)
+    /// 
+    /// This improves the model's accuracy, especially for short-term forecasts.
+    /// </para>
+    /// </remarks>
     private void UpdateARMACoefficients(Vector<T> y)
     {
         int p = _tbatsOptions.ARMAOrder; // AR order
@@ -439,6 +814,28 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         _maCoefficients = maCoefficients;
     }
 
+    /// <summary>
+    /// Implements the Durbin-Levinson algorithm for estimating AR coefficients.
+    /// </summary>
+    /// <param name="autocorrelations">The autocorrelation values.</param>
+    /// <param name="p">The AR order.</param>
+    /// <returns>A vector of AR coefficients.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// The Durbin-Levinson algorithm is a method for estimating autoregressive (AR) coefficients.
+    /// These coefficients capture how much each past value influences the current value.
+    /// 
+    /// The algorithm works recursively, starting with a simple model and gradually adding more
+    /// past values while adjusting all coefficients at each step.
+    /// 
+    /// For example, in a stock price model:
+    /// - A positive AR(1) coefficient means if yesterday's price was high, today's is likely high too
+    /// - A negative AR(2) coefficient might mean if the price two days ago was high, today's is likely lower
+    /// 
+    /// This helps the model capture complex patterns of dependency between observations at different times.
+    /// </para>
+    /// </remarks>
     private Vector<T> DurbinLevinsonAlgorithm(T[] autocorrelations, int p)
     {
         Vector<T> phi = new Vector<T>(p);
@@ -472,6 +869,30 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return phi;
     }
 
+    /// <summary>
+    /// Implements the innovations algorithm for estimating MA coefficients.
+    /// </summary>
+    /// <param name="autocorrelations">The autocorrelation values.</param>
+    /// <param name="q">The MA order.</param>
+    /// <returns>A vector of MA coefficients.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// The innovations algorithm estimates moving average (MA) coefficients, which capture
+    /// how much each past error (or "innovation") influences the current value.
+    /// 
+    /// The algorithm works recursively, calculating each coefficient based on:
+    /// - The autocorrelation at that lag
+    /// - Previously calculated MA coefficients
+    /// - The variance of the innovations
+    /// 
+    /// For example, in a sales forecasting model:
+    /// - A positive MA(1) coefficient means if we underestimated yesterday's sales, we'll adjust today's forecast upward
+    /// - A negative MA(2) coefficient might mean if we overestimated sales two days ago, we'll adjust today's forecast upward
+    /// 
+    /// This helps the model correct for patterns in its own forecasting errors.
+    /// </para>
+    /// </remarks>
     private Vector<T> InnovationsAlgorithm(T[] autocorrelations, int q)
     {
         Vector<T> theta = new Vector<T>(q);
@@ -496,6 +917,30 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return theta;
     }
 
+    /// <summary>
+    /// Calculates autocorrelations of the time series data.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <param name="maxLag">The maximum lag to calculate autocorrelations for.</param>
+    /// <returns>An array of autocorrelation values.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Autocorrelation measures how similar a time series is to a delayed version of itself.
+    /// It helps identify patterns and dependencies in the data.
+    /// 
+    /// For each lag (1, 2, 3, etc.), this method:
+    /// 1. Calculates how much each value correlates with the value that many steps before it
+    /// 2. Normalizes this correlation to be between -1 and 1
+    /// 
+    /// For example:
+    /// - A high lag-1 autocorrelation means consecutive values tend to be similar
+    /// - A high lag-7 autocorrelation in daily data suggests a weekly pattern
+    /// - A negative autocorrelation means values tend to alternate (high followed by low)
+    /// 
+    /// These autocorrelations help the model identify and capture repeating patterns in the data.
+    /// </para>
+    /// </remarks>
     private T[] CalculateAutocorrelations(Vector<T> y, int maxLag)
     {
         T[] autocorrelations = new T[maxLag + 1];
@@ -520,6 +965,27 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return autocorrelations;
     }
 
+    /// <summary>
+    /// Evaluates the model's performance on test data.
+    /// </summary>
+    /// <param name="xTest">The input features matrix for testing.</param>
+    /// <param name="yTest">The actual target values for testing.</param>
+    /// <returns>A dictionary containing evaluation metrics.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method tests how well the model performs by comparing its predictions to actual values.
+    /// It calculates several error metrics:
+    /// 
+    /// - MSE (Mean Squared Error): Average of squared differences between predictions and actual values
+    /// - RMSE (Root Mean Squared Error): Square root of MSE, in the same units as the original data
+    /// - MAE (Mean Absolute Error): Average of absolute differences, less sensitive to outliers than MSE
+    /// - MAPE (Mean Absolute Percentage Error): Average percentage difference, useful for comparing across different scales
+    /// 
+    /// Lower values for these metrics indicate better model performance. They help you understand
+    /// how accurate your forecasts are likely to be and compare different models or parameter settings.
+    /// </para>
+    /// </remarks>
     public override Dictionary<string, T> EvaluateModel(Matrix<T> xTest, Vector<T> yTest)
     {
         Vector<T> predictions = Predict(xTest);
@@ -534,6 +1000,27 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         return metrics;
     }
 
+    /// <summary>
+    /// Serializes the model's core parameters to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Serialization is the process of converting the model's state into a format that can be saved to disk.
+    /// This allows you to save a trained model and load it later without having to retrain it.
+    /// 
+    /// This method saves:
+    /// - The level and trend components
+    /// - All seasonal components
+    /// - The ARMA coefficients
+        /// - The Box-Cox transformation parameter
+    /// - All configuration options
+    /// 
+    /// After serializing, you can store the model and later deserialize it to make predictions
+    /// or continue analysis without repeating the training process.
+    /// </para>
+    /// </remarks>
     protected override void SerializeCore(BinaryWriter writer)
     {
         // Serialize TBATSModel specific data
@@ -567,6 +1054,25 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         writer.Write(JsonConvert.SerializeObject(_tbatsOptions));
     }
 
+    /// <summary>
+    /// Deserializes the model's core parameters from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Deserialization is the process of loading a previously saved model from disk.
+    /// This method reads the model's parameters from a file and reconstructs the model
+    /// exactly as it was when it was saved.
+    /// 
+    /// This allows you to:
+    /// - Load a previously trained model without retraining
+    /// - Make predictions with consistent results
+    /// - Continue analysis from where you left off
+    /// 
+    /// It's like saving your work in a document and opening it later to continue editing.
+    /// </para>
+    /// </remarks>
     protected override void DeserializeCore(BinaryReader reader)
     {
         // Deserialize TBATSModel specific data
