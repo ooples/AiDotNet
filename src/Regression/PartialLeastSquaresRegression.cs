@@ -1,16 +1,111 @@
 namespace AiDotNet.Regression;
 
+
+/// <summary>
+/// Implements Partial Least Squares Regression (PLS), a technique that combines features from principal 
+/// component analysis and multiple linear regression to handle situations with many correlated predictors.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// Partial Least Squares Regression is particularly useful when dealing with many predictor variables 
+/// that may be highly correlated. It works by finding a linear combination of the predictors (components) 
+/// that maximizes the covariance between the predictors and the response variable.
+/// </para>
+/// <para>
+/// Unlike Principal Component Regression which only considers the variance in the predictor variables, 
+/// PLS regression considers both the variance in the predictors and their relationship with the response variable.
+/// This often leads to models with better predictive power, especially when the predictors are highly correlated.
+/// </para>
+/// <para>
+/// For Beginners:
+/// Think of PLS regression as a way to find the most important patterns in your input data that are also 
+/// strongly related to what you're trying to predict. It's like finding the key ingredients in a recipe 
+/// that most influence the taste, rather than just the most abundant ingredients.
+/// </para>
+/// </remarks>
 public class PartialLeastSquaresRegression<T> : RegressionBase<T>
 {
+    /// <summary>
+    /// Configuration options for the partial least squares regression model.
+    /// </summary>
+    /// <value>
+    /// Contains settings like the number of components to extract.
+    /// </value>
     private readonly PartialLeastSquaresRegressionOptions<T> _options;
+
+    /// <summary>
+    /// The loadings matrix (P) that represents how the original variables load onto the components.
+    /// </summary>
+    /// <value>
+    /// A matrix where each column represents the loadings for a component.
+    /// </value>
     private Matrix<T> _loadings;
+
+    /// <summary>
+    /// The scores matrix (T) that represents the projection of the original data onto the components.
+    /// </summary>
+    /// <value>
+    /// A matrix where each column represents the scores for a component.
+    /// </value>
     private Matrix<T> _scores;
+
+    /// <summary>
+    /// The weights matrix (W) used to transform the original variables into components.
+    /// </summary>
+    /// <value>
+    /// A matrix where each column represents the weights for a component.
+    /// </value>
     private Matrix<T> _weights;
+
+    /// <summary>
+    /// The mean of the target variable used for centering.
+    /// </summary>
+    /// <value>
+    /// A vector containing the mean value of the target variable.
+    /// </value>
     private Vector<T> _yMean;
+
+    /// <summary>
+    /// The means of the predictor variables used for centering.
+    /// </summary>
+    /// <value>
+    /// A vector containing the mean value of each predictor variable.
+    /// </value>
     private Vector<T> _xMean;
+
+    /// <summary>
+    /// The standard deviation of the target variable used for scaling.
+    /// </summary>
+    /// <value>
+    /// The standard deviation value of the target variable.
+    /// </value>
     private T _yStd;
+
+    /// <summary>
+    /// The standard deviations of the predictor variables used for scaling.
+    /// </summary>
+    /// <value>
+    /// A vector containing the standard deviation of each predictor variable.
+    /// </value>
     private Vector<T> _xStd;
 
+    /// <summary>
+    /// Initializes a new instance of the PartialLeastSquaresRegression class with the specified options and regularization.
+    /// </summary>
+    /// <param name="options">Configuration options for the PLS regression model. If null, default options will be used.</param>
+    /// <param name="regularization">Regularization method to prevent overfitting. If null, no regularization will be applied.</param>
+    /// <remarks>
+    /// <para>
+    /// The constructor initializes the model with either the provided options or default settings.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This constructor sets up the PLS regression model with your specified settings or uses
+    /// default settings if none are provided. Regularization is an optional technique to prevent the model
+    /// from becoming too complex and overfitting to the training data.
+    /// </para>
+    /// </remarks>
     public PartialLeastSquaresRegression(PartialLeastSquaresRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
         : base(options, regularization)
     {
@@ -24,10 +119,35 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _xStd = new Vector<T>(0);
     }
 
+    /// <summary>
+    /// Trains the partial least squares regression model on the provided data.
+    /// </summary>
+    /// <param name="x">The input features matrix where each row is a training example and each column is a feature.</param>
+    /// <param name="y">The target values vector corresponding to each training example.</param>
+    /// <remarks>
+    /// <para>
+    /// This method performs the following steps:
+    /// 1. Validates the input data
+    /// 2. Centers and scales the data
+    /// 3. Extracts the specified number of components using the NIPALS algorithm
+    /// 4. Calculates the regression coefficients
+    /// 5. Adjusts the coefficients for the scaling
+    /// 6. Calculates the intercept
+    /// 7. Applies regularization to the model matrices
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// Training is the process where the model learns from your data. The PLS algorithm first centers and scales
+    /// your data (makes all variables have similar ranges), then finds the most important patterns (components)
+    /// that explain both the variation in your input features and their relationship with the target variable.
+    /// These components are then used to build a regression model that can predict the target variable from
+    /// new input features.
+    /// </para>
+    /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);
-    
+
         // Center and scale the data
         (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
 
@@ -61,7 +181,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         // Calculate regression coefficients
         Matrix<T> W = _weights;
         Matrix<T> P = _loadings;
-        Matrix<T> invPtW = (P.Transpose().Multiply(W)).Inverse();
+        Matrix<T> invPtW = P.Transpose().Multiply(W).Inverse();
         Coefficients = W.Multiply(invPtW).Multiply(_scores.Transpose()).Multiply(yScaled);
 
         // Apply regularization to coefficients
@@ -82,6 +202,23 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _weights = Regularization.RegularizeMatrix(_weights);
     }
 
+    /// <summary>
+    /// Validates the input data before training.
+    /// </summary>
+    /// <param name="x">The input features matrix.</param>
+    /// <param name="y">The target values vector.</param>
+    /// <exception cref="ArgumentException">Thrown when the number of rows in x doesn't match the length of y.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method checks that the input data is valid before proceeding with training.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method makes sure your data is in the correct format before training begins.
+    /// It checks that you have the same number of target values as you have examples in your input data.
+    /// If not, it will raise an error to let you know there's a mismatch.
+    /// </para>
+    /// </remarks>
     private void ValidateInputs(Matrix<T> x, Vector<T> y)
     {
         if (x.Rows != y.Length)
@@ -90,6 +227,23 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         }
     }
 
+    /// <summary>
+    /// Makes predictions for the given input data.
+    /// </summary>
+    /// <param name="input">The input features matrix where each row is an example and each column is a feature.</param>
+    /// <returns>A vector of predicted values for each input example.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method scales the input data using the means and standard deviations from the training data,
+    /// applies the regression coefficients, and adds the intercept to produce predictions.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// After training, this method is used to make predictions on new data. It first scales your input data
+    /// the same way the training data was scaled, then applies the learned model to calculate the predicted values.
+    /// This is the main purpose of building a regression model - to predict values for new examples.
+    /// </para>
+    /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
         int rows = input.Rows;
@@ -104,41 +258,90 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
                 scaledInput[i, j] = NumOps.Divide(NumOps.Subtract(input[i, j], _xMean[j]), _xStd[j]);
             }
         }
-    
+
         // Make predictions
         Vector<T> predictions = scaledInput.Multiply(Coefficients);
         for (int i = 0; i < predictions.Length; i++)
         {
             predictions[i] = NumOps.Add(predictions[i], Intercept);
         }
-    
+
         return predictions;
     }
 
+    /// <summary>
+    /// Gets metadata about the model.
+    /// </summary>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the model, including its type, coefficients, loadings, scores, weights,
+    /// number of components, and feature importance.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// Model metadata provides information about the model itself, rather than the predictions it makes.
+    /// This includes details about how the model is configured (like how many components it uses) and
+    /// information about the importance of different features. This can help you understand which input
+    /// variables are most influential in making predictions.
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
         {
             ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
-            {
-                { "Coefficients", Coefficients },
-                { "Loadings", _loadings },
-                { "Scores", _scores },
-                { "Weights", _weights },
-                { "NumComponents", _options.NumComponents },
-                { "FeatureImportance", CalculateFeatureImportances() }
-            }
+        {
+            { "Coefficients", Coefficients },
+            { "Loadings", _loadings },
+            { "Scores", _scores },
+            { "Weights", _weights },
+            { "NumComponents", _options.NumComponents },
+            { "FeatureImportance", CalculateFeatureImportances() }
+        }
         };
     }
 
+    /// <summary>
+    /// Gets the type of the model.
+    /// </summary>
+    /// <returns>The model type identifier for partial least squares regression.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method is used for model identification and serialization purposes.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method simply returns an identifier that indicates this is a partial least squares regression model.
+    /// It's used internally by the library to keep track of different types of models.
+    /// </para>
+    /// </remarks>
     protected override ModelType GetModelType() => ModelType.PartialLeastSquaresRegression;
 
+    /// <summary>
+    /// Calculates the importance of each feature in the model.
+    /// </summary>
+    /// <returns>A vector containing the importance score for each feature.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the Variable Importance in Projection (VIP) scores, which measure the contribution
+    /// of each variable to the model based on the variance explained by each PLS component and the weights
+    /// of each variable in those components.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// Feature importance tells you which input variables have the most influence on the predictions.
+    /// In PLS regression, this is calculated using a measure called VIP (Variable Importance in Projection),
+    /// which considers both how much each component explains the variation in the data and how much each
+    /// variable contributes to those components. Higher values indicate more important variables.
+    /// </para>
+    /// </remarks>
     protected override Vector<T> CalculateFeatureImportances()
     {
         // VIP (Variable Importance in Projection) scores
         Vector<T> vip = new Vector<T>(Coefficients.Length);
-    
+
         // Calculate ssY (sum of squares of Y)
         T ssY = NumOps.Zero;
         Matrix<T> scoresTransposeMultiplyScores = _scores.Transpose().Multiply(_scores);
@@ -162,6 +365,22 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         return vip;
     }
 
+    /// <summary>
+    /// Serializes the model to a byte array.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model data.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the model's parameters, including base class data and PLS-specific data
+    /// such as loadings, scores, weights, means, and standard deviations.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// Serialization converts the model's internal state into a format that can be saved to disk or
+    /// transmitted over a network. This allows you to save a trained model and load it later without
+    /// having to retrain it. Think of it like saving your progress in a video game.
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using MemoryStream ms = new MemoryStream();
@@ -183,6 +402,22 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// Deserializes the model from a byte array.
+    /// </summary>
+    /// <param name="modelData">The byte array containing the serialized model data.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs the model's parameters from a serialized byte array, including base class data
+    /// and PLS-specific data such as loadings, scores, weights, means, and standard deviations.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// Deserialization is the opposite of serialization - it takes the saved model data and reconstructs
+    /// the model's internal state. This allows you to load a previously trained model and use it to make
+    /// predictions without having to retrain it. It's like loading a saved game to continue where you left off.
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] modelData)
     {
         using MemoryStream ms = new MemoryStream(modelData);

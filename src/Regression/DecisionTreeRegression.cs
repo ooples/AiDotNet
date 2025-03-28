@@ -1,14 +1,105 @@
 namespace AiDotNet.Regression;
 
+/// <summary>
+/// Represents a decision tree regression model that predicts continuous values based on input features.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Decision tree regression builds a model in the form of a tree structure where each internal node represents a 
+/// decision based on a feature, each branch represents an outcome of that decision, and each leaf node 
+/// represents a predicted value. The model is trained by recursively splitting the data based on the optimal 
+/// feature and threshold that minimizes the prediction error.
+/// </para>
+/// <para><b>For Beginners:</b> A decision tree regression is like a flowchart that helps predict numerical values.
+/// 
+/// Think of it like answering a series of yes/no questions to reach a prediction:
+/// - "Is the temperature above 75°F?"
+/// - "Is the humidity below 50%?"
+/// - "Is it a weekend?"
+/// 
+/// Each question splits the data into two groups, and the tree learns which questions to ask 
+/// to make the most accurate predictions. For example, a decision tree might predict house prices 
+/// based on features like square footage, number of bedrooms, and neighborhood.
+/// 
+/// The model is called a "tree" because it resembles an upside-down tree, with a single starting point (root) 
+/// that branches out into multiple endpoints (leaves) where the final predictions are made.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
 {
+    /// <summary>
+    /// The configuration options for the decision tree algorithm.
+    /// </summary>
     private readonly DecisionTreeOptions _options;
+    
+    /// <summary>
+    /// Random number generator used for feature selection and other randomized operations.
+    /// </summary>
     private readonly Random _random;
+    
+    /// <summary>
+    /// Vector storing the importance scores for each feature in the model.
+    /// </summary>
     private Vector<T> _featureImportances;
+    
+    /// <summary>
+    /// The regularization strategy applied to the model to prevent overfitting.
+    /// </summary>
     private readonly IRegularization<T> _regularization;
 
+    /// <summary>
+    /// Gets the number of trees in this model, which is always 1 for a single decision tree.
+    /// </summary>
+    /// <value>
+    /// The number of trees in the model, which is 1 for this implementation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property returns the number of decision trees used in the model. For the DecisionTreeRegression class, 
+    /// this is always 1, as it implements a single decision tree. This property is provided for compatibility with 
+    /// ensemble methods that may use multiple trees.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property simply tells you how many trees are in the model.
+    /// 
+    /// A single decision tree model (like this one) always returns 1.
+    /// 
+    /// Other algorithms like Random Forests or Gradient Boosting use multiple trees 
+    /// (sometimes hundreds or thousands) to make better predictions, but a basic 
+    /// decision tree uses just one tree structure.
+    /// </para>
+    /// </remarks>
     public override int NumberOfTrees => 1;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DecisionTreeRegression{T}"/> class with optional configuration.
+    /// </summary>
+    /// <param name="options">Optional configuration options for the decision tree algorithm.</param>
+    /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new decision tree regression model with the specified options and regularization strategy.
+    /// If no options are provided, default values are used. If no regularization is specified, no regularization is applied.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how you create a new decision tree prediction model.
+    /// 
+    /// When creating a decision tree, you can specify two main things:
+    /// - Options: Controls how the tree grows (like its maximum depth or how many samples are needed to split)
+    /// - Regularization: Helps prevent the model from becoming too complex and "memorizing" the training data
+    /// 
+    /// If you don't specify these parameters, the model will use reasonable default settings.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Create a decision tree with default settings
+    /// var tree = new DecisionTreeRegression&lt;double&gt;();
+    /// 
+    /// // Create a decision tree with custom options
+    /// var options = new DecisionTreeOptions { MaxDepth = 5 };
+    /// var customTree = new DecisionTreeRegression&lt;double&gt;(options);
+    /// ```
+    /// </para>
+    /// </remarks>
     public DecisionTreeRegression(DecisionTreeOptions? options = null, IRegularization<T>? regularization = null)
         : base(options, regularization)
     {
@@ -18,6 +109,42 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         _random = new Random(_options.Seed ?? Environment.TickCount);
     }
 
+    /// <summary>
+    /// Trains the decision tree model using the provided input features and target values.
+    /// </summary>
+    /// <param name="x">A matrix where each row represents a sample and each column represents a feature.</param>
+    /// <param name="y">A vector of target values corresponding to each sample in x.</param>
+    /// <remarks>
+    /// <para>
+    /// This method builds the decision tree model by recursively splitting the data based on features and thresholds 
+    /// that best reduce the prediction error. It applies any specified regularization to the input data and 
+    /// calculates feature importances after training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the decision tree how to make predictions using your data.
+    /// 
+    /// You provide:
+    /// - x: Your input data (features) - like house size, number of bedrooms, location, etc.
+    /// - y: The values you want to predict - like house prices
+    /// 
+    /// The training process:
+    /// 1. Looks at your data to find patterns
+    /// 2. Decides which features are most useful for predictions
+    /// 3. Creates a tree structure with decision rules
+    /// 4. Figures out how important each feature is
+    /// 
+    /// After training, the model is ready to make predictions on new data.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Create training data
+    /// var features = new Matrix&lt;double&gt;(...); // Input features
+    /// var targets = new Vector&lt;double&gt;(...);  // Target values
+    /// 
+    /// // Train the model
+    /// decisionTree.Train(features, targets);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         // Apply regularization to the input data
@@ -28,6 +155,41 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         CalculateFeatureImportances(regularizedX);
     }
 
+    /// <summary>
+    /// Predicts target values for the provided input features using the trained decision tree model.
+    /// </summary>
+    /// <param name="input">A matrix where each row represents a sample to predict and each column represents a feature.</param>
+    /// <returns>A vector of predicted values corresponding to each input sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method traverses the decision tree for each input sample to find the leaf node that corresponds to the sample's features.
+    /// The prediction stored in the leaf node is then returned as the predicted value for that sample. Any specified regularization
+    /// is applied to both the input data and the predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method uses your trained model to make predictions on new data.
+    /// 
+    /// How it works:
+    /// 1. For each row of input data, the model starts at the top of the decision tree
+    /// 2. At each decision point (node), it checks the value of a specific feature
+    /// 3. Based on that value, it follows the appropriate branch
+    /// 4. It continues until it reaches a leaf node (endpoint)
+    /// 5. The value stored in that leaf node becomes the prediction
+    /// 
+    /// For example, if predicting house prices:
+    /// - "Is square footage > 2000?" If yes, go left; if no, go right
+    /// - "Is number of bedrooms > 3?" If yes, go left; if no, go right
+    /// - Reach leaf node: Predict price = $350,000
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Create test data
+    /// var newFeatures = new Matrix&lt;double&gt;(...);
+    /// 
+    /// // Make predictions
+    /// var predictions = decisionTree.Predict(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
         // Apply regularization to the input data
@@ -43,6 +205,36 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         return _regularization.RegularizeCoefficients(new Vector<T>(predictions));
     }
 
+    /// <summary>
+    /// Gets metadata about the decision tree model and its configuration.
+    /// </summary>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the model, including its type and configuration options. This information
+    /// can be useful for model management, comparison, and documentation purposes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information about your decision tree model.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Decision Tree)
+    /// - Maximum depth of the tree (how many questions it can ask)
+    /// - Minimum samples required to split a node (how much data is needed to create a new decision point)
+    /// - Maximum features considered at each split (how many features the model looks at when deciding how to split)
+    /// 
+    /// This information is helpful when:
+    /// - Comparing different models
+    /// - Documenting your model's configuration
+    /// - Troubleshooting model performance
+    /// 
+    /// Example:
+    /// ```csharp
+    /// var metadata = decisionTree.GetModelMetadata();
+    /// Console.WriteLine($"Model type: {metadata.ModelType}");
+    /// Console.WriteLine($"Max depth: {metadata.AdditionalInfo["MaxDepth"]}");
+    /// ```
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -57,6 +249,41 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         };
     }
 
+    /// <summary>
+    /// Gets the importance score of a specific feature in the decision tree model.
+    /// </summary>
+    /// <param name="featureIndex">The index of the feature to get the importance score for.</param>
+    /// <returns>The importance score of the specified feature.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model hasn't been trained yet.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the feature index is invalid.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method returns the importance score of the specified feature in the trained decision tree model. Feature
+    /// importance scores indicate how useful each feature was in building the tree, with higher values indicating 
+    /// more important features. The scores are normalized to sum to 1.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method tells you how important each feature is for making predictions.
+    /// 
+    /// Feature importance:
+    /// - Measures how much each feature contributes to the model's predictions
+    /// - Higher values mean the feature has more influence on the predictions
+    /// - Values range from 0 to 1, and all feature importances sum to 1
+    /// 
+    /// For example, when predicting house prices:
+    /// - Square footage might have importance 0.6 (very important)
+    /// - Number of bedrooms might have importance 0.3 (somewhat important)
+    /// - Year built might have importance 0.1 (less important)
+    /// 
+    /// This helps you understand which features matter most for your predictions.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Get importance of the first feature (index 0)
+    /// var importance = decisionTree.GetFeatureImportance(0);
+    /// Console.WriteLine($"Feature 0 importance: {importance}");
+    /// ```
+    /// </para>
+    /// </remarks>
     public T GetFeatureImportance(int featureIndex)
     {
         if (_featureImportances.Length == 0)
@@ -72,6 +299,38 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         return _featureImportances[featureIndex];
     }
 
+    /// <summary>
+    /// Serializes the decision tree model to a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts the decision tree model into a byte array that can be stored in a file, database,
+    /// or transmitted over a network. The serialized data includes the model's configuration options and the
+    /// complete tree structure.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+    /// 
+    /// Serialization allows you to:
+    /// - Save your model to a file
+    /// - Store your model in a database
+    /// - Send your model over a network
+    /// - Keep your model for later use without having to retrain it
+    /// 
+    /// The serialized data includes:
+    /// - All the model's settings (like maximum depth)
+    /// - The entire tree structure with all its decision rules
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Serialize the model
+    /// byte[] modelData = decisionTree.Serialize();
+    /// 
+    /// // Save to a file
+    /// File.WriteAllBytes("decisionTree.model", modelData);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using var ms = new MemoryStream();
@@ -88,6 +347,42 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// Loads a previously serialized decision tree model from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs a decision tree model from a byte array that was previously created using the
+    /// Serialize method. It restores the model's configuration options and tree structure, allowing the model
+    /// to be used for predictions without retraining.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+    /// 
+    /// Deserialization allows you to:
+    /// - Load a model that was saved earlier
+    /// - Use a model without having to retrain it
+    /// - Share models between different applications
+    /// 
+    /// When you deserialize a model:
+    /// - All settings are restored
+    /// - The entire tree structure is reconstructed
+    /// - The model is ready to make predictions immediately
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Load from a file
+    /// byte[] modelData = File.ReadAllBytes("decisionTree.model");
+    /// 
+    /// // Deserialize the model
+    /// var decisionTree = new DecisionTreeRegression&lt;double&gt;();
+    /// decisionTree.Deserialize(modelData);
+    /// 
+    /// // Now you can use the model for predictions
+    /// var predictions = decisionTree.Predict(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] data)
     {
         using var ms = new MemoryStream(data);
@@ -103,6 +398,43 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         Root = DeserializeNode(reader);
     }
 
+    /// <summary>
+    /// Trains the decision tree model using the provided input features, target values, and sample weights.
+    /// </summary>
+    /// <param name="x">A matrix where each row represents a sample and each column represents a feature.</param>
+    /// <param name="y">A vector of target values corresponding to each sample in x.</param>
+    /// <param name="sampleWeights">A vector of weights for each sample, indicating their importance during training.</param>
+    /// <exception cref="ArgumentException">Thrown when input dimensions don't match.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method builds the decision tree model similar to the Train method, but allows specifying different weights
+    /// for each training sample. Samples with higher weights have more influence on the training process, which can be 
+    /// useful for handling imbalanced datasets or for boosting algorithms.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method is similar to the regular Train method, but lets you specify how important each training example is.
+    /// 
+    /// Sample weights allow you to:
+    /// - Give more importance to certain examples during training
+    /// - Make the model pay more attention to rare cases
+    /// - Balance uneven datasets (where some outcomes are much more common than others)
+    /// 
+    /// For example, when predicting house prices:
+    /// - You might give higher weights to recent sales (more relevant)
+    /// - You might give lower weights to unusual properties (potential outliers)
+    /// - You might give higher weights to properties similar to the ones you'll make predictions for
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Create training data
+    /// var features = new Matrix&lt;double&gt;(...);  // Input features
+    /// var targets = new Vector&lt;double&gt;(...);   // Target values
+    /// var weights = new Vector&lt;double&gt;(...);   // Sample weights
+    /// 
+    /// // Train the model with weights
+    /// decisionTree.TrainWithWeights(features, targets, weights);
+    /// ```
+    /// </para>
+    /// </remarks>
     public void TrainWithWeights(Matrix<T> x, Vector<T> y, Vector<T> sampleWeights)
     {
         // Validate inputs
@@ -121,6 +453,14 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         CalculateFeatureImportances(x);
     }
 
+    /// <summary>
+    /// Finds the best feature and threshold to split the data based on weighted samples.
+    /// </summary>
+    /// <param name="x">The feature matrix.</param>
+    /// <param name="y">The target vector.</param>
+    /// <param name="weights">The sample weights vector.</param>
+    /// <param name="featureIndices">The indices of features to consider for splitting.</param>
+    /// <returns>A tuple containing the index of the best feature and the best threshold value.</returns>
     private (int featureIndex, T threshold) FindBestSplitWithWeights(Matrix<T> x, Vector<T> y, Vector<T> weights, IEnumerable<int> featureIndices)
     {
         int bestFeatureIndex = -1;
@@ -149,6 +489,14 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         return (bestFeatureIndex, bestThreshold);
     }
 
+    /// <summary>
+    /// Calculates the score of a potential split based on weighted samples.
+    /// </summary>
+    /// <param name="featureValues">The values of the feature being considered for splitting.</param>
+    /// <param name="y">The target vector.</param>
+    /// <param name="weights">The sample weights vector.</param>
+    /// <param name="threshold">The threshold value to evaluate for splitting.</param>
+    /// <returns>The score of the split, with higher values indicating better splits.</returns>
     private T CalculateWeightedSplitScore(Vector<T> featureValues, Vector<T> y, Vector<T> weights, T threshold)
     {
         var leftIndices = new List<int>();
@@ -187,6 +535,12 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         );
     }
 
+    /// <summary>
+    /// Calculates the weighted variance reduction for a set of target values and weights.
+    /// </summary>
+    /// <param name="y">The target vector.</param>
+    /// <param name="weights">The sample weights vector.</param>
+    /// <returns>The weighted variance reduction value.</returns>
     private T CalculateWeightedVarianceReduction(Vector<T> y, Vector<T> weights)
     {
         T totalWeight = weights.Sum();
@@ -203,6 +557,14 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         return weightedVariance;
     }
 
+    /// <summary>
+    /// Builds a decision tree using weighted samples.
+    /// </summary>
+    /// <param name="node">The current node to build from.</param>
+    /// <param name="x">The feature matrix for samples in this node.</param>
+    /// <param name="y">The target vector for samples in this node.</param>
+    /// <param name="weights">The sample weights vector for samples in this node.</param>
+    /// <param name="depth">The current depth in the tree.</param>
     private void BuildTreeWithWeights(DecisionTreeNode<T> node, Matrix<T> x, Vector<T> y, Vector<T> weights, int depth)
     {
         if (depth >= Options.MaxDepth || x.Rows <= Options.MinSamplesSplit)
@@ -245,6 +607,15 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         BuildTreeWithWeights(node.Right, x.GetRows(rightIndices), y.GetElements(rightIndices), weights.GetElements(rightIndices), depth + 1);
     }
 
+    /// <summary>
+    /// Splits the data into left and right subsets based on a feature and threshold.
+    /// </summary>
+    /// <param name="x">The feature matrix.</param>
+    /// <param name="y">The target vector.</param>
+    /// <param name="weights">The sample weights vector.</param>
+    /// <param name="featureIndex">The index of the feature to split on.</param>
+    /// <param name="threshold">The threshold value to split on.</param>
+    /// <returns>Two lists containing the indices of samples that go to the left and right child nodes.</returns>
     private (List<int> leftIndices, List<int> rightIndices) SplitDataWithWeights(Matrix<T> x, Vector<T> y, Vector<T> weights, int featureIndex, T threshold)
     {
         var leftIndices = new List<int>();
@@ -265,12 +636,25 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         return (leftIndices, rightIndices);
     }
 
+    /// <summary>
+    /// Calculates the weighted prediction value for a leaf node.
+    /// </summary>
+    /// <param name="y">The target vector for samples in this leaf.</param>
+    /// <param name="weights">The sample weights vector for samples in this leaf.</param>
+    /// <returns>The weighted average of target values, to be used as the leaf's prediction.</returns>
     private T CalculateWeightedLeafValue(Vector<T> y, Vector<T> weights)
     {
         T totalWeight = weights.Sum();
         return NumOps.Divide(y.DotProduct(weights), totalWeight);
     }
 
+    /// <summary>
+    /// Builds the decision tree recursively.
+    /// </summary>
+    /// <param name="x">The feature matrix for samples in this node.</param>
+    /// <param name="y">The target vector for samples in this node.</param>
+    /// <param name="depth">The current depth in the tree.</param>
+    /// <returns>The root node of the built decision tree.</returns>
     private DecisionTreeNode<T>? BuildTree(Matrix<T> x, Vector<T> y, int depth)
     {
         if (depth >= _options.MaxDepth || x.Rows < _options.MinSamplesSplit)
@@ -366,6 +750,12 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         return node;
     }
 
+    /// <summary>
+    /// Predicts the target value for a single sample by traversing the decision tree.
+    /// </summary>
+    /// <param name="input">The feature vector of the sample to predict.</param>
+    /// <param name="node">The current node in the traversal.</param>
+    /// <returns>The predicted value for the input sample.</returns>
     private T PredictSingle(Vector<T> input, DecisionTreeNode<T>? node)
     {
         if (node == null)
@@ -388,6 +778,10 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates the importance scores for all features based on their contribution to the tree.
+    /// </summary>
+    /// <param name="x">The feature matrix used for training.</param>
     private void CalculateFeatureImportances(Matrix<T> x)
     {
         _featureImportances = new Vector<T>([.. Enumerable.Repeat(NumOps.Zero, x.Columns)]);
@@ -395,6 +789,11 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         NormalizeFeatureImportances();
     }
 
+    /// <summary>
+    /// Recursively calculates feature importances by traversing the tree.
+    /// </summary>
+    /// <param name="node">The current node in the traversal.</param>
+    /// <param name="numFeatures">The total number of features in the model.</param>
     private void CalculateFeatureImportancesRecursive(DecisionTreeNode<T>? node, int numFeatures)
     {
         if (node == null || node.IsLeaf)
@@ -409,6 +808,11 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         CalculateFeatureImportancesRecursive(node.Right, numFeatures);
     }
 
+    /// <summary>
+    /// Calculates the importance of a single node based on the variance reduction it achieves.
+    /// </summary>
+    /// <param name="node">The node to calculate importance for.</param>
+    /// <returns>The importance score of the node.</returns>
     private T CalculateNodeImportance(DecisionTreeNode<T> node)
     {
         if (node.IsLeaf || node.Left == null || node.Right == null)
@@ -429,6 +833,9 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         return NumOps.Multiply(varianceReduction, NumOps.FromDouble(node.Samples.Count));
     }
 
+    /// <summary>
+    /// Normalizes feature importance scores to sum to 1.
+    /// </summary>
     private void NormalizeFeatureImportances()
     {
         T sum = _featureImportances.Aggregate(NumOps.Zero, (acc, x) => NumOps.Add(acc, x));
@@ -444,6 +851,11 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         }
     }
 
+    /// <summary>
+    /// Serializes a tree node to a binary writer.
+    /// </summary>
+    /// <param name="node">The node to serialize.</param>
+    /// <param name="writer">The binary writer to write to.</param>
     private void SerializeNode(DecisionTreeNode<T>? node, BinaryWriter writer)
     {
         if (node == null)
@@ -462,6 +874,11 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         SerializeNode(node.Right, writer);
     }
 
+    /// <summary>
+    /// Deserializes a tree node from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <returns>The deserialized node.</returns>
     private DecisionTreeNode<T>? DeserializeNode(BinaryReader reader)
     {
         bool nodeExists = reader.ReadBoolean();
@@ -483,6 +900,10 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         return node;
     }
 
+    /// <summary>
+    /// Calculates feature importances based on the number of features.
+    /// </summary>
+    /// <param name="featureCount">The total number of features.</param>
     protected override void CalculateFeatureImportances(int featureCount)
     {
         _featureImportances = new Vector<T>(featureCount);

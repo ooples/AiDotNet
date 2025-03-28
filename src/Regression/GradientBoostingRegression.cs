@@ -1,14 +1,116 @@
 namespace AiDotNet.Regression;
 
+/// <summary>
+/// Implements a Gradient Boosting Regression model, which combines multiple decision trees
+/// sequentially to create a powerful ensemble that learns from the errors of previous trees.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Gradient Boosting is an ensemble technique that builds decision trees sequentially, with each tree
+/// correcting the errors made by the previous trees. The model starts with a simple prediction (typically
+/// the mean of the target values) and iteratively adds trees that predict the residuals (errors) of the
+/// current ensemble. These predictions are added to the ensemble with a learning rate that controls the
+/// contribution of each tree, helping to prevent overfitting.
+/// </para>
+/// <para><b>For Beginners:</b> Gradient Boosting is like having a team of experts who learn from each other's mistakes.
+/// 
+/// Imagine you're trying to predict house prices:
+/// - You start with a simple guess (the average price of all houses)
+/// - You build a decision tree to predict where your guess was wrong
+/// - You adjust your prediction a little bit based on this tree
+/// - You build another tree to predict where you're still making mistakes
+/// - You keep adding trees, each one focusing on fixing the remaining errors
+/// 
+/// The "gradient" part refers to how it identifies mistakes, and "boosting" means it builds trees 
+/// sequentially, with each tree boosting the performance of the ensemble.
+/// 
+/// This approach is very powerful because:
+/// - It learns complex patterns gradually
+/// - It focuses its effort on the hard-to-predict cases
+/// - It combines many simple models (trees) into a strong predictive model
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
+    /// <summary>
+    /// Collection of decision trees that make up the ensemble.
+    /// </summary>
     private List<DecisionTreeRegression<T>> _trees;
+    
+    /// <summary>
+    /// The initial prediction value, typically the mean of the target values.
+    /// </summary>
     private T _initialPrediction;
+    
+    /// <summary>
+    /// Configuration options for the Gradient Boosting algorithm.
+    /// </summary>
     private readonly GradientBoostingRegressionOptions _options;
+    
+    /// <summary>
+    /// Random number generator used for tree building and sampling.
+    /// </summary>
     private Random _random;
 
+    /// <summary>
+    /// Gets the number of trees in the ensemble model.
+    /// </summary>
+    /// <value>
+    /// The number of trees in the ensemble.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property returns the number of decision trees in the Gradient Boosting ensemble. This is an important
+    /// characteristic of the model as it represents the number of boosting stages that have been performed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many individual decision trees are in your model.
+    /// 
+    /// In Gradient Boosting:
+    /// - Each tree corrects errors made by all previous trees
+    /// - More trees generally means better predictions (up to a point)
+    /// - However, too many trees can lead to overfitting
+    /// 
+    /// Typical gradient boosting models might use anywhere from 50 to 1000 trees, 
+    /// depending on the complexity of the problem and the depth of each tree.
+    /// </para>
+    /// </remarks>
     public override int NumberOfTrees => _trees.Count;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GradientBoostingRegression{T}"/> class.
+    /// </summary>
+    /// <param name="options">Optional configuration options for the Gradient Boosting algorithm.</param>
+    /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new Gradient Boosting Regression model with the specified options and regularization
+    /// strategy. If no options are provided, default values are used. If no regularization is specified, no regularization
+    /// is applied.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how you create a new Gradient Boosting model.
+    /// 
+    /// When creating a model, you can specify:
+    /// - Options: Controls how many trees to build, how complex each tree can be, and how quickly the model learns
+    /// - Regularization: Helps prevent the model from becoming too specialized to the training data
+    /// 
+    /// If you don't specify these parameters, the model will use reasonable default settings.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Create a Gradient Boosting model with default settings
+    /// var gbr = new GradientBoostingRegression&lt;double&gt;();
+    /// 
+    /// // Create a model with custom options
+    /// var options = new GradientBoostingRegressionOptions { 
+    ///     NumberOfTrees = 100,
+    ///     LearningRate = 0.1,
+    ///     MaxDepth = 3
+    /// };
+    /// var customGbr = new GradientBoostingRegression&lt;double&gt;(options);
+    /// ```
+    /// </para>
+    /// </remarks>
     public GradientBoostingRegression(GradientBoostingRegressionOptions? options = null, IRegularization<T>? regularization = null)
         : base(options, regularization)
     {
@@ -18,6 +120,39 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _random = new Random(Options.Seed ?? Environment.TickCount);
     }
 
+    /// <summary>
+    /// Asynchronously trains the Gradient Boosting Regression model using the provided input features and target values.
+    /// </summary>
+    /// <param name="x">A matrix where each row represents a sample and each column represents a feature.</param>
+    /// <param name="y">A vector of target values corresponding to each sample in x.</param>
+    /// <returns>A task representing the asynchronous training operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method trains the Gradient Boosting Regression model by first calculating an initial prediction (typically
+    /// the mean of the target values), and then sequentially building decision trees that predict the residuals
+    /// (errors) of the current ensemble. The trees are built in parallel to improve training efficiency, but the
+    /// sequential nature of the algorithm is maintained by updating the residuals after each tree is built.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the model how to make predictions using your data.
+    /// 
+    /// The training process works like this:
+    /// 1. Start with a simple prediction (the average of all target values)
+    /// 2. Calculate how wrong this prediction is for each training example (the "residuals")
+    /// 3. Build a decision tree that tries to predict these residuals
+    /// 4. Add this tree's predictions (scaled by the learning rate) to the current model
+    /// 5. Update the residuals based on the new predictions
+    /// 6. Repeat steps 3-5 until you've built the desired number of trees
+    /// 
+    /// The "Async" in the name means this method can run without blocking other operations in your program,
+    /// and it uses parallel processing to build trees more quickly when possible.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Train the model
+    /// await gbr.TrainAsync(features, targets);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
         // Apply regularization to the feature matrix
@@ -68,6 +203,39 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         await CalculateFeatureImportancesAsync(x.Columns);
     }
 
+    /// <summary>
+    /// Asynchronously predicts target values for the provided input features using the trained Gradient Boosting model.
+    /// </summary>
+    /// <param name="input">A matrix where each row represents a sample to predict and each column represents a feature.</param>
+    /// <returns>A task that returns a vector of predicted values corresponding to each input sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method predicts target values for new input data by combining the initial prediction with the
+    /// weighted contributions of all trees in the ensemble. The predictions from each tree are scaled by the
+    /// learning rate before being added to the ensemble prediction. The method uses parallel processing to
+    /// generate tree predictions efficiently.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method uses your trained model to make predictions on new data.
+    /// 
+    /// The prediction process works like this:
+    /// 1. Start with the initial prediction (the average of all target values in the training data)
+    /// 2. For each tree in the model:
+    ///    - Get the tree's prediction
+    ///    - Scale it by the learning rate (to control how much influence each tree has)
+    ///    - Add it to the running total
+    /// 3. The final prediction is the sum of the initial prediction plus all the scaled tree predictions
+    /// 
+    /// The "Async" in the name means this method returns a Task, allowing your program to do other things
+    /// while waiting for predictions to complete. It also uses parallel processing to get predictions from 
+    /// multiple trees simultaneously, making it faster.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Make predictions
+    /// var predictions = await gbr.PredictAsync(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
         // Apply regularization to the input matrix
@@ -92,6 +260,33 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return predictions;
     }
 
+    /// <summary>
+    /// Calculates the importance scores for all features used in the model.
+    /// </summary>
+    /// <param name="featureCount">The number of features in the model.</param>
+    /// <returns>A task representing the asynchronous calculation operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the importance of each feature in the Gradient Boosting model by aggregating
+    /// the importance scores across all trees in the ensemble. The importance scores are normalized to sum to 1,
+    /// making it easier to compare the relative importance of different features.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method figures out which input features matter most for predictions.
+    /// 
+    /// Feature importance helps you understand:
+    /// - Which variables have the biggest impact on your predictions
+    /// - Which features might be redundant or irrelevant
+    /// - What the model is focusing on when making decisions
+    /// 
+    /// The calculation works by:
+    /// 1. Getting the importance scores from each individual tree
+    /// 2. Adding up these scores across all trees for each feature
+    /// 3. Normalizing the scores so they sum to 1 (making them easier to compare)
+    /// 
+    /// This information can help you interpret the model and potentially simplify future models
+    /// by focusing on the most important features.
+    /// </para>
+    /// </remarks>
     protected override async Task CalculateFeatureImportancesAsync(int featureCount)
     {
         var importances = new T[featureCount];
@@ -125,6 +320,41 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         FeatureImportances = new Vector<T>(importances);
     }
 
+    /// <summary>
+    /// Gets metadata about the Gradient Boosting Regression model and its configuration.
+    /// </summary>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the model, including its type and configuration options such as
+    /// the number of trees, maximum tree depth, learning rate, and subsampling ratio. This information can be
+    /// useful for model management, comparison, and documentation purposes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information about your Gradient Boosting model.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Gradient Boosting)
+    /// - How many trees are in the ensemble
+    /// - How deep each tree is allowed to grow
+    /// - The learning rate (how quickly the model incorporates new trees)
+    /// - Subsampling ratio (what fraction of the data is used for each tree)
+    /// - Other configuration settings
+    /// 
+    /// This information is helpful when:
+    /// - Comparing different models
+    /// - Documenting your model's configuration
+    /// - Troubleshooting model performance
+    /// - Replicating your results
+    /// 
+    /// Example:
+    /// ```csharp
+    /// var metadata = gbr.GetModelMetadata();
+    /// Console.WriteLine($"Model type: {metadata.ModelType}");
+    /// Console.WriteLine($"Number of trees: {metadata.AdditionalInfo["NumberOfTrees"]}");
+    /// Console.WriteLine($"Learning rate: {metadata.AdditionalInfo["LearningRate"]}");
+    /// ```
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -142,6 +372,42 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
+    /// <summary>
+    /// Serializes the Gradient Boosting Regression model to a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts the Gradient Boosting Regression model into a byte array that can be stored in a file,
+    /// database, or transmitted over a network. The serialized data includes the base class data, model-specific
+    /// options, the initial prediction, and all the trees in the ensemble.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+    /// 
+    /// Serialization allows you to:
+    /// - Save your model to a file
+    /// - Store your model in a database
+    /// - Send your model over a network
+    /// - Keep your model for later use without having to retrain it
+    /// 
+    /// The serialized data includes:
+    /// - All the model's settings (like number of trees and learning rate)
+    /// - The initial prediction (the starting point for all predictions)
+    /// - Every individual decision tree in the ensemble
+    /// 
+    /// Because Gradient Boosting models contain multiple trees, the serialized data
+    /// can be quite large for complex models.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Serialize the model
+    /// byte[] modelData = gbr.Serialize();
+    /// 
+    /// // Save to a file
+    /// File.WriteAllBytes("gradientBoosting.model", modelData);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using var ms = new MemoryStream();
@@ -169,6 +435,43 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// Loads a previously serialized Gradient Boosting Regression model from a byte array.
+    /// </summary>
+    /// <param name="modelData">The byte array containing the serialized model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs a Gradient Boosting Regression model from a byte array that was previously created
+    /// using the Serialize method. It restores the base class data, model-specific options, the initial prediction,
+    /// and all the trees in the ensemble, allowing the model to be used for predictions without retraining.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+    /// 
+    /// Deserialization allows you to:
+    /// - Load a model that was saved earlier
+    /// - Use a model without having to retrain it
+    /// - Share models between different applications
+    /// 
+    /// When you deserialize a model:
+    /// - All settings are restored
+    /// - The initial prediction is recovered
+    /// - All the individual trees are reconstructed
+    /// - The model is ready to make predictions immediately
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Load from a file
+    /// byte[] modelData = File.ReadAllBytes("gradientBoosting.model");
+    /// 
+    /// // Deserialize the model
+    /// var gbr = new GradientBoostingRegression&lt;double&gt;();
+    /// gbr.Deserialize(modelData);
+    /// 
+    /// // Now you can use the model for predictions
+    /// var predictions = await gbr.PredictAsync(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] modelData)
     {
         using var ms = new MemoryStream(modelData);

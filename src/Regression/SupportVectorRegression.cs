@@ -1,16 +1,125 @@
-
 namespace AiDotNet.Regression;
 
+/// <summary>
+/// Implements Support Vector Regression (SVR), which creates a regression model by finding
+/// a hyperplane that lies within a specified margin (epsilon) of the training data.
+/// This approach is effective for both linear and nonlinear regression problems.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+/// <remarks>
+/// <para>
+/// Support Vector Regression (SVR) works by:
+/// - Transforming data into a higher-dimensional space using kernel functions
+/// - Finding the optimal hyperplane that fits within an epsilon-width tube around the data
+/// - Using only a subset of the training examples (support vectors) to make predictions
+/// - Balancing model complexity and training error through the C parameter
+/// 
+/// Unlike traditional regression methods that minimize squared errors, SVR aims to find
+/// a function that deviates from training data by no more than epsilon while remaining as flat as possible.
+/// </para>
+/// <para><b>For Beginners:</b> Support Vector Regression is like creating a tunnel through your data.
+/// 
+/// Think of it like this:
+/// - You want to draw a line (or curve) through your data points
+/// - Instead of drawing the line directly through the points, you create a tunnel of a certain width
+/// - You try to include as many points as possible inside this tunnel
+/// - Points outside the tunnel are called "support vectors" and help define its shape
+/// 
+/// For example, when predicting house prices, SVR would create a tunnel through the data
+/// that captures the general trend while allowing some houses to fall outside the tunnel
+/// if they're unusually priced for their features.
+/// </para>
+/// </remarks>
 public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 {
+    /// <summary>
+    /// Configuration options for the Support Vector Regression model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These options control key aspects of the SVR algorithm, including:
+    /// - Epsilon: The width of the tube within which no penalty is given to errors
+    /// - C: The regularization parameter that balances fitting the data vs. keeping the model simple
+    /// - MaxIterations: The maximum number of optimization iterations to perform
+    /// - KernelType: The type of kernel function to use for transforming the data
+    /// </para>
+    /// <para><b>For Beginners:</b> These settings control how your model learns from data:
+    /// 
+    /// - Epsilon: How wide your tunnel is (wider = more tolerant of errors)
+    /// - C: How strictly you want to fit your data (higher = follows data more closely)
+    /// - MaxIterations: How many attempts the model makes to improve itself
+    /// - KernelType: What kind of shape your tunnel can take (straight, curved, etc.)
+    /// 
+    /// These parameters let you balance between a model that fits your training data very closely
+    /// (which might not generalize well) and one that's too simple to capture important patterns.
+    /// </para>
+    /// </remarks>
     private readonly SupportVectorRegressionOptions _options;
 
+    /// <summary>
+    /// Creates a new Support Vector Regression model.
+    /// </summary>
+    /// <param name="options">
+    /// Optional configuration settings for the SVR model. These settings control aspects like:
+    /// - The width of the epsilon-insensitive tube (epsilon)
+    /// - The regularization parameter (C)
+    /// - The type of kernel function to use
+    /// If not provided, default options will be used.
+    /// </param>
+    /// <param name="regularization">
+    /// Optional regularization method to prevent overfitting.
+    /// If not provided, no additional regularization will be applied beyond the built-in regularization of SVR.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new Support Vector Regression model with the specified configuration options
+    /// and regularization method. If options are not provided, default values are used.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets up a new SVR model before training.
+    /// 
+    /// Think of it like configuring a new tool:
+    /// - You can use the default settings (by not specifying options)
+    /// - Or you can customize how it works (by providing specific options)
+    /// - The regularization parameter provides extra protection against overfitting
+    /// 
+    /// After setting up the model with these options, you'll need to train it on your data
+    /// to find the support vectors and coefficients that best describe your data pattern.
+    /// </para>
+    /// </remarks>
     public SupportVectorRegression(SupportVectorRegressionOptions? options = null, IRegularization<T>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new SupportVectorRegressionOptions();
     }
 
+    /// <summary>
+    /// Optimizes the SVR model using the provided input data and target values.
+    /// </summary>
+    /// <param name="x">The input feature matrix, where rows represent observations and columns represent features.</param>
+    /// <param name="y">The target values vector containing the actual output values to predict.</param>
+    /// <remarks>
+    /// <para>
+    /// This method implements the core optimization for SVR. It:
+    /// 1. Applies regularization to the input matrix
+    /// 2. Uses the Sequential Minimal Optimization (SMO) algorithm to find the optimal parameters
+    /// 3. Applies regularization to the resulting alpha coefficients
+    /// 
+    /// The SMO algorithm is an efficient way to solve the quadratic programming problem
+    /// that arises when training an SVR model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method finds the best tunnel through your data points.
+    /// 
+    /// The process works like this:
+    /// 
+    /// 1. The model prepares your data with regularization (like smoothing it out)
+    /// 2. It uses a special algorithm (SMO) to find the optimal tunnel shape
+    /// 3. It identifies which points (support vectors) are most important for defining this tunnel
+    /// 4. It calculates how much influence each support vector should have on predictions
+    /// 
+    /// After optimization, the model knows exactly how to predict new values based on
+    /// the patterns it found in your training data.
+    /// </para>
+    /// </remarks>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Apply regularization to the input matrix
@@ -23,6 +132,31 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         Alphas = Regularization.RegularizeCoefficients(Alphas);
     }
 
+    /// <summary>
+    /// Predicts target values for a matrix of input features.
+    /// </summary>
+    /// <param name="input">The input feature matrix for which to make predictions.</param>
+    /// <returns>A vector of predicted values, one for each row in the input matrix.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method makes predictions for multiple input samples. It:
+    /// 1. Applies regularization to the input data
+    /// 2. Predicts each sample individually using the PredictSingle method
+    /// 3. Returns a vector of all predictions
+    /// </para>
+    /// <para><b>For Beginners:</b> This method uses your trained model to predict values for new data.
+    /// 
+    /// The prediction process works like this:
+    /// 1. The model first prepares your input data (regularization)
+    /// 2. For each row of data (like each house you want to price):
+    ///    - It calculates how similar this house is to each support vector
+    ///    - It combines these similarities using the trained weights (alphas)
+    ///    - It adds the bias term (B) to get the final prediction
+    /// 3. It returns all the predictions together
+    /// 
+    /// This lets you predict many values at once, like estimating prices for multiple houses simultaneously.
+    /// </para>
+    /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
         // Apply regularization to the input matrix for prediction
@@ -37,6 +171,37 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         return predictions;
     }
 
+    /// <summary>
+    /// Predicts a target value for a single input feature vector.
+    /// </summary>
+    /// <param name="input">The input feature vector for which to make a prediction.</param>
+    /// <returns>The predicted value for the input vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the SVR prediction function for a single input sample:
+    /// f(x) = b + sum(alpha_i * K(support_vector_i, x))
+    /// 
+    /// where:
+    /// - b is the bias term (B)
+    /// - alpha_i are the Lagrange multipliers (Alphas)
+    /// - K is the kernel function
+    /// - support_vector_i are the training examples that define the model
+    /// </para>
+    /// <para><b>For Beginners:</b> This method predicts a value for a single data point.
+    /// 
+    /// Think of it like this:
+    /// 1. Start with a base value (the bias term B)
+    /// 2. For each support vector (key data points from training):
+    ///    - Calculate how similar your input is to this support vector using the kernel function
+    ///    - Multiply this similarity by the importance (alpha) of that support vector
+    ///    - Add this contribution to your prediction
+    /// 3. The final sum is your predicted value
+    /// 
+    /// For example, predicting a house price might involve comparing the house to several key 
+    /// houses (support vectors) from your training data, with each comparison weighted by how
+    /// important that house is for making predictions.
+    /// </para>
+    /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
         T result = B;
@@ -49,6 +214,39 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         return result;
     }
 
+    /// <summary>
+    /// Implements the Sequential Minimal Optimization (SMO) algorithm for SVR.
+    /// </summary>
+    /// <param name="x">The input feature matrix.</param>
+    /// <param name="y">The target values vector.</param>
+    /// <remarks>
+    /// <para>
+    /// This method implements the Sequential Minimal Optimization algorithm for training SVR models.
+    /// SMO breaks down the complex quadratic programming problem into a series of smallest possible
+    /// sub-problems that can be solved analytically. It:
+    /// 
+    /// 1. Initializes alpha coefficients to zero
+    /// 2. Iteratively selects pairs of coefficients to optimize
+    /// 3. Updates the bias term (B) after each optimization step
+    /// 4. Continues until convergence or maximum iterations are reached
+    /// 5. Extracts the support vectors (data points with non-zero alphas)
+    /// </para>
+    /// <para><b>For Beginners:</b> This method is like a coach training athletes one pair at a time.
+    /// 
+    /// The training process works like this:
+    /// 
+    /// 1. Start with all influence values (alphas) set to zero
+    /// 2. For multiple rounds (iterations):
+    ///    - Pick a data point that violates the current model's predictions
+    ///    - Find another data point to pair it with
+    ///    - Adjust both points' influence values to improve the model
+    ///    - Update the base prediction value (bias) accordingly
+    /// 3. Keep the data points that ended up with non-zero influence (support vectors)
+    /// 
+    /// This approach is efficient because it focuses on the most problematic data points
+    /// and only keeps the ones that are truly important for defining the model.
+    /// </para>
+    /// </remarks>
     private void SequentialMinimalOptimization(Matrix<T> x, Vector<T> y)
     {
         int m = x.Rows;
@@ -117,6 +315,29 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         SupportVectors = x.GetRows(Enumerable.Range(0, m).Where(i => NumOps.GreaterThan(Alphas[i], NumOps.Zero)).ToArray());
     }
 
+    /// <summary>
+    /// Selects a second alpha coefficient to optimize along with the first one.
+    /// </summary>
+    /// <param name="i">The index of the first alpha coefficient.</param>
+    /// <param name="m">The total number of training examples.</param>
+    /// <returns>The index of the second alpha coefficient.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method randomly selects a second alpha coefficient that is different from the first one.
+    /// In more advanced implementations, heuristics can be used to select a second alpha that
+    /// maximizes the optimization step.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method finds a partner for training.
+    /// 
+    /// It's like choosing a different student to pair with the first student for a group project:
+    /// - You need two different students to work together
+    /// - The selection is random in this implementation
+    /// - More advanced versions could choose partners more strategically
+    /// 
+    /// This pairing approach is fundamental to the SMO algorithm, which always
+    /// optimizes two coefficients at a time.
+    /// </para>
+    /// </remarks>
     private readonly Random _random = new();
 
     private int SelectSecondAlpha(int i, int m)
@@ -130,6 +351,34 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         return j;
     }
 
+    /// <summary>
+    /// Computes the bounds for alpha coefficient optimization.
+    /// </summary>
+    /// <param name="yi">The target value for the first example.</param>
+    /// <param name="yj">The target value for the second example.</param>
+    /// <param name="ai">The current alpha value for the first example.</param>
+    /// <param name="aj">The current alpha value for the second example.</param>
+    /// <returns>A tuple containing the lower (L) and upper (H) bounds for the second alpha.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the bounds within which the second alpha coefficient must lie
+    /// to satisfy the constraints of the SVR optimization problem. The bounds depend on:
+    /// - Whether the target values of the two examples are equal
+    /// - The current values of both alpha coefficients
+    /// - The regularization parameter C
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets limits for how much a value can change.
+    /// 
+    /// Think of it like setting boundaries for a negotiation:
+    /// - You need to keep the solution within certain limits
+    /// - These limits depend on the current values and the relationship between the two examples
+    /// - The C parameter sets the maximum possible value
+    /// - The calculations ensure the solution remains valid
+    /// 
+    /// These bounds help the algorithm make controlled adjustments that maintain
+    /// the mathematical constraints of the problem.
+    /// </para>
+    /// </remarks>
     private (T L, T H) ComputeBounds(T yi, T yj, T ai, T aj)
     {
         if (NumOps.Equals(yi, yj))
@@ -148,6 +397,31 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         }
     }
 
+    /// <summary>
+    /// Gets metadata about the SVR model.
+    /// </summary>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the SVR model, including:
+    /// - Base metadata from the parent class
+    /// - The epsilon parameter (width of the insensitive tube)
+    /// - The C parameter (regularization strength)
+    /// - The type of regularization used
+    /// 
+    /// This metadata is useful for model inspection, logging, and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method shares details about your model's configuration.
+    /// 
+    /// It's like getting a summary sheet about your model:
+    /// - It includes the basic information about your model
+    /// - It adds SVR-specific settings like epsilon and C
+    /// - It notes what type of regularization was used
+    /// 
+    /// This information is helpful for comparing different models or documenting
+    /// which settings worked best for your problem.
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();
@@ -158,11 +432,55 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         return metadata;
     }
 
+    /// <summary>
+    /// Returns the type identifier for this regression model.
+    /// </summary>
+    /// <returns>
+    /// The model type identifier for support vector regression.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the enum value that identifies this model as a support vector regression model.
+    /// This is used for model identification in serialization/deserialization and for logging purposes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method simply tells the system what kind of model this is.
+    /// 
+    /// It's like a name tag for the model that says "I am a support vector regression model."
+    /// This is useful when:
+    /// - Saving the model to a file
+    /// - Loading a model from a file
+    /// - Logging information about the model
+    /// 
+    /// You generally won't need to call this method directly in your code.
+    /// </para>
+    /// </remarks>
     protected override ModelType GetModelType()
     {
         return ModelType.SupportVectorRegression;
     }
 
+    /// <summary>
+    /// Serializes the support vector regression model to a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model data.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts the model, including its coefficients, support vectors, and configuration options, into a 
+    /// byte array. This enables the model to be saved to a file, stored in a database, or transmitted over a network.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the model to computer memory so you can use it later.
+    /// 
+    /// Think of it like taking a snapshot of the model:
+    /// - It captures all the important values, settings, and support vectors
+    /// - It converts them into a format that can be easily stored
+    /// - The resulting byte array can be saved to a file or database
+    /// 
+    /// This is useful when you want to:
+    /// - Train the model once and use it many times
+    /// - Share the model with others
+    /// - Use the model in a different application
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using var ms = new MemoryStream();
@@ -180,6 +498,29 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// Deserializes the support vector regression model from a byte array.
+    /// </summary>
+    /// <param name="modelData">The byte array containing the serialized model data.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs the model from a byte array created by the Serialize method. It restores 
+    /// the model's coefficients, support vectors, and configuration options, allowing a previously saved model 
+    /// to be loaded and used for predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a saved model from computer memory.
+    /// 
+    /// Think of it like opening a saved document:
+    /// - It takes the byte array created by the Serialize method
+    /// - It rebuilds all the settings, support vectors, and coefficients
+    /// - The model is then ready to use for making predictions
+    /// 
+    /// This allows you to:
+    /// - Use a previously trained model without having to train it again
+    /// - Load models that others have shared with you
+    /// - Use the same model across different applications
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] modelData)
     {
         using var ms = new MemoryStream(modelData);

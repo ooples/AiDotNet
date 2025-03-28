@@ -1,11 +1,81 @@
 namespace AiDotNet.Regression;
 
+/// <summary>
+/// Implements K-Nearest Neighbors algorithm for regression, which predicts target values
+/// by averaging the values of the K closest training examples.
+/// </summary>
+/// <remarks>
+/// <para>
+/// K-Nearest Neighbors (KNN) is a non-parametric and instance-based learning algorithm that makes
+/// predictions based on the similarity between the input and training samples. For regression, it computes
+/// the average of the target values of the K nearest neighbors to the query point. The algorithm doesn't
+/// build an explicit model but instead stores all training examples and performs computations at prediction time.
+/// </para>
+/// <para><b>For Beginners:</b> K-Nearest Neighbors is like asking your neighbors for advice.
+/// 
+/// Imagine you want to guess the price of a house:
+/// - You look at the K most similar houses to yours (the "nearest neighbors") 
+/// - You take the average of their prices as your prediction
+/// 
+/// The "K" is just how many neighbors you consider. If K=3, you look at the 3 most similar houses.
+/// 
+/// This approach is:
+/// - Simple to understand: similar inputs should have similar outputs
+/// - Makes no assumptions about the data's structure
+/// - Works well when similar examples in your data actually have similar target values
+/// 
+/// Unlike most machine learning algorithms, KNN doesn't "learn" patterns during training - it simply
+/// remembers all examples and does the real work at prediction time by finding similar examples.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
 {
+    /// <summary>
+    /// Configuration options for the K-Nearest Neighbors algorithm.
+    /// </summary>
     private readonly KNearestNeighborsOptions _options;
+    
+    /// <summary>
+    /// Matrix containing the feature vectors of the training samples.
+    /// </summary>
     private Matrix<T> _xTrain;
+    
+    /// <summary>
+    /// Vector containing the target values of the training samples.
+    /// </summary>
     private Vector<T> _yTrain;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KNearestNeighborsRegression{T}"/> class.
+    /// </summary>
+    /// <param name="options">Optional configuration options for the KNN algorithm.</param>
+    /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new K-Nearest Neighbors regression model with the specified options and
+    /// regularization strategy. If no options are provided, default values are used. If no regularization
+    /// is specified, no regularization is applied.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how you create a new K-Nearest Neighbors model.
+    /// 
+    /// The key setting is K - the number of neighbors to consider when making predictions:
+    /// - Smaller K values (like 1 or 2): More sensitive to noise in the data
+    /// - Larger K values (like 10 or 20): Smoother predictions but might miss important patterns
+    /// 
+    /// If you don't specify any options, the model will use reasonable default settings.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Create a KNN model with default settings
+    /// var knn = new KNearestNeighborsRegression&lt;double&gt;();
+    /// 
+    /// // Create a KNN model with custom options
+    /// var options = new KNearestNeighborsOptions { K = 5 };
+    /// var customKnn = new KNearestNeighborsRegression&lt;double&gt;(options);
+    /// ```
+    /// </para>
+    /// </remarks>
     public KNearestNeighborsRegression(KNearestNeighborsOptions? options = null, IRegularization<T>? regularization = null)
         : base(options, regularization)
     {
@@ -14,6 +84,32 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         _yTrain = new Vector<T>(0);
     }
 
+    /// <summary>
+    /// Optimizes the KNN model by storing the training data for later use in predictions.
+    /// </summary>
+    /// <param name="x">A matrix where each row represents a sample and each column represents a feature.</param>
+    /// <param name="y">A vector of target values corresponding to each sample in x.</param>
+    /// <remarks>
+    /// <para>
+    /// This method "trains" the KNN model by storing the training data for later use during prediction.
+    /// Unlike many other machine learning algorithms, KNN doesn't build a parametric model during training.
+    /// Instead, it simply stores the training data and uses it to compute predictions at runtime by
+    /// finding the K nearest neighbors to each query point.
+    /// </para>
+    /// <para><b>For Beginners:</b> KNN doesn't really "learn" during training - it just memorizes the examples.
+    /// 
+    /// While most machine learning models try to extract patterns during training, KNN takes a different approach:
+    /// 1. It simply stores all the training examples (both features and target values)
+    /// 2. When asked to make a prediction, it does the actual work of finding similar examples
+    /// 
+    /// Think of it like studying for an exam by memorizing all the examples in a textbook, 
+    /// rather than trying to understand the underlying rules. When given a new problem,
+    /// you solve it by finding the most similar examples from the ones you memorized.
+    /// 
+    /// This is why KNN is sometimes called a "lazy learner" - it doesn't do much work during training,
+    /// but has to work harder at prediction time.
+    /// </para>
+    /// </remarks>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Apply regularization to the training data
@@ -29,6 +125,33 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         }
     }
 
+    /// <summary>
+    /// Predicts target values for the provided input features using the trained KNN model.
+    /// </summary>
+    /// <param name="input">A matrix where each row represents a sample to predict and each column represents a feature.</param>
+    /// <returns>A vector of predicted values corresponding to each input sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method predicts target values for new input data by finding the K nearest neighbors from the
+    /// training data for each input sample and computing the average of their target values. The method
+    /// applies any specified regularization to the input data before making predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method uses your trained model to make predictions on new data.
+    /// 
+    /// For each input example, it:
+    /// 1. Calculates how similar the new example is to each training example (using distance)
+    /// 2. Finds the K most similar training examples
+    /// 3. Takes the average of their target values as the prediction
+    /// 
+    /// This method handles multiple inputs at once, making a separate prediction for each one.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Make predictions
+    /// var predictions = knn.Predict(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
         // Apply regularization to the input data if available
@@ -43,6 +166,31 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         return predictions;
     }
 
+    /// <summary>
+    /// Predicts the target value for a single input feature vector.
+    /// </summary>
+    /// <param name="input">The feature vector of the sample to predict.</param>
+    /// <returns>The predicted value for the input sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method predicts the target value for a single input feature vector by finding the K nearest
+    /// neighbors from the training data and computing the average of their target values. The distance
+    /// between the input and each training sample is computed using Euclidean distance.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a prediction for a single new data point.
+    /// 
+    /// The prediction process works like this:
+    /// 1. Calculate the distance between the new point and every training example
+    /// 2. Find the K training examples with the smallest distances (the nearest neighbors)
+    /// 3. Calculate the average of their target values
+    /// 4. Return this average as the prediction
+    /// 
+    /// For example, if you want to predict a house price and K=3, this method would:
+    /// - Find the 3 most similar houses from the training data
+    /// - Calculate the average of their prices
+    /// - Return that average as the predicted price
+    /// </para>
+    /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
         var distances = new List<(int index, T distance)>();
@@ -67,6 +215,12 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         return NumOps.Divide(sum, NumOps.FromDouble(_options.K));
     }
 
+    /// <summary>
+    /// Calculates the Euclidean distance between two feature vectors.
+    /// </summary>
+    /// <param name="v1">The first feature vector.</param>
+    /// <param name="v2">The second feature vector.</param>
+    /// <returns>The Euclidean distance between the two vectors.</returns>
     private T CalculateDistance(Vector<T> v1, Vector<T> v2)
     {
         T sum = NumOps.Zero;
@@ -79,8 +233,47 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         return NumOps.Sqrt(sum);
     }
 
+    /// <summary>
+    /// Gets the model type of the K-Nearest Neighbors Regression model.
+    /// </summary>
+    /// <returns>The model type enumeration value.</returns>
     protected override ModelType GetModelType() => ModelType.KNearestNeighbors;
 
+    /// <summary>
+    /// Serializes the K-Nearest Neighbors Regression model to a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts the KNN model into a byte array that can be stored in a file, database,
+    /// or transmitted over a network. The serialized data includes the base class data, the number of
+    /// neighbors (K), and the training data that is used for making predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+    /// 
+    /// Serialization allows you to:
+    /// - Save your model to a file
+    /// - Store your model in a database
+    /// - Send your model over a network
+    /// - Keep your model for later use without having to retrain it
+    /// 
+    /// The serialized data includes:
+    /// - The value of K (number of neighbors)
+    /// - All the training examples (both features and target values)
+    /// 
+    /// Since KNN stores all training data, the serialized model can be quite large
+    /// compared to other machine learning models.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Serialize the model
+    /// byte[] modelData = knn.Serialize();
+    /// 
+    /// // Save to a file
+    /// File.WriteAllBytes("knn.model", modelData);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using var ms = new MemoryStream();
@@ -108,6 +301,42 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// Loads a previously serialized K-Nearest Neighbors Regression model from a byte array.
+    /// </summary>
+    /// <param name="modelData">The byte array containing the serialized model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs a KNN model from a byte array that was previously created using the
+    /// Serialize method. It restores the base class data, the number of neighbors (K), and the training
+    /// data that is used for making predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+    /// 
+    /// Deserialization allows you to:
+    /// - Load a model that was saved earlier
+    /// - Use a model without having to retrain it
+    /// - Share models between different applications
+    /// 
+    /// When you deserialize a model:
+    /// - The value of K is restored
+    /// - All training examples are loaded back into memory
+    /// - The model is ready to make predictions immediately
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Load from a file
+    /// byte[] modelData = File.ReadAllBytes("knn.model");
+    /// 
+    /// // Deserialize the model
+    /// var knn = new KNearestNeighborsRegression&lt;double&gt;();
+    /// knn.Deserialize(modelData);
+    /// 
+    /// // Now you can use the model for predictions
+    /// var predictions = knn.Predict(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] modelData)
     {
         using var ms = new MemoryStream(modelData);

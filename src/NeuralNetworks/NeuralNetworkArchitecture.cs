@@ -1,22 +1,298 @@
 ﻿namespace AiDotNet.NeuralNetworks;
 
+/// <summary>
+/// Defines the structure and configuration of a neural network, including its layers, input/output dimensions, and task-specific properties.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <remarks>
+/// <para>
+/// The NeuralNetworkArchitecture class serves as a blueprint for constructing neural networks with specific configurations.
+/// It handles the validation of input dimensions, layer compatibility, and provides methods for retrieving information about
+/// the network's structure. This architecture can be used to create various types of neural networks with different input 
+/// dimensionalities and layer arrangements.
+/// </para>
+/// <para><b>For Beginners:</b> Think of NeuralNetworkArchitecture as the blueprint for building a neural network.
+/// 
+/// Just like an architect's blueprint for a building specifies:
+/// - How many floors the building will have
+/// - The size and purpose of each room
+/// - How rooms connect to each other
+/// 
+/// The NeuralNetworkArchitecture defines:
+/// - What kind of data your network will process (like images or text)
+/// - How many layers your network will have
+/// - How many neurons are in each layer
+/// - How the layers connect to process your data
+/// 
+/// Before you can build a neural network, you need this blueprint to ensure all the parts
+/// will fit together correctly. It helps prevent errors like trying to feed image data into
+/// a network designed for text, or having layers that don't match up in size.
+/// </para>
+/// </remarks>
 public class NeuralNetworkArchitecture<T>
 {
+    /// <summary>
+    /// Gets the optional list of predefined layers for the neural network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property allows you to explicitly define the layers that will make up the neural network.
+    /// If not provided, default layers will be created based on other architecture parameters when
+    /// the neural network is initialized.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where you can specify exact layers for your network.
+    /// 
+    /// Think of this as customizing the rooms in your building:
+    /// - Instead of using standard room designs, you specify exactly what you want
+    /// - You control the exact size, type, and connections of each layer
+    /// - This gives you precise control over how your network processes data
+    /// 
+    /// If you leave this empty (null), the system will create standard layers
+    /// based on your other settings, like creating standard rooms based on
+    /// the overall building design.
+    /// </para>
+    /// </remarks>
     public List<ILayer<T>>? Layers { get; }
+
+    /// <summary>
+    /// Gets the type of input the neural network is designed to handle.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property defines the dimensionality of the input data that the neural network is designed to process.
+    /// Options include OneDimensional (for vector data), TwoDimensional (for matrix data like images),
+    /// and ThreeDimensional (for volumetric data like color images or video).
+    /// </para>
+    /// <para><b>For Beginners:</b> This specifies what shape of data your network will process.
+    /// 
+    /// Neural networks can handle different types of data:
+    /// - OneDimensional: Simple lists of values (like a customer's age, income, etc.)
+    /// - TwoDimensional: Grid-like data (like a grayscale image)
+    /// - ThreeDimensional: Cube-like data (like a color image with red, green, blue channels)
+    /// 
+    /// This is important because the network needs to know how to interpret the input.
+    /// For example, in a color image, pixels that are next to each other horizontally,
+    /// vertically, or across color channels have different kinds of relationships.
+    /// </para>
+    /// </remarks>
     public InputType InputType { get; }
+
+    /// <summary>
+    /// Gets or sets the size of the input vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For one-dimensional inputs, this specifies the number of input features.
+    /// For multi-dimensional inputs, this represents the total number of input elements
+    /// (calculated as InputHeight * InputWidth * InputDepth).
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the total number of input values your network receives.
+    /// 
+    /// For example:
+    /// - For a list of 10 customer attributes: InputSize = 10
+    /// - For a 28×28 grayscale image: InputSize = 784 (28×28)
+    /// - For a 32×32 color image: InputSize = 3072 (32×32×3 color channels)
+    /// 
+    /// This tells the network how many "inputs" to expect. Think of it like how many
+    /// separate pieces of information your network will consider at once.
+    /// </para>
+    /// </remarks>
     public int InputSize { get; private set; }
+
+    /// <summary>
+    /// Gets the size of the output vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property specifies the dimensionality of the network's output. It represents the number of
+    /// output neurons in the final layer. For classification tasks, this typically equals the number of classes.
+    /// For regression tasks, this equals the number of values to predict.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how many values your network will output.
+    /// 
+    /// For example:
+    /// - For classifying 10 digits (0-9): OutputSize = 10
+    /// - For predicting a single value (like house price): OutputSize = 1
+    /// - For predicting multiple values (like x,y coordinates): OutputSize = 2
+    /// 
+    /// Think of this as how many answers your network gives at once.
+    /// </para>
+    /// </remarks>
     public int OutputSize { get; }
+
+    /// <summary>
+    /// Gets the height dimension for 2D or 3D inputs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For two-dimensional or three-dimensional inputs, this property specifies the height of the input.
+    /// For example, for image data, this would be the height in pixels.
+    /// </para>
+    /// <para><b>For Beginners:</b> For grid-like data (like images), this is the number of rows.
+    /// 
+    /// For example:
+    /// - For a 28×28 image: InputHeight = 28
+    /// 
+    /// This is only used when working with multi-dimensional data like images.
+    /// For simple lists of values, you'd use InputSize instead.
+    /// </para>
+    /// </remarks>
     public int InputHeight { get; }
+
+    /// <summary>
+    /// Gets the width dimension for 2D or 3D inputs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For two-dimensional or three-dimensional inputs, this property specifies the width of the input.
+    /// For example, for image data, this would be the width in pixels.
+    /// </para>
+    /// <para><b>For Beginners:</b> For grid-like data (like images), this is the number of columns.
+    /// 
+    /// For example:
+    /// - For a 28×28 image: InputWidth = 28
+    /// 
+    /// This is only used when working with multi-dimensional data like images.
+    /// For simple lists of values, you'd use InputSize instead.
+    /// </para>
+    /// </remarks>
     public int InputWidth { get; }
+
+    /// <summary>
+    /// Gets the depth dimension for 3D inputs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For three-dimensional inputs, this property specifies the depth of the input.
+    /// For example, for color image data, this would typically be 3 (for RGB channels).
+    /// </para>
+    /// <para><b>For Beginners:</b> For 3D data (like color images), this is the number of channels or layers.
+    /// 
+    /// For example:
+    /// - For a color RGB image: InputDepth = 3 (red, green, blue channels)
+    /// - For a grayscale image: InputDepth = 1
+    /// 
+    /// This is only used when working with three-dimensional data.
+    /// For simpler data types, it's usually set to 1 and doesn't affect the network.
+    /// </para>
+    /// </remarks>
     public int InputDepth { get; }
+
+    /// <summary>
+    /// Gets or sets the list of Restricted Boltzmann Machine layers for pre-training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property stores Restricted Boltzmann Machine (RBM) layers that can be used for unsupervised
+    /// pre-training of the network, which can improve the network's performance, especially for deep
+    /// architectures with limited labeled data.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are special layers used for pre-training the network.
+    /// 
+    /// Restricted Boltzmann Machines (RBMs) are a type of neural network layer that:
+    /// - Can learn patterns in data without supervision
+    /// - Help initialize the weights of a network before the main training
+    /// - Often improve performance on complex tasks
+    /// 
+    /// Think of RBM pre-training like teaching a student the basics before they start
+    /// advanced courses. It gives the network a better starting point for learning
+    /// the specific task you want it to perform.
+    /// 
+    /// This is an advanced feature that you can ignore when first starting with neural networks.
+    /// </para>
+    /// </remarks>
     public List<RestrictedBoltzmannMachine<T>> RbmLayers { get; set; }
+
+    /// <summary>
+    /// Gets the type of task the neural network is designed to perform.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property specifies the type of task that the neural network is intended to solve,
+    /// such as classification (assigning inputs to discrete categories) or regression (predicting continuous values).
+    /// The task type affects the default network configuration, particularly the output layer and activation functions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This defines what kind of problem your network is solving.
+    /// 
+    /// Common task types include:
+    /// - Classification: Sorting inputs into categories (like "dog" or "cat" for images)
+    /// - Regression: Predicting a number value (like house prices)
+    /// - Sequence Generation: Creating sequences (like text or music)
+    /// 
+    /// The task type helps determine how your network should be structured and trained.
+    /// For example, a classification network typically ends with a Softmax activation
+    /// to output probabilities for each category, while a regression network
+    /// might end with a linear activation to output any numerical value.
+    /// </para>
+    /// </remarks>
     public NeuralNetworkTaskType TaskType { get; }
+
+    /// <summary>
+    /// Gets the complexity level of the neural network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property defines the general complexity of the network architecture, which affects the default number of layers
+    /// and neurons when automatically generating the network structure. Options typically include Simple, Medium, and Complex.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how powerful and complex your network will be.
+    /// 
+    /// Think of this like choosing a building size:
+    /// - Simple: A small network with few layers and neurons (fast but less powerful)
+    /// - Medium: A balanced network (good for many common tasks)
+    /// - Complex: A large network with many layers and neurons (powerful but slower to train)
+    /// 
+    /// Simpler networks train faster and need less data, but may not learn very complex patterns.
+    /// Complex networks can learn sophisticated patterns but need more data and computing power.
+    /// 
+    /// When starting out, Medium complexity is often a good choice.
+    /// </para>
+    /// </remarks>
     public NetworkComplexity Complexity { get; }
 
+    /// <summary>
+    /// Gets the dimensionality of the input (1, 2, or 3).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This computed property returns the number of dimensions in the input data based on the InputType.
+    /// It returns 1 for OneDimensional, 2 for TwoDimensional, and 3 for ThreeDimensional.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many dimensions your input data has.
+    /// 
+    /// It's calculated automatically based on your InputType:
+    /// - 1: For simple lists of values (like customer attributes)
+    /// - 2: For grid data (like grayscale images)
+    /// - 3: For volumetric data (like color images)
+    /// 
+    /// This information helps the network properly process the structure of your data.
+    /// </para>
+    /// </remarks>
     public int InputDimension => 
         InputType == InputType.OneDimensional ? 1 :
         InputType == InputType.TwoDimensional ? 2 : 3;
 
+    /// <summary>
+    /// Gets the calculated total size of the input based on dimensions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This computed property calculates the total number of input elements based on the input dimensions.
+    /// For one-dimensional inputs, it returns InputSize. For multi-dimensional inputs, it calculates
+    /// the product of the dimensions (InputHeight * InputWidth * InputDepth).
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates the total number of input values based on your dimensions.
+    /// 
+    /// It's automatically calculated depending on your input type:
+    /// - For 1D data: Just returns your InputSize
+    /// - For 2D data: Calculates InputHeight × InputWidth
+    /// - For 3D data: Calculates InputHeight × InputWidth × InputDepth
+    /// 
+    /// For example, a 28×28 image has 784 total pixels, so CalculatedInputSize would be 784.
+    /// 
+    /// This helps ensure all your dimension settings are consistent with each other.
+    /// </para>
+    /// </remarks>
     public int CalculatedInputSize =>
         InputType switch
         {
@@ -26,6 +302,51 @@ public class NeuralNetworkArchitecture<T>
             _ => throw new InvalidOperationException("Invalid InputDimensionality"),
         };
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NeuralNetworkArchitecture{T}"/> class with the specified parameters.
+    /// </summary>
+    /// <param name="inputType">The type of input data (one-dimensional, two-dimensional, or three-dimensional).</param>
+    /// <param name="taskType">The type of task the neural network will perform (classification, regression, etc.).</param>
+    /// <param name="complexity">The complexity level of the neural network. Default is Medium.</param>
+    /// <param name="inputSize">The size of the input vector (for one-dimensional input). Default is 0.</param>
+    /// <param name="inputHeight">The height of the input (for two/three-dimensional input). Default is 0.</param>
+    /// <param name="inputWidth">The width of the input (for two/three-dimensional input). Default is 0.</param>
+    /// <param name="inputDepth">The depth of the input (for three-dimensional input). Default is 1.</param>
+    /// <param name="outputSize">The size of the output vector. Default is 0.</param>
+    /// <param name="layers">Optional predefined layers for the neural network. Default is null.</param>
+    /// <param name="rbmLayers">Optional RBM layers for pre-training. Default is null.</param>
+    /// <exception cref="ArgumentException">Thrown when the input dimensions are invalid or inconsistent.</exception>
+    /// <remarks>
+    /// <para>
+    /// This constructor initializes a neural network architecture with the specified parameters and validates
+    /// that the input dimensions are consistent and appropriate for the selected input type. It also checks
+    /// that any provided layers are compatible with the input and output dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates the blueprint for your neural network with your chosen settings.
+    /// 
+    /// When creating a neural network architecture, you specify:
+    /// 
+    /// 1. What kind of input data you're using:
+    ///    - One-dimensional for lists of values
+    ///    - Two-dimensional for grid data like grayscale images
+    ///    - Three-dimensional for volumetric data like color images
+    /// 
+    /// 2. What task you're solving:
+    ///    - Classification (sorting into categories)
+    ///    - Regression (predicting numerical values)
+    ///    - Other specialized tasks
+    /// 
+    /// 3. Other settings like:
+    ///    - Complexity (how powerful the network should be)
+    ///    - Input dimensions (size, height, width, depth)
+    ///    - Output size (how many values to predict)
+    ///    - Optional custom layers
+    /// 
+    /// The constructor checks that all your settings make sense together.
+    /// For example, it will catch errors like trying to use both InputSize=100
+    /// and InputHeight=10, InputWidth=20 (which would imply InputSize=200).
+    /// </para>
+    /// </remarks>
     public NeuralNetworkArchitecture(
         InputType inputType,
         NeuralNetworkTaskType taskType,
@@ -53,6 +374,34 @@ public class NeuralNetworkArchitecture<T>
         ValidateInputDimensions();
     }
 
+    /// <summary>
+    /// Gets the sizes of the hidden layers in the neural network.
+    /// </summary>
+    /// <returns>An array containing the size of each hidden layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates and returns the number of neurons in each hidden layer of the neural network.
+    /// A hidden layer is any layer between the input and output layers. If no layers are defined or if there
+    /// are fewer than 3 layers (meaning no hidden layers), an empty array is returned.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method tells you how many neurons are in each hidden layer.
+    /// 
+    /// Hidden layers are the middle layers in your network:
+    /// - They sit between the input layer (which receives your data)
+    /// - And the output layer (which produces the final prediction)
+    /// - They're where most of the pattern recognition happens
+    /// 
+    /// For example, if your network has structure [784, 128, 64, 10]:
+    /// - Input layer: 784 neurons
+    /// - First hidden layer: 128 neurons
+    /// - Second hidden layer: 64 neurons
+    /// - Output layer: 10 neurons
+    /// 
+    /// This method would return [128, 64], the sizes of just the hidden layers.
+    /// 
+    /// This is useful for understanding or visualizing your network's structure.
+    /// </para>
+    /// </remarks>
     public int[] GetHiddenLayerSizes()
     {
         if (Layers == null || Layers.Count <= 1)
@@ -70,6 +419,33 @@ public class NeuralNetworkArchitecture<T>
         return [.. hiddenLayerSizes];
     }
 
+    /// <summary>
+    /// Gets the shape of the input as an array of dimensions.
+    /// </summary>
+    /// <returns>An array representing the input shape.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the shape of the input data as an array of dimensions. The format depends on the InputType:
+    /// - For OneDimensional: [InputSize]
+    /// - For TwoDimensional: [InputHeight, InputWidth]
+    /// - For ThreeDimensional: [InputDepth, InputHeight, InputWidth]
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you the exact shape of your input data.
+    /// 
+    /// Different types of data have different shapes:
+    /// - 1D data: Returns [size] - like [10] for 10 features
+    /// - 2D data: Returns [height, width] - like [28, 28] for a 28×28 image
+    /// - 3D data: Returns [depth, height, width] - like [3, 32, 32] for a color image
+    /// 
+    /// This shape information is important when:
+    /// - Preparing your data for the network
+    /// - Designing compatible layers
+    /// - Debugging shape-related errors
+    /// 
+    /// Many neural network errors happen because data shapes don't match up correctly,
+    /// so this method helps ensure your network is properly configured.
+    /// </para>
+    /// </remarks>
     public int[] GetInputShape()
     {
         return InputType switch
@@ -81,6 +457,32 @@ public class NeuralNetworkArchitecture<T>
         };
     }
 
+    /// <summary>
+    /// Gets the shape of the output as an array of dimensions.
+    /// </summary>
+    /// <returns>An array representing the output shape.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the shape of the output from the neural network. If layers are defined,
+    /// it returns the output shape of the final layer. If no layers are defined, it returns the same
+    /// shape as the input, since the output would be unchanged.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you the shape of your network's output.
+    /// 
+    /// For most common networks:
+    /// - Classification networks: Returns [number_of_classes]
+    /// - Regression networks: Returns [number_of_values_to_predict]
+    /// 
+    /// For example:
+    /// - A network classifying digits 0-9 would have output shape [10]
+    /// - A network predicting x,y coordinates would have output shape [2]
+    /// 
+    /// If you haven't defined any layers yet, this returns the same shape as
+    /// your input (since with no layers, input flows straight to output).
+    /// 
+    /// This helps you understand what shape of data to expect from your network.
+    /// </para>
+    /// </remarks>
     public int[] GetOutputShape()
     {
         if (Layers == null || Layers.Count == 0)
@@ -91,6 +493,29 @@ public class NeuralNetworkArchitecture<T>
         return Layers[Layers.Count - 1].GetOutputShape();
     }
 
+    /// <summary>
+    /// Calculates the total size of the output.
+    /// </summary>
+    /// <returns>The total number of output elements.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the total number of elements in the output by multiplying all dimensions
+    /// of the output shape. For example, if the output shape is [10, 10], the total output size would be 100.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates the total number of values in your network's output.
+    /// 
+    /// It multiplies all the dimensions of your output shape:
+    /// - For a shape [10] (like 10 classes): Total is 10
+    /// - For a shape [5, 5] (like a 5×5 grid): Total is 25
+    /// 
+    /// Most common networks have simple outputs:
+    /// - Classification: Equal to the number of categories
+    /// - Regression: Equal to the number of values being predicted
+    /// 
+    /// But some specialized networks might output matrices or tensors,
+    /// in which case this method helps calculate the total number of output values.
+    /// </para>
+    /// </remarks>
     public int CalculateOutputSize()
     {
         var outputShape = GetOutputShape();
@@ -104,6 +529,34 @@ public class NeuralNetworkArchitecture<T>
         return result;
     }
 
+    /// <summary>
+    /// Gets the size of each layer in the neural network.
+    /// </summary>
+    /// <returns>An array containing the size of each layer, including input and output layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns an array containing the number of neurons in each layer of the neural network,
+    /// starting with the input layer and ending with the output layer. The size of each layer is calculated
+    /// as the product of all dimensions in the layer's output shape.
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you the number of neurons in each layer of your network.
+    /// 
+    /// It returns a list of sizes for all layers, including:
+    /// - The input layer (first value)
+    /// - All hidden layers (middle values)
+    /// - The output layer (last value)
+    /// 
+    /// For example, a network for classifying 28×28 images into 10 categories
+    /// might return: [784, 128, 64, 10]
+    /// - 784: Input layer (28×28 pixels)
+    /// - 128: First hidden layer
+    /// - 64: Second hidden layer
+    /// - 10: Output layer (10 categories)
+    /// 
+    /// This is useful for visualizing your network structure or debugging
+    /// to make sure your layers are the sizes you expect.
+    /// </para>
+    /// </remarks>
     public int[] GetLayerSizes()
     {
         if (Layers == null || Layers.Count == 0)
@@ -120,6 +573,37 @@ public class NeuralNetworkArchitecture<T>
         return [.. layerSizes];
     }
 
+    /// <summary>
+    /// Validates the input dimensions to ensure they are consistent and appropriate for the selected input type.
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown when input dimensions are invalid or inconsistent.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when an invalid input dimension is specified.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method validates that the input dimensions provided are consistent with the specified InputType.
+    /// It checks that appropriate dimensions are provided for each input type and that any calculated sizes
+    /// match the explicitly provided InputSize. It also validates that any provided layers are compatible with
+    /// the input dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This makes sure all your dimension settings make sense together.
+    /// 
+    /// This method performs important checks like:
+    /// - For 1D data: Ensuring InputSize is provided and positive
+    /// - For 2D data: Ensuring InputHeight and InputWidth are positive
+    /// - For 3D data: Ensuring InputHeight, InputWidth, and InputDepth are all positive
+    /// 
+    /// It also checks that if you provide both InputSize and other dimension parameters,
+    /// they're consistent with each other. For example, if you set:
+    /// - InputSize = 25
+    /// - InputHeight = 5
+    /// - InputWidth = 5
+    /// 
+    /// These are consistent because 5×5=25. But if you set InputSize=30, it would
+    /// throw an error because 5×5≠30.
+    /// 
+    /// This prevents many common errors when setting up neural networks.
+    /// </para>
+    /// </remarks>
     private void ValidateInputDimensions()
     {
         int calculatedSize = InputType switch

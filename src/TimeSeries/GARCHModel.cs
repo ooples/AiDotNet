@@ -1,15 +1,209 @@
-namespace AiDotNet.TimeSeries;
+﻿namespace AiDotNet.TimeSeries;
 
+/// <summary>
+/// Represents a Generalized Autoregressive Conditional Heteroskedasticity (GARCH) model for time series with changing volatility.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The GARCH model is specifically designed for time series data that exhibits volatility clustering, where periods of high 
+/// volatility are followed by periods of high volatility, and periods of low volatility are followed by periods of low volatility.
+/// It combines a mean model (typically an ARIMA model) with a variance model that captures the conditional heteroskedasticity.
+/// </para>
+/// <para><b>For Beginners:</b> GARCH models help predict both the value and the uncertainty of financial data.
+/// 
+/// Think of it like weather forecasting:
+/// - Regular forecasting predicts the temperature (the mean value)
+/// - GARCH also predicts how much the temperature might vary (the volatility)
+/// 
+/// For example, with stock prices:
+/// - Some days, prices barely change (low volatility)
+/// - Other days, prices swing wildly up and down (high volatility)
+/// - Often, volatile periods tend to cluster together (volatility clustering)
+/// 
+/// GARCH helps model this behavior by:
+/// - Using one model to predict the average price (mean model)
+/// - Using another model to predict how much prices might fluctuate (volatility model)
+/// 
+/// This is especially useful for financial risk management, option pricing, and trading strategies.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class GARCHModel<T> : TimeSeriesModelBase<T>
 {
+    /// <summary>
+    /// The configuration options for the GARCH model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Contains the settings for the GARCH model, such as the orders of the ARCH and GARCH components,
+    /// the mean model to use, and other configuration parameters that control the model's behavior.
+    /// </para>
+    /// <para><b>For Beginners:</b> This holds all the settings that define how the model works.
+    /// 
+    /// These options include:
+    /// - How many past squared errors to consider (ARCH order)
+    /// - How many past volatilities to consider (GARCH order)
+    /// - What model to use for predicting average values
+    /// - Other technical settings that control the model's behavior
+    /// 
+    /// It's like a recipe that specifies all the ingredients and proportions
+    /// needed to create the model.
+    /// </para>
+    /// </remarks>
     private GARCHModelOptions<T> _garchOptions;
+
+    /// <summary>
+    /// The model used to forecast the mean (average value) of the time series.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is typically an ARIMA model that captures the average behavior of the time series.
+    /// The GARCH model then models the variance of the residuals (errors) from this mean model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This predicts the expected value, not the volatility.
+    /// 
+    /// The mean model:
+    /// - Forecasts the average or expected value at each time point
+    /// - Is usually an ARIMA model, which captures patterns in the data values
+    /// - Works independently of the volatility modeling
+    /// 
+    /// For example, with stock prices, the mean model might predict that
+    /// tomorrow's price will be $100, while the GARCH component predicts
+    /// how much that price might vary from the $100 prediction.
+    /// </para>
+    /// </remarks>
     private ITimeSeriesModel<T> _meanModel;
+
+    /// <summary>
+    /// The constant term in the GARCH variance equation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This parameter represents the baseline level of variance in the GARCH model.
+    /// It ensures that the conditional variance always has a minimum level, even when
+    /// past squared residuals and past variances are close to zero.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the minimum level of volatility in the model.
+    /// 
+    /// Omega (ω):
+    /// - Sets a baseline or minimum level of volatility
+    /// - Ensures the model never predicts zero volatility
+    /// - Represents the long-term average contribution to volatility
+    /// 
+    /// Think of it as the "background" volatility that's always present,
+    /// even during the calmest market periods.
+    /// </para>
+    /// </remarks>
     private Vector<T> _omega; // Constant term in variance equation
+
+    /// <summary>
+    /// The coefficients for the ARCH terms in the variance equation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These coefficients determine how much the conditional variance depends on past squared residuals.
+    /// Higher values indicate a stronger reaction of volatility to recent shocks or surprises in the data.
+    /// </para>
+    /// <para><b>For Beginners:</b> These determine how much recent surprises affect volatility.
+    /// 
+    /// Alpha (α) coefficients:
+    /// - Measure how sensitive volatility is to recent surprises or shocks
+    /// - Higher values mean volatility reacts strongly to new information
+    /// - Lower values mean volatility is more stable
+    /// 
+    /// For example, if a stock has high alpha values, a sudden price jump
+    /// will cause the model to predict higher volatility in the near future.
+    /// </para>
+    /// </remarks>
     private Vector<T> _alpha; // ARCH coefficients
+
+    /// <summary>
+    /// The coefficients for the GARCH terms in the variance equation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These coefficients determine how much the conditional variance depends on past conditional variances.
+    /// Higher values indicate a stronger persistence of volatility over time.
+    /// </para>
+    /// <para><b>For Beginners:</b> These determine how persistent volatility is over time.
+    /// 
+    /// Beta (β) coefficients:
+    /// - Measure how much current volatility depends on past volatility
+    /// - Higher values mean volatility persists for longer periods
+    /// - Lower values mean volatility dissipates more quickly
+    /// 
+    /// For example, if a stock has high beta values, a period of high volatility
+    /// will likely be followed by more periods of high volatility.
+    /// </para>
+    /// </remarks>
     private Vector<T> _beta;  // GARCH coefficients
+
+    /// <summary>
+    /// The residuals (errors) from the mean model's predictions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the differences between the actual observations and the mean model's predictions.
+    /// The GARCH model focuses on modeling the variance of these residuals.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are the prediction errors from the mean model.
+    /// 
+    /// Residuals:
+    /// - The differences between actual values and predicted values
+    /// - Represent the "surprises" or unpredicted components
+    /// - The GARCH model studies how these surprises vary over time
+    /// 
+    /// For example, if the mean model predicted $100 for a stock price
+    /// but the actual price was $103, the residual would be $3.
+    /// </para>
+    /// </remarks>
     private Vector<T> _residuals;
+
+    /// <summary>
+    /// The estimated conditional variances for each time point in the series.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the estimated variances for each time point based on the GARCH model.
+    /// They represent the expected level of volatility at each point in the time series.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are the estimated volatility levels at each time point.
+    /// 
+    /// Conditional variances:
+    /// - Measure how much uncertainty exists at each time point
+    /// - Higher values indicate higher expected volatility
+    /// - Change over time based on recent data patterns
+    /// 
+    /// These values answer the question "How much might the actual value
+    /// differ from our prediction?" at each point in time.
+    /// </para>
+    /// </remarks>
     private Vector<T> _conditionalVariances;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GARCHModel{T}"/> class with the specified options.
+    /// </summary>
+    /// <param name="options">The configuration options for the GARCH model. If null, default options are used.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor initializes the GARCH model with the provided configuration options or default options if none
+    /// are specified. The options determine parameters such as the ARCH and GARCH orders, the mean model to use,
+    /// and various other settings that control the model's behavior.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up your GARCH model with your chosen settings.
+    /// 
+    /// When creating the model, you can specify:
+    /// - ARCHOrder: How many past squared errors to consider
+    /// - GARCHOrder: How many past volatilities to consider
+    /// - MeanModel: The model used to predict the average value
+    /// 
+    /// For example:
+    /// - GARCH(1,1) is common, meaning 1 past error term and 1 past volatility term
+    /// - Higher orders (like GARCH(2,2)) capture more complex patterns but need more data
+    /// 
+    /// If you don't provide options, the model uses sensible defaults.
+    /// </para>
+    /// </remarks>
     public GARCHModel(GARCHModelOptions<T>? options = null) : base(options ?? new GARCHModelOptions<T>())
     {
         _garchOptions = (GARCHModelOptions<T>)_options;
@@ -21,6 +215,29 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         _conditionalVariances = new Vector<T>(0);
     }
 
+    /// <summary>
+    /// Trains the GARCH model on the provided input and output data.
+    /// </summary>
+    /// <param name="x">The input features matrix (typically time indicators or related variables).</param>
+    /// <param name="y">The target values vector (the time series data to forecast).</param>
+    /// <remarks>
+    /// <para>
+    /// This method trains the GARCH model in multiple steps: First, it trains the mean model to capture the average behavior
+    /// of the time series. Then, it calculates residuals (differences between actual and predicted values) and uses these
+    /// to estimate the parameters of the variance equation through maximum likelihood estimation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This teaches the model patterns in both your data values and their volatility.
+    /// 
+    /// The training process follows these steps:
+    /// 1. Train a model to predict the average values (mean model)
+    /// 2. Calculate the errors in these predictions (residuals)
+    /// 3. Find patterns in how these errors change over time
+    /// 4. Determine the best parameters (omega, alpha, beta) to model the volatility
+    /// 
+    /// This is like first learning to predict the temperature, then learning to predict
+    /// how much the temperature might vary from your prediction.
+    /// </para>
+    /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         // Step 1: Train the mean model
@@ -40,6 +257,32 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         CalculateResidualsAndVariances(_residuals);
     }
 
+    /// <summary>
+    /// Generates predictions for the given input data, including both mean and volatility forecasts.
+    /// </summary>
+    /// <param name="xNew">The input features matrix for the forecast period.</param>
+    /// <returns>A vector containing the predicted values that incorporate both the mean forecast and volatility.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates forecasts for future time periods by first predicting the mean using the mean model,
+    /// then forecasting the conditional variance using the GARCH parameters, and finally generating residuals
+    /// based on the forecasted variance to create the final predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This makes predictions that include both expected values and uncertainty.
+    /// 
+    /// The prediction process:
+    /// 1. Predicts the average value for each future period using the mean model
+    /// 2. Estimates how much uncertainty (volatility) to expect for each period
+    /// 3. Generates realistic random variations based on this volatility
+    /// 4. Combines the average prediction with these variations
+    /// 
+    /// This gives you not just a prediction, but a realistic scenario that includes
+    /// the natural randomness seen in volatile data.
+    /// 
+    /// For example, instead of just predicting "tomorrow's stock price will be $100,"
+    /// it might predict "tomorrow's stock price will be $100 with a likely range of $95-$105."
+    /// </para>
+    /// </remarks>
     public override Vector<T> Predict(Matrix<T> xNew)
     {
         int forecastHorizon = xNew.Rows;
@@ -95,6 +338,27 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         return predictions;
     }
 
+    /// <summary>
+    /// Generates a random number from a standard normal distribution.
+    /// </summary>
+    /// <returns>A random value from a standard normal distribution (mean 0, variance 1).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Box-Muller transform to generate a random number from a standard normal distribution.
+    /// The transform converts uniformly distributed random numbers to normally distributed ones.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a random number that follows a bell curve pattern.
+    /// 
+    /// The standard normal distribution (also called a bell curve):
+    /// - Has most values clustered around zero
+    /// - Values farther from zero become increasingly rare
+    /// - About 68% of values fall between -1 and 1
+    /// - About 95% of values fall between -2 and 2
+    /// 
+    /// This random number generator is used to simulate realistic market movements,
+    /// where small changes are common but extreme changes occasionally happen.
+    /// </para>
+    /// </remarks>
     private T GenerateStandardNormal()
     {
         // Box-Muller transform to generate standard normal random variable
@@ -106,6 +370,30 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         return NumOps.FromDouble(z);
     }
 
+    /// <summary>
+    /// Initializes the GARCH model parameters with reasonable starting values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method sets initial values for the GARCH parameters (omega, alpha, beta) before the optimization process.
+    /// The values are chosen to be consistent with commonly observed patterns in financial time series, with a small
+    /// positive value for omega, a moderate value for alpha, and a larger value for beta.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets starting values for the model before fine-tuning.
+    /// 
+    /// The method sets:
+    /// - Omega (the constant term): A small positive value (0.01)
+    /// - Alpha (the ARCH coefficients): Moderate values (0.05)
+    /// - Beta (the GARCH coefficients): Larger values (0.85)
+    /// 
+    /// These starting values are inspired by typical patterns seen in financial data,
+    /// where current volatility depends heavily on recent volatility (high beta)
+    /// and somewhat on recent shocks (moderate alpha).
+    /// 
+    /// Think of it as giving the model a head start in the right direction
+    /// before it begins finding the optimal parameters.
+    /// </para>
+    /// </remarks>
     private void InitializeParameters()
     {
         // Initialize parameters with small positive values
@@ -120,6 +408,31 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Estimates the optimal GARCH parameters using a gradient-based optimization approach.
+    /// </summary>
+    /// <param name="y">The residuals from the mean model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method optimizes the GARCH parameters (omega, alpha, beta) to maximize the log-likelihood
+    /// of the observed data. It uses a gradient-based approach with momentum and adaptive learning rate,
+    /// and ensures that parameters remain within valid ranges throughout the optimization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This finds the best settings to model your data's volatility patterns.
+    /// 
+    /// The optimization process:
+    /// - Starts with initial parameter values
+    /// - Repeatedly adjusts these values to better fit the data
+    /// - Uses "gradient descent," which finds the direction of improvement
+    /// - Includes "momentum" to avoid getting stuck in suboptimal solutions
+    /// - Adapts the learning rate (step size) based on progress
+    /// - Constrains parameters to maintain valid model properties
+    /// 
+    /// It's like climbing down a mountain in fog - you feel which way is downhill (the gradient),
+    /// keep some momentum so you don't get stuck in small depressions, and take smaller steps
+    /// when the terrain gets tricky.
+    /// </para>
+    /// </remarks>
     private void EstimateParameters(Vector<T> y)
     {
         int maxIterations = 10000;
@@ -191,6 +504,33 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates the gradient of the log-likelihood function with respect to the model parameters.
+    /// </summary>
+    /// <param name="y">The residuals from the mean model.</param>
+    /// <param name="gradientType">The type of parameter to calculate the gradient for (Omega, Alpha, or Beta).</param>
+    /// <returns>A vector containing the gradient values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the gradient of the log-likelihood function with respect to the specified parameter type
+    /// using numerical differentiation. The gradient indicates the direction and magnitude of the steepest increase
+    /// in the log-likelihood, which guides the parameter updates during optimization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how to adjust the parameters to better fit the data.
+    /// 
+    /// The gradient is like a compass that shows:
+    /// - Which direction to move each parameter
+    /// - How big of a step to take in that direction
+    /// 
+    /// The method:
+    /// - Slightly increases each parameter and checks if the model fits better
+    /// - Slightly decreases each parameter and checks if the model fits better
+    /// - Uses these tests to figure out which way and how far to move
+    /// 
+    /// This process is called "numerical differentiation" and it's like testing the waters
+    /// in different directions to see which way leads to improvement.
+    /// </para>
+    /// </remarks>
     private Vector<T> CalculateGradient(Vector<T> y, GradientType gradientType)
     {
         T epsilon = NumOps.FromDouble(1e-6); // Small value for numerical differentiation
@@ -251,6 +591,32 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates the log-likelihood of the data given the current model parameters.
+    /// </summary>
+    /// <param name="y">The residuals from the mean model.</param>
+    /// <returns>The log-likelihood value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the log-likelihood of the observed data given the current model parameters. The log-likelihood
+    /// is a measure of how well the model fits the data, with higher values indicating a better fit. It is used as the
+    /// objective function during parameter optimization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This measures how well the current model settings fit the data.
+    /// 
+    /// Log-likelihood:
+    /// - Is a mathematical way to measure how well a model fits data
+    /// - Higher values mean better fit (unlike error measures where lower is better)
+    /// - Takes into account both the prediction error and the expected volatility
+    /// 
+    /// For example:
+    /// - A large error during a high-volatility period might be acceptable
+    /// - The same error during a low-volatility period would be penalized more heavily
+    /// 
+    /// This measure helps the model properly account for changing volatility over time,
+    /// rather than treating all errors equally.
+    /// </para>
+    /// </remarks>
     private T CalculateLogLikelihood(Vector<T> y)
     {
         T logLikelihood = NumOps.Zero;
@@ -268,6 +634,33 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         return NumOps.Multiply(NumOps.FromDouble(-0.5), logLikelihood);
     }
 
+    /// <summary>
+    /// Calculates the conditional variances for the time series given the current model parameters.
+    /// </summary>
+    /// <param name="y">The residuals from the mean model.</param>
+    /// <returns>A vector containing the conditional variances for each time point.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the conditional variances for the time series based on the current GARCH parameters.
+    /// The conditional variance at each time point depends on the unconditional variance (for initialization) and
+    /// the ARCH and GARCH terms as specified by the model parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This estimates how volatile the data is at each point in time.
+    /// 
+    /// Conditional variance:
+    /// - Measures how much uncertainty or volatility exists at each time point
+    /// - "Conditional" means it depends on what happened in previous periods
+    /// - Changes over time based on recent data patterns
+    /// 
+    /// The calculation:
+    /// - Starts with an estimate of the long-term average variance (unconditional variance)
+    /// - Updates this based on recent squared errors (ARCH terms) 
+    /// - And recent variance estimates (GARCH terms)
+    /// 
+    /// This captures the tendency of volatility to cluster - high volatility periods
+    /// tend to be followed by high volatility periods.
+    /// </para>
+    /// </remarks>
     private Vector<T> CalculateConditionalVariances(Vector<T> y)
     {
         int n = y.Length;
@@ -298,6 +691,30 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         return conditionalVariances;
     }
 
+    /// <summary>
+    /// Constrains the GARCH parameters to ensure they remain within valid ranges.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method enforces constraints on the GARCH parameters to ensure they remain within valid ranges.
+    /// Specifically, it ensures that all parameters are non-negative and that the sum of ARCH and GARCH
+    /// coefficients is less than 1, which is a necessary condition for the model to be stationary.
+    /// </para>
+    /// <para><b>For Beginners:</b> This keeps the model parameters within sensible limits.
+    /// 
+    /// The constraints ensure:
+    /// - All parameters are positive (negative values wouldn't make statistical sense)
+    /// - The sum of alpha and beta coefficients is less than 1 (typically 0.99)
+    /// 
+    /// The second constraint is particularly important:
+    /// - If the sum exceeds 1, the model becomes "non-stationary"
+    /// - Non-stationary models can produce forecasts with infinitely increasing volatility
+    /// - This constraint keeps the model well-behaved and realistic
+    /// 
+    /// Think of it like guardrails that prevent the optimization process
+    /// from wandering into invalid or unstable territory.
+    /// </para>
+    /// </remarks>
     private void ConstrainParameters()
     {
         // Ensure all parameters are non-negative
@@ -321,6 +738,29 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates the final residuals and conditional variances based on the trained model parameters.
+    /// </summary>
+    /// <param name="residuals">The residuals from the mean model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the final residuals and conditional variances for the time series based on the
+    /// trained model parameters. These values are stored for use during forecasting and evaluation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This computes the final volatility estimates based on the trained model.
+    /// 
+    /// After finding the best parameters (omega, alpha, beta), this method:
+    /// - Calculates the final volatility estimate for each time point in your data
+    /// - Stores these estimates for later use in forecasting
+    /// 
+    /// These volatility estimates show:
+    /// - Where volatility was high in your historical data
+    /// - Where volatility was low
+    /// - How volatility patterns changed over time
+    /// 
+    /// These patterns provide the foundation for forecasting future volatility.
+    /// </para>
+    /// </remarks>
     private void CalculateResidualsAndVariances(Vector<T> residuals)
     {
         int n = residuals.Length;
@@ -349,11 +789,61 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates the unconditional variance of the time series data.
+    /// </summary>
+    /// <param name="y">The residuals from the mean model.</param>
+    /// <returns>The unconditional variance of the time series.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the unconditional variance of the time series, which represents the long-term average
+    /// level of volatility in the data. It is used for initializing the conditional variances at the beginning of the series.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates the average long-term volatility in your data.
+    /// 
+    /// Unconditional variance:
+    /// - Is the average or baseline volatility in your data
+    /// - Doesn't change over time (unlike conditional variance)
+    /// - Serves as a starting point for variance calculations
+    /// 
+    /// Think of it as the "normal" level of variability in your data.
+    /// For example, a stock might have an unconditional variance corresponding to
+    /// about 1% daily price changes on average, but the conditional variance
+    /// might be higher during market stress or lower during calm periods.
+    /// </para>
+    /// </remarks>
     private T CalculateUnconditionalVariance(Vector<T> y)
     {
         return StatisticsHelper<T>.CalculateVariance(y);
     }
 
+    /// <summary>
+    /// Evaluates the model's performance on test data.
+    /// </summary>
+    /// <param name="xTest">The test input features matrix.</param>
+    /// <param name="yTest">The test target values vector.</param>
+    /// <returns>A dictionary containing various evaluation metrics.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method evaluates the model's performance on test data by generating predictions and calculating
+    /// various error metrics. The returned metrics include Mean Squared Error (MSE), Root Mean Squared Error (RMSE),
+    /// Mean Absolute Error (MAE), and Mean Absolute Percentage Error (MAPE).
+    /// </para>
+    /// <para><b>For Beginners:</b> This measures how accurate the model's predictions are.
+    /// 
+    /// The evaluation:
+    /// - Makes predictions for data the model hasn't seen before
+    /// - Compares these predictions to the actual values
+    /// - Calculates different types of error measurements:
+    ///   - MSE (Mean Squared Error): Average of squared differences
+    ///   - RMSE (Root Mean Squared Error): Square root of MSE, in the same units as your data
+    ///   - MAE (Mean Absolute Error): Average of absolute differences
+    ///   - MAPE (Mean Absolute Percentage Error): Average percentage difference
+    /// 
+    /// These metrics help you understand how well your model is likely to perform
+    /// when forecasting new data. Lower values indicate better performance.
+    /// </para>
+    /// </remarks>
     public override Dictionary<string, T> EvaluateModel(Matrix<T> xTest, Vector<T> yTest)
     {
         Vector<T> predictions = Predict(xTest);
@@ -368,6 +858,32 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         return metrics;
     }
 
+    /// <summary>
+    /// Serializes the model's core parameters to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the model's essential parameters to a binary stream, allowing the model to be saved
+    /// to a file or database. The serialized parameters include the GARCH parameters (omega, alpha, beta),
+    /// the residuals, the conditional variances, and the model options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This saves the model so you can use it later.
+    /// 
+    /// The method:
+    /// - Converts the model's parameters to a format that can be saved
+    /// - Writes these values to a file or database
+    /// - Includes all the information needed to recreate the model exactly
+    /// 
+    /// This allows you to:
+    /// - Save a trained model for future use
+    /// - Share the model with others
+    /// - Use the model in other applications
+    /// 
+    /// It's like saving a document so you can open it again later without
+    /// having to start from scratch.
+    /// </para>
+    /// </remarks>
     protected override void SerializeCore(BinaryWriter writer)
     {
         SerializationHelper<T>.SerializeVector(writer, _omega);
@@ -379,6 +895,32 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         writer.Write(JsonConvert.SerializeObject(_garchOptions));
     }
 
+    /// <summary>
+    /// Deserializes the model's core parameters from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the model's essential parameters from a binary stream, allowing a previously saved model
+    /// to be loaded from a file or database. The deserialized parameters include the GARCH parameters (omega, alpha, beta),
+    /// the residuals, the conditional variances, and the model options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This loads a previously saved model.
+    /// 
+    /// The method:
+    /// - Reads the saved model data from a file or database
+    /// - Converts this data back into the model's parameters
+    /// - Reconstructs the model exactly as it was when saved
+    /// 
+    /// This is particularly useful when:
+    /// - You want to use a model that took a long time to train
+    /// - You want to ensure consistent results across different runs
+    /// - You need to deploy the model in a production environment
+    /// 
+    /// Think of it like opening a document you previously saved, allowing you
+    /// to continue using the model without having to train it again.
+    /// </para>
+    /// </remarks>
     protected override void DeserializeCore(BinaryReader reader)
     {
         _omega = SerializationHelper<T>.DeserializeVector(reader);

@@ -1,17 +1,72 @@
-using AiDotNet.Models.Options;
-using AiDotNet.Models.Results;
-
 namespace AiDotNet.FitDetectors;
 
+/// <summary>
+/// A fit detector that analyzes autocorrelation in model residuals to assess model fit.
+/// </summary>
+/// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> Autocorrelation refers to the correlation of a time series with its own past values. 
+/// In the context of model fitting, autocorrelation in residuals (prediction errors) can indicate that the 
+/// model is missing important patterns in the data.
+/// </para>
+/// <para>
+/// This detector uses the Durbin-Watson statistic to measure autocorrelation in model residuals. The 
+/// Durbin-Watson statistic ranges from 0 to 4, with a value of 2 indicating no autocorrelation, values 
+/// less than 2 indicating positive autocorrelation, and values greater than 2 indicating negative 
+/// autocorrelation.
+/// </para>
+/// </remarks>
 public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
 {
+    /// <summary>
+    /// Configuration options for the autocorrelation fit detector.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> These settings control how the detector interprets the Durbin-Watson 
+    /// statistic, including thresholds for determining different types of autocorrelation.
+    /// </remarks>
     private readonly AutocorrelationFitDetectorOptions _options;
 
+    /// <summary>
+    /// Initializes a new instance of the AutocorrelationFitDetector class.
+    /// </summary>
+    /// <param name="options">Optional configuration options. If not provided, default options are used.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor creates a new autocorrelation fit detector with either 
+    /// custom options or default settings.
+    /// </para>
+    /// <para>
+    /// The default settings typically use standard thresholds for interpreting the Durbin-Watson statistic, 
+    /// such as considering values below 1.5 as indicating strong positive autocorrelation and values above 
+    /// 2.5 as indicating strong negative autocorrelation.
+    /// </para>
+    /// </remarks>
     public AutocorrelationFitDetector(AutocorrelationFitDetectorOptions? options = null)
     {
         _options = options ?? new AutocorrelationFitDetectorOptions();
     }
 
+    /// <summary>
+    /// Detects the fit type of a model based on autocorrelation in residuals.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model predictions and actual values.</param>
+    /// <returns>A result object containing the detected fit type, confidence level, and recommendations.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method analyzes the pattern of errors your model makes to determine 
+    /// if there's autocorrelation, which can indicate that your model is missing important patterns in the data.
+    /// </para>
+    /// <para>
+    /// The result includes:
+    /// <list type="bullet">
+    /// <item><description>FitType: The type of autocorrelation detected (if any)</description></item>
+    /// <item><description>ConfidenceLevel: How confident the detector is in its assessment</description></item>
+    /// <item><description>Recommendations: Suggestions for improving the model based on the detected autocorrelation</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
@@ -28,6 +83,25 @@ public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
         };
     }
 
+    /// <summary>
+    /// Determines the fit type based on the Durbin-Watson statistic of model residuals.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model predictions and actual values.</param>
+    /// <returns>The detected fit type based on autocorrelation analysis.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method calculates the Durbin-Watson statistic from your model's errors 
+    /// and interprets it to determine what type of autocorrelation (if any) is present.
+    /// </para>
+    /// <para>
+    /// The Durbin-Watson statistic ranges from 0 to 4:
+    /// <list type="bullet">
+    /// <item><description>Values near 2 (typically 1.5-2.5) indicate no autocorrelation</description></item>
+    /// <item><description>Values below 1.5 suggest positive autocorrelation (errors tend to be followed by errors of the same sign)</description></item>
+    /// <item><description>Values above 2.5 suggest negative autocorrelation (errors tend to be followed by errors of the opposite sign)</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
     {
         var durbinWatsonStat = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestSet.ErrorStats.ErrorList);
@@ -51,6 +125,21 @@ public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
         }
     }
 
+    /// <summary>
+    /// Calculates the confidence level of the autocorrelation detection.
+    /// </summary>
+    /// <param name="evaluationData">Data containing model predictions and actual values.</param>
+    /// <returns>A value indicating the confidence level of the detection.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method determines how confident the detector is in its assessment 
+    /// of autocorrelation. The confidence is based on how far the Durbin-Watson statistic is from 
+    /// the ideal value of 2.0 (which indicates no autocorrelation).
+    /// </para>
+    /// <para>
+    /// A value closer to 1 indicates high confidence, while a value closer to 0 indicates low confidence.
+    /// </para>
+    /// </remarks>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
     {
         var durbinWatsonStat = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestSet.ErrorStats.ErrorList);
@@ -63,6 +152,26 @@ public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
         return confidenceLevel;
     }
 
+    /// <summary>
+    /// Generates recommendations based on the detected autocorrelation type.
+    /// </summary>
+    /// <param name="fitType">The detected fit type.</param>
+    /// <param name="evaluationData">Data containing model predictions and actual values.</param>
+    /// <returns>A list of recommendations for improving the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method provides practical suggestions for addressing the specific 
+    /// type of autocorrelation detected in your model's residuals.
+    /// </para>
+    /// <para>
+    /// Different types of autocorrelation require different approaches:
+    /// <list type="bullet">
+    /// <item><description>Positive autocorrelation often indicates missing time-dependent variables or trends</description></item>
+    /// <item><description>Negative autocorrelation might indicate over-differencing or alternating patterns</description></item>
+    /// <item><description>Weak autocorrelation might require further investigation to determine its nature</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
     {
         var recommendations = new List<string>();

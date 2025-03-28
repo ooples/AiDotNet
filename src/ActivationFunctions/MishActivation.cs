@@ -1,9 +1,53 @@
 namespace AiDotNet.ActivationFunctions;
 
+/// <summary>
+/// Implements the Mish activation function for neural networks.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> The Mish activation function is a smooth, non-monotonic function that helps neural networks
+/// learn complex patterns. It was introduced in 2019 and has shown good performance in many applications.
+/// 
+/// Mathematically, Mish is defined as: f(x) = x * tanh(softplus(x))
+/// where softplus(x) = ln(1 + e^x)
+/// 
+/// Mish combines properties of several popular activation functions:
+/// - It's smooth (no sharp corners like ReLU)
+/// - It allows both positive and negative values (unlike ReLU which zeros out negatives)
+/// - It's unbounded on the positive side (can output large positive values)
+/// - It's bounded on the negative side (won't output extremely negative values)
+/// 
+/// These properties help neural networks learn more effectively in many situations.
+/// </para>
+/// </remarks>
 public class MishActivation<T> : ActivationFunctionBase<T>
 {
+    /// <summary>
+    /// Determines if the activation function supports operations on individual scalar values.
+    /// </summary>
+    /// <returns>True, as Mish can be applied to individual values.</returns>
     protected override bool SupportsScalarOperations() => true;
 
+    /// <summary>
+    /// Applies the Mish activation function to a single input value.
+    /// </summary>
+    /// <param name="input">The input value.</param>
+    /// <returns>The activated output value using the Mish function.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method transforms a single number using the Mish formula:
+    /// 
+    /// 1. First, it calculates softplus(x) = ln(1 + e^x)
+    /// 2. Then, it calculates tanh(softplus(x))
+    /// 3. Finally, it multiplies the input by this tanh value
+    /// 
+    /// The result is a smooth curve that:
+    /// - For large positive inputs: behaves almost like the identity function (returns the input)
+    /// - For negative inputs: dampens the values but doesn't completely zero them out
+    /// - Near zero: has a smooth transition between these behaviors
+    /// </para>
+    /// </remarks>
     public override T Activate(T input)
     {
         T softplus = NumOps.Log(NumOps.Add(NumOps.One, NumOps.Exp(input)));
@@ -12,6 +56,27 @@ public class MishActivation<T> : ActivationFunctionBase<T>
         return NumOps.Multiply(input, tanh);
     }
 
+    /// <summary>
+    /// Calculates the derivative (gradient) of the Mish function for a single input value.
+    /// </summary>
+    /// <param name="input">The input value at which to calculate the derivative.</param>
+    /// <returns>The derivative value at the input point.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The derivative tells us how much the Mish function's output changes when we
+    /// slightly change the input. This is essential for training neural networks.
+    /// 
+    /// The formula for the Mish derivative is complex (as you can see from the code), but what's
+    /// important to understand is:
+    /// 
+    /// - For large positive inputs: the derivative approaches 1
+    /// - For large negative inputs: the derivative approaches 0
+    /// - In between: it has a smooth transition with values that help the network learn effectively
+    /// 
+    /// During training, this derivative helps determine how much to adjust each neuron's weights
+    /// based on the errors the network makes.
+    /// </para>
+    /// </remarks>
     public override T Derivative(T input)
     {
         T exp_x = NumOps.Exp(input);
