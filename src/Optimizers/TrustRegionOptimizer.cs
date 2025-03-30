@@ -1,11 +1,67 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the Trust Region optimization algorithm for machine learning models.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <remarks>
+/// The Trust Region optimizer is an advanced optimization technique that uses local quadratic approximations
+/// of the objective function to determine the next step. It maintains a region of trust around the current
+/// solution where the approximation is considered reliable.
+/// 
+/// <para><b>For Beginners:</b> Think of this optimizer as an explorer with a map:
+/// - The "trust region" is like the area on the map the explorer trusts to be accurate.
+/// - In each step, the explorer looks at this trusted area to decide where to go next.
+/// - If the predictions (map) match reality well, the explorer might expand the trusted area.
+/// - If the predictions are off, the explorer shrinks the trusted area and becomes more cautious.
+/// 
+/// This approach helps the optimizer make good decisions even in complex landscapes, balancing between
+/// making progress and staying reliable.
+/// </para>
+/// </remarks>
 public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
 {
+    /// <summary>
+    /// The options for configuring the Trust Region optimizer.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the configuration settings for the Trust Region optimization algorithm.
+    /// It includes parameters such as initial trust region radius, expansion and contraction factors,
+    /// and thresholds for determining the success of each optimization step.
+    /// </remarks>
     private TrustRegionOptimizerOptions _options;
+
+    /// <summary>
+    /// The current radius of the trust region.
+    /// </summary>
+    /// <remarks>
+    /// This field represents the current size of the trust region, which is dynamically adjusted
+    /// during the optimization process. The trust region is a neighborhood around the current point
+    /// where the quadratic approximation of the objective function is considered reliable.
+    /// </remarks>
     private T _trustRegionRadius;
+
+    /// <summary>
+    /// The current iteration count of the optimization process.
+    /// </summary>
+    /// <remarks>
+    /// This field keeps track of the number of iterations the optimizer has performed.
+    /// It's used to enforce stopping criteria based on the maximum number of iterations
+    /// and can be helpful for debugging or logging purposes.
+    /// </remarks>
     private int _iteration;
 
+    /// <summary>
+    /// Initializes a new instance of the TrustRegionOptimizer class.
+    /// </summary>
+    /// <param name="options">Options for configuring the Trust Region optimizer.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="gradientCache">The gradient cache to use.</param>
     public TrustRegionOptimizer(
         TrustRegionOptimizerOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -22,6 +78,9 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes adaptive parameters for the Trust Region optimizer.
+    /// </summary>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -29,6 +88,11 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         _iteration = 0;
     }
 
+    /// <summary>
+    /// Performs the optimization process using the Trust Region algorithm.
+    /// </summary>
+    /// <param name="inputData">The input data for optimization.</param>
+    /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -88,6 +152,21 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Calculates the Hessian matrix for the current solution.
+    /// </summary>
+    /// <param name="currentSolution">The current solution model.</param>
+    /// <param name="inputData">The input data for optimization.</param>
+    /// <returns>The Hessian matrix.</returns>
+    /// <remarks>
+    /// This method uses finite differences to approximate the Hessian matrix.
+    /// 
+    /// <para><b>For Beginners:</b> The Hessian is like a map of the terrain's curvature:
+    /// - It tells us how quickly the gradient changes in different directions.
+    /// - This information helps predict how the function behaves around the current point.
+    /// - Calculating it accurately is crucial for making good decisions in the optimization process.
+    /// </para>
+    /// </remarks>
     private Matrix<T> CalculateHessian(ISymbolicModel<T> currentSolution, OptimizationInputData<T> inputData)
     {
         var coefficients = currentSolution.Coefficients;
@@ -146,6 +225,13 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         return hessian;
     }
 
+    /// <summary>
+    /// Moves the current solution in the specified direction with the given step size.
+    /// </summary>
+    /// <param name="currentSolution">The current solution model.</param>
+    /// <param name="direction">The direction to move in.</param>
+    /// <param name="stepSize">The size of the step to take.</param>
+    /// <returns>A new solution model after moving in the specified direction.</returns>
     private ISymbolicModel<T> MoveInDirection(ISymbolicModel<T> currentSolution, Vector<T> direction, T stepSize)
     {
         var newModel = currentSolution.Copy();
@@ -160,6 +246,23 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         return newModel.UpdateCoefficients(newCoefficients);
     }
 
+    /// <summary>
+    /// Solves the trust region subproblem using the Conjugate Gradient method.
+    /// </summary>
+    /// <param name="gradient">The gradient vector at the current point.</param>
+    /// <param name="hessian">The Hessian matrix at the current point.</param>
+    /// <returns>The solution vector to the subproblem.</returns>
+    /// <remarks>
+    /// This method implements the Steihaug-Toint Conjugate Gradient algorithm to solve the trust region subproblem.
+    /// It finds a step direction that minimizes the quadratic model of the objective function within the trust region.
+    /// 
+    /// <para><b>For Beginners:</b> This method is like solving a puzzle within the trust region:
+    /// - It tries to find the best direction to move, considering both the slope (gradient) and curvature (Hessian).
+    /// - It uses an iterative process (Conjugate Gradient) to refine the solution.
+    /// - If it hits the boundary of the trust region, it adjusts the step to stay within bounds.
+    /// - The process stops when it finds a good enough solution or reaches the maximum number of iterations.
+    /// </para>
+    /// </remarks>
     private Vector<T> SolveSubproblem(Vector<T> gradient, Matrix<T> hessian)
     {
         var z = new Vector<T>(gradient.Length);
@@ -211,6 +314,22 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         return z;
     }
 
+    /// <summary>
+    /// Computes a step that lies on the boundary of the trust region.
+    /// </summary>
+    /// <param name="z">The current interior point.</param>
+    /// <param name="d">The direction vector.</param>
+    /// <returns>A vector representing a step to the trust region boundary.</returns>
+    /// <remarks>
+    /// This method is called when the Conjugate Gradient method proposes a step that would exit the trust region.
+    /// It calculates the intersection of the proposed step with the trust region boundary.
+    /// 
+    /// <para><b>For Beginners:</b> Think of this as finding where a line (your step) intersects a sphere (the trust region):
+    /// - If the proposed step goes outside the trust region, we need to stop at the boundary.
+    /// - This method calculates exactly where that intersection occurs.
+    /// - It ensures we take the largest possible step while staying within our "trusted" area.
+    /// </para>
+    /// </remarks>
     private Vector<T> ComputeBoundaryStep(Vector<T> z, Vector<T> d)
     {
         var a = d.DotProduct(d);
@@ -221,6 +340,23 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         return z.Add(d.Multiply(tau));
     }
 
+    /// <summary>
+    /// Solves a quadratic equation of the form ax^2 + bx + c = 0.
+    /// </summary>
+    /// <param name="a">The coefficient of x^2.</param>
+    /// <param name="b">The coefficient of x.</param>
+    /// <param name="c">The constant term.</param>
+    /// <returns>The positive root of the quadratic equation.</returns>
+    /// <remarks>
+    /// This method is used in computing the boundary step. It solves the quadratic equation that arises
+    /// when finding the intersection of a line with a sphere (in this case, the trust region boundary).
+    /// 
+    /// <para><b>For Beginners:</b> This is like solving a basic algebra problem:
+    /// - We're finding where a curved line (parabola) crosses zero.
+    /// - In our case, this helps find where our step meets the edge of the trust region.
+    /// - We always return the positive solution, as we're interested in moving forward, not backward.
+    /// </para>
+    /// </remarks>
     private T SolveQuadratic(T a, T b, T c)
     {
         var discriminant = NumOps.Subtract(NumOps.Multiply(b, b), NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(4), a), c));
@@ -231,13 +367,46 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         return NumOps.GreaterThan(tau1, NumOps.Zero) ? tau1 : tau2;
     }
 
+    /// <summary>
+    /// Calculates the predicted reduction in the objective function for a given step.
+    /// </summary>
+    /// <param name="gradient">The gradient at the current point.</param>
+    /// <param name="hessian">The Hessian matrix at the current point.</param>
+    /// <param name="stepDirection">The proposed step direction.</param>
+    /// <returns>The predicted reduction in the objective function.</returns>
+    /// <remarks>
+    /// This method computes how much the quadratic model predicts the objective function will decrease
+    /// if we take the proposed step. It's used to evaluate the quality of the proposed step.
+    /// 
+    /// <para><b>For Beginners:</b> This is like estimating how much you'll save on a shopping trip:
+    /// - The gradient tells you the initial rate of savings.
+    /// - The Hessian helps adjust that estimate based on how the savings rate might change.
+    /// - Combining these gives you a prediction of your total savings (or in our case, improvement in the function).
+    /// </para>
+    /// </remarks>
     private T CalculatePredictedReduction(Vector<T> gradient, Matrix<T> hessian, Vector<T> stepDirection)
     {
         var linearTerm = gradient.DotProduct(stepDirection);
         var quadraticTerm = stepDirection.DotProduct(hessian.Multiply(stepDirection));
+
         return NumOps.Add(linearTerm, NumOps.Multiply(NumOps.FromDouble(0.5), quadraticTerm));
     }
 
+    /// <summary>
+    /// Updates the trust region radius based on the success of the last step.
+    /// </summary>
+    /// <param name="rho">The ratio of actual improvement to predicted improvement.</param>
+    /// <remarks>
+    /// This method adjusts the size of the trust region based on how well the quadratic model predicted
+    /// the actual change in the objective function. If the prediction was very accurate, the trust region
+    /// may be expanded. If it was poor, the trust region is contracted.
+    /// 
+    /// <para><b>For Beginners:</b> This is like adjusting how much you trust your map:
+    /// - If your map (model) accurately predicted the terrain, you might explore a larger area next time.
+    /// - If the map wasn't very accurate, you'd be more cautious and explore a smaller area.
+    /// - The method ensures the trust region stays within reasonable bounds, neither too large nor too small.
+    /// </para>
+    /// </remarks>
     private void UpdateTrustRegionRadius(T rho)
     {
         if (NumOps.GreaterThan(rho, NumOps.FromDouble(_options.VerySuccessfulThreshold)))
@@ -252,12 +421,42 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         _trustRegionRadius = MathHelper.Clamp(_trustRegionRadius, NumOps.FromDouble(_options.MinTrustRegionRadius), NumOps.FromDouble(_options.MaxTrustRegionRadius));
     }
 
+    /// <summary>
+    /// Reduces the size of the trust region.
+    /// </summary>
+    /// <remarks>
+    /// This method is called when a step is rejected, indicating that the current trust region may be too large.
+    /// It contracts the trust region to promote more conservative steps in subsequent iterations.
+    /// 
+    /// <para><b>For Beginners:</b> This is like becoming more cautious after a misstep:
+    /// - If your last move wasn't good, you'd naturally want to take smaller, more careful steps.
+    /// - This method does exactly that - it makes the "trusted" area smaller.
+    /// - It ensures that even after shrinking, the trust region isn't too small to make progress.
+    /// </para>
+    /// </remarks>
     private void ShrinkTrustRegionRadius()
     {
         _trustRegionRadius = NumOps.Multiply(_trustRegionRadius, NumOps.FromDouble(_options.ContractionFactor));
         _trustRegionRadius = MathHelper.Clamp(_trustRegionRadius, NumOps.FromDouble(_options.MinTrustRegionRadius), NumOps.FromDouble(_options.MaxTrustRegionRadius));
     }
 
+    /// <summary>
+    /// Updates adaptive parameters based on the current and previous optimization steps.
+    /// </summary>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
+    /// <remarks>
+    /// This method adjusts the trust region radius based on the improvement in the objective function.
+    /// It's part of the adaptive behavior of the trust region algorithm, allowing it to respond to the
+    /// characteristics of the objective function landscape.
+    /// 
+    /// <para><b>For Beginners:</b> This is like learning from your recent experiences:
+    /// - If your last step improved things, you might become a bit more adventurous.
+    /// - If things got worse, you'd become more cautious.
+    /// - This method automatically adjusts how boldly or cautiously the algorithm explores,
+    ///   based on whether recent steps have been successful or not.
+    /// </para>
+    /// </remarks>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -280,6 +479,21 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the optimizer options.
+    /// </summary>
+    /// <param name="options">The new options to be set.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of type TrustRegionOptimizerOptions.</exception>
+    /// <remarks>
+    /// This method allows updating the optimizer's configuration during runtime. It ensures that only
+    /// the correct type of options (TrustRegionOptimizerOptions) can be set for this optimizer.
+    /// 
+    /// <para><b>For Beginners:</b> This is like changing the settings on your GPS mid-journey:
+    /// - You can adjust how the optimizer behaves without starting over.
+    /// - It checks to make sure you're using the right kind of settings for this specific optimizer.
+    /// - If you try to use the wrong type of settings, it will let you know with an error.
+    /// </para>
+    /// </remarks>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is TrustRegionOptimizerOptions trustRegionOptions)
@@ -292,11 +506,41 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Retrieves the current options of the optimizer.
+    /// </summary>
+    /// <returns>The current TrustRegionOptimizerOptions.</returns>
+    /// <remarks>
+    /// This method provides access to the current configuration of the Trust Region optimizer.
+    /// It allows inspection of the optimizer's settings without modifying them.
+    /// 
+    /// <para><b>For Beginners:</b> This is like checking your current GPS settings:
+    /// - You can see how the optimizer is currently configured.
+    /// - This is useful if you want to review or log the current settings.
+    /// - It doesn't change anything; it just lets you look at the current setup.
+    /// </para>
+    /// </remarks>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the current state of the optimizer into a byte array.
+    /// </summary>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
+    /// <remarks>
+    /// This method saves the current state of the optimizer, including its base class state and
+    /// specific Trust Region optimizer properties. This allows the optimizer's state to be stored
+    /// or transmitted and later reconstructed.
+    /// 
+    /// <para><b>For Beginners:</b> This is like taking a snapshot of the optimizer:
+    /// - It captures all the important information about the optimizer's current state.
+    /// - This snapshot can be saved or sent somewhere else.
+    /// - Later, you can use this snapshot to recreate the optimizer exactly as it was.
+    /// - It's useful for things like saving progress, or moving the optimization process to a different machine.
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -316,6 +560,22 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Deserializes the optimizer's state from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
+    /// <remarks>
+    /// This method reconstructs the optimizer's state from a serialized byte array. It restores both
+    /// the base class state and the specific properties of the Trust Region optimizer.
+    /// 
+    /// <para><b>For Beginners:</b> This is like reconstructing the optimizer from a snapshot:
+    /// - It takes the snapshot (byte array) created by the Serialize method.
+    /// - From this snapshot, it rebuilds the optimizer to the exact state it was in when serialized.
+    /// - This is useful for resuming a paused optimization process or moving it to a different machine.
+    /// - If there's a problem reading the optimizer's settings, it will raise an error to let you know.
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))

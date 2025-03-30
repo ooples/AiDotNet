@@ -1,12 +1,69 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Represents a Follow The Regularized Leader (FTRL) optimizer for machine learning models.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The FTRL optimizer is an online learning algorithm that adapts regularization in a per-coordinate fashion.
+/// It's particularly effective for sparse datasets and is widely used in click-through rate (CTR) prediction
+/// and other online learning scenarios.
+/// </para>
+/// <para><b>For Beginners:</b> FTRL is an advanced optimization technique that's good at handling large-scale,
+/// sparse data. It's often used in online advertising and recommendation systems.
+/// 
+/// Think of FTRL like a smart learning system that:
+/// - Adjusts its learning speed for each feature independently
+/// - Can handle situations where most features are zero (sparse data)
+/// - Is good at balancing between finding a good solution and not overfitting
+/// 
+/// For example, in an online advertising system, FTRL might:
+/// - Quickly learn which ad categories are important for a user
+/// - Ignore or learn slowly from features that rarely appear
+/// - Automatically adjust how much it learns from each new piece of data
+/// 
+/// This makes FTRL particularly good for systems that need to learn and predict in real-time with lots of data.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
 {
+    /// <summary>
+    /// The options specific to the FTRL algorithm.
+    /// </summary>
     private FTRLOptimizerOptions _options;
+
+    /// <summary>
+    /// Auxiliary vector used in the FTRL update rule.
+    /// </summary>
     private Vector<T>? _z;
+
+    /// <summary>
+    /// Vector of accumulated squared gradients.
+    /// </summary>
     private Vector<T>? _n;
+
+    /// <summary>
+    /// The current time step or iteration count.
+    /// </summary>
     private int _t;
 
+    /// <summary>
+    /// Initializes a new instance of the FTRLOptimizer class.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This constructor sets up the FTRL optimizer with its initial configuration.
+    /// You can customize various aspects of how it works, or use default settings if you're unsure.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The options for configuring the FTRL algorithm.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="gradientCache">The gradient cache to use.</param>
     public FTRLOptimizer(
         FTRLOptimizerOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -22,6 +79,14 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters used in the FTRL algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method sets up the initial learning rate and resets the time step.
+    /// The learning rate determines how big the steps are when the algorithm is searching for the best solution.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -29,6 +94,22 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
         _t = 0;
     }
 
+    /// <summary>
+    /// Performs the main optimization process using the FTRL algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the heart of the FTRL algorithm. It starts with a random solution
+    /// and iteratively improves it. In each iteration, it:
+    /// 1. Calculates how to improve the current solution (the gradient)
+    /// 2. Updates the solution based on this calculation
+    /// 3. Checks if this new solution is the best one found so far
+    /// 4. Decides whether to stop or continue improving
+    /// 
+    /// It's like a climber trying to find the highest peak, taking steps based on the slope they feel under their feet.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -69,6 +150,18 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Updates the current solution using the FTRL update rule.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method applies the FTRL algorithm's specific way of updating the solution.
+    /// It's like adjusting the recipe based on how well the last batch of cookies turned out, but in a very
+    /// sophisticated way that considers the history of all previous batches.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentSolution">The current solution.</param>
+    /// <param name="gradient">The calculated gradient.</param>
+    /// <returns>The updated solution.</returns>
     private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
     {
         var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
@@ -112,6 +205,17 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
         return new VectorModel<T>(newCoefficients);
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters based on the optimization progress.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts how fast the algorithm learns based on its recent performance.
+    /// If it's improving, it might speed up. If it's not improving, it might slow down to be more careful.
+    /// It's like adjusting your study pace based on how well you're understanding the material.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -133,6 +237,17 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the options for the FTRL optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to change the settings of the optimizer while it's running.
+    /// It's like adjusting the controls on a machine while it's operating. This can be useful if you want to
+    /// fine-tune the optimizer's behavior based on its performance or other factors.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The new options to be set.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of type FTRLOptimizerOptions.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is FTRLOptimizerOptions ftrlOptions)
@@ -145,11 +260,30 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Retrieves the current options of the FTRL optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method lets you see what settings the optimizer is currently using.
+    /// It's like checking the current settings on a machine to understand how it's configured.
+    /// </para>
+    /// </remarks>
+    /// <returns>The current optimization algorithm options.</returns>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the FTRL optimizer to a byte array.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method converts the current state of the optimizer into a format
+    /// that can be easily stored or transmitted. It's like taking a snapshot of the optimizer's memory,
+    /// including all its settings and learned information, so you can save it or send it somewhere else.
+    /// </para>
+    /// </remarks>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -168,6 +302,17 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Deserializes the FTRL optimizer from a byte array.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method takes a previously serialized optimizer state and
+    /// reconstructs the optimizer from it. It's like restoring the optimizer's memory from a saved snapshot,
+    /// allowing you to continue from where you left off or use a pre-trained optimizer.
+    /// </para>
+    /// </remarks>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))
@@ -185,6 +330,19 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Generates a unique key for caching gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a unique identifier for storing and retrieving
+    /// calculated gradients. It's like creating a label for a file drawer where you store specific calculations.
+    /// This helps the optimizer avoid redoing calculations it has already performed, making it more efficient.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The current model.</param>
+    /// <param name="X">The input data matrix.</param>
+    /// <param name="y">The target values vector.</param>
+    /// <returns>A string that uniquely identifies the gradient for the given inputs.</returns>
     protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);

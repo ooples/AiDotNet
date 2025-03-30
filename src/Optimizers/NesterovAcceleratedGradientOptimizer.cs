@@ -1,10 +1,53 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the Nesterov Accelerated Gradient optimization algorithm.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The Nesterov Accelerated Gradient (NAG) is an optimization algorithm that improves upon standard gradient descent.
+/// It introduces a smart prediction of the next position of the parameters, which helps to dampen oscillations and
+/// improve convergence, especially in scenarios with high curvature or small but consistent gradients.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// Imagine you're skiing down a hill. Regular gradient descent is like looking at your current position to decide where to go next.
+/// NAG is like looking ahead to where you'll be after your next move, and then deciding how to adjust your path.
+/// This "look-ahead" helps you navigate the slope more efficiently, especially around tricky turns.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBase<T>
 {
+    /// <summary>
+    /// The options specific to the Nesterov Accelerated Gradient optimizer.
+    /// </summary>
     private NesterovAcceleratedGradientOptimizerOptions _options;
+
+    /// <summary>
+    /// The velocity vector used in the NAG algorithm.
+    /// </summary>
     private Vector<T>? _velocity;
 
+    /// <summary>
+    /// Initializes a new instance of the NesterovAcceleratedGradientOptimizer class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This constructor sets up the NAG optimizer with the provided options and dependencies.
+    /// If no options are provided, it uses default settings.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like preparing your skis and gear before you start your descent. You're setting up all the tools and rules you'll use during your optimization journey.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The NAG-specific optimization options.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="gradientCache">The gradient cache to use.</param>
     public NesterovAcceleratedGradientOptimizer(
         NesterovAcceleratedGradientOptimizerOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -20,6 +63,17 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters for the NAG optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method sets up the initial values for the learning rate and momentum.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like setting your initial speed and direction before you start skiing. You're deciding how fast to move and how much to consider your previous direction.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -27,6 +81,25 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
         CurrentMomentum = NumOps.FromDouble(_options.InitialMomentum);
     }
 
+    /// <summary>
+    /// Performs the optimization process using the Nesterov Accelerated Gradient algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method implements the main optimization loop. It uses the NAG algorithm to update the solution iteratively,
+    /// aiming to find the optimal set of parameters that minimize the loss function.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is your actual ski run. You start at the top of the hill (your initial solution) and then repeatedly:
+    /// 1. Look ahead to where you might be after your next move.
+    /// 2. Check the steepness (gradient) at that future position.
+    /// 3. Adjust your speed and direction based on what you see.
+    /// 4. Make your move.
+    /// You keep doing this until you reach the bottom of the hill or decide you're close enough to the best spot.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -67,6 +140,19 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Calculates the lookahead solution based on the current solution and velocity.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method computes a predicted future position of the solution, which is a key aspect of the NAG algorithm.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like looking ahead to where you think you'll be after your next move, based on your current position and how fast you're moving (velocity).
+    /// </para>
+    /// </remarks>
+    /// <param name="currentSolution">The current solution.</param>
+    /// <returns>A predicted future solution.</returns>
     private ISymbolicModel<T> GetLookaheadSolution(ISymbolicModel<T> currentSolution)
     {
         var lookaheadCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
@@ -77,6 +163,20 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
         return new VectorModel<T>(lookaheadCoefficients);
     }
 
+    /// <summary>
+    /// Updates the velocity vector based on the current gradient.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the velocity using the momentum and learning rate, incorporating the new gradient information.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like adjusting your speed and direction. You consider how fast you were going before (momentum) and the new information about the slope (gradient),
+    /// to decide how to change your movement.
+    /// </para>
+    /// </remarks>
+    /// <param name="gradient">The current gradient.</param>
+    /// <returns>The updated velocity vector.</returns>
     private Vector<T> UpdateVelocity(Vector<T> gradient)
     {
         for (int i = 0; i < _velocity!.Length; i++)
@@ -89,6 +189,20 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
         return _velocity;
     }
 
+    /// <summary>
+    /// Updates the current solution using the velocity vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method computes the new solution by applying the velocity to the current solution.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like actually making your move down the slope. You take your current position and adjust it based on your speed and direction (velocity).
+    /// </para>
+    /// </remarks>
+    /// <param name="currentSolution">The current solution.</param>
+    /// <param name="velocity">The current velocity vector.</param>
+    /// <returns>The updated solution.</returns>
     private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> velocity)
     {
         var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
@@ -99,6 +213,21 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
         return new VectorModel<T>(newCoefficients);
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters of the NAG optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the learning rate and momentum based on the improvement in fitness.
+    /// It's used to fine-tune the algorithm's behavior as the optimization progresses.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like adjusting your skiing technique as you go down the hill. If you're making good progress, you might decide to go a bit faster or trust your momentum more.
+    /// If you're not improving, you might slow down or be more cautious about following your previous direction.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">The current optimization step data.</param>
+    /// <param name="previousStepData">The previous optimization step data.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -134,6 +263,20 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
         }
     }
 
+    /// <summary>
+    /// Updates the optimizer's options with new settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method ensures that only compatible option types are used with this optimizer.
+    /// It updates the internal options if the provided options are of the correct type.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like changing the rules for how the skier should navigate the slope. It makes sure you're only using rules that work for this specific type of skiing technique (Nesterov Accelerated Gradient method).
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The new options to be applied to the optimizer.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is NesterovAcceleratedGradientOptimizerOptions nagOptions)
@@ -146,11 +289,36 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
         }
     }
 
+    /// <summary>
+    /// Gets the current options of the Nesterov Accelerated Gradient optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method returns the current configuration options of the optimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like asking to see the current set of rules the skier is following on their descent.
+    /// </para>
+    /// </remarks>
+    /// <returns>The current optimization algorithm options.</returns>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the Nesterov Accelerated Gradient optimizer to a byte array.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method converts the current state of the optimizer, including its options and parameters, into a byte array.
+    /// This allows the optimizer's state to be saved or transmitted.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like taking a snapshot of the entire skiing process, including where the skier is on the slope and what techniques they're using, so you can save it or send it to someone else.
+    /// </para>
+    /// </remarks>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -167,6 +335,20 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
         }
     }
 
+    /// <summary>
+    /// Deserializes the Nesterov Accelerated Gradient optimizer from a byte array.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs the optimizer's state from a byte array, including its options and parameters.
+    /// It's used to restore a previously saved or transmitted optimizer state.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like using a saved snapshot to set up the skiing process exactly as it was before, placing the skier back where they were on the slope and restoring the techniques they were using.
+    /// </para>
+    /// </remarks>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))
@@ -182,6 +364,21 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
         }
     }
 
+    /// <summary>
+    /// Generates a unique key for caching gradients in the Nesterov Accelerated Gradient optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method creates a unique identifier for caching gradients, incorporating the base key and NAG-specific parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like creating a special label for each unique skiing situation, considering not just the slope (model and data) but also the specific NAG skiing technique being used (initial momentum and learning rate).
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The symbolic model for which the gradient is being calculated.</param>
+    /// <param name="X">The input data matrix.</param>
+    /// <param name="y">The target vector.</param>
+    /// <returns>A string key uniquely identifying the gradient calculation scenario for caching purposes.</returns>
     protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);

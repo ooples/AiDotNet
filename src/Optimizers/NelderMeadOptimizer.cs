@@ -1,14 +1,73 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the Nelder-Mead optimization algorithm, also known as the downhill simplex method.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The Nelder-Mead method is a heuristic search method that can optimize a problem with N variables.
+/// It attempts to minimize a scalar-valued nonlinear function of n real variables using only function values,
+/// without any derivative information.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// Imagine you're trying to find the lowest point in a hilly landscape. The Nelder-Mead method is like
+/// having a group of explorers who work together, moving and reshaping their search pattern to find the lowest point.
+/// They don't need to know which way is downhill; they just compare their positions and adjust accordingly.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class NelderMeadOptimizer<T> : OptimizerBase<T>
 {
+    /// <summary>
+    /// The options specific to the Nelder-Mead optimizer.
+    /// </summary>
     private NelderMeadOptimizerOptions _options;
+
+    /// <summary>
+    /// The current iteration count.
+    /// </summary>
     private int _iteration;
+
+    /// <summary>
+    /// The reflection coefficient.
+    /// </summary>
     private T _alpha;
+
+    /// <summary>
+    /// The contraction coefficient.
+    /// </summary>
     private T _beta;
+
+    /// <summary>
+    /// The expansion coefficient.
+    /// </summary>
     private T _gamma;
+
+    /// <summary>
+    /// The shrinkage coefficient.
+    /// </summary>
     private T _delta;
 
+    /// <summary>
+    /// Initializes a new instance of the NelderMeadOptimizer class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This constructor sets up the Nelder-Mead optimizer with the provided options and dependencies.
+    /// If no options are provided, it uses default settings.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like preparing your team of explorers before they start searching the landscape.
+    /// You're giving them their initial instructions and tools.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The Nelder-Mead-specific optimization options.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
     public NelderMeadOptimizer(
         NelderMeadOptimizerOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -27,6 +86,19 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters for the Nelder-Mead optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method sets up the initial values for the reflection, contraction, expansion, and shrinkage coefficients.
+    /// It also resets the iteration counter.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like giving your explorers their initial strategies for how to move around the landscape.
+    /// You're setting up how far they should reflect, contract, expand, or shrink their search pattern.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -37,6 +109,23 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
         _iteration = 0;
     }
 
+    /// <summary>
+    /// Performs the optimization process using the Nelder-Mead algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method implements the main optimization loop. It creates and manipulates a simplex
+    /// (a geometric figure in N dimensions) to find the optimal solution.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is the actual search process. Your team of explorers starts at different points,
+    /// then repeatedly adjusts their positions based on which points are higher or lower.
+    /// They reflect away from high points, expand towards promising areas, contract if they overshoot,
+    /// and shrink their search area if they get stuck.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -107,6 +196,21 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Initializes the simplex for the Nelder-Mead algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method creates the initial set of points (simplex) for the optimization process.
+    /// It generates n+1 random solutions, where n is the number of dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like choosing the starting positions for your team of explorers on the landscape.
+    /// You're placing them at different random spots to begin their search.
+    /// </para>
+    /// </remarks>
+    /// <param name="n">The number of dimensions (variables) in the optimization problem.</param>
+    /// <returns>A list of initial solutions forming the simplex.</returns>
     private List<ISymbolicModel<T>> InitializeSimplex(int n)
     {
         var simplex = new List<ISymbolicModel<T>>();
@@ -114,9 +218,26 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
         {
             simplex.Add(InitializeRandomSolution(n));
         }
+
         return simplex;
     }
 
+    /// <summary>
+    /// Calculates the centroid of the simplex, excluding the worst point.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method computes the average position of all points in the simplex except the worst one.
+    /// The centroid is used as a reference point for reflection, expansion, and contraction operations.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// Imagine your explorers (except the one at the highest point) all throwing ropes to each other and pulling until they meet at a central point.
+    /// This central point is the centroid, which helps guide the next move.
+    /// </para>
+    /// </remarks>
+    /// <param name="simplex">The current simplex (list of solution points).</param>
+    /// <param name="n">The number of dimensions (variables) in the optimization problem.</param>
+    /// <returns>A symbolic model representing the centroid of the simplex.</returns>
     private ISymbolicModel<T> CalculateCentroid(List<ISymbolicModel<T>> simplex, int n)
     {
         var centroidCoefficients = new Vector<T>(n);
@@ -131,24 +252,84 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
         {
             centroidCoefficients[j] = NumOps.Divide(centroidCoefficients[j], NumOps.FromDouble(n));
         }
+
         return new VectorModel<T>(centroidCoefficients);
     }
 
+    /// <summary>
+    /// Performs the reflection operation in the Nelder-Mead algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method reflects the worst point through the centroid of the remaining points.
+    /// It's used to move away from the worst solution in the simplex.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// Imagine the worst explorer jumping over the center point, landing on the opposite side.
+    /// This helps the team move away from bad areas.
+    /// </para>
+    /// </remarks>
+    /// <param name="worst">The worst point in the simplex.</param>
+    /// <param name="centroid">The centroid of the simplex (excluding the worst point).</param>
+    /// <returns>A new point that is the reflection of the worst point through the centroid.</returns>
     private ISymbolicModel<T> Reflect(ISymbolicModel<T> worst, ISymbolicModel<T> centroid)
     {
         return PerformVectorOperation(centroid, worst, _alpha, (a, b, c) => NumOps.Add(a, NumOps.Multiply(c, NumOps.Subtract(a, b))));
     }
 
+    /// <summary>
+    /// Performs the expansion operation in the Nelder-Mead algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method expands the reflected point further away from the centroid.
+    /// It's used when the reflected point is the best so far, to explore even further in that direction.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// If the reflected explorer found a good spot, this is like telling them to keep going even further in that direction.
+    /// </para>
+    /// </remarks>
+    /// <param name="centroid">The centroid of the simplex.</param>
+    /// <param name="reflected">The reflected point.</param>
+    /// <returns>A new point that is an expansion of the reflected point away from the centroid.</returns>
     private ISymbolicModel<T> Expand(ISymbolicModel<T> centroid, ISymbolicModel<T> reflected)
     {
         return PerformVectorOperation(centroid, reflected, _gamma, (a, b, c) => NumOps.Add(a, NumOps.Multiply(c, NumOps.Subtract(b, a))));
     }
 
+    /// <summary>
+    /// Performs the contraction operation in the Nelder-Mead algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method contracts the worst point towards the centroid.
+    /// It's used when the reflected point isn't better than the second worst point.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// If the reflected explorer didn't find a good spot, this is like calling them back halfway towards the group.
+    /// </para>
+    /// </remarks>
+    /// <param name="worst">The worst point in the simplex.</param>
+    /// <param name="centroid">The centroid of the simplex.</param>
+    /// <returns>A new point that is a contraction of the worst point towards the centroid.</returns>
     private ISymbolicModel<T> Contract(ISymbolicModel<T> worst, ISymbolicModel<T> centroid)
     {
         return PerformVectorOperation(centroid, worst, _beta, (a, b, c) => NumOps.Add(a, NumOps.Multiply(c, NumOps.Subtract(b, a))));
     }
 
+    /// <summary>
+    /// Performs the shrink operation in the Nelder-Mead algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method shrinks all points (except the best) towards the best point.
+    /// It's used when contraction fails to produce a better point.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// If none of the other moves worked well, this is like telling all explorers (except the best one) to move halfway towards the best explorer's position.
+    /// </para>
+    /// </remarks>
+    /// <param name="simplex">The current simplex (list of solution points).</param>
     private void Shrink(List<ISymbolicModel<T>> simplex)
     {
         var best = simplex[0];
@@ -158,6 +339,23 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Performs a vector operation on two symbolic models.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method applies a specified operation to each corresponding pair of coefficients in two symbolic models.
+    /// It's used as a helper method for reflection, expansion, contraction, and shrinkage operations.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like having a rule for how to combine the positions of two explorers to find a new position.
+    /// </para>
+    /// </remarks>
+    /// <param name="a">The first symbolic model.</param>
+    /// <param name="b">The second symbolic model.</param>
+    /// <param name="factor">A factor used in the operation.</param>
+    /// <param name="operation">The operation to perform on each pair of coefficients.</param>
+    /// <returns>A new symbolic model resulting from the vector operation.</returns>
     private ISymbolicModel<T> PerformVectorOperation(ISymbolicModel<T> a, ISymbolicModel<T> b, T factor, Func<T, T, T, T> operation)
     {
         var newCoefficients = new Vector<T>(a.Coefficients.Length);
@@ -168,6 +366,20 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
         return new VectorModel<T>(newCoefficients);
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters of the Nelder-Mead algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the reflection, expansion, contraction, and shrinkage coefficients based on the improvement in fitness.
+    /// It's used to fine-tune the algorithm's behavior as the optimization progresses.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like adjusting how far the explorers move based on how well they're doing. If they're finding better spots, they might move more boldly.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">The current optimization step data.</param>
+    /// <param name="previousStepData">The previous optimization step data.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -189,6 +401,20 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the optimizer's options with new settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method ensures that only compatible option types are used with this optimizer.
+    /// It updates the internal options if the provided options are of the correct type.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like changing the rules for how the explorers should search. It makes sure you're only using rules that work for this specific type of search (Nelder-Mead method).
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The new options to be applied to the optimizer.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is NelderMeadOptimizerOptions nmOptions)
@@ -201,11 +427,36 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Gets the current options of the Nelder-Mead optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method returns the current configuration options of the optimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like asking to see the current set of rules the explorers are following in their search.
+    /// </para>
+    /// </remarks>
+    /// <returns>The current optimization algorithm options.</returns>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the Nelder-Mead optimizer to a byte array.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method converts the current state of the optimizer, including its options and parameters, into a byte array.
+    /// This allows the optimizer's state to be saved or transmitted.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like taking a snapshot of the entire search process, including where all the explorers are and what rules they're following, so you can save it or send it to someone else.
+    /// </para>
+    /// </remarks>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -228,6 +479,20 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Deserializes the Nelder-Mead optimizer from a byte array.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs the optimizer's state from a byte array, including its options and parameters.
+    /// It's used to restore a previously saved or transmitted optimizer state.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like using a saved snapshot to set up the search process exactly as it was before, placing all the explorers back where they were and restoring the rules they were following.
+    /// </para>
+    /// </remarks>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))

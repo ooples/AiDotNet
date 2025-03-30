@@ -1,10 +1,39 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the Momentum optimization algorithm for gradient-based optimization.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The Momentum optimizer is an extension of gradient descent that helps accelerate the optimization process
+/// in relevant directions and dampens oscillations. It does this by adding a fraction of the update vector
+/// of the past time step to the current update vector.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// Imagine you're rolling a ball down a hill to find the lowest point. The Momentum optimizer is like giving
+/// that ball some "memory" of its previous movements. This helps it move faster in consistent directions and
+/// resist getting stuck in small bumps or divots along the way.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
 {
     private MomentumOptimizerOptions _options;
     private Vector<T>? _velocity;
 
+    /// <summary>
+    /// Initializes a new instance of the MomentumOptimizer class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This constructor sets up the optimizer with the provided options and dependencies. If no options are provided,
+    /// it uses default settings.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like setting up your ball-rolling experiment. You're deciding on the properties of the ball
+    /// (like its size and bounciness) and the hill (like its steepness and texture).
+    /// </para>
+    /// </remarks>
     public MomentumOptimizer(
         MomentumOptimizerOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -20,6 +49,18 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes adaptive parameters for the optimization process.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method sets up the initial learning rate and momentum for the optimization process based on the options provided.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like setting the initial speed of your ball (learning rate) and how much it remembers its previous
+    /// movements (momentum) before you start rolling it down the hill.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -27,6 +68,22 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
         CurrentMomentum = NumOps.FromDouble(_options.InitialMomentum);
     }
 
+    /// <summary>
+    /// Performs the optimization process using the Momentum algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method implements the main optimization loop. It iterates through the data, calculating gradients,
+    /// updating the velocity (momentum), and adjusting the model parameters accordingly.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is the actual process of rolling the ball down the hill. In each step, you're calculating which way
+    /// the ball should roll (gradient), how fast it's moving (velocity), and where it ends up (new solution).
+    /// You keep doing this until the ball finds the lowest point or you've rolled it enough times.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -66,6 +123,21 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Updates the velocity vector based on the current gradient and momentum.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the new velocity by combining the previous velocity (scaled by the momentum)
+    /// with the current gradient (scaled by the learning rate).
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like updating how fast and in what direction your ball is rolling. It takes into account
+    /// both where the ball was heading before (momentum) and the current slope it's on (gradient).
+    /// </para>
+    /// </remarks>
+    /// <param name="gradient">The current gradient vector.</param>
+    /// <returns>The updated velocity vector.</returns>
     private Vector<T> UpdateVelocity(Vector<T> gradient)
     {
         for (int i = 0; i < _velocity!.Length; i++)
@@ -75,9 +147,25 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
                 NumOps.Multiply(CurrentLearningRate, gradient[i])
             );
         }
+
         return _velocity;
     }
 
+    /// <summary>
+    /// Updates the current solution based on the calculated velocity.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method applies the velocity to the current solution, adjusting each coefficient accordingly.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like determining the ball's new position after it has rolled. You're using the ball's
+    /// speed and direction (velocity) to figure out where it ends up.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentSolution">The current model solution.</param>
+    /// <param name="velocity">The current velocity vector.</param>
+    /// <returns>An updated symbolic model with improved coefficients.</returns>
     private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> velocity)
     {
         var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
@@ -85,9 +173,26 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
         {
             newCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], velocity[i]);
         }
+
         return new VectorModel<T>(newCoefficients);
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the learning rate and momentum based on the performance of the current step compared to the previous step.
+    /// If improvement is seen, the learning rate and momentum may be increased, otherwise they may be decreased.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like adjusting how you roll the ball based on how well you're doing. If you're getting closer to the bottom of the hill,
+    /// you might roll the ball a bit faster or give it more momentum. If you're not improving, you might slow down or reduce the momentum
+    /// to be more careful.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -123,6 +228,21 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the optimizer's options with new settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method allows updating the optimizer's settings during runtime. It ensures that only compatible
+    /// option types are used with this optimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like changing the rules of how you're rolling the ball mid-experiment. It makes sure you're only
+    /// using rules that work for this specific type of ball-rolling (Momentum optimization).
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The new options to be applied to the optimizer.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is MomentumOptimizerOptions momentumOptions)
@@ -135,11 +255,39 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Gets the current optimization algorithm options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method returns the current options used by the Momentum optimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like checking your current ball-rolling rules. It lets you see all the settings and strategies 
+    /// you're currently using in your experiment.
+    /// </para>
+    /// </remarks>
+    /// <returns>The current MomentumOptimizerOptions object.</returns>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the optimizer's state into a byte array.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method converts the current state of the optimizer, including its base class state and options, 
+    /// into a byte array. This is useful for saving the optimizer's state or transferring it between systems.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// Think of this as taking a snapshot of your entire ball-rolling experiment. It captures all the details of your 
+    /// current setup, including the ball's position, speed, and all your rules. This snapshot can be used to recreate 
+    /// the exact same experiment later or share it with others.
+    /// </para>
+    /// </remarks>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -156,6 +304,21 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Deserializes a byte array to restore the optimizer's state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method takes a byte array (previously created by Serialize) and uses it to restore the optimizer's state, 
+    /// including its base class state and options.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like using a detailed blueprint to recreate your ball-rolling experiment exactly as it was at a certain point. 
+    /// It allows you to set up the experiment to match a previous state, with all the same rules and conditions.
+    /// </para>
+    /// </remarks>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))
@@ -171,6 +334,25 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Generates a unique key for caching gradients based on the model and input data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method creates a unique identifier for caching gradients. It combines the base gradient cache key 
+    /// with specific parameters of the Momentum algorithm.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// Imagine you're leaving markers along your ball-rolling path. This method creates a unique label for each marker, 
+    /// combining information about the hill (the model and data) with specifics about how you're rolling the ball 
+    /// (initial momentum and learning rate). This helps you quickly recognize and use information from similar 
+    /// situations you've encountered before.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The symbolic model being optimized.</param>
+    /// <param name="X">The input data matrix.</param>
+    /// <param name="y">The target output vector.</param>
+    /// <returns>A string representing the unique gradient cache key.</returns>
     protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);

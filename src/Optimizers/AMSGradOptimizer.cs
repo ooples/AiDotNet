@@ -1,13 +1,61 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the AMSGrad optimization algorithm, an improved version of Adam optimizer.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// AMSGrad is an adaptive learning rate optimization algorithm that addresses some of the convergence issues in Adam.
+/// It maintains the maximum of past squared gradients to ensure non-decreasing step sizes.
+/// </para>
+/// <para><b>For Beginners:</b> AMSGrad is like a smart assistant that helps adjust the learning process.
+/// It remembers past information to make better decisions about how quickly to learn in different parts of the problem.
+/// </para>
+/// </remarks>
 public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
 {
+    /// <summary>
+    /// The options specific to the AMSGrad optimizer.
+    /// </summary>
     private AMSGradOptimizerOptions _options;
+
+    /// <summary>
+    /// The first moment vector (moving average of gradients).
+    /// </summary>
     private Vector<T>? _m;
+
+    /// <summary>
+    /// The second moment vector (moving average of squared gradients).
+    /// </summary>
     private Vector<T>? _v;
+
+    /// <summary>
+    /// The maximum of past second moments.
+    /// </summary>
     private Vector<T>? _vHat;
+
+    /// <summary>
+    /// The current time step.
+    /// </summary>
     private int _t;
 
+    /// <summary>
+    /// Initializes a new instance of the AMSGradOptimizer class.
+    /// </summary>
+    /// <param name="options">The options for configuring the AMSGrad optimizer.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="gradientCache">The gradient cache to use.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This sets up the AMSGrad optimizer with its initial configuration.
+    /// You can customize various aspects of how it learns, or use default settings.
+    /// </para>
+    /// </remarks>
     public AMSGradOptimizer(
         AMSGradOptimizerOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -23,6 +71,14 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters used by the AMSGrad optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This resets the learning rate and time step to their starting values,
+    /// preparing the optimizer for a new optimization run.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -30,6 +86,16 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
         _t = 0;
     }
 
+    /// <summary>
+    /// Performs the optimization process using the AMSGrad algorithm.
+    /// </summary>
+    /// <param name="inputData">The input data for optimization, including training data and targets.</param>
+    /// <returns>The result of the optimization process, including the best solution found.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the main optimization process. It repeatedly updates the solution
+    /// using the AMSGrad steps until it reaches the best possible solution or hits a stopping condition.
+    /// </para>
+    /// </remarks>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -71,6 +137,17 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Updates the current solution using the AMSGrad update rule.
+    /// </summary>
+    /// <param name="currentSolution">The current solution being optimized.</param>
+    /// <param name="gradient">The gradient of the current solution.</param>
+    /// <returns>A new solution with updated coefficients.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method applies the AMSGrad formula to update each parameter of the solution.
+    /// It uses the current and past gradients to determine how much to change each parameter.
+    /// </para>
+    /// </remarks>
     private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
     {
         var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
@@ -101,6 +178,17 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
         return new VectorModel<T>(newCoefficients);
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
+    /// </summary>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts the learning rate based on how well the optimization is progressing.
+    /// If the solution is improving, it might increase the learning rate to learn faster.
+    /// If not, it might decrease the rate to be more careful.
+    /// </para>
+    /// </remarks>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -122,6 +210,17 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the optimizer's options with new settings.
+    /// </summary>
+    /// <param name="options">The new options to be applied to the optimizer.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to change the settings of the AMSGrad optimizer while it's running.
+    /// It's like adjusting the controls on a machine that's already operating. If you provide the wrong type of settings,
+    /// it will stop and let you know there's an error.
+    /// </para>
+    /// </remarks>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is AMSGradOptimizerOptions amsGradOptions)
@@ -134,11 +233,30 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Retrieves the current options of the optimizer.
+    /// </summary>
+    /// <returns>The current optimization algorithm options.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method lets you check what settings the AMSGrad optimizer is currently using.
+    /// It's like looking at the current settings on a machine.
+    /// </para>
+    /// </remarks>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Converts the current state of the optimizer into a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method saves all the important information about the AMSGrad optimizer's current state.
+    /// It's like taking a snapshot of the optimizer that can be used to recreate its exact state later.
+    /// This is useful for saving progress or sharing the optimizer's state with others.
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -157,6 +275,16 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Restores the optimizer's state from a byte array previously created by the Serialize method.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method rebuilds the AMSGrad optimizer's state from a saved snapshot.
+    /// It's like restoring a machine to a previous configuration using a backup.
+    /// This allows you to continue optimization from where you left off or use a shared optimizer state.
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))
@@ -174,6 +302,19 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Generates a unique key for caching gradients based on the current state of the optimizer and input data.
+    /// </summary>
+    /// <param name="model">The symbolic model being optimized.</param>
+    /// <param name="X">The input matrix.</param>
+    /// <param name="y">The target vector.</param>
+    /// <returns>A string that uniquely identifies the current optimization state for gradient caching.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a unique label for the current state of the AMSGrad optimization.
+    /// It's used to efficiently store and retrieve calculated gradients, which helps speed up the optimization process.
+    /// The key includes specific AMSGrad parameters to ensure it's unique to this optimizer's current state.
+    /// </para>
+    /// </remarks>
     protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
