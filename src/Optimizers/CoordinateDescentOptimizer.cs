@@ -1,12 +1,58 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the Coordinate Descent optimization algorithm for numerical optimization problems.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// Coordinate Descent is an optimization algorithm that minimizes a multivariable function by solving a series of 
+/// single-variable optimization problems. It cycles through each variable (coordinate) and optimizes it while holding 
+/// the others constant.
+/// </para>
+/// <para><b>For Beginners:</b> This optimizer is like adjusting the knobs on a complex machine one at a time. 
+/// It focuses on improving one aspect of the solution at a time, which can be more manageable and sometimes 
+/// more effective than trying to adjust everything at once.
+/// </para>
+/// </remarks>
 public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
 {
+    /// <summary>
+    /// The options specific to the Coordinate Descent optimization algorithm.
+    /// </summary>
     private CoordinateDescentOptimizerOptions _options;
+
+    /// <summary>
+    /// Vector of learning rates for each coordinate (variable) in the optimization problem.
+    /// </summary>
     private Vector<T> _learningRates;
+
+    /// <summary>
+    /// Vector of momentum values for each coordinate (variable) in the optimization problem.
+    /// </summary>
     private Vector<T> _momentums;
+
+    /// <summary>
+    /// Vector of previous update values for each coordinate (variable) in the optimization problem.
+    /// </summary>
     private Vector<T> _previousUpdate;
 
+    /// <summary>
+    /// Initializes a new instance of the CoordinateDescentOptimizer class.
+    /// </summary>
+    /// <param name="options">The options for configuring the Coordinate Descent algorithm.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="gradientCache">The gradient cache to use.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This constructor sets up the Coordinate Descent optimizer with its initial configuration.
+    /// You can customize various aspects of how it works, or use default settings.
+    /// </para>
+    /// </remarks>
     public CoordinateDescentOptimizer(
         CoordinateDescentOptimizerOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -24,6 +70,15 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         _previousUpdate = Vector<T>.Empty();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters used in the Coordinate Descent algorithm.
+    /// </summary>
+    /// <param name="currentSolution">The current solution model.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method sets up the initial state for the optimizer,
+    /// including learning rates, momentums, and previous updates for each coordinate (variable).
+    /// </para>
+    /// </remarks>
     private void InitializeAdaptiveParameters(ISymbolicModel<T> currentSolution)
     {
         base.InitializeAdaptiveParameters();
@@ -33,6 +88,17 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         _previousUpdate = Vector<T>.CreateDefault(dimensions, NumOps.Zero);
     }
 
+    /// <summary>
+    /// Performs the main optimization process using the Coordinate Descent algorithm.
+    /// </summary>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the heart of the Coordinate Descent algorithm. It iteratively improves the solution
+    /// by updating one coordinate (variable) at a time. The process continues until it reaches the maximum number of iterations 
+    /// or meets the stopping criteria.
+    /// </para>
+    /// </remarks>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -68,6 +134,17 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Updates the current solution by optimizing each coordinate (variable) individually.
+    /// </summary>
+    /// <param name="currentSolution">The current solution model.</param>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The updated solution model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method goes through each variable in the solution and tries to improve it individually.
+    /// It's like fine-tuning each knob on a machine one at a time to get the best overall performance.
+    /// </para>
+    /// </remarks>
     private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, OptimizationInputData<T> inputData)
     {
         var newCoefficients = currentSolution.Coefficients.Copy();
@@ -82,6 +159,18 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         return currentSolution.UpdateCoefficients(newCoefficients);
     }
 
+    /// <summary>
+    /// Calculates the partial derivative (gradient) for a specific coordinate (variable).
+    /// </summary>
+    /// <param name="model">The current solution model.</param>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <param name="index">The index of the coordinate to calculate the partial derivative for.</param>
+    /// <returns>The calculated partial derivative.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method estimates how much the overall performance would change if we slightly adjust
+    /// one specific variable. It helps determine which direction to move that variable to improve the solution.
+    /// </para>
+    /// </remarks>
     private T CalculatePartialDerivative(ISymbolicModel<T> model, OptimizationInputData<T> inputData, int index)
     {
         var epsilon = NumOps.FromDouble(1e-6);
@@ -101,6 +190,17 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         return NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), NumOps.Multiply(NumOps.FromDouble(2.0), epsilon));
     }
 
+    /// <summary>
+    /// Calculates the update for a specific coordinate based on its gradient and momentum.
+    /// </summary>
+    /// <param name="gradient">The calculated gradient for the coordinate.</param>
+    /// <param name="index">The index of the coordinate.</param>
+    /// <returns>The calculated update value.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method determines how much to change a specific variable. It considers both
+    /// the current gradient (which suggests the best direction to move) and momentum (which helps maintain consistent movement).
+    /// </para>
+    /// </remarks>
     private T CalculateUpdate(T gradient, int index)
     {
         var update = NumOps.Add(
@@ -112,6 +212,17 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         return NumOps.Negate(update);
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters (learning rates and momentums) based on the optimization progress.
+    /// </summary>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts how big of steps the optimizer takes for each variable.
+    /// If the solution is improving, it might increase the step sizes to progress faster. If not, it might decrease
+    /// them to be more careful.
+    /// </para>
+    /// </remarks>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -136,6 +247,16 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the options for the Coordinate Descent optimizer.
+    /// </summary>
+    /// <param name="options">The new options to be set.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of type CoordinateDescentOptimizerOptions.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to change the settings of the optimizer during runtime.
+    /// It ensures that only the correct type of options (specific to Coordinate Descent) can be used.
+    /// </para>
+    /// </remarks>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is CoordinateDescentOptimizerOptions cdOptions)
@@ -148,11 +269,29 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Retrieves the current options of the Coordinate Descent optimizer.
+    /// </summary>
+    /// <returns>The current optimization algorithm options.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to check the current settings of the optimizer.
+    /// It's useful if you need to inspect or copy the current configuration.
+    /// </para>
+    /// </remarks>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the Coordinate Descent optimizer to a byte array.
+    /// </summary>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method converts the current state of the optimizer into a series of bytes.
+    /// This is useful for saving the optimizer's state to a file or sending it over a network.
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -184,6 +323,16 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Deserializes the Coordinate Descent optimizer from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method reconstructs the optimizer's state from a series of bytes.
+    /// It's used to restore a previously saved state of the optimizer, allowing you to continue from where you left off.
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))

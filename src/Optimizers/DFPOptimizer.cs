@@ -1,12 +1,58 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the Davidon-Fletcher-Powell (DFP) optimization algorithm for numerical optimization problems.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// The DFP algorithm is a quasi-Newton method for solving unconstrained nonlinear optimization problems.
+/// It approximates the inverse Hessian matrix to determine the search direction, combining the efficiency
+/// of Newton's method with the stability of gradient descent.
+/// </para>
+/// <para><b>For Beginners:</b> This optimizer is like a smart navigator that learns from its past steps
+/// to make better decisions about which direction to move in the future. It's particularly good at
+/// handling complex optimization problems where the landscape of possible solutions is intricate.
+/// </para>
+/// </remarks>
 public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
 {
+    /// <summary>
+    /// The options specific to the DFP optimization algorithm.
+    /// </summary>
     private DFPOptimizerOptions _options;
+
+    /// <summary>
+    /// The inverse Hessian matrix approximation used in the DFP algorithm.
+    /// </summary>
     private Matrix<T> _inverseHessian;
+
+    /// <summary>
+    /// The gradient from the previous iteration.
+    /// </summary>
     private new Vector<T> _previousGradient;
+
+    /// <summary>
+    /// The current adaptive learning rate.
+    /// </summary>
     private T _adaptiveLearningRate;
 
+    /// <summary>
+    /// Initializes a new instance of the DFPOptimizer class.
+    /// </summary>
+    /// <param name="options">The options for configuring the DFP algorithm.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="gradientCache">The gradient cache to use.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This constructor sets up the DFP optimizer with its initial configuration.
+    /// You can customize various aspects of how it works, or use default settings.
+    /// </para>
+    /// </remarks>
     public DFPOptimizer(
         DFPOptimizerOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -26,11 +72,30 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters used in the DFP algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method sets up the initial learning rate for the optimizer.
+    /// The learning rate determines how big of steps the optimizer takes when improving the solution.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         _adaptiveLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
     }
 
+    /// <summary>
+    /// Performs the main optimization process using the DFP algorithm.
+    /// </summary>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the heart of the DFP algorithm. It iteratively improves the solution
+    /// by calculating gradients, determining search directions, and updating the solution. The process continues
+    /// until it reaches the maximum number of iterations or meets the stopping criteria.
+    /// </para>
+    /// </remarks>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -73,11 +138,35 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Calculates the search direction using the inverse Hessian approximation and the current gradient.
+    /// </summary>
+    /// <param name="gradient">The current gradient.</param>
+    /// <returns>The calculated search direction.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method determines which direction the optimizer should move in
+    /// to improve the solution. It uses the inverse Hessian matrix to make this decision more intelligent
+    /// than just following the steepest descent.
+    /// </para>
+    /// </remarks>
     private Vector<T> CalculateDirection(Vector<T> gradient)
     {
         return _inverseHessian.Multiply(gradient).Transform(NumOps.Negate);
     }
 
+    /// <summary>
+    /// Updates the current solution by moving in the calculated direction.
+    /// </summary>
+    /// <param name="currentSolution">The current solution model.</param>
+    /// <param name="direction">The calculated search direction.</param>
+    /// <param name="gradient">The current gradient.</param>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The updated solution model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method takes a step in the direction calculated by CalculateDirection.
+    /// It uses line search to determine how big of a step to take, then updates the solution accordingly.
+    /// </para>
+    /// </remarks>
     private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T> inputData)
     {
         var stepSize = OptimizerHelper<T>.LineSearch(currentSolution, direction, gradient, inputData, _adaptiveLearningRate);
@@ -86,6 +175,17 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
         return currentSolution.UpdateCoefficients(newCoefficients);
     }
 
+    /// <summary>
+    /// Updates the inverse Hessian approximation using the DFP update formula.
+    /// </summary>
+    /// <param name="currentSolution">The current solution model.</param>
+    /// <param name="newSolution">The new solution model.</param>
+    /// <param name="gradient">The current gradient.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method updates the optimizer's "memory" of how the solution space looks.
+    /// It helps the optimizer make better decisions about which direction to move in future iterations.
+    /// </para>
+    /// </remarks>
     private void UpdateInverseHessian(ISymbolicModel<T> currentSolution, ISymbolicModel<T> newSolution, Vector<T> gradient)
     {
         if (_previousGradient == null)
@@ -111,6 +211,17 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
         _inverseHessian = _inverseHessian.Add(term1).Subtract(term2);
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters based on the optimization progress.
+    /// </summary>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts how big of steps the optimizer takes.
+    /// If the solution is improving, it might increase the step size to progress faster.
+    /// If not, it might decrease the step size to be more careful.
+    /// </para>
+    /// </remarks>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -133,6 +244,16 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the options for the DFP optimizer.
+    /// </summary>
+    /// <param name="options">The new options to be set.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of type DFPOptimizerOptions.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to change the settings of the optimizer during runtime.
+    /// It ensures that only the correct type of options (specific to DFP) can be used.
+    /// </para>
+    /// </remarks>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is DFPOptimizerOptions dfpOptions)
@@ -145,11 +266,29 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Retrieves the current options of the DFP optimizer.
+    /// </summary>
+    /// <returns>The current optimization algorithm options.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to check the current settings of the optimizer.
+    /// It's useful if you need to inspect or copy the current configuration.
+    /// </para>
+    /// </remarks>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the DFP optimizer to a byte array.
+    /// </summary>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method converts the current state of the optimizer into a series of bytes.
+    /// This is useful for saving the optimizer's state to a file or sending it over a network.
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -179,6 +318,16 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Deserializes the DFP optimizer from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method reconstructs the optimizer's state from a series of bytes.
+    /// It's used to restore a previously saved state of the optimizer, allowing you to continue from where you left off.
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))

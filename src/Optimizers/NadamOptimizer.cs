@@ -1,12 +1,62 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the Nesterov-accelerated Adaptive Moment Estimation (Nadam) optimization algorithm.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Nadam combines the ideas of Adam (adaptive learning rates) and Nesterov accelerated gradient (NAG).
+/// It adapts the learning rates of each parameter and incorporates momentum using Nesterov's method.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// Imagine you're rolling a smart ball down a hill. This ball can adjust its speed for different parts of the hill (adaptive learning rates),
+/// and it can look ahead to anticipate slopes (Nesterov's method). This combination helps it find the lowest point more efficiently.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
 {
+    /// <summary>
+    /// The options specific to the Nadam optimizer.
+    /// </summary>
     private NadamOptimizerOptions _options;
+
+    /// <summary>
+    /// The first moment vector (momentum).
+    /// </summary>
     private Vector<T>? _m;
+
+    /// <summary>
+    /// The second moment vector (adaptive learning rates).
+    /// </summary>
     private Vector<T>? _v;
+
+    /// <summary>
+    /// The current time step.
+    /// </summary>
     private int _t;
 
+    /// <summary>
+    /// Initializes a new instance of the NadamOptimizer class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This constructor sets up the Nadam optimizer with the provided options and dependencies.
+    /// If no options are provided, it uses default settings.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like preparing your smart ball for the hill-rolling experiment. You're setting up its initial properties
+    /// and deciding how it will adapt during its journey.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The Nadam-specific optimization options.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="gradientCache">The gradient cache to use.</param>
     public NadamOptimizer(
         NadamOptimizerOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -22,6 +72,17 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters for the Nadam optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method sets up the initial learning rate and resets the time step counter.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like setting the initial speed of your smart ball and resetting its internal clock before it starts rolling.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -29,6 +90,22 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
         _t = 0;
     }
 
+    /// <summary>
+    /// Performs the optimization process using the Nadam algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method implements the main optimization loop. It iterates through the data, calculating gradients,
+    /// updating the momentum and adaptive learning rates, and adjusting the model parameters accordingly.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is the actual process of rolling your smart ball down the hill. In each step, you're calculating which way
+    /// the ball should roll (gradient), how fast it's moving (momentum), and how it should adapt its speed (adaptive learning rates).
+    /// You keep doing this until the ball finds the lowest point or you've rolled it enough times.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -69,6 +146,22 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Updates the current solution based on the calculated gradient using the Nadam algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method applies the Nadam update rule to adjust the model parameters. It uses both momentum
+    /// and adaptive learning rates, incorporating Nesterov's accelerated gradient.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like adjusting the ball's position based on its current speed, the slope it's on, and its ability
+    /// to look ahead. It's a complex calculation that helps the ball move more efficiently towards the lowest point.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentSolution">The current model solution.</param>
+    /// <param name="gradient">The calculated gradient.</param>
+    /// <returns>An updated symbolic model with improved coefficients.</returns>
     private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
     {
         var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
@@ -102,6 +195,21 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
         return new VectorModel<T>(newCoefficients);
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the learning rate based on the performance of the current step compared to the previous step.
+    /// If improvement is seen, the learning rate may be increased, otherwise it may be decreased.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like adjusting how fast your ball rolls based on whether it's getting closer to the bottom of the hill.
+    /// If it's improving, you might let it roll a bit faster. If not, you might slow it down to be more careful.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -123,6 +231,21 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the optimizer's options with new settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method ensures that only compatible option types are used with this optimizer.
+    /// It updates the internal options if the provided options are of the correct type.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like changing the rules of how your smart ball rolls mid-experiment. It makes sure you're only
+    /// using rules that work for this specific type of smart ball (Nadam optimization).
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The new options to be applied to the optimizer.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is NadamOptimizerOptions nadamOptions)
@@ -135,11 +258,39 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Gets the current optimization algorithm options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method returns the current options used by the Nadam optimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like checking your current smart ball rolling rules. It lets you see all the settings and strategies 
+    /// you're currently using in your experiment.
+    /// </para>
+    /// </remarks>
+    /// <returns>The current NadamOptimizerOptions object.</returns>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the optimizer's state into a byte array.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method converts the current state of the optimizer, including its base class state, options, and time step,
+    /// into a byte array. This is useful for saving the optimizer's state or transferring it between systems.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// Think of this as taking a snapshot of your entire smart ball rolling experiment. It captures all the details of your 
+    /// current setup, including the ball's position, speed, and all your rules. This snapshot can be used to recreate 
+    /// the exact same experiment later or share it with others.
+    /// </para>
+    /// </remarks>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -158,6 +309,21 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Deserializes a byte array to restore the optimizer's state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method takes a byte array (previously created by Serialize) and uses it to restore the optimizer's state, 
+    /// including its base class state, options, and time step.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like using a detailed blueprint to recreate your smart ball rolling experiment exactly as it was at a certain point. 
+    /// It allows you to set up the experiment to match a previous state, with all the same rules and conditions.
+    /// </para>
+    /// </remarks>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))
@@ -175,6 +341,23 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Generates a unique key for caching gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method creates a unique identifier for caching gradients based on the current model, input data,
+    /// and Nadam-specific parameters. This helps in efficiently reusing previously calculated gradients when possible.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like creating a special label for each unique situation your smart ball encounters. It helps the ball
+    /// remember and quickly recall how it should move in similar situations, making the whole process more efficient.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The current symbolic model.</param>
+    /// <param name="X">The input feature matrix.</param>
+    /// <param name="y">The target vector.</param>
+    /// <returns>A string that uniquely identifies the current gradient calculation scenario.</returns>
     protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);

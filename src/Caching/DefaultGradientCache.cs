@@ -1,3 +1,5 @@
+global using System.Collections.Concurrent;
+
 namespace AiDotNet.Caching;
 
 /// <summary>

@@ -1,10 +1,52 @@
 ﻿namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements a normal optimization algorithm with adaptive parameters.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The NormalOptimizer uses a combination of random search and adaptive parameter tuning to find optimal solutions.
+/// It incorporates elements from genetic algorithms but operates on a single solution at a time.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// Imagine you're trying to find the highest peak in a mountain range, but you can't see very far.
+/// This optimizer is like a hiker who starts at random spots, climbs to the nearest peak, and then jumps to another random spot.
+/// The hiker learns from each climb and adjusts their strategy (like how far to jump or how carefully to look around) based on whether they're finding higher peaks or not.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class NormalOptimizer<T> : OptimizerBase<T>
 {
+    /// <summary>
+    /// Random number generator used for creating random solutions and selecting features.
+    /// </summary>
     private readonly Random _random = new();
+
+    /// <summary>
+    /// Options specific to the normal optimizer, including parameters inherited from genetic algorithms.
+    /// </summary>
     private GeneticAlgorithmOptimizerOptions _normalOptions;
 
+    /// <summary>
+    /// Initializes a new instance of the NormalOptimizer class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This constructor sets up the NormalOptimizer with the provided options and dependencies.
+    /// If no options are provided, it uses default settings.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like preparing for your hike. You're deciding what equipment to bring, how long you'll hike for,
+    /// and setting up rules for how you'll explore the mountain range.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The optimization options.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
     public NormalOptimizer(GeneticAlgorithmOptimizerOptions? options = null, PredictionStatsOptions? predictionOptions = null,
         ModelStatsOptions? modelOptions = null,
         IModelEvaluator<T>? modelEvaluator = null,
@@ -17,6 +59,26 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Performs the optimization process.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method implements the main optimization loop. It generates random solutions,
+    /// evaluates them, and keeps track of the best solution found. It also adapts its parameters
+    /// based on the performance of each solution.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is your actual hike through the mountain range. You're repeatedly:
+    /// 1. Picking a random spot to start from.
+    /// 2. Climbing to the nearest peak and measuring its height.
+    /// 3. Remembering the highest peak you've found so far.
+    /// 4. Adjusting your strategy based on whether you're finding higher peaks or not.
+    /// 5. Deciding whether to keep going or stop if you think you've found the highest peak.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -49,6 +111,23 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts various parameters of the optimization process based on the performance
+    /// of the current solution compared to the previous one. It updates feature selection,
+    /// mutation rate, exploration/exploitation balance, population size, and crossover rate.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like adjusting your hiking strategy based on your recent experiences. If you're finding higher peaks,
+    /// you might decide to look more closely in the areas you're in. If not, you might decide to take bigger jumps
+    /// to new areas or look at different aspects of the landscape.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -69,6 +148,21 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         UpdateCrossoverRate(currentStepData, previousStepData);
     }
 
+    /// <summary>
+    /// Updates the feature selection parameters based on the current and previous optimization steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the minimum and maximum number of features to consider in the model.
+    /// If the current solution is better, it expands the range of features. Otherwise, it narrows the range.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like deciding whether to pay attention to more or fewer landmarks during your hike.
+    /// If you're finding better views, you might start looking at more things. If not, you might focus on fewer key features.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
     private void UpdateFeatureSelectionParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
@@ -83,6 +177,21 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the exploration vs exploitation balance based on the current and previous optimization steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the exploration rate. If the current solution is better, it decreases exploration
+    /// (favoring exploitation). Otherwise, it increases exploration.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like deciding whether to explore new areas or focus more on the areas you've already found to be good.
+    /// If you're finding better peaks, you might explore less and focus more on the current area. If not, you might decide to look in new places.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
     private void UpdateExplorationExploitationBalance(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
@@ -96,6 +205,21 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         Options.ExplorationRate = MathHelper.Clamp(Options.ExplorationRate, Options.MinExplorationRate, Options.MaxExplorationRate);
     }
 
+    /// <summary>
+    /// Updates the mutation rate based on the current and previous optimization steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the mutation rate. If the current solution is better, it decreases the mutation rate.
+    /// Otherwise, it increases the mutation rate.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like deciding how much to vary your path as you explore. If you're finding better peaks,
+    /// you might make smaller, more careful adjustments. If not, you might make bigger, more random changes to your path.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
     private void UpdateMutationRate(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
@@ -110,6 +234,21 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         _normalOptions.MutationRate = MathHelper.Clamp(_normalOptions.MutationRate, _normalOptions.MinMutationRate, _normalOptions.MaxMutationRate);
     }
 
+    /// <summary>
+    /// Updates the population size based on the current and previous optimization steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the population size. If the current solution is better, it decreases the population size.
+    /// Otherwise, it increases the population size, always staying within the defined limits.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like deciding how many different paths to try at once. If you're finding better peaks,
+    /// you might focus on fewer paths. If not, you might try more paths to increase your chances of finding a good one.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
     private void UpdatePopulationSize(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
@@ -122,6 +261,21 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the crossover rate based on the current and previous optimization steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the crossover rate. If the current solution is better, it increases the crossover rate.
+    /// Otherwise, it decreases the crossover rate, always staying within the defined limits.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like deciding how often to combine good paths you've found. If you're finding better peaks,
+    /// you might try combining good paths more often. If not, you might try combining them less and explore more independently.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
     private void UpdateCrossoverRate(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
@@ -136,12 +290,42 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         _normalOptions.CrossoverRate = MathHelper.Clamp(_normalOptions.CrossoverRate, _normalOptions.MinCrossoverRate, _normalOptions.MaxCrossoverRate);
     }
 
+    /// <summary>
+    /// Creates a random solution for the optimization problem.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method generates a random symbolic model by first selecting a random subset of features
+    /// and then creating a model using those features.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like choosing a random starting point for your hike. You're deciding which aspects of the landscape
+    /// (features) you'll pay attention to for this particular climb.
+    /// </para>
+    /// </remarks>
+    /// <param name="totalFeatures">The total number of available features.</param>
+    /// <returns>A randomly created symbolic model.</returns>
     private ISymbolicModel<T> CreateRandomSolution(int totalFeatures)
     {
         var selectedFeatures = RandomlySelectFeatures(totalFeatures);
         return SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, selectedFeatures.Count);
     }
 
+    /// <summary>
+    /// Randomly selects a subset of features to use in the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method chooses a random number of features between the minimum and maximum allowed,
+    /// and then randomly selects specific features to include.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like deciding which specific landmarks or terrain features you'll use to guide your climb.
+    /// You're randomly picking a set of things to pay attention to, which will influence how you explore the area.
+    /// </para>
+    /// </remarks>
+    /// <param name="totalFeatures">The total number of available features.</param>
+    /// <returns>A list of indices representing the selected features.</returns>
     private List<int> RandomlySelectFeatures(int totalFeatures)
     {
         var selectedFeatures = new List<int>();
@@ -159,11 +343,38 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         return selectedFeatures;
     }
 
+    /// <summary>
+    /// Gets the current optimization algorithm options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method returns the current set of options used by the NormalOptimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like checking your current hiking plan and equipment list.
+    /// </para>
+    /// </remarks>
+    /// <returns>The current optimization algorithm options.</returns>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _normalOptions;
     }
 
+    /// <summary>
+    /// Updates the optimization algorithm options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method updates the optimizer's options with a new set of options. It checks if the provided options
+    /// are of the correct type before applying them.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like updating your hiking plan with new information or equipment. You're making sure the new plan
+    /// is compatible with your current approach before adopting it.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The new optimization algorithm options to apply.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of the expected type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is GeneticAlgorithmOptimizerOptions geneticOptions)
@@ -176,6 +387,20 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Serializes the current state of the optimizer into a byte array.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method converts the current state of the optimizer, including its options, into a byte array
+    /// that can be stored or transmitted.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like taking a snapshot of your current hiking strategy and equipment setup,
+    /// so you can recreate it exactly later or share it with others.
+    /// </para>
+    /// </remarks>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -194,6 +419,21 @@ public class NormalOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Deserializes a byte array to restore the optimizer's state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method takes a byte array (previously created by the Serialize method) and uses it to
+    /// restore the optimizer's state, including its options.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like using a saved snapshot of a hiking strategy to set up your approach exactly as it was before.
+    /// You're recreating all the details of your previous setup from the saved information.
+    /// </para>
+    /// </remarks>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))

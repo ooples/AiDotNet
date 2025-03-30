@@ -1,15 +1,70 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the Adam (Adaptive Moment Estimation) optimization algorithm for gradient-based optimization.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// Adam is an advanced optimization algorithm that combines ideas from RMSprop and Momentum optimization methods.
+/// It adapts the learning rates for each parameter individually and is well-suited for problems with noisy or sparse gradients.
+/// </para>
+/// <para><b>For Beginners:</b> Adam is like a smart personal trainer for your machine learning model.
+/// It helps your model learn efficiently by adjusting how it learns based on past experiences.
+/// </para>
+/// </remarks>
 public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
 {
+    /// <summary>
+    /// The options specific to the Adam optimizer.
+    /// </summary>
     private AdamOptimizerOptions _options;
+
+    /// <summary>
+    /// The first moment vector (moving average of gradients).
+    /// </summary>
     private Vector<T> _m;
+
+    /// <summary>
+    /// The second moment vector (moving average of squared gradients).
+    /// </summary>
     private Vector<T> _v;
+
+    /// <summary>
+    /// The current time step (iteration count).
+    /// </summary>
     private int _t;
+
+    /// <summary>
+    /// The current learning rate.
+    /// </summary>
     private T _currentLearningRate;
+
+    /// <summary>
+    /// The current value of beta1 (exponential decay rate for first moment estimates).
+    /// </summary>
     private T _currentBeta1;
+
+    /// <summary>
+    /// The current value of beta2 (exponential decay rate for second moment estimates).
+    /// </summary>
     private T _currentBeta2;
 
+    /// <summary>
+    /// Initializes a new instance of the AdamOptimizer class.
+    /// </summary>
+    /// <param name="options">The options for configuring the Adam optimizer.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This sets up the Adam optimizer with its initial configuration.
+    /// You can customize various aspects of how it learns, or use default settings that work well for many problems.
+    /// </para>
+    /// </remarks>
     public AdamOptimizer(
         AdamOptimizerOptions? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -27,9 +82,18 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         _currentLearningRate = NumOps.Zero;
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
+
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters used by the Adam optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This sets up the initial learning rate and momentum factors.
+    /// These values will be adjusted as the optimizer learns more about the problem.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         _currentLearningRate = NumOps.FromDouble(_options.LearningRate);
@@ -37,6 +101,16 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         _currentBeta2 = NumOps.FromDouble(_options.Beta2);
     }
 
+    /// <summary>
+    /// Performs the optimization process using the Adam algorithm.
+    /// </summary>
+    /// <param name="inputData">The input data for optimization, including training data and targets.</param>
+    /// <returns>The result of the optimization process, including the best solution found.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the main learning process. It repeatedly tries to improve
+    /// the model's parameters, using the Adam algorithm to decide how to change them.
+    /// </para>
+    /// </remarks>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
@@ -77,6 +151,16 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
+    /// </summary>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts how the optimizer learns based on its recent performance.
+    /// It can change the learning rate and momentum factors to help the optimizer learn more effectively.
+    /// </para>
+    /// </remarks>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -97,6 +181,17 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the current solution using the Adam update rule.
+    /// </summary>
+    /// <param name="currentSolution">The current solution being optimized.</param>
+    /// <param name="gradient">The calculated gradient for the current solution.</param>
+    /// <returns>A new solution with updated parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method applies the Adam algorithm to adjust the model's parameters.
+    /// It uses the current gradient and past information to decide how to change each parameter.
+    /// </para>
+    /// </remarks>
     private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
     {
         for (int i = 0; i < gradient.Length; i++)
@@ -115,6 +210,18 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         return currentSolution;
     }
 
+    /// <summary>
+    /// Updates a vector of parameters using the Adam optimization algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method applies the Adam algorithm to a vector of parameters.
+    /// It's like adjusting multiple knobs on a machine all at once, where each knob represents a parameter.
+    /// The method decides how much to turn each knob based on past adjustments and the current gradient.
+    /// </para>
+    /// </remarks>
     public override Vector<T> UpdateVector(Vector<T> parameters, Vector<T> gradient)
     {
         if (_m == null || _v == null || _m.Length != parameters.Length)
@@ -155,6 +262,17 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         return parameters;
     }
 
+    /// <summary>
+    /// Updates a matrix of parameters using the Adam optimization algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter matrix to be updated.</param>
+    /// <param name="gradient">The gradient matrix corresponding to the parameters.</param>
+    /// <returns>The updated parameter matrix.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method is similar to UpdateVector, but it works on a 2D grid of parameters instead of a 1D list.
+    /// It's like adjusting a whole panel of knobs, where each knob is positioned in a grid.
+    /// </para>
+    /// </remarks>
     public override Matrix<T> UpdateMatrix(Matrix<T> parameters, Matrix<T> gradient)
     {
         if (_m == null || _v == null || _m.Length != parameters.Rows * parameters.Columns)
@@ -205,6 +323,14 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         return updatedMatrix;
     }
 
+    /// <summary>
+    /// Resets the optimizer's internal state.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is like resetting the optimizer's memory.
+    /// It forgets all past adjustments and starts fresh, which can be useful when you want to reuse the optimizer for a new problem.
+    /// </para>
+    /// </remarks>
     public override void Reset()
     {
         _m = Vector<T>.Empty();
@@ -212,6 +338,16 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         _t = 0;
     }
 
+    /// <summary>
+    /// Updates the optimizer's options.
+    /// </summary>
+    /// <param name="options">The new options to be set.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdamOptimizerOptions.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to change the optimizer's settings mid-way.
+    /// It's like adjusting the personal trainer's approach based on new instructions.
+    /// </para>
+    /// </remarks>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is AdamOptimizerOptions adamOptions)
@@ -224,11 +360,29 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Gets the current optimizer options.
+    /// </summary>
+    /// <returns>The current AdamOptimizerOptions.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method lets you check what settings the optimizer is currently using.
+    /// It's like asking your personal trainer about their current training plan for you.
+    /// </para>
+    /// </remarks>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the optimizer's state into a byte array.
+    /// </summary>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method saves the optimizer's current state into a compact form.
+    /// It's like taking a snapshot of the optimizer's memory and settings, which can be used later to recreate its exact state.
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -260,6 +414,15 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Deserializes the optimizer's state from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method rebuilds the optimizer's state from a saved snapshot.
+    /// It's like restoring the optimizer's memory and settings from a backup, allowing you to continue from where you left off.
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))
@@ -292,6 +455,18 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Generates a unique key for caching gradients.
+    /// </summary>
+    /// <param name="model">The symbolic model.</param>
+    /// <param name="X">The input matrix.</param>
+    /// <param name="y">The target vector.</param>
+    /// <returns>A string key for gradient caching.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a unique identifier for a specific optimization scenario.
+    /// It's like creating a label for a particular training session, which helps in efficiently storing and retrieving calculated gradients.
+    /// </para>
+    /// </remarks>
     protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);

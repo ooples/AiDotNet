@@ -1,11 +1,60 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the Levenberg-Marquardt optimization algorithm for non-linear least squares problems.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The Levenberg-Marquardt algorithm is a popular method for solving non-linear least squares problems. It combines 
+/// the Gauss-Newton algorithm and the method of gradient descent, providing a robust solution that works well in 
+/// many situations.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// This optimizer is like a smart problem-solver that's really good at fitting curves to data points. It's especially 
+/// useful when the relationship between your inputs and outputs isn't a straight line. It works by making small 
+/// adjustments to its guess, getting closer to the best solution with each step.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
 {
+    /// <summary>
+    /// The options specific to the Levenberg-Marquardt algorithm.
+    /// </summary>
     private LevenbergMarquardtOptimizerOptions<T> _options;
+
+    /// <summary>
+    /// The current iteration count of the optimization process.
+    /// </summary>
     private int _iteration;
+
+    /// <summary>
+    /// The damping factor used in the Levenberg-Marquardt algorithm to balance between gradient descent and Gauss-Newton steps.
+    /// </summary>
     private T _dampingFactor;
 
+    /// <summary>
+    /// Initializes a new instance of the LevenbergMarquardtOptimizer class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This constructor sets up the optimizer with the provided options and dependencies. If no options are provided, 
+    /// it uses default settings.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is where we set up our smart problem-solver. We can give it special instructions (options) on how to work, 
+    /// or let it use its default settings. We also give it tools (like modelEvaluator and fitDetector) that it needs 
+    /// to do its job well.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">Custom options for the Levenberg-Marquardt algorithm.</param>
+    /// <param name="predictionOptions">Options for prediction statistics calculation.</param>
+    /// <param name="modelOptions">Options for model statistics calculation.</param>
+    /// <param name="modelEvaluator">Custom model evaluator.</param>
+    /// <param name="fitDetector">Custom fit detector.</param>
+    /// <param name="fitnessCalculator">Custom fitness calculator.</param>
+    /// <param name="modelCache">Custom model cache.</param>
+    /// <param name="gradientCache">Custom gradient cache.</param>
     public LevenbergMarquardtOptimizer(
         LevenbergMarquardtOptimizerOptions<T>? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -22,6 +71,21 @@ public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters used by the optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method sets up the initial values for the damping factor and iteration count. The damping factor is a key 
+    /// component of the Levenberg-Marquardt algorithm, controlling the balance between the Gauss-Newton and gradient 
+    /// descent approaches.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like setting up the starting point for our problem-solver. We give it an initial "cautiousness" level 
+    /// (damping factor) and reset its step counter. The cautiousness helps it decide whether to take big steps or 
+    /// small steps when trying to find the best solution.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -29,6 +93,24 @@ public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
         _iteration = 0;
     }
 
+    /// <summary>
+    /// Performs the optimization process using the Levenberg-Marquardt algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method implements the main optimization loop. It iteratively improves the solution by calculating the 
+    /// Jacobian matrix, residuals, and updating the solution until a stopping criterion is met.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is where the magic happens! Our problem-solver repeatedly tries to improve its guess. In each round:
+    /// 1. It calculates how sensitive the output is to small changes (Jacobian).
+    /// 2. It checks how far off its current guess is (residuals).
+    /// 3. It uses this information to make a better guess.
+    /// 4. It keeps doing this until it's happy with the result or runs out of attempts.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -68,6 +150,22 @@ public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Calculates the Jacobian matrix for the current model and input data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The Jacobian matrix represents the local sensitivity of the model's output to changes in its parameters.
+    /// Each element (i,j) in the matrix is the partial derivative of the i-th output with respect to the j-th parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like creating a sensitivity map. It shows how much each part of our guess affects the final answer.
+    /// It helps the optimizer understand which parts of the guess to change to get better results.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The current model being optimized.</param>
+    /// <param name="X">The input data matrix.</param>
+    /// <returns>The Jacobian matrix.</returns>
     private Matrix<T> CalculateJacobian(ISymbolicModel<T> model, Matrix<T> X)
     {
         int m = X.Rows;
@@ -85,6 +183,23 @@ public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
         return jacobian;
     }
 
+    /// <summary>
+    /// Calculates the partial derivative of the model output with respect to a specific parameter.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method uses numerical differentiation to estimate the partial derivative. It slightly perturbs the 
+    /// parameter and observes the change in the model's output.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like gently poking each part of our guess and seeing how much it changes the answer. 
+    /// It helps us understand which parts of our guess are most important.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The current model being optimized.</param>
+    /// <param name="x">A single input data point.</param>
+    /// <param name="paramIndex">The index of the parameter for which to calculate the derivative.</param>
+    /// <returns>The estimated partial derivative.</returns>
     private T CalculatePartialDerivative(ISymbolicModel<T> model, Vector<T> x, int paramIndex)
     {
         var epsilon = NumOps.FromDouble(1e-8);
@@ -101,12 +216,47 @@ public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
         return NumOps.Divide(NumOps.Subtract(yPlus, yMinus), NumOps.FromDouble(2 * 1e-8));
     }
 
+    /// <summary>
+    /// Calculates the residuals (differences between predicted and actual values) for the current model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Residuals represent the errors in the model's predictions. They are used to guide the optimization process
+    /// towards minimizing these errors.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This checks how far off our current guess is from the real answers. It's like measuring the gap between 
+    /// what our model predicts and what actually happened.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The current model being optimized.</param>
+    /// <param name="X">The input data matrix.</param>
+    /// <param name="y">The actual output values.</param>
+    /// <returns>A vector of residuals.</returns>
     private Vector<T> CalculateResiduals(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
     {
         var predictions = model.Predict(X);
         return y.Subtract(predictions);
     }
 
+    /// <summary>
+    /// Updates the current solution based on the Levenberg-Marquardt algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method implements the core of the Levenberg-Marquardt algorithm. It calculates the update step
+    /// by solving a modified normal equation system, which balances between the Gauss-Newton method and gradient descent.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is where the optimizer decides how to improve its current guess. It's like a smart navigator
+    /// that looks at a map (the Jacobian) and the current errors (residuals) to figure out which direction
+    /// to move and how big a step to take.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentSolution">The current model solution.</param>
+    /// <param name="jacobian">The Jacobian matrix of the current solution.</param>
+    /// <param name="residuals">The residuals (errors) of the current solution.</param>
+    /// <returns>An updated symbolic model with improved coefficients.</returns>
     private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Matrix<T> jacobian, Vector<T> residuals)
     {
         var jTj = jacobian.Transpose().Multiply(jacobian);
@@ -120,6 +270,25 @@ public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
         return new VectorModel<T>(newCoefficients);
     }
 
+    /// <summary>
+    /// Solves the linear system of equations in the Levenberg-Marquardt algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method solves the linear system Ax = b, where A is the left-hand side matrix and b is the right-hand side vector.
+    /// It uses either a custom decomposition method provided in the options, or falls back to default methods (LU decomposition
+    /// with SVD as a fallback).
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like solving a complex puzzle to find out how to adjust our guess. It uses advanced math techniques
+    /// to figure out the best way to change our model's parameters. If we've provided a special method to solve
+    /// this puzzle, it uses that. Otherwise, it tries a standard method, and if that doesn't work, it uses a more
+    /// robust (but slower) method as a backup.
+    /// </para>
+    /// </remarks>
+    /// <param name="lhs">The left-hand side matrix of the linear system.</param>
+    /// <param name="jTr">The right-hand side vector of the linear system.</param>
+    /// <returns>The solution vector of the linear system.</returns>
     private Vector<T> SolveLinearSystem(Matrix<T> lhs, Vector<T> jTr)
     {
         if (_options.CustomDecomposition != null)
@@ -141,6 +310,23 @@ public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the damping factor of the Levenberg-Marquardt algorithm based on the performance
+    /// of the current step compared to the previous step. If the current step improved the solution, the damping
+    /// factor is decreased to allow larger steps. If not, it's increased to take more conservative steps.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like adjusting how cautious our optimizer is. If the last guess was better, it becomes more
+    /// confident and takes bigger steps. If the last guess wasn't so good, it becomes more careful and takes
+    /// smaller steps. This helps the optimizer adapt to the shape of the problem it's solving.
+    /// </para>
+    /// </remarks>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -162,6 +348,22 @@ public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the optimizer's options with new settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method allows updating the optimizer's settings during runtime. It ensures that only compatible
+    /// option types are used with this optimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like changing the settings on a machine while it's running. It makes sure that we're only
+    /// using settings that work for this specific type of optimizer. If someone tries to use the wrong
+    /// type of settings, it lets them know there's a problem.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The new options to be applied to the optimizer.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is LevenbergMarquardtOptimizerOptions<T> lmOptions)
@@ -174,11 +376,39 @@ public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Retrieves the current options of the optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method provides access to the current settings of the Levenberg-Marquardt optimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like checking the current settings on a machine. It lets you see how the optimizer
+    /// is currently configured without changing anything.
+    /// </para>
+    /// </remarks>
+    /// <returns>The current options of the Levenberg-Marquardt optimizer.</returns>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the optimizer's state into a byte array.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method converts the current state of the optimizer, including its options and internal parameters,
+    /// into a byte array. This is useful for saving the optimizer's state or transferring it between systems.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like taking a snapshot of the optimizer's current state and packing it into a compact form.
+    /// It's useful if you want to save the optimizer's progress and continue from this point later, or if
+    /// you want to move the optimizer to a different computer.
+    /// </para>
+    /// </remarks>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -198,6 +428,22 @@ public class LevenbergMarquardtOptimizer<T> : GradientBasedOptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Deserializes a byte array to restore the optimizer's state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method takes a byte array (previously created by the Serialize method) and uses it to restore
+    /// the optimizer's state, including its options and internal parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like unpacking that snapshot we took earlier and setting up the optimizer exactly as it was
+    /// when we saved it. It's the reverse process of serialization, allowing us to continue optimization
+    /// from a previously saved state.
+    /// </para>
+    /// </remarks>
+    /// <param name="data">The byte array containing the serialized optimizer state.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))

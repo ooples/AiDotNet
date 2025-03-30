@@ -2,14 +2,64 @@ global using AiDotNet.GaussianProcesses;
 
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Represents a Bayesian Optimizer for optimization problems.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// Bayesian Optimization is a powerful technique for optimizing black-box functions that are expensive to evaluate.
+/// It uses a probabilistic model to make predictions about the function's behavior and decides where to sample next.
+/// </para>
+/// <para><b>For Beginners:</b> Think of this optimizer as a smart guessing game. It tries to find the best solution
+/// by making educated guesses based on what it has learned from previous attempts. It's particularly useful when
+/// each guess is time-consuming or expensive to evaluate.
+/// </para>
+/// </remarks>
 public class BayesianOptimizer<T> : OptimizerBase<T>
 {
+    /// <summary>
+    /// The options for configuring the Bayesian Optimization algorithm.
+    /// </summary>
     private BayesianOptimizerOptions<T> _options;
+
+    /// <summary>
+    /// A random number generator used for generating random points and initializing solutions.
+    /// </summary>
     private Random _random;
+
+    /// <summary>
+    /// A matrix storing the points that have been sampled during the optimization process.
+    /// </summary>
     private Matrix<T> _sampledPoints;
+
+    /// <summary>
+    /// A vector storing the corresponding function values for the sampled points.
+    /// </summary>
     private Vector<T> _sampledValues;
+
+    /// <summary>
+    /// The Gaussian Process model used to approximate the objective function.
+    /// </summary>
     private IGaussianProcess<T> _gaussianProcess;
 
+    /// <summary>
+    /// Initializes a new instance of the BayesianOptimizer class.
+    /// </summary>
+    /// <param name="options">The options for configuring the Bayesian Optimization algorithm.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="gaussianProcess">The Gaussian Process to use for modeling the objective function.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This sets up the Bayesian Optimizer with its initial configuration.
+    /// You can customize various aspects of how it works, or use default settings. The Gaussian Process
+    /// is a key component that helps the optimizer make predictions about unknown points.
+    /// </para>
+    /// </remarks>
     public BayesianOptimizer(
         BayesianOptimizerOptions<T>? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -29,6 +79,14 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters used in the Bayesian Optimization algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method sets up the initial state for the optimizer.
+    /// It clears any previously sampled points and their corresponding values, preparing for a fresh optimization run.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -36,6 +94,17 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
         _sampledValues = Vector<T>.Empty();
     }
 
+    /// <summary>
+    /// Performs the main optimization process using the Bayesian Optimization algorithm.
+    /// </summary>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the heart of the Bayesian Optimization algorithm. It starts by taking some
+    /// random samples, then iteratively uses what it has learned to make smart guesses about where the best solution
+    /// might be. It keeps doing this until it finds a good solution or runs out of allowed attempts.
+    /// </para>
+    /// </remarks>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -54,7 +123,7 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
             var randomSolution = InitializeRandomSolution(inputData.XTrain.Columns);
             var stepData = EvaluateSolution(randomSolution, inputData);
             UpdateBestSolution(stepData, ref bestStepData);
-    
+        
             // Set values in the matrix and vector using indexing
             for (int j = 0; j < randomSolution.Coefficients.Length; j++)
             {
@@ -114,6 +183,16 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Optimizes the acquisition function to determine the next point to sample.
+    /// </summary>
+    /// <param name="dimensions">The number of dimensions in the optimization space.</param>
+    /// <returns>The next point to sample.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method decides where to look next for a good solution. It does this by
+    /// balancing between exploring new areas and focusing on areas that seem promising based on what we've seen so far.
+    /// </para>
+    /// </remarks>
     private Vector<T> OptimizeAcquisitionFunction(int dimensions)
     {
         Vector<T> bestPoint = Vector<T>.Empty();
@@ -134,6 +213,16 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
         return bestPoint;
     }
 
+    /// <summary>
+    /// Generates a random point within the specified bounds of the optimization space.
+    /// </summary>
+    /// <param name="dimensions">The number of dimensions in the optimization space.</param>
+    /// <returns>A randomly generated point.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a random guess within the allowed range. It's used to explore
+    /// the solution space, especially at the beginning when we don't have much information.
+    /// </para>
+    /// </remarks>
     private Vector<T> GenerateRandomPoint(int dimensions)
     {
         var point = new T[dimensions];
@@ -145,6 +234,17 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
         return new Vector<T>(point);
     }
 
+    /// <summary>
+    /// Calculates the value of the acquisition function for a given point.
+    /// </summary>
+    /// <param name="point">The point to evaluate.</param>
+    /// <returns>The value of the acquisition function at the given point.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method helps decide how promising a particular point is. It balances between
+    /// picking points that the model thinks will be good (exploitation) and points where the model is uncertain
+    /// (exploration).
+    /// </para>
+    /// </remarks>
     private T CalculateAcquisitionFunction(Vector<T> point)
     {
         var (mean, variance) = _gaussianProcess.Predict(point);
@@ -165,6 +265,16 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates the options for the Bayesian Optimization algorithm.
+    /// </summary>
+    /// <param name="options">The new options to be set.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to change how the Bayesian Optimization algorithm behaves
+    /// by updating its settings. It checks to make sure you're providing the right kind of settings.
+    /// </para>
+    /// </remarks>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is BayesianOptimizerOptions<T> bayesianOptions)
@@ -178,11 +288,27 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Gets the current options for the Bayesian Optimization algorithm.
+    /// </summary>
+    /// <returns>The current optimization options.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method lets you see what settings the Bayesian Optimization algorithm is currently using.</para>
+    /// </remarks>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Converts the current state of the optimizer into a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method takes all the important information about the current state
+    /// of the Bayesian Optimizer and turns it into a format that can be easily saved or sent to another computer.
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using (MemoryStream ms = new MemoryStream())
@@ -217,6 +343,16 @@ public class BayesianOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Restores the state of the optimizer from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized state of the optimizer.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method takes a saved state of the Bayesian Optimizer (in the form of a byte array)
+    /// and uses it to restore the optimizer to that state. It's like loading a saved game, bringing back all the
+    /// important settings and progress that were saved earlier.
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))

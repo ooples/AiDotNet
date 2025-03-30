@@ -1,16 +1,77 @@
 namespace AiDotNet.Optimizers;
 
+/// <summary>
+/// Implements the Covariance Matrix Adaptation Evolution Strategy (CMA-ES) optimization algorithm.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// CMA-ES is a powerful optimization algorithm for non-linear, non-convex optimization problems.
+/// It is particularly effective for problems with up to about 100 dimensions and is known for its
+/// robustness and ability to handle complex fitness landscapes.
+/// </para>
+/// <para><b>For Beginners:</b> CMA-ES is like an advanced search algorithm that tries to find the best solution
+/// by learning from previous attempts. It's especially good at solving complex problems where the relationship
+/// between inputs and outputs isn't straightforward.
+/// </para>
+/// </remarks>
 public class CMAESOptimizer<T> : OptimizerBase<T>
 {
+    /// <summary>
+    /// The options specific to the CMA-ES optimization algorithm.
+    /// </summary>
     private CMAESOptimizerOptions<T> _options;
+
+    /// <summary>
+    /// Random number generator for the algorithm.
+    /// </summary>
     private Random _random;
+
+    /// <summary>
+    /// The current population of candidate solutions.
+    /// </summary>
     private Matrix<T> _population;
+
+    /// <summary>
+    /// The mean of the current distribution.
+    /// </summary>
     private Vector<T> _mean;
+
+    /// <summary>
+    /// The covariance matrix of the distribution.
+    /// </summary>
     private Matrix<T> _C;
+
+    /// <summary>
+    /// Evolution path for covariance matrix adaptation.
+    /// </summary>
     private Vector<T> _pc;
+
+    /// <summary>
+    /// Evolution path for step-size adaptation.
+    /// </summary>
     private Vector<T> _ps;
+
+    /// <summary>
+    /// The current step size.
+    /// </summary>
     private T _sigma;
 
+    /// <summary>
+    /// Initializes a new instance of the CMAESOptimizer class.
+    /// </summary>
+    /// <param name="options">The options for configuring the CMA-ES algorithm.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This constructor sets up the CMA-ES optimizer with its initial configuration.
+    /// You can customize various aspects of how it works, or use default settings.
+    /// </para>
+    /// </remarks>
     public CMAESOptimizer(
         CMAESOptimizerOptions<T>? options = null,
         PredictionStatsOptions? predictionOptions = null,
@@ -32,6 +93,14 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         InitializeAdaptiveParameters();
     }
 
+    /// <summary>
+    /// Initializes the adaptive parameters used in the CMA-ES algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method sets up the initial state for the optimizer,
+    /// including the population, mean, covariance matrix, and step size.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -43,6 +112,17 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         _sigma = NumOps.FromDouble(_options.InitialStepSize);
     }
 
+    /// <summary>
+    /// Performs the main optimization process using the CMA-ES algorithm.
+    /// </summary>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the heart of the CMA-ES algorithm. It iteratively improves the solution
+    /// by generating new populations, evaluating their fitness, and updating the distribution parameters.
+    /// The process continues until it reaches the maximum number of generations or meets the stopping criteria.
+    /// </para>
+    /// </remarks>
     public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -82,6 +162,15 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
+    /// <summary>
+    /// Initializes the CMA-ES specific parameters.
+    /// </summary>
+    /// <param name="dimensions">The number of dimensions in the problem space.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method sets up the initial values for the mean, covariance matrix,
+    /// and evolution paths based on the number of dimensions in your problem.
+    /// </para>
+    /// </remarks>
     private void InitializeCMAESParameters(int dimensions)
     {
         _mean = InitializeRandomSolution(dimensions).Coefficients;
@@ -90,6 +179,15 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         _ps = new Vector<T>(dimensions);
     }
 
+    /// <summary>
+    /// Generates a new population of candidate solutions.
+    /// </summary>
+    /// <returns>A matrix representing the new population.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a set of new potential solutions by sampling
+    /// from a multivariate normal distribution centered around the current mean.
+    /// </para>
+    /// </remarks>
     private Matrix<T> GeneratePopulation()
     {
         int dimensions = _mean.Length;
@@ -107,6 +205,16 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         return population;
     }
 
+    /// <summary>
+    /// Generates a sample from a multivariate normal distribution.
+    /// </summary>
+    /// <param name="dimensions">The number of dimensions for the sample.</param>
+    /// <returns>A vector representing the sample.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a random sample that follows a specific
+    /// statistical distribution, which is key to how CMA-ES explores the solution space.
+    /// </para>
+    /// </remarks>
     private Vector<T> GenerateMultivariateNormalSample(int dimensions)
     {
         // Generate a vector of standard normal samples
@@ -135,13 +243,34 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         return lowerTriangular.Multiply(standardNormal);
     }
 
+    /// <summary>
+    /// Generates a standard normal random number.
+    /// </summary>
+    /// <returns>A random number from a standard normal distribution.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a single random number that follows
+    /// a standard normal distribution (bell curve centered at 0 with a standard deviation of 1).
+    /// </para>
+    /// </remarks>
     private double GenerateStandardNormal()
     {
         double u1 = 1.0 - _random.NextDouble();
         double u2 = 1.0 - _random.NextDouble();
+
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
     }
 
+    /// <summary>
+    /// Evaluates the fitness of each individual in the population.
+    /// </summary>
+    /// <param name="population">The population to evaluate.</param>
+    /// <param name="inputData">The input data for evaluation.</param>
+    /// <returns>A vector of fitness scores for the population.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method calculates how good each potential solution in the population is,
+    /// based on the problem you're trying to solve.
+    /// </para>
+    /// </remarks>
     private Vector<T> EvaluatePopulation(Matrix<T> population, OptimizationInputData<T> inputData)
     {
         var fitnessValues = new Vector<T>(population.Rows);
@@ -155,6 +284,17 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         return fitnessValues;
     }
 
+    /// <summary>
+    /// Updates the distribution parameters of the CMA-ES algorithm based on the current population and their fitness values.
+    /// </summary>
+    /// <param name="population">The current population of candidate solutions.</param>
+    /// <param name="fitnessValues">The fitness values corresponding to each individual in the population.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method is the core of the CMA-ES algorithm. It adjusts the search
+    /// distribution based on the performance of the current population. This allows the algorithm to
+    /// adapt its search strategy as it progresses, focusing on more promising areas of the solution space.
+    /// </para>
+    /// </remarks>
     private void UpdateDistribution(Matrix<T> population, Vector<T> fitnessValues)
     {
         int dimensions = _mean.Length;
@@ -252,6 +392,16 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         )));
     }
 
+    /// <summary>
+    /// Updates the options for the CMA-ES optimizer.
+    /// </summary>
+    /// <param name="options">The new options to be set.</param>
+    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to change the settings of the CMA-ES optimizer during runtime.
+    /// It checks to make sure you're providing the right kind of options specific to the CMA-ES algorithm.
+    /// </para>
+    /// </remarks>
     protected override void UpdateOptions(OptimizationAlgorithmOptions options)
     {
         if (options is CMAESOptimizerOptions<T> cmaesOptions)
@@ -264,11 +414,29 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         }
     }
 
+    /// <summary>
+    /// Gets the current options of the CMA-ES optimizer.
+    /// </summary>
+    /// <returns>The current optimization algorithm options.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to retrieve the current settings of the CMA-ES optimizer.
+    /// You can use this to check or save the current configuration.
+    /// </para>
+    /// </remarks>
     public override OptimizationAlgorithmOptions GetOptions()
     {
         return _options;
     }
 
+    /// <summary>
+    /// Serializes the current state of the CMA-ES optimizer into a byte array.
+    /// </summary>
+    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method saves the current state of the optimizer into a format
+    /// that can be stored or transmitted. This is useful for saving progress or sharing the optimizer's state.
+    /// </para>
+    /// </remarks>
     public override byte[] Serialize()
     {
         using MemoryStream ms = new MemoryStream();
@@ -292,6 +460,16 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// Deserializes a byte array to restore the state of the CMA-ES optimizer.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized state of the optimizer.</param>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method loads a previously saved state of the optimizer.
+    /// It's like restoring a saved game, allowing you to continue from where you left off or use a shared optimizer state.
+    /// </para>
+    /// </remarks>
     public override void Deserialize(byte[] data)
     {
         using MemoryStream ms = new MemoryStream(data);
