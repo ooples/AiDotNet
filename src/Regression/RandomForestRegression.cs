@@ -81,7 +81,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// to the training data.
     /// </para>
     /// </remarks>
-    public RandomForestRegression(RandomForestRegressionOptions options, IRegularization<T>? regularization = null)
+    public RandomForestRegression(RandomForestRegressionOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options;
@@ -171,7 +171,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var regularizedInput = Regularization.RegularizeMatrix(input);
+        var regularizedInput = Regularization.Regularize(input);
         var predictionTasks = _trees.Select(tree => Task.Run(() => tree.Predict(regularizedInput)));
         var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks);
 
@@ -185,7 +185,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         var regularizedPredictions = new Vector<T>(result);
-        return Regularization.RegularizeCoefficients(regularizedPredictions);
+        return Regularization.Regularize(regularizedPredictions);
     }
 
     /// <summary>
@@ -205,9 +205,9 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// variables are most influential in making predictions.
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        return new ModelMetadata<T>
+        return new ModelMetaData<T>
         {
             ModelType = ModelType.RandomForest,
             AdditionalInfo = new Dictionary<string, object>
@@ -382,5 +382,39 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         // Reinitialize other fields
         _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Random Forest regression model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the model with the same configuration but no trained parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the Random Forest regression model with the same configuration
+    /// options and regularization method as the current instance, but without copying the trained trees
+    /// or other learned parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
+    /// any learned parameters.
+    /// 
+    /// Think of it like getting a blank forest template with the same settings, 
+    /// but without any of the trained trees. The new model has the same:
+    /// - Number of trees setting
+    /// - Maximum depth setting
+    /// - Minimum samples split setting
+    /// - Maximum features ratio
+    /// - Split criterion (how nodes decide which feature to split on)
+    /// - Regularization method
+    /// 
+    /// But it doesn't have any of the actual trained trees that were learned from data.
+    /// 
+    /// This is mainly used internally when doing things like cross-validation or 
+    /// creating ensembles of similar models with different training data.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create a new instance with the same options and regularization
+        return new RandomForestRegression<T>(_options, Regularization);
     }
 }

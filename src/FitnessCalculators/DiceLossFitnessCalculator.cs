@@ -27,7 +27,7 @@ namespace AiDotNet.FitnessCalculators;
 /// trying to identify is much smaller than the background (like finding a small tumor in a large scan).
 /// </para>
 /// </remarks>
-public class DiceLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class DiceLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the DiceLossFitnessCalculator class.
@@ -76,7 +76,7 @@ public class DiceLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// typically won't need to call it directly.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return NeuralNetworkHelper<T>.DiceLoss(dataSet.Predicted, dataSet.Actual);
     }

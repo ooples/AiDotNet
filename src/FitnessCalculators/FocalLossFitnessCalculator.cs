@@ -31,7 +31,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - Any situation with imbalanced classes
 /// </para>
 /// </remarks>
-public class FocalLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class FocalLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The focusing parameter that controls how much to down-weight easy examples.
@@ -136,7 +136,7 @@ public class FocalLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// passing in your model's predictions, the actual values, and the gamma and alpha parameters.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return NeuralNetworkHelper<T>.FocalLoss(dataSet.Predicted, dataSet.Actual, _gamma, _alpha);
     }

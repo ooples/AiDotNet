@@ -15,7 +15,7 @@ namespace AiDotNet.FitDetectors;
 /// the model's complexity and uncertainty, providing a more comprehensive assessment of model fit.
 /// </para>
 /// </remarks>
-public class BayesianFitDetector<T> : FitDetectorBase<T>
+public class BayesianFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Bayesian fit detector.
@@ -65,7 +65,7 @@ public class BayesianFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -104,7 +104,7 @@ public class BayesianFitDetector<T> : FitDetectorBase<T>
     /// while inconsistent values across metrics might indicate instability.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var dic = StatisticsHelper<T>.CalculateDIC(evaluationData.ModelStats);
         var waic = StatisticsHelper<T>.CalculateWAIC(evaluationData.ModelStats);
@@ -155,7 +155,7 @@ public class BayesianFitDetector<T> : FitDetectorBase<T>
     /// indicating greater confidence in the fit assessment.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var posteriorPredictiveCheck = StatisticsHelper<T>.CalculatePosteriorPredictiveCheck(evaluationData.ModelStats);
         var bayes_factor = StatisticsHelper<T>.CalculateBayesFactor(evaluationData.ModelStats);
@@ -189,7 +189,7 @@ public class BayesianFitDetector<T> : FitDetectorBase<T>
     /// the basis for the assessment.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

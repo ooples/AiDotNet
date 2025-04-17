@@ -34,7 +34,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - Any binary classification problem where you want to strongly penalize misclassifications
 /// </para>
 /// </remarks>
-public class SquaredHingeLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class SquaredHingeLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the SquaredHingeLossFitnessCalculator class.
@@ -86,8 +86,8 @@ public class SquaredHingeLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// in its predictions and you want to strongly penalize any mistakes.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.SquaredHingeLoss(dataSet.Predicted, dataSet.Actual);
+        return new SquaredHingeLoss<T>().Calculate(dataSet.Predicted, dataSet.Actual);
     }
 }

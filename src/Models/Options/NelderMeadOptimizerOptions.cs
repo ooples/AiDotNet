@@ -31,7 +31,7 @@ namespace AiDotNet.Models.Options;
 /// which affects how quickly and reliably the algorithm can find the optimal solution.
 /// </para>
 /// </remarks>
-public class NelderMeadOptimizerOptions : OptimizationAlgorithmOptions
+public class NelderMeadOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the initial reflection coefficient, which controls how far to reflect the simplex away from the worst point.

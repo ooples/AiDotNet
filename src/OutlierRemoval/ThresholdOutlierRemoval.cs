@@ -4,6 +4,8 @@
 /// Implements a threshold-based method for removing outliers from datasets.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of input data structure.</typeparam>
+/// <typeparam name="TOutput">The type of output data structure.</typeparam>
 /// <remarks>
 /// This class uses the Median Absolute Deviation (MAD) method to identify and remove outliers.
 /// 
@@ -11,7 +13,7 @@
 /// They can negatively impact your model's performance by skewing the results. This class helps
 /// identify and remove these unusual data points before training your model.
 /// </remarks>
-public class ThresholdOutlierRemoval<T> : IOutlierRemoval<T>
+public class ThresholdOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, TOutput>
 {
     private readonly T _threshold;
     private readonly INumericOperations<T> _numOps;
@@ -62,32 +64,56 @@ public class ThresholdOutlierRemoval<T> : IOutlierRemoval<T>
     /// is from this middle value. If any point is too far away (based on your threshold),
     /// that entire row of data is considered an outlier and removed from both inputs and outputs.
     /// </remarks>
-    public (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs)
+    public (TInput CleanedInputs, TOutput CleanedOutputs) RemoveOutliers(TInput inputs, TOutput outputs)
     {
+        // Convert to concrete types
+        var (inputMatrix, outputVector) = OutlierRemovalHelper<T, TInput, TOutput>.ConvertToMatrixVector(inputs, outputs);
+        
         var cleanedInputs = new List<Vector<T>>();
         var cleanedOutputs = new List<T>();
-
-        for (int j = 0; j < inputs.Columns; j++)
+        var includeRow = new bool[inputMatrix.Rows];
+        
+        // Initialize all rows as included
+        for (int i = 0; i < inputMatrix.Rows; i++)
         {
-            var column = inputs.GetColumn(j);
+            includeRow[i] = true;
+        }
+
+        for (int j = 0; j < inputMatrix.Columns; j++)
+        {
+            var column = inputMatrix.GetColumn(j);
             var median = StatisticsHelper<T>.CalculateMedian(column);
             var deviations = column.Select(x => _numOps.Abs(_numOps.Subtract(x, median))).OrderBy(x => x).ToList();
             var medianDeviation = deviations[deviations.Count / 2];
             var threshold = _numOps.Multiply(_threshold, medianDeviation);
 
-            for (int i = 0; i < inputs.Rows; i++)
+            for (int i = 0; i < inputMatrix.Rows; i++)
             {
-                if (_numOps.LessThanOrEquals(_numOps.Abs(_numOps.Subtract(inputs[i, j], median)), threshold))
+                if (_numOps.GreaterThan(_numOps.Abs(_numOps.Subtract(inputMatrix[i, j], median)), threshold))
                 {
-                    if (j == 0) // Only add to cleaned data once per row
-                    {
-                        cleanedInputs.Add(inputs.GetRow(i));
-                        cleanedOutputs.Add(outputs[i]);
-                    }
+                    includeRow[i] = false;
                 }
             }
         }
 
-        return (new Matrix<T>(cleanedInputs), new Vector<T>(cleanedOutputs));
+        // Collect all rows that are still marked as included
+        for (int i = 0; i < inputMatrix.Rows; i++)
+        {
+            if (includeRow[i])
+            {
+                cleanedInputs.Add(inputMatrix.GetRow(i));
+                cleanedOutputs.Add(outputVector[i]);
+            }
+        }
+
+        var cleanedInputMatrix = new Matrix<T>(cleanedInputs);
+        var cleanedOutputVector = new Vector<T>(cleanedOutputs);
+        
+        // Convert back to original types
+        return OutlierRemovalHelper<T, TInput, TOutput>.ConvertToOriginalTypes(
+            cleanedInputMatrix, 
+            cleanedOutputVector, 
+            typeof(TInput), 
+            typeof(TOutput));
     }
 }

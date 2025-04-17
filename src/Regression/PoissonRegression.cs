@@ -1,6 +1,5 @@
 namespace AiDotNet.Regression;
 
-
 /// <summary>
 /// Implements Poisson regression, a generalized linear model used for modeling count data and contingency tables.
 /// </summary>
@@ -47,7 +46,7 @@ public class PoissonRegression<T> : RegressionBase<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    public PoissonRegression(PoissonRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public PoissonRegression(PoissonRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new PoissonRegressionOptions<T>();
@@ -104,7 +103,7 @@ public class PoissonRegression<T> : RegressionBase<T>
             // Apply regularization to the matrix
             if (Regularization != null)
             {
-                xTwx = Regularization.RegularizeMatrix(xTwx);
+                xTwx = Regularization.Regularize(xTwx);
             }
 
             Vector<T> newCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTwx, xTwz, MatrixDecompositionFactory.GetDecompositionType(_options.DecompositionMethod));
@@ -112,7 +111,7 @@ public class PoissonRegression<T> : RegressionBase<T>
             // Apply regularization to the coefficients
             if (Regularization != null)
             {
-                newCoefficients = Regularization.RegularizeCoefficients(newCoefficients);
+                newCoefficients = Regularization.Regularize(newCoefficients);
             }
 
             if (HasConverged(currentCoefficients, newCoefficients))
@@ -329,5 +328,47 @@ public class PoissonRegression<T> : RegressionBase<T>
     protected override ModelType GetModelType()
     {
         return ModelType.PoissonRegression;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Poisson Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Poisson Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Poisson Regression model, including its options,
+    /// coefficients, intercept, and regularization settings. The new instance is completely independent of the original,
+    /// allowing modifications without affecting the original model.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method creates an exact copy of your trained model.
+    /// 
+    /// Think of it like making a perfect duplicate:
+    /// - It copies all the configuration settings (like maximum iterations and tolerance)
+    /// - It preserves the coefficients (the weights for each feature)
+    /// - It maintains the intercept (the starting point of your model)
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before further modifying the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        var newModel = new PoissonRegression<T>(_options, Regularization);
+        
+        // Copy coefficients if they exist
+        if (Coefficients != null)
+        {
+            newModel.Coefficients = Coefficients.Clone();
+        }
+        
+        // Copy the intercept
+        newModel.Intercept = Intercept;
+        
+        return newModel;
     }
 }

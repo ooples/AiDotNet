@@ -158,7 +158,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
         int m = matrix.Rows;
         int n = matrix.Columns;
         Matrix<T> Q = Matrix<T>.CreateIdentityMatrix<T>(m);
-        Matrix<T> R = matrix.Copy();
+        Matrix<T> R = matrix.Clone();
 
         for (int k = 0; k < n; k++)
         {
@@ -212,7 +212,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
         int m = matrix.Rows;
         int n = matrix.Columns;
         Matrix<T> Q = Matrix<T>.CreateIdentityMatrix<T>(m);
-        Matrix<T> R = matrix.Copy();
+        Matrix<T> R = matrix.Clone();
 
         for (int j = 0; j < n; j++)
         {

@@ -37,7 +37,7 @@ namespace AiDotNet.Models.Options;
 /// how small they can get, and how it adapts as it explores.
 /// </para>
 /// </remarks>
-public class PowellOptimizerOptions : OptimizationAlgorithmOptions
+public class PowellOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the initial step size used by the algorithm when exploring the function space.

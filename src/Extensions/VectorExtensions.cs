@@ -1383,4 +1383,22 @@ public static class VectorExtensions
 
         return numOps.Sqrt(sumOfSquares);
     }
+
+    /// <summary>
+    /// Creates a subvector from the given vector using the specified indices.
+    /// </summary>
+    /// <typeparam name="T">The type of elements in the vector.</typeparam>
+    /// <param name="vector">The source vector.</param>
+    /// <param name="indices">The indices of elements to include in the subvector.</param>
+    /// <returns>A new vector containing only the specified elements.</returns>
+    public static Vector<T> Subvector<T>(this Vector<T> vector, int[] indices)
+    {
+        var result = new Vector<T>(indices.Length);
+        for (int i = 0; i < indices.Length; i++)
+        {
+            result[i] = vector[indices[i]];
+        }
+
+        return result;
+    }
 }

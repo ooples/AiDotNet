@@ -26,7 +26,7 @@ namespace AiDotNet.FitnessCalculators;
 /// as it helps select the most important ones while reducing the impact of less important or redundant features.
 /// </para>
 /// </remarks>
-public class ElasticNetLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class ElasticNetLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The ratio that determines the mix between L1 (absolute value) and L2 (squared value) regularization.
@@ -113,7 +113,7 @@ public class ElasticNetLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// typically won't need to call it directly.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return NeuralNetworkHelper<T>.ElasticNetLoss(dataSet.Predicted, dataSet.Actual, _l1Ratio, _alpha);
     }

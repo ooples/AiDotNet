@@ -124,7 +124,7 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// ```
     /// </para>
     /// </remarks>
-    public ExtremelyRandomizedTreesRegression(ExtremelyRandomizedTreesRegressionOptions options, IRegularization<T>? regularization = null)
+    public ExtremelyRandomizedTreesRegression(ExtremelyRandomizedTreesRegressionOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options;
@@ -221,7 +221,7 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var regularizedInput = Regularization.RegularizeMatrix(input);
+        var regularizedInput = Regularization.Regularize(input);
         var predictionTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.Predict(regularizedInput)));
         var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks, _options.MaxDegreeOfParallelism);
 
@@ -235,7 +235,7 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         }
 
         var regularizedPredictions = new Vector<T>(result);
-        return Regularization.RegularizeCoefficients(regularizedPredictions);
+        return Regularization.Regularize(regularizedPredictions);
     }
 
     /// <summary>
@@ -310,9 +310,9 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        var metadata = new ModelMetadata<T>
+        var metadata = new ModelMetaData<T>
         {
             ModelType = ModelType.ExtremelyRandomizedTrees,
             AdditionalInfo = new Dictionary<string, object>
@@ -474,5 +474,36 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         }
 
         _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the extremely randomized trees regression model with the same configuration.
+    /// </summary>
+    /// <returns>
+    /// A new instance of <see cref="ExtremelyRandomizedTreesRegression{T}"/> with the same configuration as the current instance.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new extremely randomized trees regression model that has the same configuration 
+    /// as the current instance. It's used for model persistence, cloning, and transferring the model's 
+    /// configuration to new instances.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+    /// 
+    /// It's like making a blueprint copy of your model that can be used to:
+    /// - Save your model's settings
+    /// - Create a new identical model
+    /// - Transfer your model's configuration to another system
+    /// 
+    /// This is useful when you want to:
+    /// - Create multiple similar models
+    /// - Save a model's configuration for later use
+    /// - Reset a model while keeping its settings
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create and return a new instance with the same configuration
+        return new ExtremelyRandomizedTreesRegression<T>(_options, Regularization);
     }
 }

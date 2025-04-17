@@ -1,6 +1,4 @@
-using System;
-
-namespace AiDotNet.TimeSeries;
+﻿namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements spectral analysis for time series data, which transforms time domain signals into the frequency domain.
@@ -48,61 +46,9 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// <param name="options">The configuration options for spectral analysis. If null, default options are used.</param>
     public SpectralAnalysisModel(SpectralAnalysisOptions<T>? options = null) : base(options ?? new SpectralAnalysisOptions<T>())
     {
-        _spectralOptions = (SpectralAnalysisOptions<T>)_options;
+        _spectralOptions = (SpectralAnalysisOptions<T>)Options;
         _frequencies = new Vector<T>(1);
         _periodogram = new Vector<T>(1);
-    }
-
-    /// <summary>
-    /// Trains the spectral analysis model using the provided input data and target values.
-    /// </summary>
-    /// <param name="x">The input features matrix (not used in spectral analysis).</param>
-    /// <param name="y">The time series data to analyze.</param>
-    /// <remarks>
-    /// <para>
-    /// The training process involves:
-    /// 1. Optionally applying a window function to the signal
-    /// 2. Computing the Fast Fourier Transform (FFT)
-    /// 3. Calculating the periodogram (power spectral density)
-    /// 4. Computing the corresponding frequencies
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Training this model means analyzing your time series data to find repeating patterns. The process:
-    /// 1. First, we might apply a "window function" to your data (this reduces artifacts in the analysis)
-    /// 2. Then we use a mathematical technique called the Fast Fourier Transform (FFT) to convert your
-    ///    time data into frequency information
-    /// 3. Next, we calculate how strong each frequency is in your data (the periodogram)
-    /// 4. Finally, we calculate what actual frequencies these values correspond to
-    /// 
-    /// After training, you can see which frequencies (or repeating patterns) are strongest in your data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        int n = y.Length;
-        int nfft = _spectralOptions.NFFT;
-
-        // Apply window function if specified
-        Vector<T> windowedSignal = _spectralOptions.UseWindowFunction ? ApplyWindowFunction(y) : y;
-
-        // Compute FFT
-        Vector<Complex<T>> fft = ComputeFFT(windowedSignal, nfft);
-
-        // Compute periodogram
-        _periodogram = new Vector<T>(nfft / 2 + 1);
-        for (int i = 0; i < _periodogram.Length; i++)
-        {
-            T magnitude = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(fft[i].Real, fft[i].Real), NumOps.Multiply(fft[i].Imaginary, fft[i].Imaginary)));
-            _periodogram[i] = NumOps.Divide(NumOps.Multiply(magnitude, magnitude), NumOps.FromDouble(n));
-        }
-
-        // Compute frequencies
-        _frequencies = new Vector<T>(nfft / 2 + 1);
-        for (int i = 0; i < _frequencies.Length; i++)
-        {
-            _frequencies[i] = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(nfft));
-        }
     }
 
     /// <summary>
@@ -402,5 +348,320 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         results["PeakFrequencyDifference"] = peakFreqDiff;
 
         return results;
+    }
+
+    /// <summary>
+    /// Core implementation of the training logic for the spectral analysis model.
+    /// </summary>
+    /// <param name="x">The input features matrix (not used in spectral analysis).</param>
+    /// <param name="y">The time series data to analyze.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method contains the actual implementation of the spectral analysis process.
+    /// It takes your time series data and breaks it down into its frequency components,
+    /// similar to how a prism breaks light into different colors. This helps identify
+    /// which patterns (frequencies) are most prominent in your data.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Validate input
+        if (y == null || y.Length == 0)
+        {
+            throw new ArgumentException("Time series data cannot be null or empty", nameof(y));
+        }
+
+        int n = y.Length;
+        int nfft = _spectralOptions.NFFT;
+        
+        // If NFFT wasn't specified or is invalid, use the next power of 2 >= n
+        if (nfft <= 0)
+        {
+            nfft = 1;
+            while (nfft < n)
+            {
+                nfft *= 2;
+            }
+            _spectralOptions.NFFT = nfft;
+        }
+
+        // Apply window function if specified
+        Vector<T> windowedSignal = _spectralOptions.UseWindowFunction 
+            ? ApplyWindowFunction(y) 
+            : new Vector<T>(y); // Create a copy to avoid modifying the input
+
+        // Compute FFT
+        Vector<Complex<T>> fft = ComputeFFT(windowedSignal, nfft);
+
+        // Compute periodogram
+        _periodogram = new Vector<T>(nfft / 2 + 1);
+        for (int i = 0; i < _periodogram.Length; i++)
+        {
+            T magnitude = NumOps.Sqrt(NumOps.Add(
+                NumOps.Multiply(fft[i].Real, fft[i].Real), 
+                NumOps.Multiply(fft[i].Imaginary, fft[i].Imaginary)
+            ));
+            
+            // Scale by 1/n for proper normalization
+            _periodogram[i] = NumOps.Divide(NumOps.Multiply(magnitude, magnitude), NumOps.FromDouble(n));
+        }
+
+        // Compute frequencies
+        _frequencies = new Vector<T>(nfft / 2 + 1);
+        for (int i = 0; i < _frequencies.Length; i++)
+        {
+            // Normalize frequency by sampling rate if provided, otherwise use normalized frequency
+            if (NumOps.GreaterThan(NumOps.FromDouble(_spectralOptions.SamplingRate), NumOps.Zero))
+            {
+                _frequencies[i] = NumOps.Multiply(
+                    NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(nfft)),
+                    NumOps.FromDouble(_spectralOptions.SamplingRate)
+                );
+            }
+            else
+            {
+                _frequencies[i] = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(nfft));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Predicts a single value based on the dominant frequency component.
+    /// </summary>
+    /// <param name="input">The input vector containing a time index.</param>
+    /// <returns>A predicted value based on the dominant frequency component.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Unlike traditional forecasting models, spectral analysis doesn't really predict future values.
+    /// Instead, it identifies patterns in the data. This method tries to provide a prediction by:
+    /// 1. Finding the strongest frequency component in your data
+    /// 2. Using that frequency to generate a value at the time index you specified
+    /// 
+    /// This is primarily useful for synthetic data generation or simplified predictions
+    /// based on the dominant cycle in your data.
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Check if model has been trained
+        if (_periodogram == null || _periodogram.Length <= 1 || _frequencies == null || _frequencies.Length <= 1)
+        {
+            throw new InvalidOperationException("Model must be trained before making predictions");
+        }
+
+        // Validate input
+        if (input == null || input.Length < 1)
+        {
+            throw new ArgumentException("Input vector must contain at least one element (time index)", nameof(input));
+        }
+
+        // Find the dominant frequency (excluding DC component at index 0)
+        int dominantIndex = 1;
+        T maxPower = _periodogram[1];
+        
+        for (int i = 2; i < _periodogram.Length; i++)
+        {
+            if (NumOps.GreaterThan(_periodogram[i], maxPower))
+            {
+                maxPower = _periodogram[i];
+                dominantIndex = i;
+            }
+        }
+        
+        // Get the dominant frequency
+        T dominantFreq = _frequencies[dominantIndex];
+        
+        // Generate a sinusoidal value at the specified time index using the dominant frequency
+        T timeIndex = input[0];
+        T amplitude = NumOps.Sqrt(maxPower);
+        
+        // Calculate sin(2π * frequency * timeIndex)
+        T angle = NumOps.Multiply(
+            NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), dominantFreq),
+            timeIndex
+        );
+        
+        // Convert angle to a value between 0 and 2π
+        while (NumOps.GreaterThan(angle, NumOps.FromDouble(2 * Math.PI)))
+        {
+            angle = NumOps.Subtract(angle, NumOps.FromDouble(2 * Math.PI));
+        }
+        
+        while (NumOps.LessThan(angle, NumOps.Zero))
+        {
+            angle = NumOps.Add(angle, NumOps.FromDouble(2 * Math.PI));
+        }
+        
+        // Calculate sine using an approximation
+        T sinValue;
+        if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI)))
+        {
+            // Use sin(x) ≈ x - x³/6 for small x
+            if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI / 2)))
+            {
+                T xSquared = NumOps.Multiply(angle, angle);
+                T xCubed = NumOps.Multiply(xSquared, angle);
+                sinValue = NumOps.Subtract(angle, NumOps.Divide(xCubed, NumOps.FromDouble(6)));
+            }
+            // For x near π/2, use sin(x) ≈ 1 - (x - π/2)²/2
+            else
+            {
+                T diff = NumOps.Subtract(angle, NumOps.FromDouble(Math.PI / 2));
+                T diffSquared = NumOps.Multiply(diff, diff);
+                sinValue = NumOps.Subtract(NumOps.One, NumOps.Divide(diffSquared, NumOps.FromDouble(2)));
+            }
+        }
+        else
+        {
+            // For π to 2π, use sin(x) = -sin(x - π)
+            T reducedAngle = NumOps.Subtract(angle, NumOps.FromDouble(Math.PI));
+            
+            // Calculate sin for reduced angle between 0 and π
+            T reducedSin;
+            if (NumOps.LessThan(reducedAngle, NumOps.FromDouble(Math.PI / 2)))
+            {
+                T xSquared = NumOps.Multiply(reducedAngle, reducedAngle);
+                T xCubed = NumOps.Multiply(xSquared, reducedAngle);
+                reducedSin = NumOps.Subtract(reducedAngle, NumOps.Divide(xCubed, NumOps.FromDouble(6)));
+            }
+            else
+            {
+                T diff = NumOps.Subtract(reducedAngle, NumOps.FromDouble(Math.PI / 2));
+                T diffSquared = NumOps.Multiply(diff, diff);
+                reducedSin = NumOps.Subtract(NumOps.One, NumOps.Divide(diffSquared, NumOps.FromDouble(2)));
+            }
+            
+            // Negate for the full range
+            sinValue = NumOps.Negate(reducedSin);
+        }
+        
+        // Scale by amplitude
+        return NumOps.Multiply(amplitude, sinValue);
+    }
+
+    /// <summary>
+    /// Gets metadata about the model, including its type, parameters, and characteristics of the spectral analysis.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method provides a summary of the spectral analysis, including:
+    /// - The configuration settings used (FFT size, window function type, etc.)
+    /// - Statistics about the frequency analysis (dominant frequencies, frequency range, etc.)
+    /// - Overall metrics that describe the spectrum
+    /// 
+    /// This information is useful for comparing different analyses, documenting your process,
+    /// or sharing your findings with others.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        // Create a new metadata object
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.SpectralAnalysisModel,
+            AdditionalInfo = new Dictionary<string, object>()
+        };
+    
+        // Add configuration parameters
+        metadata.AdditionalInfo["NFFT"] = _spectralOptions.NFFT;
+        metadata.AdditionalInfo["UseWindowFunction"] = _spectralOptions.UseWindowFunction;
+        metadata.AdditionalInfo["WindowFunctionType"] = _spectralOptions.WindowFunction?.GetWindowFunctionType().ToString() ?? "None";
+        metadata.AdditionalInfo["OverlapPercentage"] = _spectralOptions.OverlapPercentage;
+    
+        // Only include sampling rate if it was specified
+        if (NumOps.GreaterThan(NumOps.FromDouble(_spectralOptions.SamplingRate), NumOps.Zero))
+        {
+            metadata.AdditionalInfo["SamplingRate"] = Convert.ToDouble(_spectralOptions.SamplingRate);
+        }
+    
+        // Add metadata about the frequencies and periodogram
+        if (_frequencies != null && _frequencies.Length > 0 && _periodogram != null && _periodogram.Length > 0)
+        {
+            // Find dominant frequency (excluding DC component at index 0)
+            int dominantIndex = 0;
+            T maxPower = NumOps.Zero;
+        
+            for (int i = 1; i < _periodogram.Length; i++)
+            {
+                if (NumOps.GreaterThan(_periodogram[i], maxPower))
+                {
+                    maxPower = _periodogram[i];
+                    dominantIndex = i;
+                }
+            }
+        
+            // Add frequency statistics
+            metadata.AdditionalInfo["FrequencyCount"] = _frequencies.Length;
+            metadata.AdditionalInfo["MinFrequency"] = Convert.ToDouble(_frequencies[0]);
+            metadata.AdditionalInfo["MaxFrequency"] = Convert.ToDouble(_frequencies[_frequencies.Length - 1]);
+            metadata.AdditionalInfo["DominantFrequency"] = Convert.ToDouble(_frequencies[dominantIndex]);
+            metadata.AdditionalInfo["DominantFrequencyPower"] = Convert.ToDouble(maxPower);
+        
+            // Calculate the total power (sum of periodogram)
+            T totalPower = NumOps.Zero;
+            for (int i = 0; i < _periodogram.Length; i++)
+            {
+                totalPower = NumOps.Add(totalPower, _periodogram[i]);
+            }
+            metadata.AdditionalInfo["TotalPower"] = Convert.ToDouble(totalPower);
+        
+            // Calculate the spectral entropy as a measure of randomness
+            T logSum = NumOps.Zero;
+            for (int i = 0; i < _periodogram.Length; i++)
+            {
+                if (NumOps.GreaterThan(_periodogram[i], NumOps.Zero))
+                {
+                    T normalizedPower = NumOps.Divide(_periodogram[i], totalPower);
+                    T logPower = NumOps.Log(normalizedPower);
+                    logSum = NumOps.Subtract(logSum, NumOps.Multiply(normalizedPower, logPower));
+                }
+            }
+            metadata.AdditionalInfo["SpectralEntropy"] = Convert.ToDouble(logSum);
+        }
+    
+        // Add the serialized model data
+        metadata.ModelData = this.Serialize();
+    
+        return metadata;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the SpectralAnalysisModel with the same options.
+    /// </summary>
+    /// <returns>A new instance of the SpectralAnalysisModel.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates a fresh copy of the spectral analysis model with the same
+    /// configuration settings but no trained data. It's useful when you want to:
+    /// - Analyze a different dataset with the same settings
+    /// - Create multiple models with similar configurations
+    /// - Reset the model to start fresh with the same options
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a deep copy of the options
+        var newOptions = new SpectralAnalysisOptions<T>
+        {
+            NFFT = _spectralOptions.NFFT,
+            UseWindowFunction = _spectralOptions.UseWindowFunction,
+            OverlapPercentage = _spectralOptions.OverlapPercentage,
+            SamplingRate = _spectralOptions.SamplingRate
+        };
+    
+        // Copy the window function if one is specified
+        if (_spectralOptions.WindowFunction != null)
+        {
+            newOptions.WindowFunction = WindowFunctionFactory.CreateWindowFunction<T>(
+                _spectralOptions.WindowFunction.GetWindowFunctionType());
+        }
+    
+        // Create a new instance with the copied options
+        return new SpectralAnalysisModel<T>(newOptions);
     }
 }

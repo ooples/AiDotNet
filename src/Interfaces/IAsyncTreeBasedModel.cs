@@ -25,7 +25,7 @@ namespace AiDotNet.Interfaces;
 /// This interface inherits all the regular methods from ITreeBasedModel but adds async
 /// versions of the training and prediction methods.
 /// </remarks>
-public interface IAsyncTreeBasedModel<T> : ITreeBasedModel<T>
+public interface IAsyncTreeBasedModel<T> : ITreeBasedRegression<T>
 {
     /// <summary>
     /// Trains the tree-based model asynchronously using the provided input features and target values.

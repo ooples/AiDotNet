@@ -21,7 +21,7 @@ namespace AiDotNet.Interfaces;
 /// predicting, and evaluating machine learning models.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface ITreeBasedModel<T> : IFullModel<T>
+public interface ITreeBasedRegression<T> : INonLinearRegression<T>
 {
     /// <summary>
     /// Gets the number of decision trees used in the model.

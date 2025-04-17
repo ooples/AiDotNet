@@ -45,7 +45,7 @@
 /// intuitive measure of how well your model captures the patterns in your data.
 /// </para>
 /// </remarks>
-public class RSquaredFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class RSquaredFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the RSquaredFitnessCalculator class.
@@ -102,7 +102,7 @@ public class RSquaredFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// while still interpreting R² in the standard way (higher is better).
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return dataSet.PredictionStats.R2;
     }

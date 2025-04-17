@@ -16,12 +16,12 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBase<T>
+public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Nesterov Accelerated Gradient optimizer.
     /// </summary>
-    private NesterovAcceleratedGradientOptimizerOptions _options;
+    private NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The velocity vector used in the NAG algorithm.
@@ -49,17 +49,11 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
     /// <param name="modelCache">The model cache to use.</param>
     /// <param name="gradientCache">The gradient cache to use.</param>
     public NesterovAcceleratedGradientOptimizer(
-        NesterovAcceleratedGradientOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new NesterovAcceleratedGradientOptimizerOptions();
+        _options = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
+
         InitializeAdaptiveParameters();
     }
 
@@ -100,15 +94,15 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _velocity = new Vector<T>(currentSolution.Coefficients.Length);
+        _velocity = new Vector<T>(currentSolution.GetParameters().Length);
         InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
@@ -153,14 +147,16 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
     /// </remarks>
     /// <param name="currentSolution">The current solution.</param>
     /// <returns>A predicted future solution.</returns>
-    private ISymbolicModel<T> GetLookaheadSolution(ISymbolicModel<T> currentSolution)
+    private IFullModel<T, TInput, TOutput> GetLookaheadSolution(IFullModel<T, TInput, TOutput> currentSolution)
     {
-        var lookaheadCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        var parameters = currentSolution.GetParameters();
+        var lookaheadCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
-            lookaheadCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], NumOps.Multiply(CurrentMomentum, _velocity![i]));
+            lookaheadCoefficients[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(CurrentMomentum, _velocity![i]));
         }
-        return new VectorModel<T>(lookaheadCoefficients);
+
+        return currentSolution.WithParameters(lookaheadCoefficients);
     }
 
     /// <summary>
@@ -203,14 +199,16 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
     /// <param name="currentSolution">The current solution.</param>
     /// <param name="velocity">The current velocity vector.</param>
     /// <returns>The updated solution.</returns>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> velocity)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
     {
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
-            newCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], velocity[i]);
+            newCoefficients[i] = NumOps.Subtract(parameters[i], velocity[i]);
         }
-        return new VectorModel<T>(newCoefficients);
+
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -228,7 +226,7 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
     /// </remarks>
     /// <param name="currentStepData">The current optimization step data.</param>
     /// <param name="previousStepData">The previous optimization step data.</param>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -277,9 +275,9 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
     /// </remarks>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is NesterovAcceleratedGradientOptimizerOptions nagOptions)
+        if (options is NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> nagOptions)
         {
             _options = nagOptions;
         }
@@ -301,7 +299,7 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
     /// </para>
     /// </remarks>
     /// <returns>The current optimization algorithm options.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -359,7 +357,7 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<NesterovAcceleratedGradientOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
         }
     }
@@ -379,7 +377,7 @@ public class NesterovAcceleratedGradientOptimizer<T> : GradientBasedOptimizerBas
     /// <param name="X">The input data matrix.</param>
     /// <param name="y">The target vector.</param>
     /// <returns>A string key uniquely identifying the gradient calculation scenario for caching purposes.</returns>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_NAG_{_options.InitialMomentum}_{_options.InitialLearningRate}";

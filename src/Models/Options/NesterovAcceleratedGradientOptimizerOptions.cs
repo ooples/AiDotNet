@@ -34,7 +34,7 @@ namespace AiDotNet.Models.Options;
 /// rather than requiring you to find the perfect fixed values upfront.
 /// </para>
 /// </remarks>
-public class NesterovAcceleratedGradientOptimizerOptions : GradientBasedOptimizerOptions
+public class NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the factor by which the learning rate is increased when the algorithm

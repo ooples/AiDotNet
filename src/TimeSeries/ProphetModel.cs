@@ -16,13 +16,100 @@ namespace AiDotNet.TimeSeries;
 /// guesses about future values.
 /// </para>
 /// </remarks>
-public class ProphetModel<T> : TimeSeriesModelBase<T>
+public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 {
-    private ProphetOptions<T> _prophetOptions;
+    /// <summary>
+    /// Stores the configuration options for the Prophet model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds all user-configurable settings for the model, including seasonal periods,
+    /// holidays, changepoint settings, regressor configurations, and optimization parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the model's instruction manual. It contains
+    /// all the settings that control how the model works, such as which seasonal patterns to look for,
+    /// which holidays to consider, and how the model should learn from your data.
+    /// </para>
+    /// </remarks>
+    private ProphetOptions<T, TInput, TOutput> _prophetOptions;
+
+    /// <summary>
+    /// Represents the overall trend component of the time series.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The trend component captures the long-term increase or decrease in the time series data.
+    /// It's one of the fundamental components of the Prophet decomposition.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the main direction your data is heading in over time.
+    /// For example, if you're tracking sales over many years, this captures whether sales are generally
+    /// increasing, decreasing, or staying flat over the long term, ignoring seasonal ups and downs.
+    /// </para>
+    /// </remarks>
     private T _trend;
+
+    /// <summary>
+    /// Stores the coefficients for all seasonal components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector contains coefficients for the Fourier series representation of all seasonal components.
+    /// Each seasonal period (yearly, monthly, weekly, etc.) is represented by multiple sine and cosine terms.
+    /// </para>
+    /// <para><b>For Beginners:</b> This holds information about repeating patterns in your data.
+    /// For example, ice cream sales might go up every summer and down every winter, or website traffic
+    /// might be higher on weekends than weekdays. These coefficients help the model capture these
+    /// regular patterns at different time scales (daily, weekly, yearly, etc.).
+    /// </para>
+    /// </remarks>
     private Vector<T> _seasonalComponents;
+
+    /// <summary>
+    /// Stores the effect of each holiday on the time series.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector contains coefficients representing how much each defined holiday affects the
+    /// time series values. Each element corresponds to a holiday defined in ProphetOptions.Holidays.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tracks how special days like holidays affect your data.
+    /// For example, retail sales might spike before Christmas or drop on certain holidays.
+    /// Each number in this list tells the model how much a specific holiday tends to
+    /// increase or decrease the values in your data.
+    /// </para>
+    /// </remarks>
     private Vector<T> _holidayComponents;
+
+    /// <summary>
+    /// Represents the coefficient for the changepoint component.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The changepoint component models abrupt changes in the trend of the time series.
+    /// This coefficient determines the magnitude of the effect of each changepoint.
+    /// </para>
+    /// <para><b>For Beginners:</b> This captures sudden changes in your data's overall pattern.
+    /// For example, if a company launched a new product and saw a sudden increase in sales,
+    /// or if a policy change caused a sharp drop in some measurement, this helps the model
+    /// account for these unexpected shifts instead of treating them as noise.
+    /// </para>
+    /// </remarks>
     private T _changepoint;
+
+    /// <summary>
+    /// Stores the coefficients for additional regressor variables.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector contains coefficients for external regressor variables that may influence
+    /// the time series but are not part of the core seasonal or trend components.
+    /// </para>
+    /// <para><b>For Beginners:</b> This holds information about how external factors affect your data.
+    /// For example, if you're predicting ice cream sales, temperature might be a regressor because
+    /// hot weather leads to more ice cream sales. These numbers tell the model exactly how much
+    /// each external factor influences your data.
+    /// </para>
+    /// </remarks>
     private Vector<T> _regressors;
 
     /// <summary>
@@ -41,10 +128,10 @@ public class ProphetModel<T> : TimeSeriesModelBase<T>
     /// (holidays), sudden changes (changepoints), and other factors that might affect your predictions (regressors).
     /// </para>
     /// </remarks>
-    public ProphetModel(ProphetOptions<T>? options = null) 
-        : base(options ?? new ProphetOptions<T>())
+    public ProphetModel(ProphetOptions<T, TInput, TOutput>? options = null) 
+        : base(options ?? new ProphetOptions<T, TInput, TOutput>())
     {
-        _prophetOptions = options ?? new ProphetOptions<T>();
+        _prophetOptions = options ?? new ProphetOptions<T, TInput, TOutput>();
 
         // Initialize model components
         _trend = NumOps.FromDouble(_prophetOptions.InitialTrendValue);
@@ -52,37 +139,6 @@ public class ProphetModel<T> : TimeSeriesModelBase<T>
         _holidayComponents = new Vector<T>(_prophetOptions.Holidays.Count);
         _changepoint = NumOps.FromDouble(_prophetOptions.InitialChangepointValue);
         _regressors = new Vector<T>(_prophetOptions.RegressorCount);
-    }
-
-    /// <summary>
-    /// Trains the Prophet model using the provided input data and target values.
-    /// </summary>
-    /// <param name="x">The input matrix containing features.</param>
-    /// <param name="y">The target vector containing the values to be predicted.</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the Prophet model by initializing its components based on the input data,
-    /// then optimizing the model parameters to best fit the provided target values.
-    /// </para>
-    /// <para><b>For Beginners:</b> Training is like teaching the model about your data. You give it examples 
-    /// of past data (x) and what happened (y), and it learns patterns from this information. The model adjusts 
-    /// its internal settings (parameters) to make its predictions as close as possible to the actual values you provided.
-    /// After training, the model will be ready to make predictions on new data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        int n = y.Length;
-        Matrix<T> states = new Matrix<T>(n, GetStateSize());
-
-        // Initialize components
-        InitializeComponents(x, y);
-
-        // Perform optimization (e.g., using L-BFGS or Stan)
-        OptimizeParameters(x, y);
-
-        // Store final state
-        states.SetRow(n - 1, GetCurrentState());
     }
 
     /// <summary>
@@ -375,20 +431,20 @@ public class ProphetModel<T> : TimeSeriesModelBase<T>
         initialParameters[p + 1] = NumOps.FromDouble(_prophetOptions.InitialChangepointValue);
 
         // Use the user-defined optimizer if provided, otherwise use LFGSOptimizer as default
-        IOptimizer<T> optimizer = _prophetOptions.Optimizer ?? new LBFGSOptimizer<T>();
+        var optimizer = _prophetOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
 
         // Prepare the optimization input data
-        var inputData = new OptimizationInputData<T>
+        var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>()
         {
             XTrain = x,
             YTrain = y
         };
 
         // Run optimization
-        OptimizationResult<T> result = optimizer.Optimize(inputData);
+        var result = optimizer.Optimize(inputData);
 
         // Update model parameters with optimized values
-        Vector<T> optimizedParameters = result.BestSolution.Coefficients;
+        Vector<T> optimizedParameters = result.BestSolution.GetParameters();
         for (int i = 0; i < p; i++)
         {
             _regressors[i] = optimizedParameters[i];
@@ -438,7 +494,7 @@ public class ProphetModel<T> : TimeSeriesModelBase<T>
     /// to come up with a final prediction.
     /// </para>
     /// </remarks>
-    private T PredictSingle(Vector<T> x)
+    private T PredictSingleInternal(Vector<T> x)
     {
         T prediction = _trend;
         prediction = NumOps.Add(prediction, GetSeasonalComponent(x));
@@ -819,7 +875,7 @@ public class ProphetModel<T> : TimeSeriesModelBase<T>
         }
 
         // Read options
-        _prophetOptions = new ProphetOptions<T>();
+        _prophetOptions = new ProphetOptions<T, TInput, TOutput>();
         int seasonalPeriodsCount = reader.ReadInt32();
         for (int i = 0; i < seasonalPeriodsCount; i++)
         {
@@ -831,5 +887,232 @@ public class ProphetModel<T> : TimeSeriesModelBase<T>
             _prophetOptions.Holidays.Add(new DateTime(reader.ReadInt64()));
         }
         _prophetOptions.RegressorCount = reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// Core implementation of the training logic for the Prophet model.
+    /// </summary>
+    /// <param name="x">The input features matrix.</param>
+    /// <param name="y">The target vector containing the values to be predicted.</param>
+    /// <remarks>
+    /// <para>
+    /// This protected method contains the actual implementation of the training process.
+    /// It's called by the public Train method and handles the core training logic.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where the real learning happens for the model.
+    /// The method carefully validates your data, then initializes the model components
+    /// (like trend and seasonal patterns), and finally optimizes all the parameters to
+    /// best fit your data. If anything goes wrong during this process, it provides clear
+    /// error messages to help you understand and fix the issue.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Validate inputs
+        if (x == null)
+        {
+            throw new ArgumentNullException(nameof(x), "Input matrix cannot be null");
+        }
+    
+        if (y == null)
+        {
+            throw new ArgumentNullException(nameof(y), "Target vector cannot be null");
+        }
+    
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException($"Input matrix rows ({x.Rows}) must match target vector length ({y.Length})");
+        }
+    
+        if (x.Rows == 0)
+        {
+            throw new ArgumentException("Cannot train on empty dataset");
+        }
+    
+        // Initialize model state vector
+        int n = y.Length;
+        Matrix<T> states = new Matrix<T>(n, GetStateSize());
+        
+        // Initialize components (trend, seasonal, holiday, changepoint, regressors)
+        InitializeComponents(x, y);
+        
+        // Optimize parameters using the selected optimizer
+        OptimizeParameters(x, y);
+        
+        // Store final state for future reference
+        states.SetRow(n - 1, GetCurrentState());
+    }
+
+    /// <summary>
+    /// Predicts a single value based on the input vector.
+    /// </summary>
+    /// <param name="input">The input vector containing time and other regressor values.</param>
+    /// <returns>The predicted value for the given input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates a prediction for a single input vector by combining the effects
+    /// of trend, seasonality, holidays, changepoints, and regressors as learned during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the method that makes a prediction for a single point in time.
+    /// It takes all the patterns the model has learned (trends, seasons, holiday effects, etc.)
+    /// and combines them to predict what value we should expect at the given time point.
+    /// 
+    /// The input vector should contain:
+    /// - Time information (typically the first element)
+    /// - Any additional regressor values that the model was trained with
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Validate the input
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input), "Input vector cannot be null");
+        }
+    
+        // Check if model has been trained
+        if (NumOps.Equals(_trend, NumOps.Zero) && _seasonalComponents.Length == 0)
+        {
+            throw new InvalidOperationException("Model must be trained before making predictions");
+        }
+    
+        // Check if input has the right dimensions
+        int expectedLength = 1 + _prophetOptions.RegressorCount; // Time plus regressors
+        if (input.Length < expectedLength)
+        {
+            throw new ArgumentException($"Input vector length ({input.Length}) is too short. Expected at least {expectedLength} elements.");
+        }
+    
+        // Use the private implementation to make the actual prediction
+        T prediction = PredictSingleInternal(input);
+        
+        // Apply any post-processing logic if needed
+        if (_prophetOptions.ApplyTransformation)
+        {
+            prediction = _prophetOptions.TransformPrediction(prediction);
+        }
+        
+        return prediction;
+    }
+
+    /// <summary>
+    /// Gets metadata about the model, including its type, parameters, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides detailed information about the model's configuration, learned parameters,
+    /// and operational statistics. It's useful for model versioning, comparison, and documentation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a detailed report card about the model.
+    /// It includes information about how the model was set up and what it learned during training.
+    /// This is useful for:
+    /// - Keeping track of different models you've created
+    /// - Comparing models to see which one works better
+    /// - Documenting what your model does for other people to understand
+    /// - Saving the model's configuration for future reference
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.ProphetModel,
+            AdditionalInfo = []
+        };
+    
+        // Add basic information
+        metadata.AdditionalInfo["ModelName"] = "Prophet Time Series Model";
+        metadata.AdditionalInfo["Version"] = "1.0";
+    
+        // Add trend information
+        metadata.AdditionalInfo["TrendValue"] = Convert.ToDouble(_trend);
+    
+        // Add seasonal information
+        metadata.AdditionalInfo["SeasonalPeriodCount"] = _prophetOptions.SeasonalPeriods.Count;
+        for (int i = 0; i < _prophetOptions.SeasonalPeriods.Count; i++)
+        {
+            metadata.AdditionalInfo[$"SeasonalPeriod_{i}"] = _prophetOptions.SeasonalPeriods[i];
+        }
+        metadata.AdditionalInfo["FourierOrder"] = _prophetOptions.FourierOrder;
+        metadata.AdditionalInfo["SeasonalComponentsCount"] = _seasonalComponents.Length;
+    
+        // Add holiday information
+        metadata.AdditionalInfo["HolidayCount"] = _prophetOptions.Holidays.Count;
+        metadata.AdditionalInfo["HolidayComponentsCount"] = _holidayComponents.Length;
+    
+        // Add changepoint information
+        metadata.AdditionalInfo["ChangepointValue"] = Convert.ToDouble(_changepoint);
+        metadata.AdditionalInfo["ChangepointCount"] = _prophetOptions.Changepoints.Count;
+    
+        // Add regressor information
+        metadata.AdditionalInfo["RegressorCount"] = _prophetOptions.RegressorCount;
+        if (_prophetOptions.RegressorCount > 0 && _regressors != null)
+        {
+            for (int i = 0; i < _prophetOptions.RegressorCount && i < _regressors.Length; i++)
+            {
+                metadata.AdditionalInfo[$"RegressorCoefficient_{i}"] = Convert.ToDouble(_regressors[i]);
+            }
+        }
+    
+        // Include optimizer information if available
+        if (_prophetOptions.Optimizer != null)
+        {
+            metadata.AdditionalInfo["OptimizerType"] = _prophetOptions.Optimizer.GetType().Name;
+        }
+    
+        // Add model state size
+        metadata.AdditionalInfo["StateSize"] = GetStateSize();
+    
+        // Include serialized model data
+        metadata.ModelData = this.Serialize();
+    
+        return metadata;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Prophet model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the Prophet model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a fresh copy of the model with the same configuration options
+    /// but without any trained parameters. It's used for creating new models with similar configurations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a fresh copy of the model with the same settings,
+    /// but without any of the learned information. It's like creating a new recipe book with the same 
+    /// instructions but no completed recipes yet. This is useful when you want to:
+    /// - Train the same type of model on different data
+    /// - Create multiple similar models for comparison
+    /// - Start over with the same configuration but different training
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a deep copy of options to avoid reference issues
+        var newOptions = new ProphetOptions<T, TInput, TOutput>
+        {
+            // Basic settings
+            InitialTrendValue = _prophetOptions.InitialTrendValue,
+            InitialChangepointValue = _prophetOptions.InitialChangepointValue,
+            FourierOrder = _prophetOptions.FourierOrder,
+            RegressorCount = _prophetOptions.RegressorCount,
+            ApplyTransformation = _prophetOptions.ApplyTransformation,
+        
+            // Copy the optimizer if possible
+            Optimizer = _prophetOptions.Optimizer
+        };
+    
+        // Deep copy seasonal periods
+        newOptions.SeasonalPeriods = [.. _prophetOptions.SeasonalPeriods];
+    
+        // Deep copy holidays
+        newOptions.Holidays = [.. _prophetOptions.Holidays];
+    
+        // Deep copy changepoints
+        newOptions.Changepoints = [.. _prophetOptions.Changepoints];
+    
+        // Create a new instance with the copied options
+        return new ProphetModel<T, TInput, TOutput>(newOptions);
     }
 }

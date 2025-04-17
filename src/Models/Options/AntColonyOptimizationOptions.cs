@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// virtual "ants" explore possible solutions and leave "trails" on good solutions that guide future searches.
 /// It's especially good at finding efficient routes or combinations when there are many possibilities to consider.</para>
 /// </remarks>
-public class AntColonyOptimizationOptions : OptimizationAlgorithmOptions
+public class AntColonyOptimizationOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the number of artificial ants used in each iteration of the algorithm.

@@ -19,7 +19,7 @@ namespace AiDotNet.FitDetectors;
 /// This detector will tell you if your model is good, moderate, poor, or very poor based on this AUC value.
 /// </para>
 /// </remarks>
-public class ROCCurveFitDetector<T> : FitDetectorBase<T>
+public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the ROC curve fit detector.
@@ -82,7 +82,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// The result contains all this information for you to use.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
@@ -126,7 +126,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// The thresholds for these categories are set in the options.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (_numOps.GreaterThanOrEquals(Auc, _numOps.FromDouble(_options.GoodFitThreshold)))
             return FitType.GoodFit;
@@ -156,7 +156,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// This helps you understand how much you should trust the detector's assessment.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         return _numOps.Multiply(Auc, _numOps.FromDouble(_options.ConfidenceScalingFactor));
     }
@@ -183,7 +183,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// These recommendations are starting points that you can try to improve your model's performance.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

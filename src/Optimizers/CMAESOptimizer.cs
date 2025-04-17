@@ -15,17 +15,12 @@ namespace AiDotNet.Optimizers;
 /// between inputs and outputs isn't straightforward.
 /// </para>
 /// </remarks>
-public class CMAESOptimizer<T> : OptimizerBase<T>
+public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the CMA-ES optimization algorithm.
     /// </summary>
-    private CMAESOptimizerOptions<T> _options;
-
-    /// <summary>
-    /// Random number generator for the algorithm.
-    /// </summary>
-    private Random _random;
+    private CMAESOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The current population of candidate solutions.
@@ -73,23 +68,17 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// </para>
     /// </remarks>
     public CMAESOptimizer(
-        CMAESOptimizerOptions<T>? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
+        CMAESOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new CMAESOptimizerOptions<T>();
-        _random = new Random(_options.Seed);
+        _options = options ?? new CMAESOptimizerOptions<T, TInput, TOutput>();
         _population = Matrix<T>.Empty();
         _mean = Vector<T>.Empty();
         _C = Matrix<T>.Empty();
         _pc = Vector<T>.Empty();
         _ps = Vector<T>.Empty();
         _sigma = NumOps.Zero;
+
         InitializeAdaptiveParameters();
     }
 
@@ -123,12 +112,12 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// The process continues until it reaches the maximum number of generations or meets the stopping criteria.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
         InitializeCMAESParameters(inputData.XTrain.Columns);
@@ -254,8 +243,8 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     private double GenerateStandardNormal()
     {
-        double u1 = 1.0 - _random.NextDouble();
-        double u2 = 1.0 - _random.NextDouble();
+        double u1 = 1.0 - Random.NextDouble();
+        double u2 = 1.0 - Random.NextDouble();
 
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
     }
@@ -271,7 +260,7 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// based on the problem you're trying to solve.
     /// </para>
     /// </remarks>
-    private Vector<T> EvaluatePopulation(Matrix<T> population, OptimizationInputData<T> inputData)
+    private Vector<T> EvaluatePopulation(Matrix<T> population, OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var fitnessValues = new Vector<T>(population.Rows);
         for (int i = 0; i < population.Rows; i++)
@@ -402,9 +391,9 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// It checks to make sure you're providing the right kind of options specific to the CMA-ES algorithm.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is CMAESOptimizerOptions<T> cmaesOptions)
+        if (options is CMAESOptimizerOptions<T, TInput, TOutput> cmaesOptions)
         {
             _options = cmaesOptions;
         }
@@ -423,7 +412,7 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// You can use this to check or save the current configuration.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -480,7 +469,7 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         base.Deserialize(baseData);
 
         string optionsJson = reader.ReadString();
-        _options = JsonConvert.DeserializeObject<CMAESOptimizerOptions<T>>(optionsJson)
+        _options = JsonConvert.DeserializeObject<CMAESOptimizerOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
         // Deserialize CMA-ES specific data
@@ -490,7 +479,5 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         _pc = SerializationHelper<T>.DeserializeVector(reader);
         _ps = SerializationHelper<T>.DeserializeVector(reader);
         _sigma = SerializationHelper<T>.ReadValue(reader);
-
-        _random = new Random(_options.Seed);
     }
 }

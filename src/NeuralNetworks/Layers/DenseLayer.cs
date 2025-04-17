@@ -625,7 +625,7 @@ public class DenseLayer<T> : LayerBase<T>
     /// Think of it like making a perfect clone that starts exactly where the original is.
     /// </para>
     /// </remarks>
-    public override LayerBase<T> Copy()
+    public override LayerBase<T> Clone()
     {
         DenseLayer<T> copy;
         

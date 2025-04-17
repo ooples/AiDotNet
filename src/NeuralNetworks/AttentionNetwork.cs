@@ -49,7 +49,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>
     /// which becomes computationally expensive for very long sequences.
     /// </para>
     /// </remarks>
-    private readonly int _sequenceLength;
+    private int _sequenceLength;
 
     /// <summary>
     /// The size of the embeddings used to represent each element in the sequence.
@@ -70,7 +70,30 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>
     /// vector that captures various aspects of its meaning and context.
     /// </para>
     /// </remarks>
-    private readonly int _embeddingSize;
+    private int _embeddingSize;
+
+    /// <summary>
+    /// The loss function used to measure the network's performance during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the loss function that the network uses to quantify its error during training.
+    /// The loss function plays a crucial role in guiding the network's learning process.
+    /// </para>
+    /// <para><b>For Beginners:</b> The loss function is like a scorekeeper for the network's performance.
+    /// 
+    /// It does the following:
+    /// - Measures how far off the network's predictions are from the correct answers
+    /// - Provides a single number that represents how well (or poorly) the network is doing
+    /// - Guides the network in adjusting its internal values to improve its performance
+    /// 
+    /// For attention networks, especially in tasks like language translation or text summarization,
+    /// Cross-Entropy Loss is often used as the default. This loss function is particularly good at
+    /// handling tasks where the network needs to choose from a set of possible outputs, which is
+    /// common in language-related tasks.
+    /// </para>
+    /// </remarks>
+    private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AttentionNetwork{T}"/> class.
@@ -78,10 +101,13 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>
     /// <param name="architecture">The architecture specification for the network.</param>
     /// <param name="sequenceLength">The maximum length of sequences this network can process.</param>
     /// <param name="embeddingSize">The size of the embeddings used to represent each element in the sequence.</param>
+    /// <param name="lossFunction">The loss function to use for training. If null, a default Cross-Entropy loss function will be used.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates an attention network with the specified architecture, sequence length, and embedding size.
     /// It initializes the network's layers according to the architecture specification or uses default layers if none are provided.
+    /// If no loss function is specified, it uses Cross-Entropy Loss, which is commonly used for attention networks in tasks like
+    /// machine translation or text summarization.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new attention network with the specified settings.
     /// 
@@ -89,16 +115,21 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>
     /// - architecture: The overall design of the network (layers, connections, etc.)
     /// - sequenceLength: How many elements (like words) the network can process at once
     /// - embeddingSize: How rich the representation of each element is
+    /// - lossFunction: How the network measures its mistakes during training (optional)
     /// 
     /// These settings control the capacity, expressiveness, and computational requirements of the network.
     /// Larger values for sequenceLength and embeddingSize give the network more capacity to handle
     /// complex tasks but require more memory and processing power.
+    /// 
+    /// The loss function helps the network learn by measuring how far off its predictions are.
+    /// Cross-Entropy Loss is used by default because it works well for many language-related tasks.
     /// </para>
     /// </remarks>
-    public AttentionNetwork(NeuralNetworkArchitecture<T> architecture, int sequenceLength, int embeddingSize) : base(architecture)
+    public AttentionNetwork(NeuralNetworkArchitecture<T> architecture, int sequenceLength, int embeddingSize, ILossFunction<T>? lossFunction = null) : base(architecture)
     {
         _sequenceLength = sequenceLength;
         _embeddingSize = embeddingSize;
+        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
 
         InitializeLayers();
     }
@@ -142,42 +173,6 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Makes a prediction using the attention network.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector containing the prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs a forward pass through all layers of the attention network to generate a prediction
-    /// for the given input. Each layer's output becomes the input to the next layer in the network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method processes input data through the network to make a prediction.
-    /// 
-    /// The prediction process works like this:
-    /// 1. The input data enters the first layer of the network
-    /// 2. Each layer processes the data and passes it to the next layer
-    /// 3. The attention layers focus on relevant parts of the sequence
-    /// 4. The final layer produces the output prediction
-    /// 
-    /// For example, in a translation task:
-    /// - Input might be a sentence in English
-    /// - The network processes this through its layers
-    /// - The attention mechanisms focus on relevant words
-    /// - Output would be the translated sentence in another language
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Updates the parameters of the attention network.
     /// </summary>
     /// <param name="parameters">The parameters to update the network with.</param>
@@ -215,93 +210,206 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the attention network to a binary writer.
+    /// Makes a prediction using the current state of the Attention Network.
     /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when serialization encounters an error.</exception>
+    /// <param name="input">The input tensor to make a prediction for.</param>
+    /// <returns>The predicted output tensor after passing through all layers of the network.</returns>
+    /// <exception cref="ArgumentException">Thrown when the input sequence length exceeds the maximum allowed length.</exception>
     /// <remarks>
     /// <para>
-    /// This method serializes the attention network by writing the number of layers and then serializing each layer
-    /// in sequence. For each layer, it writes the full type name followed by the layer's serialized data.
+    /// This method performs a forward pass through the network, transforming the input data through each layer
+    /// to produce a final prediction. It includes input validation to ensure the provided tensor matches the
+    /// expected input shape of the network.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the network to a file or stream so it can be used later.
+    /// <para><b>For Beginners:</b> This is how the network processes new data to make predictions.
     /// 
-    /// Serialization is like taking a snapshot of the network:
-    /// - It saves the structure of the network (number and types of layers)
-    /// - It saves all the learned parameters (weights, biases, etc.)
-    /// - It ensures everything can be reconstructed exactly as it was
+    /// The prediction process:
+    /// 1. Checks if the input data is valid and not too long
+    /// 2. Passes the input through each layer of the network
+    /// 3. Each layer transforms the data, with attention layers focusing on relevant parts
+    /// 4. The final layer produces the network's prediction
     /// 
-    /// This is useful for:
-    /// - Saving a trained model for later use
-    /// - Sharing a model with others
-    /// - Creating backups during long training processes
+    /// Think of it like a series of experts each looking at the data and passing their insights
+    /// to the next expert, with the last one making the final decision.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-        writer.Write(Layers.Count);
+        if (input.Shape[1] > _sequenceLength)
+            throw new ArgumentException($"Input sequence length {input.Shape[1]} exceeds maximum sequence length {_sequenceLength}");
+
+        var current = input;
         foreach (var layer in Layers)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            current = layer.Forward(current);
         }
+
+        return current;
     }
 
     /// <summary>
-    /// Deserializes the attention network from a binary reader.
+    /// Trains the Attention Network using the provided input and expected output.
     /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization encounters an error.</exception>
+    /// <param name="input">The input tensor used for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
     /// <remarks>
     /// <para>
-    /// This method deserializes the attention network by reading the number of layers and then deserializing each layer
-    /// in sequence. For each layer, it reads the full type name, creates an instance of that type, and then deserializes
-    /// the layer's data.
+    /// This method implements the training process for the Attention Network. It performs a forward pass,
+    /// calculates the loss between the network's prediction and the expected output, and then backpropagates
+    /// this error to adjust the network's parameters.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved network from a file or stream.
+    /// <para><b>For Beginners:</b> This is how the network learns from examples.
     /// 
-    /// Deserialization is like reconstructing the network from a snapshot:
-    /// - It reads the structure of the network (number and types of layers)
-    /// - It loads all the learned parameters (weights, biases, etc.)
-    /// - It recreates the network exactly as it was when saved
+    /// The training process:
+    /// 1. Makes a prediction using the current network state
+    /// 2. Compares the prediction to the correct answer to calculate the error
+    /// 3. Figures out how to adjust the network to reduce this error
+    /// 4. Updates the network's internal settings to improve future predictions
     /// 
-    /// This allows you to:
-    /// - Use a previously trained model without retraining it
-    /// - Continue training from where you left off
-    /// - Deploy the same model across different systems
+    /// It's like a student doing practice problems, checking their answers, and learning
+    /// from their mistakes to do better next time.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-        for (int i = 0; i < layerCount; i++)
+        // Forward pass
+        var output = Predict(input);
+        var flattenedOutput = output.ToVector();
+        var flattenedExpectedOutput = expectedOutput.ToVector();
+
+        // Calculate loss
+        var loss = _lossFunction.CalculateLoss(flattenedOutput, flattenedExpectedOutput);
+
+        // Backward pass
+        var flattenedGradient = _lossFunction.CalculateDerivative(flattenedOutput, flattenedExpectedOutput);
+    
+        // Unflatten the gradient to match the output shape
+        var gradient = new Tensor<T>(output.Shape).Unflatten(flattenedGradient);
+
+        for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            gradient = Layers[i].Backward(gradient);
         }
+
+        // Update parameters
+        UpdateParameters(GetParameters());
+    }
+
+    /// <summary>
+    /// Gets metadata about the Attention Network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata that describes the Attention Network, including its type, architecture details,
+    /// and other relevant information. This metadata can be useful for model management, documentation,
+    /// and versioning.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides a summary of your network's setup and characteristics.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Attention Network)
+    /// - Details about the network's structure and capacity
+    /// - Information about the input and output shapes
+    /// 
+    /// It's like a spec sheet for your network, useful for keeping track of different versions
+    /// or comparing different network configurations.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.AttentionNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "SequenceLength", _sequenceLength },
+                { "EmbeddingSize", _embeddingSize },
+                { "NumberOfLayers", Layers.Count },
+                { "LayerTypes", Layers.Select(l => l.GetType().Name).ToList() },
+                { "ParameterCount", Layers.Sum(l => l.ParameterCount) },
+                { "InputShape", new[] { _sequenceLength, _embeddingSize } },
+                { "OutputShape", Layers[Layers.Count - 1].GetOutputShape() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes network-specific data for the Attention Network.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the specific configuration and state of the Attention Network to a binary stream.
+    /// It includes network-specific parameters that are essential for later reconstruction of the network.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the unique settings of your Attention Network.
+    /// 
+    /// It writes:
+    /// - The sequence length and embedding size
+    /// - The configuration of each layer
+    /// - Any other Attention Network-specific parameters
+    /// 
+    /// Saving these details allows you to recreate the exact same network structure later.
+    /// It's like writing down a detailed recipe so you can make the same dish again in the future.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_sequenceLength);
+        writer.Write(_embeddingSize);
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data for the Attention Network.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the specific configuration and state of the Attention Network from a binary stream.
+    /// It reconstructs the network-specific parameters to match the state of the network when it was serialized.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads the unique settings of your Attention Network.
+    /// 
+    /// It reads:
+    /// - The sequence length and embedding size
+    /// - The configuration of each layer
+    /// - Any other Attention Network-specific parameters
+    /// 
+    /// Loading these details allows you to recreate the exact same network structure that was previously saved.
+    /// It's like following a detailed recipe to recreate a dish exactly as it was made before.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _sequenceLength = reader.ReadInt32();
+        _embeddingSize = reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the attention network model.
+    /// </summary>
+    /// <returns>A new instance of the attention network model with the same configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the attention network model with the same configuration as the current instance.
+    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
+    /// with the serialized data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a copy of the model structure without copying the learned data.
+    /// 
+    /// Think of it like creating a blueprint of the network's architecture:
+    /// - It includes the same structure (layers, connections, sizes)
+    /// - It preserves the configuration settings (sequence length, embedding size)
+    /// - It doesn't copy over any of the learned knowledge (weights, biases)
+    /// 
+    /// This is particularly useful when you want to save or load models, as it provides the framework
+    /// that learned parameters can be loaded into.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new AttentionNetwork<T>(Architecture, _sequenceLength, _embeddingSize, _lossFunction);
     }
 }

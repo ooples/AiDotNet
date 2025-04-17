@@ -14,7 +14,7 @@ namespace AiDotNet.FitDetectors;
 /// - Learning too much from the training data and not generalizing well (overfit)
 /// </para>
 /// </remarks>
-public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
+public class GradientBoostingFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options that control how the detector evaluates model fit.
@@ -50,7 +50,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// to improve your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
@@ -87,7 +87,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// - Lower MSE values indicate better performance.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainError = evaluationData.TrainingSet.ErrorStats.MSE;
         var validationError = evaluationData.ValidationSet.ErrorStats.MSE;
@@ -124,7 +124,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// overfitting or have other issues.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainError = evaluationData.TrainingSet.ErrorStats.MSE;
         var validationError = evaluationData.ValidationSet.ErrorStats.MSE;
@@ -165,7 +165,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// - Data leakage: When information from validation data accidentally influences training
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -212,7 +212,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// (training) versus data it hasn't seen (validation).
     /// </para>
     /// </remarks>
-    private Dictionary<string, T> GetPerformanceMetrics(ModelEvaluationData<T> evaluationData)
+    private Dictionary<string, T> GetPerformanceMetrics(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         return new Dictionary<string, T>
         {

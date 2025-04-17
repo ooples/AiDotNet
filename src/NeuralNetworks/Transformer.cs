@@ -58,6 +58,55 @@ public class Transformer<T> : NeuralNetworkBase<T>
     private readonly TransformerArchitecture<T> _transformerArchitecture;
 
     /// <summary>
+    /// Gets or sets the attention mask used in the Transformer.
+    /// </summary>
+    /// <remarks>
+    /// This mask is used to control which positions are attended to in the self-attention layers.
+    /// It's particularly useful for tasks like sequence generation where future tokens should be masked.
+    /// </remarks>
+    public Tensor<T>? AttentionMask { get; set; }
+
+    /// <summary>
+    /// The loss function used to calculate the error of the Transformer's predictions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The loss function measures how far the Transformer's predictions are from the expected outputs.
+    /// It's crucial for training as it guides the optimization process to improve the Transformer's accuracy.
+    /// </para>
+    /// <para><b>For Beginners:</b> The loss function is like a scorekeeper for the Transformer.
+    /// 
+    /// Imagine you're playing a game where you have to guess numbers:
+    /// - The loss function tells you how close your guess was to the correct answer
+    /// - A lower score (loss) means you're doing better
+    /// - The Transformer uses this score to learn and make better guesses next time
+    /// 
+    /// Different types of loss functions can be used depending on the specific task the Transformer is performing.
+    /// </para>
+    /// </remarks>
+    private ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// The optimizer used to update the Transformer's parameters during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The optimizer determines how the Transformer's parameters should be adjusted based on the calculated gradients.
+    /// It's responsible for the learning process, controlling how quickly and in what manner the model improves.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer is like a coach for the Transformer.
+    /// 
+    /// Think of training the Transformer as teaching it to play a sport:
+    /// - The optimizer decides how to adjust the Transformer's technique (its parameters)
+    /// - It looks at how the Transformer performed (the loss) and suggests improvements
+    /// - Different optimizers have different strategies, like focusing on quick improvements or steady, consistent progress
+    /// 
+    /// The choice of optimizer can significantly affect how well and how quickly the Transformer learns.
+    /// </para>
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
     /// Creates a new Transformer neural network with the specified architecture.
     /// </summary>
     /// <param name="architecture">
@@ -80,9 +129,14 @@ public class Transformer<T> : NeuralNetworkBase<T>
     /// This is similar to how you might specify the size, number of rooms, and layout when building a house.
     /// </para>
     /// </remarks>
-    public Transformer(TransformerArchitecture<T> architecture) : base(architecture)
+    public Transformer(TransformerArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, 
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
         _transformerArchitecture = architecture;
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = optimizer ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
+
+        InitializeLayers();
     }
 
     /// <summary>
@@ -177,41 +231,6 @@ public class Transformer<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Processes an input vector through the Transformer network to produce a prediction.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector after passing through all layers of the Transformer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method passes the input sequentially through each layer of the Transformer.
-    /// In a typical language model, this input might represent a tokenized text sequence.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is where the Transformer actually performs its task.
-    /// 
-    /// When you give the Transformer some input data:
-    /// - The data passes through each layer in sequence
-    /// - Each layer transforms the data in some way
-    /// - The final output represents the Transformer's answer or prediction
-    /// 
-    /// For example, if you're using the Transformer for language translation:
-    /// - The input might be a sentence in English
-    /// - The output would be the same sentence translated to another language
-    /// 
-    /// This method handles the entire processing pipeline from input to output.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the Transformer network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>
@@ -247,106 +266,266 @@ public class Transformer<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Saves the Transformer network structure and parameters to a binary stream.
+    /// Performs a forward pass through the Transformer network to generate predictions.
     /// </summary>
-    /// <param name="writer">The binary writer to save the network to.</param>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor containing the predictions.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the type information and parameters of each layer,
-    /// allowing the network to be reconstructed later using the Deserialize method.
-    /// Serialization is useful for saving trained models to disk or transferring them between applications.
+    /// This method passes the input through each layer of the Transformer sequentially.
+    /// It handles both the encoder and decoder parts of the Transformer if present.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the Transformer to a file so you can use it later.
+    /// <para><b>For Beginners:</b> This method takes your input data and runs it through the entire Transformer.
     /// 
-    /// When saving the Transformer:
-    /// - Information about each layer's type is saved
-    /// - All the learned parameter values are saved
-    /// - The entire structure of the network is preserved
+    /// It's like sending a message through a complex machine:
+    /// - The input goes through each part of the Transformer in order
+    /// - Each layer processes the data in its own way (attention, normalization, etc.)
+    /// - The final output is the Transformer's prediction or transformation of your input
     /// 
-    /// This is useful for:
-    /// - Saving a trained model after spending time and resources on training
-    /// - Sharing your model with others
-    /// - Using your model in a different application
-    /// 
-    /// It's like taking a snapshot of the entire Transformer that can be restored later.
+    /// This is used when you want to use a trained Transformer to process new data.
     /// </para>
     /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when serialization encounters issues with layer information.</exception>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
+        Tensor<T> encoderOutput = input;
+        Tensor<T> decoderOutput = input;  // Initialize with input, will be replaced in decoder layers
+        Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input.Shape, NumOps.One); // Default to all ones if no mask is provided
 
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
+        // Encoder
+        for (int i = 0; i < _transformerArchitecture.NumEncoderLayers; i++)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            if (Layers[i] is AttentionLayer<T> attentionLayer)
+            {
+                encoderOutput = attentionLayer.Forward(encoderOutput, mask);
+            }
+            else
+            {
+                encoderOutput = Layers[i].Forward(encoderOutput);
+            }
         }
+
+        // Decoder
+        for (int i = _transformerArchitecture.NumEncoderLayers; i < Layers.Count; i++)
+        {
+            if (Layers[i] is DecoderLayer<T> decoderLayer)
+            {
+                decoderOutput = decoderLayer.Forward(decoderOutput, encoderOutput, mask);
+            }
+            else if (Layers[i] is AttentionLayer<T> attentionLayer)
+            {
+                decoderOutput = attentionLayer.Forward(decoderOutput, mask);
+            }
+            else
+            {
+                decoderOutput = Layers[i].Forward(decoderOutput);
+            }
+        }
+
+        return decoderOutput;
     }
 
     /// <summary>
-    /// Loads a Transformer network structure and parameters from a binary stream.
+    /// Trains the Transformer network on a single batch of data.
     /// </summary>
-    /// <param name="reader">The binary reader to load the network from.</param>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor.</param>
     /// <remarks>
     /// <para>
-    /// This method reconstructs the network by reading the type information and parameters of each layer.
-    /// It's used to load previously saved models for inference or continued training.
+    /// This method performs a forward pass, calculates the loss, and then backpropagates
+    /// the error to update the network's parameters. It uses the specified loss function and optimizer.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved Transformer from a file.
+    /// <para><b>For Beginners:</b> This method teaches the Transformer using example data.
     /// 
-    /// When loading the Transformer:
-    /// - The number and types of layers are read from the file
-    /// - Each layer is created with the correct type
-    /// - The parameter values are loaded into each layer
+    /// The process works like this:
+    /// 1. The Transformer makes a prediction based on the input
+    /// 2. We compare this prediction to the expected output
+    /// 3. We calculate how wrong the prediction was (the "loss")
+    /// 4. We adjust the Transformer's internal values to make it a little more accurate next time
     /// 
-    /// This allows you to:
-    /// - Use a model that was trained earlier
-    /// - Continue training a model from where you left off
-    /// - Use models created by others
-    /// 
-    /// It's like reassembling the Transformer from a blueprint and parts list that was saved earlier.
+    /// This process is repeated many times with different examples to train the Transformer.
     /// </para>
     /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization encounters issues with layer information.</exception>
-    public override void Deserialize(BinaryReader reader)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
+        // Forward pass
+        Tensor<T> prediction = Predict(input);
 
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
+        var flattenedPredictions = prediction.ToVector();
+        var flattenedOutput = expectedOutput.ToVector();
 
-        for (int i = 0; i < layerCount; i++)
+        // Calculate loss
+        T loss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedOutput);
+
+        // Backward pass
+        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedOutput);
+        Vector<T> inputGradients = Backpropagate(outputGradients);
+
+        // Get parameter gradients
+        Vector<T> parameterGradients = GetParameterGradients();
+
+        // Apply gradient clipping if necessary
+        parameterGradients = ClipGradient(parameterGradients);
+
+        // Update parameters
+        Vector<T> currentParameters = GetParameters();
+        var updatedParameters = _optimizer.UpdateParameters(Tensor<T>.FromVector(currentParameters), Tensor<T>.FromVector(parameterGradients));
+        UpdateParameters(updatedParameters.ToVector());
+    }
+
+    /// <summary>
+    /// Sets the attention mask for the Transformer.
+    /// </summary>
+    /// <param name="mask">The attention mask to be used in self-attention layers.</param>
+    /// <remarks>
+    /// Call this method before training or prediction to set a mask for controlling attention.
+    /// </remarks>
+    public void SetAttentionMask(Tensor<T> mask)
+    {
+        AttentionMask = mask;
+    }
+
+    /// <summary>
+    /// Retrieves metadata about the Transformer model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the Transformer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method collects and returns various pieces of information about the Transformer,
+    /// including its type, architecture details, and current state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a summary of the Transformer's current state and structure.
+    /// 
+    /// It's like creating a report card for the Transformer, including:
+    /// - What type of model it is (Transformer)
+    /// - How it's structured (number of layers, size of each layer, etc.)
+    /// - Its current training progress
+    /// - Other important details about its configuration
+    /// 
+    /// This information is useful for keeping track of different models, especially when you're
+    /// experimenting with multiple configurations.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
+            ModelType = ModelType.Transformer,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NumHeads", _transformerArchitecture.NumHeads },
+                { "NumEncoderLayers", _transformerArchitecture.NumEncoderLayers },
+                { "NumDecoderLayers", _transformerArchitecture.NumDecoderLayers },
+                { "MaxSequenceLength", _transformerArchitecture.MaxSequenceLength },
+                { "VocabularySize", _transformerArchitecture.VocabularySize },
+                { "DropoutRate", _transformerArchitecture.DropoutRate },
+                { "LayerCount", Layers.Count },
+                { "ParameterCount", GetParameterCount() },
+                { "LossFunction", _lossFunction.GetType().Name },
+                { "Optimizer", _optimizer.GetType().Name }
+            },
+            ModelData = this.Serialize()
+        };
+    }
 
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
+    /// <summary>
+    /// Serializes Transformer-specific data to a binary stream.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes Transformer-specific configuration and state data to a binary stream.
+    /// It allows the Transformer's current state to be saved and later reconstructed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves all the important details about the Transformer to a file.
+    /// 
+    /// It's like taking a snapshot of the Transformer's current state, including:
+    /// - Its configuration (how it's set up)
+    /// - Its current parameter values (what it has learned so far)
+    /// 
+    /// This allows you to save your trained Transformer and use it again later without having to retrain it.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write Transformer-specific architecture details
+        writer.Write(_transformerArchitecture.NumHeads);
+        writer.Write(_transformerArchitecture.NumEncoderLayers);
+        writer.Write(_transformerArchitecture.NumDecoderLayers);
+        writer.Write(_transformerArchitecture.MaxSequenceLength);
+        writer.Write(_transformerArchitecture.VocabularySize);
+        writer.Write(Convert.ToDouble(_transformerArchitecture.DropoutRate));
 
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
+        // Write loss function and optimizer types
+        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
+        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
+    }
 
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
+    /// <summary>
+    /// Deserializes Transformer-specific data from a binary stream.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads Transformer-specific configuration and state data from a binary stream.
+    /// It reconstructs the Transformer's state from previously serialized data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads all the important details about a Transformer from a file.
+    /// 
+    /// It's like reconstructing the Transformer from a saved snapshot, including:
+    /// - Rebuilding its configuration (how it was set up)
+    /// - Restoring its parameter values (what it had learned)
+    /// 
+    /// This allows you to load a previously trained Transformer and use it immediately without having to retrain it.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Read Transformer-specific architecture details
+        int numHeads = reader.ReadInt32();
+        int numEncoderLayers = reader.ReadInt32();
+        int numDecoderLayers = reader.ReadInt32();
+        int maxSequenceLength = reader.ReadInt32();
+        int vocabularySize = reader.ReadInt32();
+        T dropoutRate = NumOps.FromDouble(reader.ReadDouble());
 
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
-        }
+        // Read and reconstruct loss function and optimizer
+        _lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Transformer with the same architecture and configuration.
+    /// </summary>
+    /// <returns>A new instance of the Transformer with the same configuration as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new Transformer neural network with the same architecture, loss function,
+    /// and optimizer as the current instance. The new instance has freshly initialized parameters,
+    /// making it useful for creating separate instances with identical configurations or for
+    /// resetting a network while preserving its structure.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a brand new Transformer with the same setup.
+    /// 
+    /// Think of it like creating a blueprint copy:
+    /// - It has the same architecture (number of layers, attention heads, etc.)
+    /// - It uses the same loss function to measure performance
+    /// - It uses the same optimizer to learn from data
+    /// - But it starts with fresh parameters (weights and biases)
+    /// 
+    /// This is useful when you want to:
+    /// - Start over with a fresh network but keep the same design
+    /// - Create multiple networks with identical settings for comparison
+    /// - Reset a network to its initial state
+    /// 
+    /// The new Transformer will need to be trained from scratch, as it doesn't
+    /// inherit any of the learned knowledge from the original.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new Transformer<T>(
+            _transformerArchitecture,
+            _lossFunction,
+            _optimizer);
     }
 }

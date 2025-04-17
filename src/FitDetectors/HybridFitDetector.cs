@@ -15,10 +15,10 @@ namespace AiDotNet.FitDetectors;
 /// a second opinion from another doctor - having multiple perspectives leads to better diagnosis.
 /// </para>
 /// </remarks>
-public class HybridFitDetector<T> : FitDetectorBase<T>
+public class HybridFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
-    private readonly ResidualAnalysisFitDetector<T> _residualAnalyzer;
-    private readonly LearningCurveFitDetector<T> _learningCurveDetector;
+    private readonly ResidualAnalysisFitDetector<T, TInput, TOutput> _residualAnalyzer;
+    private readonly LearningCurveFitDetector<T, TInput, TOutput> _learningCurveDetector;
     private readonly HybridFitDetectorOptions _options;
 
     /// <summary>
@@ -37,8 +37,8 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     /// </para>
     /// </remarks>
     public HybridFitDetector(
-        ResidualAnalysisFitDetector<T> residualAnalyzer,
-        LearningCurveFitDetector<T> learningCurveDetector,
+        ResidualAnalysisFitDetector<T, TInput, TOutput> residualAnalyzer,
+        LearningCurveFitDetector<T, TInput, TOutput> learningCurveDetector,
         HybridFitDetectorOptions? options = null)
     {
         _residualAnalyzer = residualAnalyzer;
@@ -64,7 +64,7 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     /// to make it better.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var residualResult = _residualAnalyzer.DetectFit(evaluationData);
 
@@ -97,7 +97,7 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     /// and learning curve detector, then combines them to make a final decision about your model's fit type.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var residualFitType = _residualAnalyzer.DetectFit(evaluationData).FitType;
 
@@ -119,7 +119,7 @@ public class HybridFitDetector<T> : FitDetectorBase<T>
     /// about its conclusions regarding your model's performance.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var residualConfidence = _residualAnalyzer.DetectFit(evaluationData).ConfidenceLevel;
 

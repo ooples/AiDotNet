@@ -161,66 +161,6 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the ARMA model on the provided data.
-    /// </summary>
-    /// <param name="x">Feature matrix (typically just time indices for ARMA models).</param>
-    /// <param name="y">Target vector (the time series values to be modeled).</param>
-    /// <remarks>
-    /// For Beginners:
-    /// This method "teaches" the ARMA model using your historical data. The training process:
-    /// 
-    /// 1. Initializes the model coefficients (AR and MA components)
-    /// 2. Repeatedly:
-    ///    - Calculates how well the current model fits the data
-    ///    - Determines how to adjust the coefficients to fit better
-    ///    - Updates the coefficients
-    ///    - Checks if the improvements are small enough to stop
-    /// 
-    /// The method uses a technique called "gradient descent" to find the best coefficients.
-    /// Think of it like walking downhill to find the lowest point - at each step, you look
-    /// around and move in the direction that goes downhill the fastest.
-    /// 
-    /// After training, the model can be used to make predictions.
-    /// 
-    /// Note: For ARMA models, the x parameter is often just a placeholder as the model primarily
-    /// uses the time series values themselves (y) for prediction.
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        // Initialize coefficients
-        _arCoefficients = new Vector<T>(_arOrder);
-        _maCoefficients = new Vector<T>(_maOrder);
-
-        Vector<T> prevGradAR = new Vector<T>(_arOrder);
-        Vector<T> prevGradMA = new Vector<T>(_maOrder);
-
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            Vector<T> residuals = CalculateResiduals(y);
-            (Vector<T> gradAR, Vector<T> gradMA) = CalculateGradients(y, residuals);
-
-            // Update coefficients using gradient descent
-            for (int i = 0; i < _arOrder; i++)
-            {
-                _arCoefficients[i] = NumOps.Subtract(_arCoefficients[i], NumOps.Multiply(NumOps.FromDouble(_learningRate), gradAR[i]));
-            }
-            for (int i = 0; i < _maOrder; i++)
-            {
-                _maCoefficients[i] = NumOps.Subtract(_maCoefficients[i], NumOps.Multiply(NumOps.FromDouble(_learningRate), gradMA[i]));
-            }
-
-            // Check for convergence
-            if (CheckConvergence(gradAR, gradMA, prevGradAR, prevGradMA))
-            {
-                break;
-            }
-
-            prevGradAR = gradAR;
-            prevGradMA = gradMA;
-        }
-    }
-
-    /// <summary>
     /// Calculates the residuals (prediction errors) for the current model.
     /// </summary>
     /// <param name="y">The time series values.</param>
@@ -503,5 +443,344 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         {
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the ARMA model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the ARMA model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new, uninitialized instance of the ARMA model with the same configuration options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model with the same settings.
+    /// 
+    /// Think of this like creating a new blank notebook with the same paper quality, size, and number of pages
+    /// as another notebook, but without copying any of the written content.
+    /// 
+    /// This is used internally by the framework to create new model instances when needed,
+    /// such as when cloning a model or creating ensemble models.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new ARMAModel<T>((ARMAOptions<T>)Options);
+    }
+
+    /// <summary>
+    /// Gets metadata about the trained model, including its type, coefficients, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides comprehensive information about the model, including its type, parameters, coefficients,
+    /// and serialized state. This metadata can be used for model inspection, selection, or persistence.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns a complete description of your trained model.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (ARMA in this case)
+    /// - The trained coefficients that determine predictions
+    /// - The configuration options you specified when creating the model
+    /// - A serialized version of the entire model that can be saved
+    /// 
+    /// This is useful for:
+    /// - Comparing different models to choose the best one
+    /// - Documenting what model was used for a particular analysis
+    /// - Saving model details for future reference
+    /// 
+    /// Think of it like creating a detailed ID card for your model that contains
+    /// all the important information about how it works and was configured.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var armaOptions = (ARMAOptions<T>)Options;
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.ARMAModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include the actual model state variables
+                { "ARCoefficients", _arCoefficients },
+                { "MACoefficients", _maCoefficients },
+            
+                // Include model configuration as well
+                { "AROrder", armaOptions.AROrder },
+                { "MAOrder", armaOptions.MAOrder },
+                { "LearningRate", armaOptions.LearningRate },
+                { "MaxIterations", armaOptions.MaxIterations },
+                { "Tolerance", armaOptions.Tolerance }
+            },
+            ModelData = this.Serialize()
+        };
+        return metadata;
+    }
+
+    /// <summary>
+    /// Predicts future values based on a history of time series data.
+    /// </summary>
+    /// <param name="history">The historical time series data.</param>
+    /// <param name="horizon">The number of future periods to predict.</param>
+    /// <returns>A vector of predicted values for future periods.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates forecasts for future time periods based on the trained model and historical data.
+    /// It uses a rolling prediction approach where each prediction becomes part of the history for subsequent predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method forecasts future values based on past data.
+    /// 
+    /// Given:
+    /// - A series of past observations (the "history")
+    /// - The number of future periods to predict (the "horizon")
+    /// 
+    /// This method:
+    /// 1. Uses the model to predict the next value after the history
+    /// 2. Adds that prediction to the extended history
+    /// 3. Uses the extended history to predict the next value
+    /// 4. Repeats until it has made predictions for the entire horizon
+    /// 
+    /// For example, if you have sales data for Jan-Jun and want to predict Jul-Sep (horizon=3),
+    /// this method will predict Jul, then use Jan-Jul to predict Aug, then use Jan-Aug to predict Sep.
+    /// 
+    /// This approach is common in time series forecasting as it allows each prediction to build on previous predictions.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Forecast(Vector<T> history, int horizon)
+    {
+        if (horizon <= 0)
+        {
+            throw new ArgumentException("Forecast horizon must be greater than zero.", nameof(horizon));
+        }
+
+        if (_arCoefficients.Length == 0 || _maCoefficients.Length == 0)
+        {
+            throw new InvalidOperationException("Model must be trained before making forecasts.");
+        }
+
+        // Create an extended history that will include predictions
+        Vector<T> extendedHistory = new Vector<T>(history.Length + horizon);
+        for (int i = 0; i < history.Length; i++)
+        {
+            extendedHistory[i] = history[i];
+        }
+
+        // Generate predictions one by one
+        for (int t = history.Length; t < extendedHistory.Length; t++)
+        {
+            extendedHistory[t] = Predict(extendedHistory, t);
+        }
+
+        // Extract just the forecasted values
+        Vector<T> forecast = new Vector<T>(horizon);
+        for (int i = 0; i < horizon; i++)
+        {
+            forecast[i] = extendedHistory[history.Length + i];
+        }
+
+        return forecast;
+    }
+
+    /// <summary>
+    /// Returns a string representation of the ARMA model.
+    /// </summary>
+    /// <returns>A string describing the model and its parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides a human-readable description of the ARMA model, including its orders and coefficients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method gives you a text description of your model.
+    /// 
+    /// The returned string includes:
+    /// - The type of model (ARMA)
+    /// - The AR and MA orders (how many past values and errors the model uses)
+    /// - The actual coefficient values (if the model has been trained)
+    /// 
+    /// This is useful for printing or logging model details, or for quickly seeing
+    /// the structure of the model without examining all its properties individually.
+    /// </para>
+    /// </remarks>
+    public override string ToString()
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.AppendLine($"ARMA({_arOrder},{_maOrder}) Model");
+    
+        if (_arCoefficients.Length > 0)
+        {
+            sb.AppendLine("AR Coefficients:");
+            for (int i = 0; i < _arOrder; i++)
+            {
+                sb.AppendLine($"  AR[{i+1}] = {Convert.ToDouble(_arCoefficients[i]):F4}");
+            }
+        }
+    
+        if (_maCoefficients.Length > 0)
+        {
+            sb.AppendLine("MA Coefficients:");
+            for (int i = 0; i < _maOrder; i++)
+            {
+                sb.AppendLine($"  MA[{i+1}] = {Convert.ToDouble(_maCoefficients[i]):F4}");
+            }
+        }
+    
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the current model.
+    /// </summary>
+    /// <returns>A new instance of the ARMA model with the same state and parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a complete copy of the model, including its configuration and trained coefficients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
+    /// 
+    /// Unlike CreateInstance(), which creates a blank model with the same settings,
+    /// Clone() creates a complete copy including:
+    /// - The model configuration (AR order, MA order, etc.)
+    /// - All trained coefficients and internal state
+    /// 
+    /// This is useful for:
+    /// - Creating a backup before experimenting with a model
+    /// - Using the same trained model in multiple scenarios
+    /// - Creating ensemble models that use variations of the same base model
+    /// 
+    /// Think of it like photocopying a completed notebook - you get all the written content
+    /// as well as the structure of the notebook itself.
+    /// </para>
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new ARMAModel<T>((ARMAOptions<T>)Options);
+    
+        // Copy trained coefficients
+        if (_arCoefficients.Length > 0)
+        {
+            clone._arCoefficients = new Vector<T>(_arCoefficients.Length);
+            for (int i = 0; i < _arCoefficients.Length; i++)
+            {
+                clone._arCoefficients[i] = _arCoefficients[i];
+            }
+        }
+    
+        if (_maCoefficients.Length > 0)
+        {
+            clone._maCoefficients = new Vector<T>(_maCoefficients.Length);
+            for (int i = 0; i < _maCoefficients.Length; i++)
+            {
+                clone._maCoefficients[i] = _maCoefficients[i];
+            }
+        }
+    
+        return clone;
+    }
+
+    /// <summary>
+    /// Implements the core training algorithm for the ARMA model.
+    /// </summary>
+    /// <param name="x">Feature matrix (typically just time indices for ARMA models).</param>
+    /// <param name="y">Target vector (the time series values to be modeled).</param>
+    /// <remarks>
+    /// <para>
+    /// This method contains the implementation details of the training process, handling coefficient
+    /// initialization, gradient calculation, and parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the engine room of the training process.
+    /// 
+    /// While the public Train method provides a high-level interface, this method does the actual work:
+    /// 1. Initializes both AR and MA coefficients for the model
+    /// 2. Calculates prediction errors with the current model
+    /// 3. Determines how to adjust both sets of coefficients to improve predictions
+    /// 4. Updates the coefficients accordingly
+    /// 5. Repeats until the improvements become very small
+    /// 
+    /// Think of it as the detailed step-by-step recipe that the chef follows when you order a meal.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Initialize coefficients
+        _arCoefficients = new Vector<T>(_arOrder);
+        _maCoefficients = new Vector<T>(_maOrder);
+
+        Vector<T> prevGradAR = new Vector<T>(_arOrder);
+        Vector<T> prevGradMA = new Vector<T>(_maOrder);
+
+        for (int iter = 0; iter < _maxIterations; iter++)
+        {
+            Vector<T> residuals = CalculateResiduals(y);
+            (Vector<T> gradAR, Vector<T> gradMA) = CalculateGradients(y, residuals);
+
+            // Update coefficients using gradient descent
+            for (int i = 0; i < _arOrder; i++)
+            {
+                _arCoefficients[i] = NumOps.Subtract(_arCoefficients[i], NumOps.Multiply(NumOps.FromDouble(_learningRate), gradAR[i]));
+            }
+            for (int i = 0; i < _maOrder; i++)
+            {
+                _maCoefficients[i] = NumOps.Subtract(_maCoefficients[i], NumOps.Multiply(NumOps.FromDouble(_learningRate), gradMA[i]));
+            }
+
+            // Check for convergence
+            if (CheckConvergence(gradAR, gradMA, prevGradAR, prevGradMA))
+            {
+                break;
+            }
+
+            prevGradAR = gradAR;
+            prevGradMA = gradMA;
+        }
+    }
+
+    /// <summary>
+    /// Predicts a single value based on a single input vector.
+    /// </summary>
+    /// <param name="input">The input vector for a single time point.</param>
+    /// <returns>The predicted value for that time point.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides a convenient way to get a prediction for a single time point without
+    /// having to create a matrix with a single row.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a shortcut for getting just one prediction.
+    /// 
+    /// Instead of providing a table of inputs for multiple time periods, you can provide
+    /// just one set of inputs and get back a single prediction.
+    /// 
+    /// For ARMA models, the input typically represents a sequence of past values. This method
+    /// looks at those past values and predicts what the next value will be, based on the
+    /// patterns the model learned during training.
+    /// 
+    /// Under the hood, it:
+    /// 1. Takes your single input vector
+    /// 2. Creates a small table with just one row
+    /// 3. Gets a prediction using the main prediction engine
+    /// 4. Returns that single prediction to you
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Validate input
+        int minLength = Math.Max(_arOrder, _maOrder);
+        if (input.Length < minLength)
+        {
+            throw new ArgumentException(
+                $"Input vector must contain at least {minLength} elements for an ARMA({_arOrder},{_maOrder}) model.", 
+                nameof(input));
+        }
+    
+        // Create a matrix with a single row
+        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            singleRowMatrix[0, i] = input[i];
+        }
+    
+        // Use the existing Predict method
+        Vector<T> predictions = Predict(singleRowMatrix);
+    
+        // Return the single prediction
+        return predictions[0];
     }
 }

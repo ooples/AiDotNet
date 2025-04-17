@@ -89,48 +89,4 @@ public class RadialBasisFunctionOptions : NonLinearRegressionOptions
     /// </para>
     /// </remarks>
     public int NumberOfCenters { get; set; } = 10;
-
-    /// <summary>
-    /// Gets or sets the random seed used for initializing centers and other stochastic processes.
-    /// </summary>
-    /// <value>The random seed, defaulting to null (which means a random seed will be used).</value>
-    /// <remarks>
-    /// <para>
-    /// This parameter controls the initialization of random processes within the RBF model, such as
-    /// the initial placement of centers if they are randomly selected. Setting a specific seed value
-    /// ensures reproducibility of results across multiple runs with the same data. When set to null
-    /// (the default), a random seed will be generated, leading to potentially different results each
-    /// time the model is trained. This can be useful for ensemble methods or when trying different
-    /// random initializations to find the best performing model. In production environments, setting
-    /// a fixed seed is often preferred for consistency and debugging purposes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting controls whether your model will make the same decisions each time you train it.
-    /// 
-    /// The default value of null means:
-    /// - The model will use a different random starting point each time you train it
-    /// - This is like shuffling cards before dealing - you'll get a different arrangement each time
-    /// - Running the exact same training multiple times might give slightly different results
-    /// 
-    /// Think of it like planting a garden:
-    /// - The Seed determines exactly where each plant starts growing
-    /// - Using the same Seed means planting everything in exactly the same spots each time
-    /// - Using null (random) means you'll get a somewhat different garden layout each time
-    /// - Both approaches can grow beautiful gardens, but they'll have different patterns
-    /// 
-    /// You might want to set a specific seed value (like 42):
-    /// - When you need exactly reproducible results
-    /// - When debugging or comparing different model configurations
-    /// - When you've found a particularly good random initialization that works well
-    /// - In production systems where consistency is important
-    /// 
-    /// You might want to keep it as null:
-    /// - When experimenting to find the best model
-    /// - When using ensemble methods that benefit from diversity
-    /// - When you want to test how robust your model is to different initializations
-    /// 
-    /// This parameter doesn't affect how well your model can perform - it just controls whether
-    /// it will make the exact same decisions each time it's trained.
-    /// </para>
-    /// </remarks>
-    public int? Seed { get; set; } = null;
 }

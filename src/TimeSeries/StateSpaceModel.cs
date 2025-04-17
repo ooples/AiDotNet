@@ -115,50 +115,6 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the state space model using the provided input data and target values.
-    /// </summary>
-    /// <param name="x">The input features matrix.</param>
-    /// <param name="y">The target values vector.</param>
-    /// <remarks>
-    /// <para>
-    /// The training process uses the Expectation-Maximization (EM) algorithm:
-    /// 1. E-step: Estimate the hidden states using the Kalman filter and smoother
-    /// 2. M-step: Update the model parameters based on the estimated states
-    /// 3. Repeat until convergence or maximum iterations reached
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Training this model is like learning to track an object by its shadow. The process involves:
-    /// 
-    /// 1. First, we make an initial guess about how the object moves and how its shadow appears
-    /// 2. Then we use the Kalman filter to estimate where the object was at each time point based on our current understanding
-    /// 3. Next, we use the Kalman smoother to refine these estimates by looking at all the data at once
-    /// 4. Finally, we update our understanding of how the object moves and creates shadows based on these estimates
-    /// 5. We repeat steps 2-4 until our understanding stops improving significantly
-    /// 
-    /// After training, the model will have learned the patterns in your data and can make predictions.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        // Combine x and y into a single matrix of observations
-        Matrix<T> observations = x.AddColumn(y);
-
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            var (filteredStates, predictedStates) = KalmanFilter(observations);
-            var (smoothedStates, smoothedCovariances) = KalmanSmoother(filteredStates, predictedStates);
-
-            UpdateParameters(observations, smoothedStates, smoothedCovariances);
-
-            if (CheckConvergence())
-            {
-                break;
-            }
-        }
-    }
-
-    /// <summary>
     /// Applies the Kalman filter to estimate the hidden states based on observations.
     /// </summary>
     /// <param name="observations">The matrix of observations.</param>
@@ -415,16 +371,16 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     {
         if (_previousTransitionMatrix == null || _previousObservationMatrix == null)
         {
-            _previousTransitionMatrix = _transitionMatrix.Copy();
-            _previousObservationMatrix = _observationMatrix.Copy();
+            _previousTransitionMatrix = _transitionMatrix.Clone();
+            _previousObservationMatrix = _observationMatrix.Clone();
             return false;
         }
 
         double transitionDiff = CalculateMatrixDifference(_transitionMatrix, _previousTransitionMatrix);
         double observationDiff = CalculateMatrixDifference(_observationMatrix, _previousObservationMatrix);
 
-        _previousTransitionMatrix = _transitionMatrix.Copy();
-        _previousObservationMatrix = _observationMatrix.Copy();
+        _previousTransitionMatrix = _transitionMatrix.Clone();
+        _previousObservationMatrix = _observationMatrix.Clone();
 
         return transitionDiff < _convergenceThreshold && observationDiff < _convergenceThreshold;
     }
@@ -536,5 +492,210 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         _maxIterations = reader.ReadInt32();
         _tolerance = reader.ReadDouble();
         _convergenceThreshold = reader.ReadDouble();
+    }
+
+    /// <summary>
+    /// Core implementation of the training logic for the State Space Model.
+    /// </summary>
+    /// <param name="x">The input features matrix.</param>
+    /// <param name="y">The target values vector.</param>
+    /// <remarks>
+    /// <para>
+    /// This method implements the core training logic for the State Space Model using the
+    /// Expectation-Maximization (EM) algorithm with Kalman filtering and smoothing.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This is the engine behind the training process. It follows these steps:
+    /// 
+    /// 1. First, it combines your input features and target values into a matrix of observations
+    /// 2. Then it runs the EM algorithm, which alternates between:
+    ///    - Estimating the hidden states using the Kalman filter and smoother (the E-step)
+    ///    - Updating the model parameters based on these estimated states (the M-step)
+    /// 3. It keeps refining its estimates until the parameters stop changing significantly
+    ///    or until it reaches the maximum number of iterations
+    /// 
+    /// This process allows the model to learn both how the hidden state evolves and how it
+    /// relates to the observations, which is essential for making accurate predictions.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Validate inputs
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException("Input matrix rows must match output vector length.");
+        }
+
+        // Combine x and y into a single matrix of observations
+        Matrix<T> observations = x.AddColumn(y);
+
+        // Initialize parameters if needed
+        _previousTransitionMatrix = _transitionMatrix.Clone();
+        _previousObservationMatrix = _observationMatrix.Clone();
+
+        // Run the EM algorithm
+        for (int iter = 0; iter < _maxIterations; iter++)
+        {
+            // E-step: Estimate hidden states
+            var (filteredStates, predictedStates) = KalmanFilter(observations);
+            var (smoothedStates, smoothedCovariances) = KalmanSmoother(filteredStates, predictedStates);
+
+            // M-step: Update parameters
+            UpdateParameters(observations, smoothedStates, smoothedCovariances);
+
+            // Check convergence
+            if (CheckConvergence())
+            {
+                break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Predicts a single value based on the input vector.
+    /// </summary>
+    /// <param name="input">The input vector containing features for prediction.</param>
+    /// <returns>The predicted value for the given input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been properly initialized.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method generates a prediction for a single input vector by propagating the state
+    /// and transforming it to the observation space.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method generates a single prediction from your input features. It works by:
+    /// 
+    /// 1. Checking that the model is properly initialized and ready to make predictions
+    /// 2. Creating a matrix from your input vector (since the internal methods expect matrices)
+    /// 3. Using the model's understanding of how the hidden state evolves to make a prediction
+    /// 4. Transforming this predicted state into an observable prediction
+    /// 
+    /// The result is a value that represents the model's best guess for the target variable
+    /// given the input features, based on the patterns it learned during training.
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Verify that the model has been initialized properly
+        if (_transitionMatrix == null || _observationMatrix == null || _initialState == null)
+        {
+            throw new InvalidOperationException("Model has not been properly initialized. Please train the model before prediction.");
+        }
+
+        // Create a single-row matrix from the input vector
+        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            inputMatrix[0, i] = input[i];
+        }
+
+        // Use the current state to make a prediction
+        Vector<T> currentState = _initialState;
+        currentState = _transitionMatrix.Multiply(currentState);
+    
+        // Transform the state to the observation space
+        Vector<T> observation = _observationMatrix.Multiply(currentState);
+    
+        // Return the first element of the observation vector
+        // (assuming the target variable is the first or only element)
+        return observation[0];
+    }
+
+    /// <summary>
+    /// Gets metadata about the model, including its type, parameters, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed metadata about the State Space Model, including its type,
+    /// configuration, and trained parameters. This metadata can be used for model selection,
+    /// comparison, documentation, and serialization purposes.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method provides a summary of your model's settings and what it has learned.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (State Space Model)
+    /// - Information about the dimensions of the state and observation spaces
+    /// - Details about the key matrices that define the model's behavior
+    /// - Configuration settings like learning rate and convergence criteria
+    /// - A serialized version of the entire model
+    /// 
+    /// This information is useful for:
+    /// - Keeping track of different models you've created
+    /// - Comparing model configurations
+    /// - Documenting which settings worked best
+    /// - Sharing model information with others
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.StateSpaceModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Model dimensions
+                { "StateSize", _stateSize },
+                { "ObservationSize", _observationSize },
+            
+                // Training parameters
+                { "LearningRate", _learningRate },
+                { "MaxIterations", _maxIterations },
+                { "Tolerance", _tolerance },
+                { "ConvergenceThreshold", _convergenceThreshold },
+            
+                // Matrix properties
+                { "TransitionMatrixDimensions", $"{_transitionMatrix.Rows}x{_transitionMatrix.Columns}" },
+                { "ObservationMatrixDimensions", $"{_observationMatrix.Rows}x{_observationMatrix.Columns}" },
+                { "ProcessNoiseDimensions", $"{_processNoise.Rows}x{_processNoise.Columns}" },
+                { "ObservationNoiseDimensions", $"{_observationNoise.Rows}x{_observationNoise.Columns}" }
+            },
+            ModelData = this.Serialize()
+        };
+    
+        return metadata;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the State Space Model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the State Space Model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the State Space Model with the same configuration options
+    /// as the current instance. This new instance is not trained and will need to be trained on data.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates a fresh copy of the model with the same settings but no training.
+    /// 
+    /// It's useful when you want to:
+    /// - Create multiple versions of the same model
+    /// - Train models on different data sets
+    /// - Experiment with ensemble models (combining multiple models)
+    /// - Compare different training approaches with the same model structure
+    /// 
+    /// The new model copy will have identical configuration options but will need to be
+    /// trained from scratch on your data.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create options based on the current model's configuration
+        var options = new StateSpaceModelOptions<T>
+        {
+            StateSize = _stateSize,
+            ObservationSize = _observationSize,
+            LearningRate = _learningRate,
+            MaxIterations = _maxIterations,
+            Tolerance = _tolerance
+        };
+    
+        // Create and return a new instance with the same options
+        return new StateSpaceModel<T>(options);
     }
 }

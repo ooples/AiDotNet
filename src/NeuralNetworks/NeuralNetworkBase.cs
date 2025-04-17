@@ -30,7 +30,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <b>For Beginners:</b> The architecture defines the structure of your neural network - how many layers it has,
     /// how many neurons are in each layer, and how they're connected. Think of it as the blueprint for your network.
     /// </remarks>
-    protected readonly NeuralNetworkArchitecture<T> Architecture;
+    public readonly NeuralNetworkArchitecture<T> Architecture;
     
     /// <summary>
     /// Mathematical operations for the numeric type T.
@@ -79,15 +79,156 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     public virtual bool SupportsTraining => false;
 
     /// <summary>
+    /// The maximum allowed norm for gradients during training.
+    /// </summary>
+    protected T MaxGradNorm;
+
+    /// <summary>
     /// Creates a new neural network with the specified architecture.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the network.</param>
-    protected NeuralNetworkBase(NeuralNetworkArchitecture<T> architecture)
+    protected NeuralNetworkBase(NeuralNetworkArchitecture<T> architecture, double maxGradNorm = 1.0)
     {
         Architecture = architecture;
         Layers = [];
-        InitializeLayers();
         NumOps = MathHelper.GetNumericOperations<T>();
+        MaxGradNorm = NumOps.FromDouble(maxGradNorm);
+    }
+
+    /// <summary>
+    /// Applies gradient clipping to prevent exploding gradients.
+    /// </summary>
+    /// <param name="gradients">A list of tensors containing the gradients to be clipped.</param>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the total norm of all gradients and scales them down if the norm exceeds
+    /// the maximum allowed gradient norm (_maxGradNorm).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Think of this as a safety mechanism. Sometimes, the network might try to
+    /// make very large adjustments, which can make learning unstable. This method checks if the
+    /// adjustments are too big, and if they are, it scales them down to a safe level. It's like
+    /// having a speed limiter on a car to prevent it from going too fast and losing control.
+    /// </para>
+    /// </remarks>
+    protected void ClipGradients(List<Tensor<T>> gradients)
+    {
+        T totalNorm = NumOps.Zero;
+
+        // Calculate total norm
+        foreach (var gradient in gradients)
+        {
+            for (int i = 0; i < gradient.Length; i++)
+            {
+                totalNorm = NumOps.Add(totalNorm, NumOps.Multiply(gradient[i], gradient[i]));
+            }
+        }
+
+        totalNorm = NumOps.Sqrt(totalNorm);
+
+        // If total norm exceeds MaxGradNorm, clip each gradient tensor
+        if (NumOps.GreaterThan(totalNorm, MaxGradNorm))
+        {
+            T scalingFactor = NumOps.Divide(MaxGradNorm, totalNorm);
+            for (int i = 0; i < gradients.Count; i++)
+            {
+                gradients[i] = ClipGradient(gradients[i], scalingFactor);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Clips the gradient tensor by scaling it with a given factor.
+    /// </summary>
+    /// <param name="gradient">The gradient tensor to be clipped.</param>
+    /// <param name="scalingFactor">The factor by which to scale the gradient.</param>
+    /// <returns>The clipped gradient tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method adjusts the gradient by multiplying each of its values by a scaling factor.
+    /// It's used as part of the gradient clipping process to prevent the gradients from becoming too large,
+    /// which can cause instability in training.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ClipGradient(Tensor<T> gradient, T scalingFactor)
+    {
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            gradient[i] = NumOps.Multiply(gradient[i], scalingFactor);
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Clips the gradient tensor if its norm exceeds the maximum allowed gradient norm.
+    /// </summary>
+    /// <param name="gradient">The gradient tensor to be clipped.</param>
+    /// <returns>The clipped gradient tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the total norm of the gradient and scales it down if it exceeds
+    /// the maximum allowed gradient norm (MaxGradNorm).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is a safety mechanism to prevent the "exploding gradient" problem.
+    /// If the gradient (which represents how much to change the network's parameters) becomes too large,
+    /// it can cause the training to become unstable. This method checks if the gradient is too big,
+    /// and if so, it scales it down to a safe level.
+    /// </para>
+    /// <para>
+    /// Think of it like having a speed limiter on a car. If the car (gradient) tries to go too fast,
+    /// this method slows it down to a safe speed to prevent losing control during training.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> ClipGradient(Tensor<T> gradient)
+    {
+        T totalNorm = NumOps.Zero;
+
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            totalNorm = NumOps.Add(totalNorm, NumOps.Multiply(gradient[i], gradient[i]));
+        }
+
+        totalNorm = NumOps.Sqrt(totalNorm);
+
+        if (NumOps.GreaterThan(totalNorm, MaxGradNorm))
+        {
+            T scalingFactor = NumOps.Divide(MaxGradNorm, totalNorm);
+            for (int i = 0; i < gradient.Length; i++)
+            {
+                gradient[i] = NumOps.Multiply(gradient[i], scalingFactor);
+            }
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Clips the gradient vector if its norm exceeds the maximum allowed gradient norm.
+    /// </summary>
+    /// <param name="gradient">The gradient vector to be clipped.</param>
+    /// <returns>The clipped gradient vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the total norm of the gradient vector and scales it down if it exceeds
+    /// the maximum allowed gradient norm (MaxGradNorm). It uses the tensor-based ClipGradient method
+    /// internally, converting the vector to a tensor and back.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is another safety mechanism to prevent the "exploding gradient" problem,
+    /// but specifically for vector inputs. If the gradient (which represents how much to change the 
+    /// network's parameters) becomes too large, it can cause the training to become unstable. 
+    /// This method checks if the gradient is too big, and if so, it scales it down to a safe level.
+    /// </para>
+    /// <para>
+    /// Think of it like having a volume control on a speaker. If the sound (gradient) gets too loud,
+    /// this method turns it down to a comfortable level to prevent distortion (instability in training).
+    /// </para>
+    /// </remarks>
+    protected Vector<T> ClipGradient(Vector<T> gradient)
+    {
+        return ClipGradient(Tensor<T>.FromVector(gradient)).ToVector();
     }
 
     /// <summary>
@@ -163,6 +304,44 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
         
         // Convert input gradients back to vector format
         return gradientTensor.ToVector();
+    }
+
+    /// <summary>
+    /// Performs backpropagation to compute gradients for network parameters.
+    /// </summary>
+    /// <param name="outputGradients">The gradients of the loss with respect to the network outputs.</param>
+    /// <returns>The gradients of the loss with respect to the network inputs.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. After making a prediction, the network
+    /// calculates how wrong it was (the error). Then it works backward through the layers to figure out
+    /// how each parameter contributed to that error. This method handles that backward flow of information.
+    /// </para>
+    /// <para>
+    /// The "gradients" are numbers that tell us how to adjust each parameter to reduce the error.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the network is not in training mode or doesn't support training.</exception>
+    public virtual Tensor<T> Backpropagate(Tensor<T> outputGradients)
+    {
+        if (!IsTrainingMode)
+        {
+            throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
+        }
+        
+        if (!SupportsTraining)
+        {
+            throw new InvalidOperationException("This network does not support backpropagation");
+        }
+        
+        // Backpropagate through layers in reverse order
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            outputGradients = Layers[i].Backward(outputGradients);
+        }
+        
+        // Convert input gradients back to vector format
+        return outputGradients;
     }
 
     /// <summary>
@@ -410,7 +589,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// all the intermediate values in the network.
     /// </para>
     /// </remarks>
-    public virtual Vector<T> Backpropagate(Vector<T> outputGradients, Vector<T> inputs)
+    protected virtual Vector<T> Backpropagate(Vector<T> outputGradients, Vector<T> inputs)
     {
         // Store the original input for later use
         var originalInput = inputs;
@@ -493,7 +672,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// You provide some input data (like an image or text), and the network processes it through all its 
     /// layers to produce an output (like a classification or prediction).
     /// </remarks>
-    public abstract Vector<T> Predict(Vector<T> input);
+    public abstract Tensor<T> Predict(Tensor<T> input);
 
     /// <summary>
     /// Updates the network's parameters with new values.
@@ -511,26 +690,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </para>
     /// </remarks>
     public abstract void UpdateParameters(Vector<T> parameters);
-
-    /// <summary>
-    /// Saves the neural network's state to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to save to.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method saves your trained neural network to a file so you can use it later 
-    /// without having to train it again. It's like saving your progress in a video game.
-    /// </remarks>
-    public abstract void Serialize(BinaryWriter writer);
-
-    /// <summary>
-    /// Loads the neural network's state from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to load from.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method loads a previously saved neural network from a file. It's like loading 
-    /// a saved game so you can continue where you left off, without having to start over.
-    /// </remarks>
-    public abstract void Deserialize(BinaryReader reader);
 
     /// <summary>
     /// Sets the neural network to either training or inference mode.
@@ -565,4 +724,439 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
             IsTrainingMode = isTraining;
         }
     }
+
+    /// <summary>
+    /// Trains the neural network on a single input-output pair.
+    /// </summary>
+    /// <param name="input">The input data.</param>
+    /// <param name="expectedOutput">The expected output for the given input.</param>
+    /// <returns>The loss value after training on this example.</returns>
+    public abstract void Train(Tensor<T> input, Tensor<T> expectedOutput);
+
+    /// <summary>
+    /// Gets the metadata for this neural network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    public abstract ModelMetaData<T> GetModelMetaData();
+
+    /// <summary>
+    /// Resets the internal state of the different layers, clearing any remembered information.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state (hidden state and cell state) of all layers in the network.
+    /// This is useful when starting to process a new, unrelated sequence or when the network's memory
+    /// should be cleared before making new predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This clears the neural network's memory to start fresh.
+    /// 
+    /// Think of this like:
+    /// - Wiping the slate clean before starting a new task
+    /// - Erasing the neural network's "memory" so past inputs don't influence new predictions
+    /// - Starting fresh when processing a completely new sequence
+    /// 
+    /// For example, if you've been using an neural network to analyze one document and now want to
+    /// analyze a completely different document, you would reset the state first to avoid
+    /// having the first document influence the analysis of the second one.
+    /// </para>
+    /// </remarks>
+    public virtual void ResetState()
+    {
+        foreach (var layer in Layers)
+        {
+            layer.ResetState();
+        }
+    }
+
+    /// <summary>
+    /// Serializes the neural network to a byte array.
+    /// </summary>
+    /// <returns>A byte array representing the serialized neural network.</returns>
+    public virtual byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        
+        // Write the number of layers
+        writer.Write(Layers.Count);
+        
+        // Write each layer's type and shape
+        foreach (var layer in Layers)
+        {
+            // Write layer type
+            writer.Write(layer.GetType().Name);
+            
+            // Write input shape
+            var inputShape = layer.GetInputShape();
+            writer.Write(inputShape.Length);
+            foreach (var dim in inputShape)
+            {
+                writer.Write(dim);
+            }
+            
+            // Write output shape
+            var outputShape = layer.GetOutputShape();
+            writer.Write(outputShape.Length);
+            foreach (var dim in outputShape)
+            {
+                writer.Write(dim);
+            }
+            
+            // Write parameter count
+            writer.Write(layer.ParameterCount);
+            
+            // Write parameters if any
+            if (layer.ParameterCount > 0)
+            {
+                var parameters = layer.GetParameters();
+                foreach (var param in parameters)
+                {
+                    writer.Write(Convert.ToDouble(param));
+                }
+            }
+        }
+        
+        // Write network-specific data
+        SerializeNetworkSpecificData(writer);
+        
+        return ms.ToArray();
+    }
+
+    /// <summary>
+    /// Deserializes the neural network from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized neural network data.</param>
+    public virtual void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+        
+        // Clear existing layers
+        Layers.Clear();
+        
+        // Read the number of layers
+        int layerCount = reader.ReadInt32();
+        
+        // Read and recreate each layer
+        for (int i = 0; i < layerCount; i++)
+        {
+            // Read layer type
+            string layerType = reader.ReadString();
+
+            // Read input shape
+            int inputShapeLength = reader.ReadInt32();
+            int[] inputShape = new int[inputShapeLength];
+            for (int j = 0; j < inputShapeLength; j++)
+            {
+                inputShape[j] = reader.ReadInt32();
+            }
+
+            // Read output shape
+            int outputShapeLength = reader.ReadInt32();
+            int[] outputShape = new int[outputShapeLength];
+            for (int j = 0; j < outputShapeLength; j++)
+            {
+                outputShape[j] = reader.ReadInt32();
+            }
+
+            // Read parameter count
+            int paramCount = reader.ReadInt32();
+
+            // Read additional parameters if any
+            Dictionary<string, object>? additionalParams = null;
+            if (reader.ReadBoolean()) // Indicates presence of additional params
+            {
+                additionalParams = [];
+                int additionalParamCount = reader.ReadInt32();
+                for (int j = 0; j < additionalParamCount; j++)
+                {
+                    string key = reader.ReadString();
+                    string valueType = reader.ReadString();
+                    additionalParams[key] = Convert.ToDouble(valueType);
+                }
+            }
+
+            var layer = DeserializationHelper.CreateLayerFromType<T>(layerType, inputShape, outputShape, additionalParams);
+
+            // Read and set parameters if any
+            if (paramCount > 0)
+            {
+                var parameters = new Vector<T>(paramCount);
+                for (int j = 0; j < paramCount; j++)
+                {
+                    parameters[j] = NumOps.FromDouble(reader.ReadDouble());
+                }
+
+                // Update layer parameters
+                layer.UpdateParameters(parameters);
+            }
+
+            // Add the layer to the network
+            Layers.Add(layer);
+        }
+        
+        // Read network-specific data
+        DeserializeNetworkSpecificData(reader);
+    }
+
+    /// <summary>
+    /// Serializes network-specific data that is not covered by the general serialization process.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method is called at the end of the general serialization process to allow derived classes
+    /// to write any additional data specific to their implementation.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Think of this as packing a special compartment in your suitcase. 
+    /// While the main serialization method packs the common items (layers, parameters), 
+    /// this method allows each specific type of neural network to pack its own unique items 
+    /// that other networks might not have.
+    /// </para>
+    /// </remarks>
+    protected abstract void SerializeNetworkSpecificData(BinaryWriter writer);
+
+    /// <summary>
+    /// Deserializes network-specific data that was not covered by the general deserialization process.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method is called at the end of the general deserialization process to allow derived classes
+    /// to read any additional data specific to their implementation.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Continuing the suitcase analogy, this is like unpacking that special 
+    /// compartment. After the main deserialization method has unpacked the common items (layers, parameters), 
+    /// this method allows each specific type of neural network to unpack its own unique items 
+    /// that were stored during serialization.
+    /// </para>
+    /// </remarks>
+    protected abstract void DeserializeNetworkSpecificData(BinaryReader reader);
+
+    /// <summary>
+    /// Creates a new neural network with the specified parameters.
+    /// </summary>
+    /// <param name="parameters">The parameters to use for the new network.</param>
+    /// <returns>A new neural network with the specified parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new neural network that is a copy of this one, but with different parameter values.
+    /// It's useful for creating variations of a model without retraining or for ensemble methods.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Think of this as creating a copy of your neural network but with different
+    /// internal settings. It's like having the same blueprint for a house but using different materials.
+    /// 
+    /// This is useful when you want to:
+    /// - Try different variations of a trained model
+    /// - Create an ensemble of similar models with different parameters
+    /// - Manually adjust model parameters without retraining
+    /// 
+    /// The new model will have the same structure but different parameter values.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        // Create a deep copy of the current network
+        var newNetwork = (NeuralNetworkBase<T>)DeepCopy();
+    
+        // Update the parameters of the new network
+        newNetwork.UpdateParameters(parameters);
+    
+        return newNetwork;
+    }
+
+    /// <summary>
+    /// Gets the indices of input features that are actively used by the network.
+    /// </summary>
+    /// <returns>A collection of indices representing the active features.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method determines which input features have the most influence on the network's output
+    /// by analyzing the weights of the first layer. Features with larger absolute weights are
+    /// considered more active or important.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This helps you understand which parts of your input data the network
+    /// considers most important for making predictions.
+    /// 
+    /// For example, if your inputs are:
+    /// - Age (index 0)
+    /// - Income (index 1)
+    /// - Education level (index 2)
+    /// 
+    /// And this method returns [0, 2], it means the network relies heavily on age and education level,
+    /// but not so much on income when making its predictions.
+    /// 
+    /// This can help you:
+    /// - Understand what your model is paying attention to
+    /// - Potentially simplify your model by removing unused features
+    /// - Gain insights about the problem you're solving
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<int> GetActiveFeatureIndices()
+    {
+        // If the network has no layers, return an empty list
+        if (Layers.Count == 0)
+            return Array.Empty<int>();
+    
+        // Get the first layer for analysis
+        var firstLayer = Layers[0];
+    
+        // If the first layer is not a dense or convolutional layer, we can't easily determine active features
+        if (!(firstLayer is DenseLayer<T> || firstLayer is ConvolutionalLayer<T>))
+        {
+            // Return all indices as potentially active (conservative approach)
+            return Enumerable.Range(0, firstLayer.GetInputShape()[0]);
+        }
+    
+        // Get the weights from the first layer
+        Vector<T> weights = firstLayer.GetParameters();
+        int inputSize = firstLayer.GetInputShape()[0];
+        int outputSize = firstLayer.GetOutputShape()[0];
+    
+        // Calculate feature importance by summing absolute weights per input feature
+        var featureImportance = new Dictionary<int, T>();
+    
+        for (int i = 0; i < inputSize; i++)
+        {
+            T importance = NumOps.Zero;
+        
+            // For each neuron in the first layer, add the absolute weight for this feature
+            for (int j = 0; j < outputSize; j++)
+            {
+                // In most layers, weights are organized as [input1-neuron1, input2-neuron1, ..., input1-neuron2, ...]
+                int weightIndex = j * inputSize + i;
+            
+                if (weightIndex < weights.Length)
+                {
+                    importance = NumOps.Add(importance, NumOps.Abs(weights[weightIndex]));
+                }
+            }
+        
+            featureImportance[i] = importance;
+        }
+    
+        // Sort features by importance and get the top 50% (or at least 1)
+        int featuresCount = Math.Max(1, inputSize / 2);
+    
+        return featureImportance
+            .OrderByDescending(pair => Convert.ToDouble(pair.Value))
+            .Take(featuresCount)
+            .Select(pair => pair.Key);
+    }
+
+    /// <summary>
+    /// Determines if a specific input feature is actively used by the network.
+    /// </summary>
+    /// <param name="featureIndex">The index of the feature to check.</param>
+    /// <returns>True if the feature is actively used; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method checks if a specific input feature has a significant influence on the network's
+    /// output based on the weights in the first layer. A feature is considered used if its
+    /// associated weights have non-negligible magnitudes.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you whether a specific piece of your input data matters
+    /// to the neural network's decisions.
+    /// 
+    /// For example, if your inputs include age, income, and education level, this method can
+    /// tell you whether the network is actually using age (or any other specific feature) when
+    /// making predictions.
+    /// 
+    /// This is useful for:
+    /// - Understanding what information your model uses
+    /// - Simplifying your inputs by removing unused features
+    /// - Debugging models that ignore features you think should be important
+    /// </para>
+    /// </remarks>
+    public virtual bool IsFeatureUsed(int featureIndex)
+    {
+        // If feature index is out of range, it's not used
+        if (Layers.Count == 0 || featureIndex < 0 || featureIndex >= Layers[0].GetInputShape()[0])
+            return false;
+    
+        // Get active feature indices
+        var activeIndices = GetActiveFeatureIndices().ToList();
+    
+        // Check if the specified index is in the active indices
+        return activeIndices.Contains(featureIndex);
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the neural network.
+    /// </summary>
+    /// <returns>A new instance that is a deep copy of this neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a complete independent copy of the network, including all layers
+    /// and their parameters. It uses serialization and deserialization to ensure a true deep copy.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This creates a completely independent duplicate of your neural network.
+    /// 
+    /// Think of it like creating an exact clone of your network where:
+    /// - The copy has the same structure (layers, connections)
+    /// - The copy has the same learned parameters (weights, biases)
+    /// - Changes to one network don't affect the other
+    /// 
+    /// This is useful when you want to:
+    /// - Experiment with modifications without risking your original network
+    /// - Create multiple variations of a model
+    /// - Save a snapshot of your model at a particular point in training
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        // The most reliable way to create a deep copy is through serialization/deserialization
+        byte[] serialized = Serialize();
+    
+        // Create a new instance of the same type as this network
+        var copy = CreateNewInstance();
+    
+        // Load the serialized data into the new instance
+        copy.Deserialize(serialized);
+    
+        return copy;
+    }
+
+    /// <summary>
+    /// Creates a clone of the neural network.
+    /// </summary>
+    /// <returns>A new instance that is a clone of this neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// For most neural networks, Clone and DeepCopy perform the same function - creating a complete
+    /// independent copy of the network. Some specialized networks might implement this differently.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This creates an identical copy of your neural network.
+    /// 
+    /// In most cases, this works the same as DeepCopy and creates a completely independent
+    /// duplicate of your network. The duplicate will have the same structure and the same
+    /// learned parameters, but changes to one won't affect the other.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> Clone()
+    {
+        // By default, Clone behaves the same as DeepCopy
+        return DeepCopy();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the same type as this neural network.
+    /// </summary>
+    /// <returns>A new instance of the same neural network type.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This creates a blank version of the same type of neural network.
+    /// 
+    /// It's used internally by methods like DeepCopy and Clone to create the right type of
+    /// network before copying the data into it.
+    /// </para>
+    /// </remarks>
+    protected abstract IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance();
 }

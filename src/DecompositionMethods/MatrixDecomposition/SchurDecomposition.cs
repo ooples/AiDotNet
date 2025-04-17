@@ -88,7 +88,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
         int n = matrix.Rows;
         Matrix<T> H = MatrixHelper<T>.ReduceToHessenbergFormat(matrix);
         Matrix<T> U = Matrix<T>.CreateIdentity(n);
-        Matrix<T> S = H.Copy();
+        Matrix<T> S = H.Clone();
 
         const int maxIterations = 100;
         T tolerance = _numOps.FromDouble(1e-10);

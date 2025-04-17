@@ -130,39 +130,6 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the ARIMAX model on the provided data.
-    /// </summary>
-    /// <param name="x">Matrix of exogenous variables (external factors that may influence the time series).</param>
-    /// <param name="y">Vector of time series values to be modeled and predicted.</param>
-    /// <remarks>
-    /// For Beginners:
-    /// This method "teaches" the ARIMAX model using your historical data. The training process:
-    /// 1. Differences the data (if needed) to remove trends and make it easier to analyze
-    /// 2. Fits the ARIMAX model by:
-    ///    - Estimating how external factors influence the time series
-    ///    - Estimating how past values influence future values (AR coefficients)
-    ///    - Estimating how past prediction errors influence future values (MA coefficients)
-    ///    - Calculating a baseline value (intercept)
-    /// 3. Updates and finalizes the model parameters
-    /// 
-    /// After training, the model can be used to make predictions.
-    /// 
-    /// Unlike ARIMA, ARIMAX requires the x parameter to contain the external factors
-    /// that might influence your time series.
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        // Step 1: Perform differencing if necessary
-        Vector<T> diffY = DifferenceTimeSeries(y, _arimaxOptions.DifferenceOrder);
-
-        // Step 2: Fit ARIMAX model
-        FitARIMAXModel(x, diffY);
-
-        // Step 3: Update model parameters
-        UpdateModelParameters();
-    }
-
-    /// <summary>
     /// Makes predictions using the trained ARIMAX model.
     /// </summary>
     /// <param name="xNew">Matrix of exogenous variables for the periods to be predicted.</param>
@@ -586,5 +553,447 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
 
         string optionsJson = reader.ReadString();
         _arimaxOptions = JsonConvert.DeserializeObject<ARIMAXModelOptions<T>>(optionsJson) ?? new();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the ARIMAX model.
+    /// </summary>
+    /// <returns>A new ARIMAX model with the same options as this one.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method creates a blank copy of this ARIMAX model.
+    /// It's used internally by methods like DeepCopy and Clone to create a new model
+    /// with the same configuration but without copying the trained parameters.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        var arimaxOptions = (ARIMAXModelOptions<T>)Options;
+        // Create a clone of the options
+        var optionsClone = new ARIMAXModelOptions<T>
+        {
+            AROrder = arimaxOptions.AROrder,
+            MAOrder = arimaxOptions.MAOrder,
+            DifferenceOrder = arimaxOptions.DifferenceOrder,
+            ExogenousVariables = arimaxOptions.ExogenousVariables,
+            DecompositionType = arimaxOptions.DecompositionType,
+            // Copy base options
+            LagOrder = Options.LagOrder,
+            IncludeTrend = Options.IncludeTrend,
+            SeasonalPeriod = Options.SeasonalPeriod,
+            AutocorrelationCorrection = Options.AutocorrelationCorrection,
+            ModelType = Options.ModelType
+        };
+        
+        return new ARIMAXModel<T>(optionsClone);
+    }
+
+    /// <summary>
+    /// Applies the provided parameters to the model.
+    /// </summary>
+    /// <param name="parameters">The vector of parameters to apply.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method updates all the numerical values that determine
+    /// how the model behaves. It's like replacing all the settings that control how
+    /// the model makes predictions.
+    /// </para>
+    /// </remarks>
+    protected override void ApplyParameters(Vector<T> parameters)
+    {
+        int index = 0;
+        
+        // Get the number of base parameters (if any)
+        int baseParamCount = 0;
+        base.ApplyParameters(parameters);
+        
+        // Skip base parameters
+        index += baseParamCount;
+        
+        // Extract the intercept
+        _intercept = parameters[index++];
+        
+        // Extract the AR coefficients
+        for (int i = 0; i < _arCoefficients.Length; i++)
+        {
+            _arCoefficients[i] = parameters[index++];
+        }
+        
+        // Extract the MA coefficients
+        for (int i = 0; i < _maCoefficients.Length; i++)
+        {
+            _maCoefficients[i] = parameters[index++];
+        }
+        
+        // Extract the exogenous coefficients
+        for (int i = 0; i < _exogenousCoefficients.Length; i++)
+        {
+            _exogenousCoefficients[i] = parameters[index++];
+        }
+    }
+
+    /// <summary>
+    /// Gets metadata about the ARIMAX model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method provides important information about the ARIMAX model
+    /// that can help you understand its characteristics and behavior.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (ARIMAX)
+    /// - The actual coefficients and parameters the model has learned
+    /// - State information needed for predictions
+    /// 
+    /// This complete picture of the model is useful for analysis, debugging, and potentially
+    /// transferring the model's knowledge to other systems.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var arimaxOptions = (ARIMAXModelOptions<T>)Options;
+    
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.ARIMAXModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include the actual model state variables
+                { "ARCoefficients", _arCoefficients },
+                { "MACoefficients", _maCoefficients },
+                { "ExogenousCoefficients", _exogenousCoefficients },
+                { "Differenced", _differenced },
+                { "Intercept", Convert.ToDouble(_intercept) },
+            
+                // Include model configuration as well
+                { "AROrder", arimaxOptions.AROrder },
+                { "MAOrder", arimaxOptions.MAOrder },
+                { "DifferenceOrder", arimaxOptions.DifferenceOrder },
+                { "ExogenousVariables", arimaxOptions.ExogenousVariables },
+                { "DecompositionType", arimaxOptions.DecompositionType }
+            },
+            ModelData = this.Serialize()
+        };
+    
+        return metadata;
+    }
+
+    /// <summary>
+    /// Gets the indices of exogenous features actively used by the model.
+    /// </summary>
+    /// <returns>A collection of indices representing the active features.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method tells you which external factors have the strongest
+    /// influence on the model's predictions.
+    /// </para>
+    /// </remarks>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        // Select features with coefficients significantly different from zero
+        List<int> activeIndices = new List<int>();
+        
+        // Define a threshold for "active" features
+        T threshold = NumOps.FromDouble(0.01);
+        
+        // Check exogenous coefficients
+        for (int i = 0; i < _exogenousCoefficients.Length; i++)
+        {
+            if (NumOps.GreaterThan(NumOps.Abs(_exogenousCoefficients[i]), threshold))
+            {
+                activeIndices.Add(i);
+            }
+        }
+        
+        return activeIndices;
+    }
+
+    /// <summary>
+    /// Determines if a specific exogenous feature is actively used by the model.
+    /// </summary>
+    /// <param name="featureIndex">The index of the feature to check.</param>
+    /// <returns>True if the feature is actively used; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method tells you whether a specific external factor
+    /// has a meaningful influence on the model's predictions.
+    /// </para>
+    /// </remarks>
+    public override bool IsFeatureUsed(int featureIndex)
+    {
+        // Check if the feature index is valid
+        if (featureIndex < 0 || featureIndex >= _exogenousCoefficients.Length)
+        {
+            return false;
+        }
+        
+        // Define a threshold for "active" features
+        T threshold = NumOps.FromDouble(0.01);
+        
+        // Check if the coefficient's absolute value exceeds the threshold
+        return NumOps.GreaterThan(NumOps.Abs(_exogenousCoefficients[featureIndex]), threshold);
+    }
+
+    /// <summary>
+    /// Makes predictions using the trained ARIMAX model with tensor input.
+    /// </summary>
+    /// <param name="input">Tensor containing exogenous variables for the periods to be predicted.</param>
+    /// <returns>A tensor of predicted values.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This overload allows the model to work with tensor data formats.
+    /// It converts the tensor to a matrix and then uses the standard prediction method.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> Predict(Tensor<T> input)
+    {
+        // Convert tensor to matrix
+        if (input.Rank != 2)
+        {
+            throw new ArgumentException("Input tensor must be 2-dimensional (equivalent to a matrix)");
+        }
+        
+        var matrix = new Matrix<T>(input.Shape[0], input.Shape[1]);
+        for (int i = 0; i < input.Shape[0]; i++)
+        {
+            for (int j = 0; j < input.Shape[1]; j++)
+            {
+                matrix[i, j] = input[i, j];
+            }
+        }
+        
+        // Use the matrix-based predict method
+        var predictions = Predict(matrix);
+        
+        // Convert predictions to tensor
+        var resultTensor = Tensor<T>.FromVector(predictions);
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            resultTensor[i] = predictions[i];
+        }
+        
+        return resultTensor;
+    }
+
+    /// <summary>
+    /// Trains the ARIMAX model with tensor input data.
+    /// </summary>
+    /// <param name="input">Tensor containing exogenous variables.</param>
+    /// <param name="expectedOutput">Tensor containing time series values to model.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method allows the model to be trained with tensor data formats.
+    /// It converts the tensors to matrix and vector formats and then uses the standard training method.
+    /// </para>
+    /// </remarks>
+    public void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Convert input tensor to matrix
+        if (input.Rank != 2)
+        {
+            throw new ArgumentException("Input tensor must be 2-dimensional (equivalent to a matrix)");
+        }
+        
+        var matrix = new Matrix<T>(input.Shape[0], input.Shape[1]);
+        for (int i = 0; i < input.Shape[0]; i++)
+        {
+            for (int j = 0; j < input.Shape[1]; j++)
+            {
+                matrix[i, j] = input[i, j];
+            }
+        }
+        
+        // Convert output tensor to vector
+        if (expectedOutput.Rank != 1)
+        {
+            throw new ArgumentException("Expected output tensor must be 1-dimensional (equivalent to a vector)");
+        }
+        
+        var vector = new Vector<T>(expectedOutput.Shape[0]);
+        for (int i = 0; i < expectedOutput.Shape[0]; i++)
+        {
+            vector[i] = expectedOutput[i];
+        }
+        
+        // Use the matrix-based train method
+        Train(matrix, vector);
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the current model.
+    /// </summary>
+    /// <returns>A new instance of the ARIMAX model with the same state and parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a complete copy of the model, including its configuration and trained parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
+    /// 
+    /// Unlike CreateInstance(), which creates a blank model with the same settings,
+    /// Clone() creates a complete copy including:
+    /// - The model configuration (AR order, MA order, etc.)
+    /// - All trained coefficients (AR, MA, exogenous)
+    /// - Differencing information and intercept value
+    /// 
+    /// This is useful for:
+    /// - Creating a backup before experimenting with a model
+    /// - Using the same trained model in multiple scenarios
+    /// - Creating ensemble models that use variations of the same base model
+    /// </para>
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (ARIMAXModel<T>)CreateInstance();
+    
+        // Copy AR coefficients
+        for (int i = 0; i < _arCoefficients.Length; i++)
+        {
+            clone._arCoefficients[i] = _arCoefficients[i];
+        }
+    
+        // Copy MA coefficients
+        for (int i = 0; i < _maCoefficients.Length; i++)
+        {
+            clone._maCoefficients[i] = _maCoefficients[i];
+        }
+    
+        // Copy exogenous coefficients
+        for (int i = 0; i < _exogenousCoefficients.Length; i++)
+        {
+            clone._exogenousCoefficients[i] = _exogenousCoefficients[i];
+        }
+    
+        // Copy differenced values
+        clone._differenced = new Vector<T>(_differenced.Length);
+        for (int i = 0; i < _differenced.Length; i++)
+        {
+            clone._differenced[i] = _differenced[i];
+        }
+    
+        // Copy intercept
+        clone._intercept = _intercept;
+    
+        return clone;
+    }
+
+    /// <summary>
+    /// Resets the model to its untrained state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears all trained parameters, effectively resetting the model to its initial state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method erases all the learned patterns from your model.
+    /// 
+    /// After calling this method:
+    /// - All coefficients are reset to zero
+    /// - The intercept is reset to zero
+    /// - The differencing information is cleared
+    /// 
+    /// The model behaves as if it was never trained, and you would need to train it again before
+    /// making predictions. This is useful when you want to:
+    /// - Experiment with different training data on the same model
+    /// - Retrain a model from scratch with new parameters
+    /// - Reset a model that might have been trained incorrectly
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        // Reset AR coefficients
+        _arCoefficients = new Vector<T>(_arimaxOptions.AROrder);
+
+        // Reset MA coefficients
+        _maCoefficients = new Vector<T>(_arimaxOptions.MAOrder);
+
+        // Reset exogenous coefficients
+        _exogenousCoefficients = new Vector<T>(_arimaxOptions.ExogenousVariables);
+
+        // Reset differencing information
+        _differenced = new Vector<T>(0);
+
+        // Reset intercept
+        _intercept = NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Implements the core training algorithm for the ARIMAX model.
+    /// </summary>
+    /// <param name="x">Matrix of exogenous variables (external factors that may influence the time series).</param>
+    /// <param name="y">Vector of time series values to be modeled and predicted.</param>
+    /// <remarks>
+    /// <para>
+    /// This method contains the implementation details of the training process, handling differencing,
+    /// model fitting, and parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the engine room of the training process.
+    /// 
+    /// While the public Train method provides a high-level interface, this method does the actual work:
+    /// 1. Differences the data (if needed) to remove trends
+    /// 2. Fits the ARIMAX model components (external factors, AR, and MA)
+    /// 3. Updates model parameters as needed
+    /// 
+    /// Think of it as the detailed step-by-step recipe that the chef follows when you order a meal.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Step 1: Perform differencing if necessary
+        Vector<T> diffY = DifferenceTimeSeries(y, _arimaxOptions.DifferenceOrder);
+
+        // Step 2: Fit ARIMAX model
+        FitARIMAXModel(x, diffY);
+
+        // Step 3: Update model parameters
+        UpdateModelParameters();
+    }
+
+    /// <summary>
+    /// Predicts a single value based on a single vector of exogenous variables.
+    /// </summary>
+    /// <param name="input">Vector of exogenous variables for a single time point.</param>
+    /// <returns>The predicted value for that time point.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides a convenient way to get a prediction for a single time point without
+    /// having to create a matrix with a single row.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a shortcut for getting just one prediction.
+    /// 
+    /// Instead of providing a table of inputs for multiple time periods, you can provide
+    /// just one set of external factors and get back a single prediction.
+    /// 
+    /// For example, if you want to predict tomorrow's sales based on tomorrow's weather, 
+    /// promotions, and other factors, this method lets you do that directly.
+    /// 
+    /// Under the hood, it:
+    /// 1. Takes your single set of external factors
+    /// 2. Creates a small table with just one row
+    /// 3. Gets a prediction using the main prediction engine
+    /// 4. Returns that single prediction to you
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Validate input dimensions
+        if (input.Length != _exogenousCoefficients.Length)
+        {
+            throw new ArgumentException(
+                $"Input vector length ({input.Length}) must match the number of exogenous variables ({_exogenousCoefficients.Length}).",
+                nameof(input));
+        }
+    
+        // Create a matrix with a single row
+        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            singleRowMatrix[0, i] = input[i];
+        }
+    
+        // Use the existing Predict method
+        Vector<T> predictions = Predict(singleRowMatrix);
+    
+        // Return the single prediction
+        return predictions[0];
     }
 }

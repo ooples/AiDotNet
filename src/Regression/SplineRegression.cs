@@ -127,7 +127,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     /// to find the actual curve that best fits your points.
     /// </para>
     /// </remarks>
-    public SplineRegression(SplineRegressionOptions? options = null, IRegularization<T>? regularization = null)
+    public SplineRegression(SplineRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
     : base(options, regularization)
     {
         _options = options ?? new SplineRegressionOptions();
@@ -175,7 +175,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
         var basisFunctions = GenerateBasisFunctions(x);
 
         // Add regularization
-        basisFunctions = Regularization.RegularizeMatrix(basisFunctions);
+        basisFunctions = Regularization.Regularize(basisFunctions);
 
         // Solve for coefficients
         var xTx = basisFunctions.Transpose().Multiply(basisFunctions);
@@ -183,7 +183,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
         _coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
 
         // Apply regularization to coefficients
-        _coefficients = Regularization.RegularizeCoefficients(_coefficients);
+        _coefficients = Regularization.Regularize(_coefficients);
     }
 
     /// <summary>
@@ -480,5 +480,49 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
         _coefficients = new Vector<T>(coefficientsLength);
         for (int i = 0; i < coefficientsLength; i++)
             _coefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Spline Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Spline Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Spline Regression model, including its options,
+    /// knots, coefficients, and regularization settings. The new instance is completely independent of the original,
+    /// allowing modifications without affecting the original model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact copy of your trained model.
+    /// 
+    /// Think of it like making a perfect duplicate of your flexible curve:
+    /// - It copies all the configuration settings (like number of knots and degree)
+    /// - It preserves the locations of all bend points (knots)
+    /// - It duplicates all the coefficients that define the curve's shape
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before further modifying the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        var newModel = new SplineRegression<T>(_options, Regularization);
+        
+        // Deep copy the knots list
+        newModel._knots = new List<Vector<T>>();
+        foreach (var knotVector in _knots)
+        {
+            newModel._knots.Add(knotVector.Clone());
+        }
+        
+        // Deep copy the coefficients
+        if (_coefficients != null)
+        {
+            newModel._coefficients = _coefficients.Clone();
+        }
+        
+        return newModel;
     }
 }

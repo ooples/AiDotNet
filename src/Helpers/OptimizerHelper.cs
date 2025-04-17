@@ -4,15 +4,13 @@ namespace AiDotNet.Helpers;
 /// Helper class that provides optimization-related functionality for machine learning models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-public static class OptimizerHelper<T>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector<T>, Tensor<T>).</typeparam>
+public static class OptimizerHelper<T, TInput, TOutput>
 {
     /// <summary>
     /// Provides operations for the numeric type T (like addition, multiplication, etc.).
     /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is a utility that helps perform math operations regardless of 
-    /// whether you're using integers, floats, doubles, or other numeric types.
-    /// </remarks>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -28,23 +26,18 @@ public static class OptimizerHelper<T>
     /// <param name="bestFitDetectionResult">Information about model fit quality (underfitting/overfitting).</param>
     /// <param name="iterationCount">Number of iterations the optimization process ran for.</param>
     /// <returns>A complete optimization result object.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method packages all the results from training an AI model into one 
-    /// organized container. Think of it like a report card that shows how well your model performed,
-    /// what features it found important, and whether it's a good fit for your data.
-    /// </remarks>
-    public static OptimizationResult<T> CreateOptimizationResult(
-        ISymbolicModel<T> bestSolution,
+    public static OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(
+        IFullModel<T, TInput, TOutput> bestSolution,
         T bestFitness,
         List<T> fitnessHistory,
         List<Vector<T>> bestSelectedFeatures,
-        OptimizationResult<T>.DatasetResult trainingResult,
-        OptimizationResult<T>.DatasetResult validationResult,
-        OptimizationResult<T>.DatasetResult testResult,
+        OptimizationResult<T, TInput, TOutput>.DatasetResult trainingResult,
+        OptimizationResult<T, TInput, TOutput>.DatasetResult validationResult,
+        OptimizationResult<T, TInput, TOutput>.DatasetResult testResult,
         FitDetectorResult<T> bestFitDetectionResult,
         int iterationCount)
     {
-        return new OptimizationResult<T>
+        return new OptimizationResult<T, TInput, TOutput>
         {
             BestSolution = bestSolution,
             BestFitnessScore = bestFitness,
@@ -71,76 +64,130 @@ public static class OptimizerHelper<T>
     /// <param name="features">The feature matrix (X) used for this dataset.</param>
     /// <param name="y">The target values for this dataset.</param>
     /// <returns>A dataset result object containing all evaluation metrics.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method creates a detailed report about how well your model performed on a 
-    /// specific set of data. It includes various measurements of accuracy and error, as well as 
-    /// information about the data itself. This helps you understand where your model is doing well 
-    /// and where it might need improvement.
-    /// </remarks>
-    public static OptimizationResult<T>.DatasetResult CreateDatasetResult(
-        Vector<T>? predictions,
+    public static OptimizationResult<T, TInput, TOutput>.DatasetResult CreateDatasetResult(
+        TOutput predictions,
         ErrorStats<T>? errorStats,
         BasicStats<T>? actualBasicStats,
         BasicStats<T>? predictedBasicStats,
         PredictionStats<T>? predictionStats,
-        Matrix<T>? features,
-        Vector<T> y)
+        TInput features,
+        TOutput y)
     {
-        return new OptimizationResult<T>.DatasetResult
+        return new OptimizationResult<T, TInput, TOutput>.DatasetResult
         {
-            Predictions = predictions ?? Vector<T>.Empty(),
+            Predictions = predictions,
             ErrorStats = errorStats ?? ErrorStats<T>.Empty(),
             ActualBasicStats = actualBasicStats ?? BasicStats<T>.Empty(),
             PredictedBasicStats = predictedBasicStats ?? BasicStats<T>.Empty(),
             PredictionStats = predictionStats ?? PredictionStats<T>.Empty(),
-            X = features ?? Matrix<T>.Empty(),
+            X = features,
             Y = y
         };
     }
 
     /// <summary>
-    /// Identifies which features are being used by a model.
+    /// Creates a new input containing only the selected features from the original data.
     /// </summary>
-    /// <param name="solution">The model to analyze.</param>
-    /// <returns>A list of indices representing the features used by the model.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Features are the individual pieces of information your model uses to make predictions
-    /// (like "age", "height", etc.). This method checks which features your model is actually using,
-    /// since some models might ignore certain features if they're not helpful for predictions.
-    /// </remarks>
-    public static List<int> GetSelectedFeatures(ISymbolicModel<T> solution)
+    /// <param name="X">The original feature input (Matrix<T> or Tensor<T>).</param>
+    /// <param name="selectedFeatures">List of indices for features to keep.</param>
+    /// <returns>A new input with only the selected features.</returns>
+    public static TInput SelectFeatures(TInput X, List<int> selectedFeatures)
     {
-        if (solution == null)
+        if (X is Matrix<T> matrix)
         {
-            throw new ArgumentNullException(nameof(solution));
+            return (TInput)(object)SelectFeaturesMatrix(matrix, selectedFeatures);
         }
-
-        var selectedFeatures = new List<int>();
-        int featureCount = solution.FeatureCount;
-
-        for (int i = 0; i < featureCount; i++)
+        else if (X is Tensor<T> tensor)
         {
-            if (solution.IsFeatureUsed(i))
-            {
-                selectedFeatures.Add(i);
-            }
+            return (TInput)(object)SelectFeaturesTensor(tensor, selectedFeatures);
         }
-
-        return selectedFeatures;
+        else
+        {
+            throw new ArgumentException("Unsupported input type for feature selection", nameof(X));
+        }
     }
 
     /// <summary>
-    /// Creates a new matrix containing only the selected features from the original data.
+    /// Creates a new input with only the specified features.
     /// </summary>
-    /// <param name="X">The original feature matrix.</param>
-    /// <param name="selectedFeatures">List of indices for features to keep.</param>
-    /// <returns>A new matrix with only the selected features.</returns>
+    /// <param name="input">The original input data.</param>
+    /// <param name="selectedFeatures">The features to include in the new input.</param>
+    /// <returns>A new input containing only the selected features.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> If your model only uses certain features, this method creates a simplified
-    /// version of your data that includes just those important features. This can make your model
-    /// faster and sometimes more accurate by focusing only on what matters.
+    /// <para>
+    /// This method creates a reduced version of the input data that contains only the selected features.
+    /// It supports different input types like Matrix<T> and Tensor<T>.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a simplified version of your dataset.
+    /// 
+    /// Imagine you have a large dataset with many features (columns), but you only want to use some of them:
+    /// - This method builds a new dataset using only the features you've selected
+    /// - The resulting dataset has fewer columns but the same number of rows
+    /// - This is useful for feature selection, which can improve model performance by focusing on the most relevant data
+    /// 
+    /// For example, if your original dataset had 100 features but you only want to use 10 of them,
+    /// this method would create a new dataset with just those 10 features.
+    /// </para>
     /// </remarks>
-    public static Matrix<T> SelectFeatures(Matrix<T> X, List<int> selectedFeatures)
+    public static TInput SelectFeatures(TInput input, IEnumerable<Vector<T>> selectedFeatures)
+    {
+        if (input is Matrix<T>)
+        {
+            // Create a new matrix from the selected column vectors
+            return (TInput)(object)Matrix<T>.FromColumns([.. selectedFeatures]);
+        }
+        else if (input is Tensor<T>)
+        {
+            var featureList = selectedFeatures.ToList();
+            if (featureList.Count == 0)
+            {
+                return (TInput)(object)new Tensor<T>([0, 0]);
+            }
+
+            // All vectors should have the same length (number of rows)
+            int rows = featureList[0].Length;
+            int cols = featureList.Count;
+        
+            // Check all vectors have same length
+            for (int i = 1; i < featureList.Count; i++)
+            {
+                if (featureList[i].Length != rows)
+                {
+                    throw new ArgumentException("All feature vectors must have the same length");
+                }
+            }
+        
+            // Create a new 2D tensor
+            var result = new Tensor<T>([rows, cols]);
+        
+            // Fill the tensor with the data from the selected columns
+            for (int col = 0; col < cols; col++)
+            {
+                for (int row = 0; row < rows; row++)
+                {
+                    result[row, col] = featureList[col][row];
+                }
+            }
+        
+            return (TInput)(object)result;
+        }
+        else
+        {
+            throw new InvalidOperationException($"Unsupported input type: {input?.GetType().Name ?? "null"}");
+        }
+    }
+
+    /// <summary>
+    /// Selects specific features from a matrix of input data.
+    /// </summary>
+    /// <param name="X">The original input matrix where rows represent samples and columns represent features.</param>
+    /// <param name="selectedFeatures">A list of indices representing the features to be selected.</param>
+    /// <returns>A new matrix containing only the selected features.</returns>
+    /// <remarks>
+    /// This method creates a new matrix with the same number of rows as the input, but only
+    /// includes the columns (features) specified in the selectedFeatures list.
+    /// </remarks>
+    private static Matrix<T> SelectFeaturesMatrix(Matrix<T> X, List<int> selectedFeatures)
     {
         var selectedX = new Matrix<T>(X.Rows, selectedFeatures.Count);
         for (int i = 0; i < selectedFeatures.Count; i++)
@@ -156,20 +203,72 @@ public static class OptimizerHelper<T>
     }
 
     /// <summary>
-    /// Creates a new matrix containing only the selected features from the original data.
+    /// Selects specific features from a tensor of input data.
     /// </summary>
-    /// <param name="X">The original feature matrix.</param>
-    /// <param name="selectedFeatures">List of feature vectors representing important features.</param>
-    /// <returns>A new matrix with only the selected features.</returns>
+    /// <param name="X">The original input tensor. The first dimension is assumed to be the batch size, 
+    /// and the second dimension represents features.</param>
+    /// <param name="selectedFeatures">A list of indices representing the features to be selected.</param>
+    /// <returns>A new tensor containing only the selected features.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> This is similar to the other SelectFeatures method, but it works with a different
-    /// way of representing which features are important. Instead of simple indices, it uses vectors
-    /// that might contain more complex information about feature importance.
+    /// This method creates a new tensor with the same shape as the input, except for the feature
+    /// dimension which is reduced to match the number of selected features. It preserves the
+    /// order of samples and any additional dimensions beyond the feature dimension.
     /// </remarks>
-    public static Matrix<T> SelectFeatures(Matrix<T> X, List<Vector<T>> selectedFeatures)
+    private static Tensor<T> SelectFeaturesTensor(Tensor<T> X, List<int> selectedFeatures)
+    {
+        if (X.Shape.Length < 2)
+        {
+            throw new ArgumentException("Input tensor must have at least 2 dimensions", nameof(X));
+        }
+
+        // Create a new shape with the updated feature dimension
+        var newShape = X.Shape.ToArray();
+        newShape[1] = selectedFeatures.Count;
+
+        var selectedX = new Tensor<T>(newShape);
+
+        // Calculate the total number of elements to process
+        int totalElements = X.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int featuresCount = X.Shape[1];
+        int elementsPerSample = totalElements / X.Shape[0];
+
+        var oldIndices = new int[X.Shape.Length];
+        var newIndices = new int[newShape.Length];
+
+        for (int i = 0; i < X.Shape[0]; i++)
+        {
+            oldIndices[0] = i;
+            newIndices[0] = i;
+            for (int j = 0; j < selectedFeatures.Count; j++)
+            {
+                int featureIndex = selectedFeatures[j];
+                oldIndices[1] = featureIndex;
+                newIndices[1] = j;
+                for (int k = 2; k < X.Shape.Length; k++)
+                {
+                    for (int l = 0; l < X.Shape[k]; l++)
+                    {
+                        oldIndices[k] = l;
+                        newIndices[k] = l;
+                        selectedX[newIndices] = X[oldIndices];
+                    }
+                }
+            }
+        }
+
+        return selectedX;
+    }
+
+    /// <summary>
+    /// Creates a new input containing only the selected features from the original data.
+    /// </summary>
+    /// <param name="X">The original feature input (Matrix<T> or Tensor<T>).</param>
+    /// <param name="selectedFeatures">List of feature vectors representing important features.</param>
+    /// <returns>A new input with only the selected features.</returns>
+    public static TInput SelectFeatures(TInput X, List<Vector<T>> selectedFeatures)
     {
         var selectedIndices = selectedFeatures.Select(v => GetFeatureIndex(v)).ToList();
-        return X.SubMatrix(0, X.Rows - 1, selectedIndices);
+        return SelectFeatures(X, selectedIndices);
     }
 
     /// <summary>
@@ -177,11 +276,6 @@ public static class OptimizerHelper<T>
     /// </summary>
     /// <param name="featureVector">A vector representing a feature.</param>
     /// <returns>The index of the feature represented by this vector.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This helper method interprets different ways that important features might be
-    /// represented in your model. It handles several common formats and converts them to a simple
-    /// feature index (like "feature #3").
-    /// </remarks>
     private static int GetFeatureIndex(Vector<T> featureVector)
     {
         if (featureVector == null || featureVector.Length == 0)
@@ -221,141 +315,26 @@ public static class OptimizerHelper<T>
     /// <summary>
     /// Creates a data container for optimization algorithms with training, validation, and test datasets.
     /// </summary>
-    /// <param name="xTrain">Feature matrix for training the model.</param>
+    /// <param name="xTrain">Feature input for training the model.</param>
     /// <param name="yTrain">Target values for training the model.</param>
-    /// <param name="xVal">Feature matrix for validating the model during training.</param>
-    /// <param name="yVal">Target values for validation.</param>
-    /// <param name="xTest">Feature matrix for final testing of the model.</param>
+    /// <param name="xValidation">Feature input for validating the model during training.</param>
+    /// <param name="yValidation">Target values for validation.</param>
+    /// <param name="xTest">Feature input for final testing of the model.</param>
     /// <param name="yTest">Target values for testing.</param>
     /// <returns>A structured container with all datasets needed for optimization.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method organizes your data into three separate sets:
-    /// 1. Training data - Used to teach your model patterns (like studying for a test)
-    /// 2. Validation data - Used to check progress during training (like practice questions)
-    /// 3. Test data - Used for final evaluation (like the actual test)
-    /// 
-    /// This separation helps ensure your model can generalize to new data it hasn't seen before.
-    /// </remarks>
-    public static OptimizationInputData<T> CreateOptimizationInputData(
-        Matrix<T> xTrain, Vector<T> yTrain,
-        Matrix<T> xVal, Vector<T> yVal,
-        Matrix<T> xTest, Vector<T> yTest)
+    public static OptimizationInputData<T, TInput, TOutput> CreateOptimizationInputData(
+        TInput xTrain, TOutput yTrain,
+        TInput xValidation, TOutput yValidation,
+        TInput xTest, TOutput yTest)
     {
-        return new OptimizationInputData<T>
+        return new OptimizationInputData<T, TInput, TOutput>
         {
             XTrain = xTrain,
             YTrain = yTrain,
-            XVal = xVal,
-            YVal = yVal,
+            XValidation = xValidation,
+            YValidation = yValidation,
             XTest = xTest,
             YTest = yTest
         };
-    }
-
-    /// <summary>
-    /// Performs a line search to find the optimal step size for gradient-based optimization.
-    /// </summary>
-    /// <param name="currentSolution">The current model being optimized.</param>
-    /// <param name="direction">The direction vector to move in parameter space.</param>
-    /// <param name="gradient">The gradient vector indicating the direction of steepest ascent.</param>
-    /// <param name="inputData">The training, validation, and test datasets.</param>
-    /// <param name="initialStepSize">Starting step size for the search.</param>
-    /// <param name="c1">Armijo condition parameter (controls sufficient decrease).</param>
-    /// <param name="c2">Wolfe condition parameter (controls curvature).</param>
-    /// <returns>The optimal step size to use for updating model parameters.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Line search is like finding the right "step size" when walking downhill.
-    /// If you take steps that are too small, you'll waste time. If you take steps that are too big,
-    /// you might overshoot and go uphill again. This method finds the "just right" step size
-    /// to help your model improve as quickly as possible without overshooting.
-    /// 
-    /// The Armijo and Wolfe conditions are mathematical checks that ensure we're making good progress
-    /// in the right direction.
-    /// </remarks>
-    public static T LineSearch(
-        ISymbolicModel<T> currentSolution, 
-        Vector<T> direction, 
-        Vector<T> gradient, 
-        OptimizationInputData<T> inputData,
-        T initialStepSize,
-        T? c1 = default,
-        T? c2 = default)
-    {
-        c1 ??= _numOps.FromDouble(1e-4);  // Default Armijo condition parameter
-        c2 ??= _numOps.FromDouble(0.9);   // Default Wolfe condition parameter
-
-        T alpha = initialStepSize;
-        T alphaMax = _numOps.FromDouble(10.0); // Maximum step size
-
-        T initialLoss = CalculateLoss(currentSolution, inputData);
-        T initialGradientDotDirection = gradient.DotProduct(direction);
-
-        while (_numOps.LessThanOrEquals(alpha, alphaMax))
-        {
-            var newCoefficients = currentSolution.Coefficients.Add(direction.Multiply(alpha));
-            var newSolution = currentSolution.UpdateCoefficients(newCoefficients);
-            T newLoss = CalculateLoss(newSolution, inputData);
-
-            // Armijo condition (sufficient decrease)
-            if (_numOps.LessThanOrEquals(newLoss, 
-                _numOps.Add(initialLoss, 
-                    _numOps.Multiply(_numOps.Multiply(c1, alpha), initialGradientDotDirection))))
-            {
-                var newGradient = CalculateGradient(newSolution, inputData.XTrain, inputData.YTrain);
-                T newGradientDotDirection = newGradient.DotProduct(direction);
-
-                // Curvature condition (Wolfe condition)
-                if (_numOps.GreaterThanOrEquals(_numOps.Abs(newGradientDotDirection), 
-                    _numOps.Multiply(c2, _numOps.Abs(initialGradientDotDirection))))
-                {
-                    return alpha;
-                }
-            }
-
-            alpha = _numOps.Multiply(alpha, _numOps.FromDouble(0.5)); // Reduce step size
-        }
-
-        return initialStepSize; // Return initial step size if line search fails
-    }
-
-    /// <summary>
-    /// Calculates the loss (error) for a model on the training data.
-    /// </summary>
-    /// <param name="solution">The model to evaluate.</param>
-    /// <param name="inputData">The dataset containing training data.</param>
-    /// <returns>The mean squared error of the model's predictions.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Loss is a measure of how wrong your model's predictions are.
-    /// Lower loss means better predictions. This method calculates the "Mean Squared Error",
-    /// which is the average of the squared differences between predictions and actual values.
-    /// Squaring the differences ensures that both underestimates and overestimates count as errors.
-    /// </remarks>
-    private static T CalculateLoss(ISymbolicModel<T> solution, OptimizationInputData<T> inputData)
-    {
-        var predictions = solution.Predict(inputData.XTrain);
-        return StatisticsHelper<T>.CalculateMeanSquaredError(inputData.YTrain, predictions);
-    }
-
-    /// <summary>
-    /// Calculates the gradient of the loss function with respect to model parameters.
-    /// </summary>
-    /// <param name="solution">The model whose gradient is being calculated.</param>
-    /// <param name="x">The feature matrix.</param>
-    /// <param name="y">The target values.</param>
-    /// <returns>A vector representing the gradient (direction of steepest increase in loss).</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> The gradient is like a compass that points in the direction where the error
-    /// increases most rapidly. By going in the opposite direction, we can reduce the error.
-    /// 
-    /// This method calculates this "compass direction" for our model parameters. For linear models,
-    /// this is calculated as X^T * (predictions - actual) / n, where X^T is the transpose of the
-    /// feature matrix, and n is the number of data points.
-    /// </remarks>
-    private static Vector<T> CalculateGradient(ISymbolicModel<T> solution, Matrix<T> x, Vector<T> y)
-    {
-        var predictions = solution.Predict(x);
-        var errors = predictions.Subtract(y);
-
-        return x.Transpose().Multiply(errors).Divide(_numOps.FromDouble(x.Rows));
     }
 }

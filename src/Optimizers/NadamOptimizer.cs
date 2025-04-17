@@ -14,12 +14,12 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
+public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Nadam optimizer.
     /// </summary>
-    private NadamOptimizerOptions _options;
+    private NadamOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The first moment vector (momentum).
@@ -50,25 +50,12 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <param name="options">The Nadam-specific optimization options.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     public NadamOptimizer(
-        NadamOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        NadamOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new NadamOptimizerOptions();
+        _options = options ?? new NadamOptimizerOptions<T, TInput, TOutput>();
+
         InitializeAdaptiveParameters();
     }
 
@@ -86,6 +73,7 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
+
         CurrentLearningRate = NumOps.FromDouble(_options.LearningRate);
         _t = 0;
     }
@@ -106,16 +94,17 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var parameters = currentSolution.GetParameters();
+        _m = new Vector<T>(parameters.Length);
+        _v = new Vector<T>(parameters.Length);
 
-        _m = new Vector<T>(currentSolution.Coefficients.Length);
-        _v = new Vector<T>(currentSolution.Coefficients.Length);
         InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
@@ -162,15 +151,16 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="currentSolution">The current model solution.</param>
     /// <param name="gradient">The calculated gradient.</param>
     /// <returns>An updated symbolic model with improved coefficients.</returns>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
         var beta1 = NumOps.FromDouble(_options.Beta1);
         var beta2 = NumOps.FromDouble(_options.Beta2);
         var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
         var oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
 
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        for (int i = 0; i < parameters.Length; i++)
         {
             // Update biased first moment estimate
             _m![i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
@@ -189,10 +179,10 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
 
             // Update parameters
             var update = NumOps.Divide(NumOps.Multiply(CurrentLearningRate, mHatNesterov), NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon)));
-            newCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], update);
+            newCoefficients[i] = NumOps.Subtract(parameters[i], update);
         }
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -210,7 +200,7 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -246,9 +236,9 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is NadamOptimizerOptions nadamOptions)
+        if (options is NadamOptimizerOptions<T, TInput, TOutput> nadamOptions)
         {
             _options = nadamOptions;
         }
@@ -271,7 +261,7 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <returns>The current NadamOptimizerOptions object.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -334,7 +324,7 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<NadamOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<NadamOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _t = reader.ReadInt32();
@@ -358,7 +348,7 @@ public class NadamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="X">The input feature matrix.</param>
     /// <param name="y">The target vector.</param>
     /// <returns>A string that uniquely identifies the current gradient calculation scenario.</returns>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_Nadam_{_options.Beta1}_{_options.Beta2}_{_t}";

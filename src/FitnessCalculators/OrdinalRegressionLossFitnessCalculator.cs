@@ -42,7 +42,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - Fall back to other loss functions when your data doesn't fit the ordinal pattern
 /// </para>
 /// </remarks>
-public class OrdinalRegressionLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class OrdinalRegressionLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The number of classes or categories in the ordinal classification problem.
@@ -114,7 +114,7 @@ public class OrdinalRegressionLossFitnessCalculator<T> : FitnessCalculatorBase<T
     /// - If not, it analyzes your data to determine the best approach
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         if (_numClasses.HasValue)
         {
@@ -147,7 +147,7 @@ public class OrdinalRegressionLossFitnessCalculator<T> : FitnessCalculatorBase<T
     /// as you don't need to know in advance exactly what type of problem you're solving.
     /// </para>
     /// </remarks>
-    private T DefaultLossCalculation(DataSetStats<T> dataSet)
+    private T DefaultLossCalculation(DataSetStats<T, TInput, TOutput> dataSet)
     {
         // Determine the type of problem based on the data
         if (IsClassificationProblem(dataSet))
@@ -195,7 +195,7 @@ public class OrdinalRegressionLossFitnessCalculator<T> : FitnessCalculatorBase<T
     /// This helps the calculator choose the most appropriate loss function.
     /// </para>
     /// </remarks>
-    private bool IsClassificationProblem(DataSetStats<T> dataSet)
+    private bool IsClassificationProblem(DataSetStats<T, TInput, TOutput> dataSet)
     {
         // Get unique values
         var uniqueValues = dataSet.Actual.Distinct().ToList();

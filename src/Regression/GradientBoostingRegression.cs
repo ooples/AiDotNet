@@ -47,11 +47,6 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// Configuration options for the Gradient Boosting algorithm.
     /// </summary>
     private readonly GradientBoostingRegressionOptions _options;
-    
-    /// <summary>
-    /// Random number generator used for tree building and sampling.
-    /// </summary>
-    private Random _random;
 
     /// <summary>
     /// Gets the number of trees in the ensemble model.
@@ -111,13 +106,12 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public GradientBoostingRegression(GradientBoostingRegressionOptions? options = null, IRegularization<T>? regularization = null)
+    public GradientBoostingRegression(GradientBoostingRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new();
         _trees = [];
         _initialPrediction = NumOps.Zero;
-        _random = new Random(Options.Seed ?? Environment.TickCount);
     }
 
     /// <summary>
@@ -156,7 +150,7 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
         // Apply regularization to the feature matrix
-        x = Regularization.RegularizeMatrix(x);
+        x = Regularization.Regularize(x);
 
         _initialPrediction = NumOps.Divide(y.Sum(), NumOps.FromDouble(y.Length)); // Mean of y
         var residuals = y.Subtract(Vector<T>.CreateDefault(y.Length, _initialPrediction));
@@ -171,7 +165,7 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 MinSamplesSplit = _options.MinSamplesSplit,
                 MaxFeatures = _options.MaxFeatures,
                 SplitCriterion = _options.SplitCriterion,
-                Seed = _random.Next()
+                Seed = Random.Next()
             });
 
             // Subsample the data if SubsampleRatio < 1
@@ -239,7 +233,7 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
         // Apply regularization to the input matrix
-        input = Regularization.RegularizeMatrix(input);
+        input = Regularization.Regularize(input);
 
         var predictions = Vector<T>.CreateDefault(input.Rows, _initialPrediction);
 
@@ -255,7 +249,7 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Apply regularization to the final predictions
-        predictions = Regularization.RegularizeCoefficients(predictions);
+        predictions = Regularization.Regularize(predictions);
 
         return predictions;
     }
@@ -355,9 +349,9 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        return new ModelMetadata<T>
+        return new ModelMetaData<T>
         {
             ModelType = ModelType.GradientBoosting,
             AdditionalInfo = new Dictionary<string, object>
@@ -498,8 +492,36 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
             tree.Deserialize(treeData);
             _trees.Add(tree);
         }
+    }
 
-        // Reinitialize other fields
-        _random = new Random(_options.Seed ?? Environment.TickCount);
+    /// <summary>
+    /// Creates a new instance of the gradient boosting regression model with the same configuration.
+    /// </summary>
+    /// <returns>
+    /// A new instance of <see cref="GradientBoostingRegression{T}"/> with the same configuration as the current instance.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new gradient boosting regression model that has the same configuration 
+    /// as the current instance. It's used for model persistence, cloning, and transferring the model's 
+    /// configuration to new instances.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+    /// 
+    /// It's like creating a blueprint copy of your model that can be used to:
+    /// - Save your model's settings
+    /// - Create a new identical model
+    /// - Transfer your model's configuration to another system
+    /// 
+    /// This is useful when you want to:
+    /// - Create multiple similar models
+    /// - Save a model's configuration for later use
+    /// - Reset a model while keeping its settings
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create and return a new instance with the same configuration
+        return new GradientBoostingRegression<T>(_options, Regularization);
     }
 }

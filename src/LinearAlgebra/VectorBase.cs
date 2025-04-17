@@ -137,7 +137,7 @@ public abstract class VectorBase<T>
     /// <para><b>For Beginners:</b> This creates a complete duplicate of your vector.
     /// The new vector will have the same values, but changes to one won't affect the other.</para>
     /// </remarks>
-    public virtual VectorBase<T> Copy()
+    public virtual VectorBase<T> Clone()
     {
         return CreateInstance(_data);
     }
@@ -248,7 +248,7 @@ public abstract class VectorBase<T>
         if (index < 0 || index >= this.Length)
             throw new ArgumentOutOfRangeException(nameof(index));
 
-        VectorBase<T> newVector = this.Copy();
+        VectorBase<T> newVector = this.Clone();
         newVector[index] = value;
 
         return newVector;

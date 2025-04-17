@@ -45,7 +45,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - When you're predicting the frequency of events in a fixed time or space interval
 /// </para>
 /// </remarks>
-public class PoissonLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class PoissonLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the PoissonLossFitnessCalculator class.
@@ -102,7 +102,7 @@ public class PoissonLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// - You're predicting events that occur independently at a constant average rate
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return NeuralNetworkHelper<T>.PoissonLoss(dataSet.Predicted, dataSet.Actual);
     }

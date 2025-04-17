@@ -15,17 +15,12 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class NormalOptimizer<T> : OptimizerBase<T>
+public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
-    /// <summary>
-    /// Random number generator used for creating random solutions and selecting features.
-    /// </summary>
-    private readonly Random _random = new();
-
     /// <summary>
     /// Options specific to the normal optimizer, including parameters inherited from genetic algorithms.
     /// </summary>
-    private GeneticAlgorithmOptimizerOptions _normalOptions;
+    private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _normalOptions;
 
     /// <summary>
     /// Initializes a new instance of the NormalOptimizer class.
@@ -41,21 +36,11 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <param name="options">The optimization options.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    public NormalOptimizer(GeneticAlgorithmOptimizerOptions? options = null, PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
-    {
+    public NormalOptimizer(GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
+		: base(options ?? new())
+	{
         _normalOptions = options ?? new();
+
         InitializeAdaptiveParameters();
     }
 
@@ -79,20 +64,20 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var bestStepData = new OptimizationStepData<T>
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
-            Solution = SymbolicModelFactory<T>.CreateEmptyModel(Options.UseExpressionTrees, inputData.XTrain.Columns),
+            Solution = ModelHelper<T, TInput, TOutput>.CreateDefaultModel(),
             FitnessScore = _fitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
         };
-        var previousStepData = new OptimizationStepData<T>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
-            var currentSolution = CreateRandomSolution(inputData.XTrain.Columns);
+            var currentSolution = CreateRandomSolution(inputData.XTrain);
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);
@@ -128,7 +113,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -163,7 +148,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    private void UpdateFeatureSelectionParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    private void UpdateFeatureSelectionParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
@@ -192,7 +177,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    private void UpdateExplorationExploitationBalance(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    private void UpdateExplorationExploitationBalance(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
@@ -220,7 +205,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    private void UpdateMutationRate(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    private void UpdateMutationRate(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
@@ -249,7 +234,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    private void UpdatePopulationSize(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    private void UpdatePopulationSize(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
@@ -276,7 +261,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    private void UpdateCrossoverRate(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    private void UpdateCrossoverRate(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
@@ -305,7 +290,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="totalFeatures">The total number of available features.</param>
     /// <returns>A randomly created symbolic model.</returns>
-    private ISymbolicModel<T> CreateRandomSolution(int totalFeatures)
+    private IFullModel<T, TInput, TOutput> CreateRandomSolution(int totalFeatures)
     {
         var selectedFeatures = RandomlySelectFeatures(totalFeatures);
         return SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, selectedFeatures.Count);
@@ -329,11 +314,11 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     private List<int> RandomlySelectFeatures(int totalFeatures)
     {
         var selectedFeatures = new List<int>();
-        int numFeatures = _random.Next(Options.MinimumFeatures, Math.Min(Options.MaximumFeatures, totalFeatures) + 1);
+        int numFeatures = Random.Next(Options.MinimumFeatures, Math.Min(Options.MaximumFeatures, totalFeatures) + 1);
 
         while (selectedFeatures.Count < numFeatures)
         {
-            int feature = _random.Next(totalFeatures);
+            int feature = Random.Next(totalFeatures);
             if (!selectedFeatures.Contains(feature))
             {
                 selectedFeatures.Add(feature);
@@ -355,7 +340,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <returns>The current optimization algorithm options.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _normalOptions;
     }
@@ -375,9 +360,9 @@ public class NormalOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="options">The new optimization algorithm options to apply.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the expected type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is GeneticAlgorithmOptimizerOptions geneticOptions)
+        if (options is GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> geneticOptions)
         {
             _normalOptions = geneticOptions;
         }
@@ -446,7 +431,7 @@ public class NormalOptimizer<T> : OptimizerBase<T>
 
             // Deserialize NormalOptimizerOptions
             string optionsJson = reader.ReadString();
-            _normalOptions = JsonConvert.DeserializeObject<GeneticAlgorithmOptimizerOptions>(optionsJson)
+            _normalOptions = JsonConvert.DeserializeObject<GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
         }
     }

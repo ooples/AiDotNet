@@ -27,7 +27,7 @@ namespace AiDotNet.FitnessCalculators;
 /// A perfect model would have a loss of 0, while a completely wrong model would have a very high loss.
 /// </para>
 /// </remarks>
-public class CrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class CrossEntropyLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the CrossEntropyLossFitnessCalculator class.
@@ -76,7 +76,7 @@ public class CrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// typically won't need to call it directly.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return NeuralNetworkHelper<T>.CrossEntropyLoss(dataSet.Predicted, dataSet.Actual);
     }

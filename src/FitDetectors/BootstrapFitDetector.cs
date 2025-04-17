@@ -16,7 +16,7 @@
 /// model on many slightly different versions of your data to see how consistently it performs.
 /// </para>
 /// </remarks>
-public class BootstrapFitDetector<T> : FitDetectorBase<T>
+public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the bootstrap fit detector.
@@ -80,7 +80,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -124,7 +124,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var bootstrapResults = PerformBootstrap(evaluationData);
 
@@ -178,7 +178,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
     /// as 1 minus the width of the confidence interval, clamped between 0 and 1.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var bootstrapResults = PerformBootstrap(evaluationData);
 
@@ -217,7 +217,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -274,7 +274,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
     /// The number of bootstrap samples is determined by the NumberOfBootstraps option.
     /// </para>
     /// </remarks>
-    private List<BootstrapResult<T>> PerformBootstrap(ModelEvaluationData<T> evaluationData)
+    private List<BootstrapResult<T>> PerformBootstrap(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var results = new List<BootstrapResult<T>>();
 

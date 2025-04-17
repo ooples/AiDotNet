@@ -17,7 +17,7 @@ namespace AiDotNet.FitDetectors;
 /// - Unstable: When your model's performance is inconsistent or unpredictable
 /// </para>
 /// </remarks>
-public class LearningCurveFitDetector<T> : FitDetectorBase<T>
+public class LearningCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Learning Curve fit detector.
@@ -53,7 +53,7 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
     /// 3. Specific recommendations to improve your model
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -90,7 +90,7 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
     /// - Convergence: When the learning curve flattens out, indicating the model has stopped improving significantly
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var minDataPoints = _options.MinDataPoints;
         if (evaluationData.TrainingSet.PredictionStats.LearningCurve.Count < minDataPoints || evaluationData.ValidationSet.PredictionStats.LearningCurve.Count < minDataPoints)
@@ -142,7 +142,7 @@ public class LearningCurveFitDetector<T> : FitDetectorBase<T>
     /// - High variance: Points on the curve vary widely (jagged curve)
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingVariance = CalculateVariance(evaluationData.TrainingSet.PredictionStats.LearningCurve);
         var validationVariance = CalculateVariance(evaluationData.ValidationSet.PredictionStats.LearningCurve);

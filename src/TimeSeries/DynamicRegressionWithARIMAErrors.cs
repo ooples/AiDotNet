@@ -68,7 +68,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// - L2 (Ridge): Shrinks all coefficients toward zero, but rarely makes them exactly zero
     /// - ElasticNet: A combination of L1 and L2 regularization
     /// </remarks>
-    private IRegularization<T> _regularization;
+    private IRegularization<T, Matrix<T>, Vector<T>> _regularization;
     
     /// <summary>
     /// Coefficients for the regression component, representing the impact of external variables.
@@ -170,48 +170,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         _maCoefficients = new Vector<T>(options.MAOrder);
         _differenced = new Vector<T>(0);
         _intercept = NumOps.Zero;
-        _regularization = options.Regularization ?? new NoRegularization<T>();
-    }
-
-    /// <summary>
-    /// Trains the model on the provided data.
-    /// </summary>
-    /// <param name="x">Feature matrix of external regressors.</param>
-    /// <param name="y">Target vector of time series values.</param>
-    /// <remarks>
-    /// For Beginners:
-    /// This method "teaches" the model using your historical data. The training process:
-    /// 
-    /// 1. Performs differencing (if needed) to remove trends
-    /// 2. Fits a regression model to explain the relationship between external factors and your target variable
-    /// 3. Calculates the residuals (what the regression model couldn't explain)
-    /// 4. Fits an ARIMA model to these residuals to capture remaining time patterns
-    /// 5. Updates and finalizes all model parameters
-    /// 
-    /// After training, the model has learned:
-    /// - How external factors affect your target variable
-    /// - How past values and errors influence future values
-    /// - The baseline level of your time series
-    /// 
-    /// This combined knowledge allows it to make more accurate forecasts than either
-    /// a pure regression or a pure ARIMA model.
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        // Step 1: Perform differencing if necessary
-        Vector<T> diffY = DifferenceTimeSeries(y, _arimaOptions.DifferenceOrder);
-
-        // Step 2: Fit regression model
-        FitRegressionModel(x, diffY);
-
-        // Step 3: Extract residuals
-        Vector<T> residuals = ExtractResiduals(x, diffY);
-
-        // Step 4: Fit ARIMA model to residuals
-        FitARIMAModel(residuals);
-
-        // Step 5: Update model parameters
-        UpdateModelParameters();
+        _regularization = options.Regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
     }
 
     /// <summary>
@@ -919,7 +878,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void ApplyRegularization()
     {
-        _regressionCoefficients = _regularization.RegularizeCoefficients(_regressionCoefficients);
+        _regressionCoefficients = _regularization.Regularize(_regressionCoefficients);
     }
 
     /// <summary>
@@ -1143,7 +1102,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
 
         writer.Write(Convert.ToDouble(_intercept));
 
-        writer.Write(JsonConvert.SerializeObject(_options));
+        writer.Write(JsonConvert.SerializeObject(Options));
     }
 
     /// <summary>
@@ -1194,6 +1153,425 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         _intercept = NumOps.FromDouble(reader.ReadDouble());
 
         string optionsJson = reader.ReadString();
-        _options = JsonConvert.DeserializeObject<DynamicRegressionWithARIMAErrorsOptions<T>>(optionsJson) ?? new();
+    }
+
+    /// <summary>
+    /// Resets the model to its untrained state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears all trained parameters, effectively resetting the model to its initial state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method erases all the learned patterns from your model.
+    /// 
+    /// After calling this method:
+    /// - All regression coefficients are reset to zero
+    /// - All AR coefficients are reset to zero
+    /// - All MA coefficients are reset to zero
+    /// - The differencing information is cleared
+    /// - The intercept is reset to zero
+    /// 
+    /// The model behaves as if it was never trained, and you would need to train it again before
+    /// making predictions. This is useful when you want to:
+    /// - Experiment with different training data on the same model
+    /// - Retrain a model from scratch with new parameters
+    /// - Reset a model that might have been trained incorrectly
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        // Reset regression coefficients
+        _regressionCoefficients = new Vector<T>(_arimaOptions.ExternalRegressors);
+
+        // Reset AR coefficients
+        _arCoefficients = new Vector<T>(_arimaOptions.AROrder);
+
+        // Reset MA coefficients
+        _maCoefficients = new Vector<T>(_arimaOptions.MAOrder);
+
+        // Reset differencing information
+        _differenced = new Vector<T>(0);
+
+        // Reset intercept
+        _intercept = NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the model with the same configuration options.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new, uninitialized instance of the model with the same options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model with the same settings.
+    /// 
+    /// Think of this like creating a new blank notebook with the same paper quality, size, and number of pages
+    /// as another notebook, but without copying any of the written content.
+    /// 
+    /// This is used internally by the framework to create new model instances when needed,
+    /// such as when cloning a model or creating ensemble models.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a clone of the options
+        var optionsClone = new DynamicRegressionWithARIMAErrorsOptions<T>
+        {
+            AROrder = _arimaOptions.AROrder,
+            MAOrder = _arimaOptions.MAOrder,
+            DifferenceOrder = _arimaOptions.DifferenceOrder,
+            ExternalRegressors = _arimaOptions.ExternalRegressors,
+            Regularization = _arimaOptions.Regularization,
+            DecompositionType = _arimaOptions.DecompositionType
+        };
+    
+        return new DynamicRegressionWithARIMAErrors<T>(optionsClone);
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the current model.
+    /// </summary>
+    /// <returns>A new instance of the model with the same state and parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a complete copy of the model, including its configuration and trained parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
+    /// 
+    /// Unlike CreateInstance(), which creates a blank model with the same settings,
+    /// Clone() creates a complete copy including:
+    /// - The model configuration (AR order, MA order, etc.)
+    /// - All trained regression coefficients
+    /// - All trained AR and MA coefficients
+    /// - Differencing information and intercept value
+    /// 
+    /// This is useful for:
+    /// - Creating a backup before experimenting with a model
+    /// - Using the same trained model in multiple scenarios
+    /// - Creating ensemble models that use variations of the same base model
+    /// </para>
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (DynamicRegressionWithARIMAErrors<T>)CreateInstance();
+    
+        // Copy regression coefficients
+        for (int i = 0; i < _regressionCoefficients.Length; i++)
+        {
+            clone._regressionCoefficients[i] = _regressionCoefficients[i];
+        }
+    
+        // Copy AR coefficients
+        for (int i = 0; i < _arCoefficients.Length; i++)
+        {
+            clone._arCoefficients[i] = _arCoefficients[i];
+        }
+    
+        // Copy MA coefficients
+        for (int i = 0; i < _maCoefficients.Length; i++)
+        {
+            clone._maCoefficients[i] = _maCoefficients[i];
+        }
+    
+        // Copy differenced values
+        clone._differenced = new Vector<T>(_differenced.Length);
+        for (int i = 0; i < _differenced.Length; i++)
+        {
+            clone._differenced[i] = _differenced[i];
+        }
+    
+        // Copy intercept
+        clone._intercept = _intercept;
+    
+        return clone;
+    }
+
+    /// <summary>
+    /// Forecasts future values based on a history of time series data and exogenous variables.
+    /// </summary>
+    /// <param name="history">The historical time series data.</param>
+    /// <param name="horizon">The number of future periods to predict.</param>
+    /// <param name="exogenousVariables">Matrix of external regressors for future periods.</param>
+    /// <returns>A vector of predicted values for future periods.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates forecasts for future time periods based on the trained model, historical data,
+    /// and external variables.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method predicts future values based on past data.
+    /// 
+    /// Given:
+    /// - A series of past observations (the "history")
+    /// - The number of future periods to predict (the "horizon")
+    /// - External factors that might affect predictions (exogenous variables)
+    /// 
+    /// This method:
+    /// 1. Uses the regression component to capture the effects of external factors
+    /// 2. Uses the ARIMA component to capture time-dependent patterns
+    /// 3. Combines these components to generate comprehensive forecasts
+    /// 4. If differencing was used, it properly undoes the differencing to get results in the original scale
+    /// 
+    /// For example, if you have sales data for Jan-Jun and want to predict Jul-Sep,
+    /// this method will use both the external factors (like promotions, holidays) and 
+    /// the historical patterns to create accurate forecasts.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Forecast(Vector<T> history, int horizon, Matrix<T> exogenousVariables)
+    {
+        if (horizon <= 0)
+        {
+            throw new ArgumentException("Forecast horizon must be greater than zero.", nameof(horizon));
+        }
+    
+        if (exogenousVariables == null || exogenousVariables.Rows != horizon || 
+            exogenousVariables.Columns != _regressionCoefficients.Length)
+        {
+            throw new ArgumentException($"Exogenous variables matrix must have {horizon} rows and {_regressionCoefficients.Length} columns.");
+        }
+    
+        // Step 1: Apply differencing to history if needed
+        Vector<T> diffHistory = history;
+        if (_arimaOptions.DifferenceOrder > 0)
+        {
+            diffHistory = DifferenceTimeSeries(history, _arimaOptions.DifferenceOrder);
+        }
+    
+        // Step 2: Generate forecasts in the differenced space
+        Vector<T> diffForecasts = new Vector<T>(horizon);
+    
+        // Combined history and forecasts to simplify access to lags
+        Vector<T> combinedDiff = new Vector<T>(diffHistory.Length + horizon);
+        for (int i = 0; i < diffHistory.Length; i++)
+        {
+            combinedDiff[i] = diffHistory[i];
+        }
+    
+        // Compute past prediction errors for MA component
+        Vector<T> errors = new Vector<T>(diffHistory.Length + horizon);
+        for (int t = Math.Max(_arimaOptions.AROrder, _arimaOptions.MAOrder); t < diffHistory.Length; t++)
+        {
+            // Use available history to compute errors
+            T prediction = _intercept;
+        
+            // Regression component for historical period (simple approximation)
+            // In a real implementation, you would need historical exogenous variables
+        
+            // AR component
+            for (int i = 0; i < _arimaOptions.AROrder && t - i - 1 >= 0; i++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], 
+                    NumOps.Subtract(diffHistory[t - i - 1], _intercept)));
+            }
+        
+            // MA component
+            for (int i = 0; i < _arimaOptions.MAOrder && t - i - 1 >= 0; i++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], errors[t - i - 1]));
+            }
+        
+            // Compute error
+            errors[t] = NumOps.Subtract(diffHistory[t], prediction);
+        }
+    
+        // Generate forecasts
+        for (int t = 0; t < horizon; t++)
+        {
+            // Start with intercept
+            T prediction = _intercept;
+        
+            // Add regression component
+            for (int i = 0; i < _regressionCoefficients.Length; i++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(exogenousVariables[t, i], _regressionCoefficients[i]));
+            }
+        
+            // Add AR component
+            for (int i = 0; i < _arimaOptions.AROrder; i++)
+            {
+                int histIndex = diffHistory.Length - i - 1 + t;
+                if (histIndex >= 0 && histIndex < combinedDiff.Length)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], 
+                        NumOps.Subtract(combinedDiff[histIndex], _intercept)));
+                }
+            }
+        
+            // Add MA component
+            for (int i = 0; i < _arimaOptions.MAOrder; i++)
+            {
+                int errorIndex = diffHistory.Length - i - 1 + t;
+                if (errorIndex >= 0 && errorIndex < errors.Length)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], errors[errorIndex]));
+                }
+            }
+        
+            // Store forecast
+            diffForecasts[t] = prediction;
+        
+            // Update combined series and errors for next steps
+            int currentIndex = diffHistory.Length + t;
+            if (currentIndex < combinedDiff.Length)
+            {
+                combinedDiff[currentIndex] = prediction;
+                errors[currentIndex] = NumOps.Zero; // No error for forecasts
+            }
+        }
+    
+        // Step 3: Convert forecasts back to original scale if needed
+        Vector<T> finalForecasts;
+        if (_arimaOptions.DifferenceOrder > 0)
+        {
+            finalForecasts = InverseDifferenceTimeSeries(diffForecasts, _differenced);
+        }
+        else
+        {
+            finalForecasts = diffForecasts;
+        }
+    
+        return finalForecasts;
+    }
+
+    /// <summary>
+    /// Gets metadata about the trained model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides comprehensive information about the model, including its type, parameters, and configuration.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns a complete description of your trained model.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Dynamic Regression with ARIMA Errors)
+    /// - The coefficients for external factors (regression component)
+    /// - The coefficients for time-dependent patterns (AR and MA components)
+    /// - The configuration options you specified when creating the model
+    /// - A serialized version of the entire model that can be saved
+    /// 
+    /// This is useful for:
+    /// - Understanding what patterns the model has learned
+    /// - Documenting how the model was configured
+    /// - Saving the model's state for later analysis
+    /// - Comparing different models to choose the best one
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var options = (DynamicRegressionWithARIMAErrorsOptions<T>)Options;
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.DynamicRegressionWithARIMAErrors,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include the actual model state variables
+                { "RegressionCoefficients", _regressionCoefficients },
+                { "ARCoefficients", _arCoefficients },
+                { "MACoefficients", _maCoefficients },
+                { "Differenced", _differenced },
+                { "Intercept", Convert.ToDouble(_intercept) },
+        
+                // Include model configuration as well
+                { "AROrder", options.AROrder },
+                { "MAOrder", options.MAOrder },
+                { "DifferenceOrder", options.DifferenceOrder },
+                { "ExternalRegressors", options.ExternalRegressors },
+                { "DecompositionType", options.DecompositionType },
+                { "Regularization", options.Regularization?.GetType().Name ?? "None" }
+            },
+            ModelData = this.Serialize()
+        };
+
+        return metadata;
+    }
+
+    /// <summary>
+    /// Implements the core training algorithm for the Dynamic Regression with ARIMA Errors model.
+    /// </summary>
+    /// <param name="x">Feature matrix of external regressors.</param>
+    /// <param name="y">Target vector of time series values.</param>
+    /// <remarks>
+    /// <para>
+    /// This method contains the implementation details of the training process, handling differencing,
+    /// regression modeling, and ARIMA parameter estimation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the engine room of the training process.
+    /// 
+    /// While the public Train method provides a high-level interface, this method does the actual work:
+    /// 1. Performs differencing to remove trends (if specified)
+    /// 2. Fits the regression model to capture external factor effects
+    /// 3. Calculates residuals (what the regression couldn't explain)
+    /// 4. Fits the ARIMA model to these residuals
+    /// 5. Finalizes all model parameters
+    /// 
+    /// Think of it as the detailed step-by-step recipe that the chef follows when you order a meal.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Step 1: Perform differencing if necessary
+        Vector<T> diffY = DifferenceTimeSeries(y, _arimaOptions.DifferenceOrder);
+
+        // Step 2: Fit regression model
+        FitRegressionModel(x, diffY);
+
+        // Step 3: Extract residuals
+        Vector<T> residuals = ExtractResiduals(x, diffY);
+
+        // Step 4: Fit ARIMA model to residuals
+        FitARIMAModel(residuals);
+
+        // Step 5: Update model parameters
+        UpdateModelParameters();
+    }
+
+    /// <summary>
+    /// Predicts a single value based on a single input vector of external regressors.
+    /// </summary>
+    /// <param name="input">Vector of external regressors for a single time point.</param>
+    /// <returns>The predicted value for that time point.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides a convenient way to get a prediction for a single time point without
+    /// having to create a matrix with a single row.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a shortcut for getting just one prediction.
+    /// 
+    /// Instead of providing a table of inputs for multiple time periods, you can provide
+    /// just one set of external factors and get back a single prediction.
+    /// 
+    /// For example, if you want to predict tomorrow's sales based on tomorrow's promotions, 
+    /// weather forecast, and other factors, this method lets you do that directly.
+    /// 
+    /// Under the hood, it:
+    /// 1. Takes your single set of inputs
+    /// 2. Creates a small table with just one row
+    /// 3. Gets a prediction using the main prediction engine
+    /// 4. Returns that single prediction to you
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Validate input dimensions
+        if (input.Length != _regressionCoefficients.Length)
+        {
+            throw new ArgumentException(
+                $"Input vector length ({input.Length}) must match the number of external regressors ({_regressionCoefficients.Length}).",
+                nameof(input));
+        }
+    
+        // Create a matrix with a single row
+        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            singleRowMatrix[0, i] = input[i];
+        }
+    
+        // Use the existing Predict method
+        Vector<T> predictions = Predict(singleRowMatrix);
+    
+        // Return the single prediction
+        return predictions[0];
     }
 }

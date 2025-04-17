@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// positions of each point (too complex).
 /// </para>
 /// </remarks>
-public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
+public class InformationCriteriaFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the information criteria fit detector.
@@ -59,7 +59,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// All of this is packaged into a single result that you can use to understand and improve your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -95,7 +95,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// that balance how well your model fits the data against how complex it is. Lower values are generally better.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingAic = evaluationData.TrainingSet.ErrorStats.AIC;
         var validationAic = evaluationData.ValidationSet.ErrorStats.AIC;
@@ -151,7 +151,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// The calculation uses a mathematical formula that converts differences in AIC/BIC into a confidence score.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingAic = evaluationData.TrainingSet.ErrorStats.AIC;
         var validationAic = evaluationData.ValidationSet.ErrorStats.AIC;
@@ -198,7 +198,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// - Feature selection: The process of choosing which input variables (features) to include in your model
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

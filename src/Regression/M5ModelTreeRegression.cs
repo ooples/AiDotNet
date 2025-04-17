@@ -69,7 +69,7 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// or fitting too closely to the training data, which helps it perform better on new data.
     /// </para>
     /// </remarks>
-    public M5ModelTree(M5ModelTreeOptions? options = null, IRegularization<T>? regularization = null)
+    public M5ModelTree(M5ModelTreeOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new M5ModelTreeOptions();
@@ -605,9 +605,9 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// - Saving important details along with the model
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        return new ModelMetadata<T>
+        return new ModelMetaData<T>
         {
             ModelType = ModelType.M5ModelTree,
             AdditionalInfo = new Dictionary<string, object>
@@ -704,7 +704,7 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         // Apply regularization if a linear model exists
         if (node.LinearModel != null && node.LinearModel.Coefficients != null)
         {
-            var regularizedCoefficients = Regularization.RegularizeCoefficients(node.LinearModel.Coefficients);
+            var regularizedCoefficients = Regularization.Regularize(node.LinearModel.Coefficients);
             var regularizationTerm = regularizedCoefficients.Subtract(node.LinearModel.Coefficients).L2Norm();
             error = NumOps.Add(error, regularizationTerm);
         }
@@ -864,5 +864,33 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
             x.GetRows(rightIndices),
             y.GetElements(rightIndices)
         );
+    }
+
+    /// <summary>
+    /// Creates a new instance of the M5ModelTree with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new M5ModelTree instance with the same options and regularization as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the abstract method from the base class, allowing the creation of a new model
+    /// with the same configuration options and regularization settings. This is useful for model cloning,
+    /// ensemble methods, or cross-validation scenarios where multiple instances of the same model type
+    /// with identical configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a copy of the model's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of model with identical settings:
+    /// - This method creates a new, empty model with the same configuration
+    /// - It's like making a copy of a recipe before you start cooking
+    /// - The new model has the same settings but no trained data
+    /// - This is useful for techniques that need multiple models, like cross-validation
+    /// 
+    /// For example, if you're testing your model on different subsets of data,
+    /// you'd want each test to use a model with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        return new M5ModelTree<T>(_options, Regularization);
     }
 }

@@ -18,7 +18,7 @@ namespace AiDotNet.Factories;
 /// specify what you need, and the factory provides it.
 /// </para>
 /// </remarks>
-public class TimeSeriesModelFactory<T>
+public class TimeSeriesModelFactory<T, TInput, TOutput>
 {
     /// <summary>
     /// Creates a time series model of the specified type with custom options.
@@ -33,12 +33,11 @@ public class TimeSeriesModelFactory<T>
     /// Different models are better suited for different types of time series data.
     /// </para>
     /// <para>
-    /// Available model types include:
-    /// <list type="bullet">
-    /// <item><description>ARIMA (AutoRegressive Integrated Moving Average): A flexible model that can handle data with trends.</description></item>
-    /// <item><description>ExponentialSmoothing: Good for data with seasonal patterns that repeat at regular intervals.</description></item>
-    /// <item><description>SARIMA (Seasonal ARIMA): An extension of ARIMA that can also handle seasonal effects in the data.</description></item>
-    /// </list>
+    /// Choose the model that best matches the patterns in your data. For example:
+    /// - Use ARIMA for data with trends but no seasonality
+    /// - Use SARIMA for data with both trends and seasonal patterns
+    /// - Use Exponential Smoothing when recent observations are more important than older ones
+    /// - Use Prophet for data with multiple seasonal patterns and holiday effects
     /// </para>
     /// <para>
     /// Note that you must provide options that match the model type. For example, if you specify 
@@ -50,8 +49,33 @@ public class TimeSeriesModelFactory<T>
         return (modelType, options) switch
         {
             (TimeSeriesModelType.ARIMA, ARIMAOptions<T> arimaOptions) => new ARIMAModel<T>(arimaOptions),
-            (TimeSeriesModelType.ExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) => new ExponentialSmoothingModel<T>(esOptions),
             (TimeSeriesModelType.SARIMA, SARIMAOptions<T> sarimaOptions) => new SARIMAModel<T>(sarimaOptions),
+            (TimeSeriesModelType.ARMA, ARMAOptions<T> armaOptions) => new ARMAModel<T>(armaOptions),
+            (TimeSeriesModelType.AR, ARModelOptions<T> arOptions) => new ARModel<T>(arOptions),
+            (TimeSeriesModelType.MA, MAModelOptions<T> maOptions) => new MAModel<T>(maOptions),
+            (TimeSeriesModelType.ExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) => 
+                new ExponentialSmoothingModel<T>(esOptions),
+            (TimeSeriesModelType.SimpleExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) => 
+                new ExponentialSmoothingModel<T>(esOptions),
+            (TimeSeriesModelType.DoubleExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) => 
+                new ExponentialSmoothingModel<T>(esOptions),
+            (TimeSeriesModelType.TripleExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) => 
+                new ExponentialSmoothingModel<T>(esOptions),
+            (TimeSeriesModelType.StateSpace, StateSpaceModelOptions<T> ssOptions) => new StateSpaceModel<T>(ssOptions),
+            (TimeSeriesModelType.TBATS, TBATSModelOptions<T> tbatsOptions) => new TBATSModel<T>(tbatsOptions),
+            (TimeSeriesModelType.DynamicRegressionWithARIMAErrors, DynamicRegressionWithARIMAErrorsOptions<T> drOptions) => new DynamicRegressionWithARIMAErrors<T>(drOptions),
+            (TimeSeriesModelType.ARIMAX, ARIMAXModelOptions<T> arimaxOptions) => new ARIMAXModel<T>(arimaxOptions),
+            (TimeSeriesModelType.GARCH, GARCHModelOptions<T> garchOptions) => new GARCHModel<T>(garchOptions),
+            (TimeSeriesModelType.VAR, VARModelOptions<T> varOptions) => new VectorAutoRegressionModel<T>(varOptions),
+            (TimeSeriesModelType.VARMA, VARMAModelOptions<T> varmaOptions) => new VARMAModel<T>(varmaOptions),
+            (TimeSeriesModelType.ProphetModel, ProphetOptions<T, TInput, TOutput> prophetOptions) => new ProphetModel<T, TInput, TOutput>(prophetOptions),
+            (TimeSeriesModelType.NeuralNetworkARIMA, NeuralNetworkARIMAOptions<T> nnarimaOptions) => new NeuralNetworkARIMAModel<T>(nnarimaOptions),
+            (TimeSeriesModelType.BayesianStructuralTimeSeriesModel, BayesianStructuralTimeSeriesOptions<T> bstsOptions) => new BayesianStructuralTimeSeriesModel<T>(bstsOptions),
+            (TimeSeriesModelType.SpectralAnalysis, SpectralAnalysisOptions<T> saOptions) => new SpectralAnalysisModel<T>(saOptions),
+            (TimeSeriesModelType.STLDecomposition, STLDecompositionOptions<T> stlOptions) => new STLDecomposition<T>(stlOptions),
+            (TimeSeriesModelType.InterventionAnalysis, InterventionAnalysisOptions<T, Matrix<T>, Vector<T>> iaOptions) => new InterventionAnalysisModel<T>(iaOptions),
+            (TimeSeriesModelType.TransferFunctionModel, TransferFunctionOptions<T, Matrix<T>, Vector<T>> tfOptions) => new TransferFunctionModel<T>(tfOptions),
+            (TimeSeriesModelType.UnobservedComponentsModel, UnobservedComponentsOptions<T, TInput, TOutput> ucOptions) => new UnobservedComponentsModel<T, TInput, TOutput>(ucOptions),
             _ => throw new ArgumentException($"Unsupported model type or invalid options: {modelType}")
         };
     }
@@ -80,11 +104,46 @@ public class TimeSeriesModelFactory<T>
         TimeSeriesRegressionOptions<T> options = modelType switch
         {
             TimeSeriesModelType.ARIMA => new ARIMAOptions<T>(),
-            TimeSeriesModelType.ExponentialSmoothing => new ExponentialSmoothingOptions<T>(),
             TimeSeriesModelType.SARIMA => new SARIMAOptions<T>(),
+            TimeSeriesModelType.ARMA => new ARMAOptions<T>(),
+            TimeSeriesModelType.AR => new ARModelOptions<T>(),
+            TimeSeriesModelType.MA => new MAModelOptions<T>(),
+            TimeSeriesModelType.ExponentialSmoothing => new ExponentialSmoothingOptions<T>(),
+            TimeSeriesModelType.SimpleExponentialSmoothing => new ExponentialSmoothingOptions<T> 
+            { 
+                UseTrend = false, 
+                UseSeasonal = false 
+            },
+            TimeSeriesModelType.DoubleExponentialSmoothing => new ExponentialSmoothingOptions<T> 
+            { 
+                UseTrend = true, 
+                UseSeasonal = false 
+            },
+            TimeSeriesModelType.TripleExponentialSmoothing => new ExponentialSmoothingOptions<T> 
+            { 
+                UseTrend = true, 
+                UseSeasonal = true,
+                SeasonalPeriod = 12  // Default to monthly seasonality
+            },
+            TimeSeriesModelType.StateSpace => new StateSpaceModelOptions<T>(),
+            TimeSeriesModelType.TBATS => new TBATSModelOptions<T>(),
+            TimeSeriesModelType.DynamicRegressionWithARIMAErrors => new DynamicRegressionWithARIMAErrorsOptions<T>(),
+            TimeSeriesModelType.ARIMAX => new ARIMAXModelOptions<T>(),
+            TimeSeriesModelType.GARCH => new GARCHModelOptions<T>(),
+            TimeSeriesModelType.VAR => new VARModelOptions<T>(),
+            TimeSeriesModelType.VARMA => new VARMAModelOptions<T>(),
+            TimeSeriesModelType.ProphetModel => new ProphetOptions<T, TInput, TOutput>(),
+            TimeSeriesModelType.NeuralNetworkARIMA => new NeuralNetworkARIMAOptions<T>(),
+            TimeSeriesModelType.BayesianStructuralTimeSeriesModel => new BayesianStructuralTimeSeriesOptions<T>(),
+            TimeSeriesModelType.SpectralAnalysis => new SpectralAnalysisOptions<T>(),
+            TimeSeriesModelType.STLDecomposition => new STLDecompositionOptions<T>(),
+            TimeSeriesModelType.InterventionAnalysis => new InterventionAnalysisOptions<T, TInput, TOutput>(),
+            TimeSeriesModelType.TransferFunctionModel => new TransferFunctionOptions<T, TInput, TOutput>(),
+            TimeSeriesModelType.UnobservedComponentsModel => new UnobservedComponentsOptions<T, TInput, TOutput>(),
+            TimeSeriesModelType.Custom => throw new ArgumentException("Custom models require custom options to be provided explicitly"),
             _ => throw new ArgumentException($"Unsupported model type: {modelType}")
         };
-
+    
         return CreateModel(modelType, options);
     }
 }

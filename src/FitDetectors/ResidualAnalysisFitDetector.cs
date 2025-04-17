@@ -21,7 +21,7 @@ namespace AiDotNet.FitDetectors;
 /// and how to improve it.
 /// </para>
 /// </remarks>
-public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
+public class ResidualAnalysisFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the residual analysis detector.
@@ -67,7 +67,7 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
     /// and improve your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -107,7 +107,7 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
     /// - R-squared differences: Compares model performance across different datasets
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         // Check for autocorrelation using Durbin-Watson statistic
         if (_numOps.LessThan(evaluationData.TestSet.ErrorStats.DurbinWatsonStatistic, _numOps.FromDouble(1.5)) || 
@@ -198,7 +198,7 @@ public class ResidualAnalysisFitDetector<T> : FitDetectorBase<T>
     /// while a score closer to 0 means there's more uncertainty.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(evaluationData.TrainingSet.ErrorStats.PopulationStandardError, evaluationData.TrainingSet.ErrorStats.MeanBiasError));
         var validationConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(evaluationData.ValidationSet.ErrorStats.PopulationStandardError, evaluationData.ValidationSet.ErrorStats.MeanBiasError));

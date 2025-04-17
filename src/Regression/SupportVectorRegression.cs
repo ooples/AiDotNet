@@ -86,7 +86,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// to find the support vectors and coefficients that best describe your data pattern.
     /// </para>
     /// </remarks>
-    public SupportVectorRegression(SupportVectorRegressionOptions? options = null, IRegularization<T>? regularization = null)
+    public SupportVectorRegression(SupportVectorRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new SupportVectorRegressionOptions();
@@ -123,13 +123,13 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Apply regularization to the input matrix
-        Matrix<T> regularizedX = Regularization.RegularizeMatrix(x);
+        Matrix<T> regularizedX = Regularization.Regularize(x);
 
         // Implement SMO algorithm for SVR with regularized input
         SequentialMinimalOptimization(regularizedX, y);
 
         // Apply regularization to the coefficients (alphas)
-        Alphas = Regularization.RegularizeCoefficients(Alphas);
+        Alphas = Regularization.Regularize(Alphas);
     }
 
     /// <summary>
@@ -160,7 +160,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         // Apply regularization to the input matrix for prediction
-        Matrix<T> regularizedInput = Regularization.RegularizeMatrix(input);
+        Matrix<T> regularizedInput = Regularization.Regularize(input);
 
         var predictions = new Vector<T>(regularizedInput.Rows);
         for (int i = 0; i < regularizedInput.Rows; i++)
@@ -422,9 +422,9 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// which settings worked best for your problem.
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        var metadata = base.GetModelMetadata();
+        var metadata = base.GetModelMetaData();
         metadata.AdditionalInfo["Epsilon"] = _options.Epsilon;
         metadata.AdditionalInfo["C"] = _options.C;
         metadata.AdditionalInfo["RegularizationType"] = Regularization.GetType().Name;
@@ -534,5 +534,52 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         // Deserialize SVR specific data
         _options.Epsilon = reader.ReadDouble();
         _options.C = reader.ReadDouble();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Support Vector Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Support Vector Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Support Vector Regression model, including its options,
+    /// support vectors, alpha coefficients, bias term, and regularization settings. The new instance is completely 
+    /// independent of the original, allowing modifications without affecting the original model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact copy of your trained model.
+    /// 
+    /// Think of it like making a perfect duplicate of your tunnel:
+    /// - It copies all the configuration settings (like epsilon, C, and kernel type)
+    /// - It preserves the support vectors (the key data points that define your tunnel)
+    /// - It maintains the alpha coefficients (how important each support vector is)
+    /// - It keeps the bias term (B) which affects the overall position of your tunnel
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before further modifying the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        var newModel = new SupportVectorRegression<T>(_options, Regularization);
+        
+        // Copy support vectors if they exist
+        if (SupportVectors != null)
+        {
+            newModel.SupportVectors = SupportVectors.Clone();
+        }
+        
+        // Copy alpha coefficients if they exist
+        if (Alphas != null)
+        {
+            newModel.Alphas = Alphas.Clone();
+        }
+        
+        // Copy the bias term
+        newModel.B = B;
+        
+        return newModel;
     }
 }

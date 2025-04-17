@@ -39,7 +39,7 @@
 /// the solution space.
 /// </para>
 /// </remarks>
-public class SimulatedAnnealingOptions : OptimizationAlgorithmOptions
+public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the initial temperature of the annealing process.

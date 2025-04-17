@@ -25,7 +25,7 @@
 /// networks, linear regression, and logistic regression. The options in this class let you control how
 /// quickly the algorithm moves downhill and how it avoids certain pitfalls during the optimization process.</para>
 /// </remarks>
-public class GradientDescentOptimizerOptions : GradientBasedOptimizerOptions
+public class GradientDescentOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// The regularization options to control overfitting during gradient descent optimization.

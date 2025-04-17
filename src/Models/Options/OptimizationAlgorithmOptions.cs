@@ -13,7 +13,7 @@
 /// how quickly and accurately the algorithm learns from your data.
 /// </para>
 /// </remarks>
-public class OptimizationAlgorithmOptions
+public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the maximum number of iterations (epochs) for the optimization algorithm.
@@ -252,4 +252,311 @@ public class OptimizationAlgorithmOptions
     /// it's close enough to the best answer and stops searching.</para>
     /// </remarks>
     public double Tolerance { get; set; } = 1e-6;
+
+    /// <summary>
+    /// Gets or sets the options for prediction statistics calculation.
+    /// </summary>
+    /// <value>The prediction statistics options.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> These settings control how predictions are evaluated and what additional
+    /// information (like confidence intervals) is included with predictions. This is useful for understanding
+    /// how reliable your model's predictions are.</para>
+    /// </remarks>
+    public PredictionStatsOptions PredictionOptions { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the options for model statistics calculation.
+    /// </summary>
+    /// <value>The model statistics options.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> These settings control what statistics are calculated about your model,
+    /// such as complexity metrics or feature importance. This helps you understand how your model works
+    /// and what factors are most important in its predictions.</para>
+    /// </remarks>
+    public ModelStatsOptions ModelStatsOptions { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the model evaluator to use for assessing model performance.
+    /// </summary>
+    /// <value>The model evaluator implementation.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The model evaluator is responsible for testing how well your model performs
+    /// on data. It calculates metrics like accuracy or error rates that tell you how good your model is.</para>
+    /// </remarks>
+    public IModelEvaluator<T, TInput, TOutput> ModelEvaluator { get; set; } = new DefaultModelEvaluator<T, TInput, TOutput>();
+
+    /// <summary>
+    /// Gets or sets the fit detector to determine when a model has converged or is overfitting.
+    /// </summary>
+    /// <value>The fit detector implementation.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The fit detector helps determine when training should stop. It can detect
+    /// when your model has learned as much as it can from the data, or when it's starting to memorize the
+    /// training data instead of learning general patterns (overfitting).</para>
+    /// </remarks>
+    public IFitDetector<T, TInput, TOutput> FitDetector { get; set; } = new CalibratedProbabilityFitDetector<T, TInput, TOutput>();
+
+    /// <summary>
+    /// Gets or sets the fitness calculator to evaluate model quality during optimization.
+    /// </summary>
+    /// <value>The fitness calculator implementation.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The fitness calculator assigns a score to your model based on how well it performs.
+    /// This score is used by the optimization algorithm to determine which model parameters are better than others,
+    /// guiding the learning process toward better solutions.</para>
+    /// </remarks>
+    public IFitnessCalculator<T, TInput, TOutput> FitnessCalculator { get; set; } = new RSquaredFitnessCalculator<T, TInput, TOutput>();
+
+    /// <summary>
+    /// Gets or sets the model cache to store and retrieve previously evaluated models.
+    /// </summary>
+    /// <value>The model cache implementation.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The model cache stores models that have already been evaluated, which can
+    /// save time if the same model parameters are encountered again during optimization. This is especially
+    /// useful for complex models that take a long time to evaluate.</para>
+    /// </remarks>
+    public IModelCache<T, TInput, TOutput> ModelCache { get; set; } = new DefaultModelCache<T, TInput, TOutput>();
+
+    /// <summary>
+    /// Creates default implementations for the nullable interface objects based on optimizer type.
+    /// </summary>
+    /// <param name="optimizerType">The type of optimizer to create defaults for.</param>
+    /// <returns>An OptimizationAlgorithmOptions<T, TInput, TOutput> instance with appropriate default implementations.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of OptimizationAlgorithmOptions<T, TInput, TOutput> with default implementations
+    /// for all the interface properties based on the specified optimizer type.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets up all the necessary components for your chosen
+    /// optimization method. It's like getting a pre-configured toolkit specifically designed for the
+    /// type of problem you're trying to solve. You can use this as a starting point and then customize
+    /// individual settings as needed.
+    /// </para>
+    /// </remarks>
+    public static OptimizationAlgorithmOptions<T, TInput, TOutput> CreateDefaults(OptimizerType optimizerType)
+    {
+        var options = new OptimizationAlgorithmOptions<T, TInput, TOutput>
+        {
+            // Create default implementations based on optimizer type
+            PredictionOptions = new PredictionStatsOptions(),
+            ModelStatsOptions = new ModelStatsOptions(),
+            // Set up common components that exist in our codebase
+            ModelEvaluator = new DefaultModelEvaluator<T, TInput, TOutput>(),
+            FitDetector = new CalibratedProbabilityFitDetector<T, TInput, TOutput>(),
+            FitnessCalculator = new RSquaredFitnessCalculator<T, TInput, TOutput>()
+        };
+
+        // Apply optimizer-specific settings
+        switch (optimizerType)
+        {
+            case OptimizerType.GradientDescent:
+                // Set gradient descent specific defaults
+                options.InitialLearningRate = 0.01;
+                options.UseAdaptiveLearningRate = true;
+                options.LearningRateDecay = 0.99;
+                break;
+    
+            case OptimizerType.StochasticGradientDescent:
+                // Set SGD specific defaults
+                options.InitialLearningRate = 0.05;
+                options.UseAdaptiveLearningRate = true;
+                options.LearningRateDecay = 0.95;
+                options.UseAdaptiveMomentum = true;
+                break;
+    
+            case OptimizerType.AdaptiveGradient:
+                // Set adaptive gradient specific defaults
+                options.InitialLearningRate = 0.1;
+                options.UseAdaptiveLearningRate = true;
+                options.MinLearningRate = 1e-4;
+                options.UseAdaptiveMomentum = false;
+                break;
+    
+            case OptimizerType.EvolutionaryAlgorithm:
+                // Set evolutionary algorithm specific defaults
+                options.ExplorationRate = 0.7;
+                options.MaxIterations = 500;
+                options.UseEarlyStopping = true;
+                options.EarlyStoppingPatience = 20;
+                break;
+    
+            case OptimizerType.ParticleSwarm:
+                // Set particle swarm specific defaults
+                options.ExplorationRate = 0.6;
+                options.InitialMomentum = 0.8;
+                options.MaxIterations = 300;
+                options.UseEarlyStopping = true;
+                break;
+    
+            case OptimizerType.DifferentialEvolution:
+                // Set differential evolution specific defaults
+                options.ExplorationRate = 0.8;
+                options.MaxIterations = 400;
+                options.UseEarlyStopping = true;
+                options.EarlyStoppingPatience = 25;
+                break;
+    
+            case OptimizerType.BayesianOptimization:
+                // Set Bayesian optimization specific defaults
+                options.ExplorationRate = 0.3;
+                options.Tolerance = 1e-5;
+                options.MaxIterations = 100;
+                break;
+    
+            case OptimizerType.NelderMead:
+                // Set Nelder-Mead specific defaults
+                options.Tolerance = 1e-7;
+                options.MaxIterations = 200;
+                options.UseEarlyStopping = true;
+                break;
+    
+            case OptimizerType.LBFGS:
+                // Set L-BFGS specific defaults
+                options.UseAdaptiveLearningRate = false;
+                options.UseAdaptiveMomentum = false;
+                options.MaxIterations = 150;
+                options.Tolerance = 1e-6;
+                break;
+    
+            case OptimizerType.CoordinateDescent:
+                // Set coordinate descent specific defaults
+                options.UseAdaptiveLearningRate = true;
+                options.InitialLearningRate = 0.05;
+                options.MaxIterations = 250;
+                options.Tolerance = 1e-6;
+                break;
+    
+            case OptimizerType.SimulatedAnnealing:
+                // Set simulated annealing specific defaults
+                options.ExplorationRate = 0.9;
+                options.MaxIterations = 500;
+                options.UseEarlyStopping = true;
+                options.EarlyStoppingPatience = 30;
+                break;
+    
+            case OptimizerType.AdamOptimizer:
+                // Set Adam optimizer specific defaults
+                options.InitialLearningRate = 0.001;
+                options.UseAdaptiveLearningRate = true;
+                options.UseAdaptiveMomentum = true;
+                options.MaxIterations = 200;
+                break;
+    
+            case OptimizerType.RMSProp:
+                // Set RMSProp specific defaults
+                options.InitialLearningRate = 0.001;
+                options.UseAdaptiveLearningRate = true;
+                options.LearningRateDecay = 0.9;
+                options.MaxIterations = 200;
+                break;
+    
+            case OptimizerType.GeneticAlgorithm:
+                // Set genetic algorithm specific defaults
+                options.ExplorationRate = 0.7;
+                options.MaxIterations = 500;
+                options.UseEarlyStopping = true;
+                options.EarlyStoppingPatience = 25;
+                break;
+    
+            case OptimizerType.TrustRegion:
+                // Set trust region specific defaults
+                options.Tolerance = 1e-8;
+                options.MaxIterations = 150;
+                options.UseAdaptiveLearningRate = false;
+                break;
+    
+            case OptimizerType.NormalOptimizer:
+                // Set normal optimizer specific defaults
+                options.InitialLearningRate = 0.01;
+                options.UseAdaptiveLearningRate = true;
+                options.MaxIterations = 100;
+                options.Tolerance = 1e-6;
+                break;
+    
+            case OptimizerType.QuasiNewton:
+                // Set quasi-Newton specific defaults
+                options.Tolerance = 1e-7;
+                options.MaxIterations = 150;
+                options.UseAdaptiveLearningRate = false;
+                break;
+    
+            case OptimizerType.ConjugateGradient:
+                // Set conjugate gradient specific defaults
+                options.Tolerance = 1e-7;
+                options.MaxIterations = 200;
+                options.UseAdaptiveLearningRate = false;
+                break;
+    
+            case OptimizerType.AdaGrad:
+                // Set AdaGrad specific defaults
+                options.InitialLearningRate = 0.01;
+                options.UseAdaptiveLearningRate = true;
+                options.UseAdaptiveMomentum = false;
+                options.MaxIterations = 200;
+                break;
+    
+            case OptimizerType.AdaDelta:
+                // Set AdaDelta specific defaults
+                options.UseAdaptiveLearningRate = true;
+                options.UseAdaptiveMomentum = false;
+                options.MaxIterations = 200;
+                break;
+    
+            case OptimizerType.Momentum:
+                // Set momentum specific defaults
+                options.InitialLearningRate = 0.01;
+                options.InitialMomentum = 0.9;
+                options.UseAdaptiveMomentum = true;
+                options.MaxIterations = 150;
+                break;
+    
+            case OptimizerType.Nadam:
+                // Set Nadam specific defaults
+                options.InitialLearningRate = 0.002;
+                options.UseAdaptiveLearningRate = true;
+                options.UseAdaptiveMomentum = true;
+                options.MaxIterations = 200;
+                break;
+    
+            case OptimizerType.AMSGrad:
+                // Set AMSGrad specific defaults
+                options.InitialLearningRate = 0.001;
+                options.UseAdaptiveLearningRate = true;
+                options.UseAdaptiveMomentum = true;
+                options.MaxIterations = 200;
+                break;
+    
+            case OptimizerType.HillClimbing:
+                // Set hill climbing specific defaults
+                options.ExplorationRate = 0.5;
+                options.MaxIterations = 300;
+                options.UseEarlyStopping = true;
+                break;
+    
+            case OptimizerType.CrossEntropy:
+                // Set cross-entropy specific defaults
+                options.ExplorationRate = 0.6;
+                options.MaxIterations = 250;
+                options.UseEarlyStopping = true;
+                break;
+    
+            case OptimizerType.PowellMethod:
+                // Set Powell's method specific defaults
+                options.Tolerance = 1e-7;
+                options.MaxIterations = 200;
+                options.UseEarlyStopping = true;
+                break;
+    
+            default:
+                // Default optimizer with standard settings
+                options.InitialLearningRate = 0.01;
+                options.UseAdaptiveLearningRate = true;
+                options.MaxIterations = 100;
+                options.Tolerance = 1e-6;
+                break;
+        }
+
+        return options;
+    }
 }

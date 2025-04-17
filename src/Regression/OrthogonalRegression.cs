@@ -1,6 +1,5 @@
 namespace AiDotNet.Regression;
 
-
 /// <summary>
 /// Implements orthogonal regression (also known as total least squares), which minimizes the perpendicular 
 /// distance from data points to the fitted line or hyperplane.
@@ -49,7 +48,7 @@ public class OrthogonalRegression<T> : RegressionBase<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    public OrthogonalRegression(OrthogonalRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public OrthogonalRegression(OrthogonalRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new OrthogonalRegressionOptions<T>();
@@ -86,7 +85,7 @@ public class OrthogonalRegression<T> : RegressionBase<T>
         int p = x.Columns;
 
         // Apply regularization to the input matrix
-        x = Regularization.RegularizeMatrix(x);
+        x = Regularization.Regularize(x);
 
         // Center the data
         Vector<T> meanX = new(p);
@@ -155,7 +154,7 @@ public class OrthogonalRegression<T> : RegressionBase<T>
         Coefficients = solution.GetSubVector(0, p);
 
         // Apply regularization to the coefficients
-        Coefficients = Regularization.RegularizeCoefficients(Coefficients);
+        Coefficients = Regularization.Regularize(Coefficients);
 
         Intercept = NumOps.Subtract(meanY, Coefficients.DotProduct(meanX));
     }
@@ -240,5 +239,49 @@ public class OrthogonalRegression<T> : RegressionBase<T>
         _options.Tolerance = reader.ReadDouble();
         _options.MaxIterations = reader.ReadInt32();
         _options.ScaleVariables = reader.ReadBoolean();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Orthogonal Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Orthogonal Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Orthogonal Regression model, including its options,
+    /// coefficients, intercept, and regularization settings. The new instance is completely independent of the original,
+    /// allowing modifications without affecting the original model.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method creates an exact copy of your trained model.
+    /// 
+    /// Think of it like making a perfect duplicate:
+    /// - It copies all the configuration settings (like tolerance and whether to scale variables)
+    /// - It preserves the coefficients (the weights for each feature)
+    /// - It maintains the intercept (the starting point of your regression line or plane)
+    /// - It includes the same regularization settings to prevent overfitting
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before making changes to the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create a new instance with the same options and regularization
+        var newModel = new OrthogonalRegression<T>(_options, Regularization);
+        
+        // Copy coefficients if they exist
+        if (Coefficients != null)
+        {
+            newModel.Coefficients = Coefficients.Clone();
+        }
+        
+        // Copy the intercept
+        newModel.Intercept = Intercept;
+        
+        return newModel;
     }
 }

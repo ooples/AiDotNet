@@ -33,29 +33,12 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class DecimalNormalizer<T> : INormalizer<T>
+/// <typeparam name="TInput">The type of input data structure.</typeparam>
+/// <typeparam name="TOutput">The type of output data structure.</typeparam>
+public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutput>
 {
     /// <summary>
-    /// The numeric operations provider for the specified type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field holds a reference to an object that provides operations for the numeric type T.
-    /// These operations include addition, subtraction, multiplication, division, and comparisons,
-    /// which are needed for the decimal normalization calculations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like having a calculator that works with whatever number type you're using.
-    /// 
-    /// Since this normalizer can work with different types of numbers (integers, decimals, etc.),
-    /// it needs a way to perform math operations on these numbers. This field provides those capabilities,
-    /// similar to having a specialized calculator that knows how to handle the specific type of numbers
-    /// you're working with.
-    /// </para>
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DecimalNormalizer{T}"/> class.
+    /// Initializes a new instance of the <see cref="DecimalNormalizer{T, TInput, TOutput}"/> class.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -74,18 +57,15 @@ public class DecimalNormalizer<T> : INormalizer<T>
     /// It's like setting up your calculator before starting your calculations.
     /// </para>
     /// </remarks>
-    public DecimalNormalizer()
+    public DecimalNormalizer() : base()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
-    /// Normalizes a vector using the decimal approach.
+    /// Normalizes output data to a standard range.
     /// </summary>
-    /// <param name="vector">The input vector to normalize.</param>
-    /// <returns>
-    /// A tuple containing the normalized vector and the normalization parameters, which include the scale factor.
-    /// </returns>
+    /// <param name="data">The data to normalize.</param>
+    /// <returns>A tuple containing the normalized data and the normalization parameters.</returns>
     /// <remarks>
     /// <para>
     /// This method normalizes a vector by:
@@ -114,31 +94,65 @@ public class DecimalNormalizer<T> : INormalizer<T>
     /// - The normalized values would be [0.042, 0.125, 0.007, -0.089]
     /// </para>
     /// </remarks>
-    public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
+    public override (TOutput, NormalizationParameters<T>) Normalize(TOutput data)
     {
-        T maxAbs = vector.AbsoluteMaximum();
-        T scale = _numOps.One;
-        T ten = _numOps.FromDouble(10);
-        while (_numOps.GreaterThanOrEquals(maxAbs, scale))
+        if (data is Vector<T> vector)
         {
-            scale = _numOps.Multiply(scale, ten);
+            T maxAbs = vector.AbsoluteMaximum();
+            T scale = NumOps.One;
+            T ten = NumOps.FromDouble(10);
+            while (NumOps.GreaterThanOrEquals(maxAbs, scale))
+            {
+                scale = NumOps.Multiply(scale, ten);
+            }
+            var normalizedVector = vector.Transform(x => NumOps.Divide(x, scale));
+            var parameters = new NormalizationParameters<T>
+            {
+                Method = NormalizationMethod.Decimal,
+                Scale = scale
+            };
+            return ((TOutput)(object)normalizedVector, parameters);
         }
-        var normalizedVector = vector.Transform(x => _numOps.Divide(x, scale));
-        var parameters = new NormalizationParameters<T>
+        else if (data is Tensor<T> tensor)
         {
-            Method = NormalizationMethod.Decimal,
-            Scale = scale
-        };
-        return (normalizedVector, parameters);
+            // Flatten tensor to apply decimal normalization
+            var flattenedTensor = tensor.ToVector();
+            T maxAbs = flattenedTensor.AbsoluteMaximum();
+            T scale = NumOps.One;
+            T ten = NumOps.FromDouble(10);
+            while (NumOps.GreaterThanOrEquals(maxAbs, scale))
+            {
+                scale = NumOps.Multiply(scale, ten);
+            }
+            
+            var normalizedVector = flattenedTensor.Transform(x => NumOps.Divide(x, scale));
+            
+            // Convert back to tensor with the same shape
+            var normalizedTensor = Tensor<T>.FromVector(normalizedVector);
+            if (tensor.Shape.Length > 1)
+            {
+                normalizedTensor = normalizedTensor.Reshape(tensor.Shape);
+            }
+            
+            var parameters = new NormalizationParameters<T>
+            {
+                Method = NormalizationMethod.Decimal,
+                Scale = scale
+            };
+            
+            return ((TOutput)(object)normalizedTensor, parameters);
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported data type {typeof(TOutput).Name}. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
-    /// Normalizes a matrix using the decimal approach, applying normalization separately to each column.
+    /// Normalizes input data to a standard range.
     /// </summary>
-    /// <param name="matrix">The input matrix to normalize.</param>
-    /// <returns>
-    /// A tuple containing the normalized matrix and a list of normalization parameters for each column.
-    /// </returns>
+    /// <param name="data">The data to normalize.</param>
+    /// <returns>A tuple containing the normalized data and a list of normalization parameters for each feature.</returns>
     /// <remarks>
     /// <para>
     /// This method normalizes each column of the matrix independently using the decimal approach.
@@ -162,24 +176,86 @@ public class DecimalNormalizer<T> : INormalizer<T>
     /// - A separate scale factor for each column, so you can convert back to original values later
     /// </para>
     /// </remarks>
-    public (Matrix<T>, List<NormalizationParameters<T>>) NormalizeMatrix(Matrix<T> matrix)
+    public override (TInput, List<NormalizationParameters<T>>) Normalize(TInput data)
     {
-        var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
-        var parametersList = new List<NormalizationParameters<T>>();
-        for (int i = 0; i < matrix.Columns; i++)
+        if (data is Matrix<T> matrix)
         {
-            var column = matrix.GetColumn(i);
-            var (normalizedColumn, parameters) = NormalizeVector(column);
-            normalizedMatrix.SetColumn(i, normalizedColumn);
-            parametersList.Add(parameters);
+            var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
+            var parametersList = new List<NormalizationParameters<T>>();
+            
+            for (int i = 0; i < matrix.Columns; i++)
+            {
+                var column = matrix.GetColumn(i);
+                // Convert column to TOutput for normalize method
+                var (normalizedColumn, parameters) = Normalize((TOutput)(object)column);
+                // Convert back to Vector<T>
+                if (normalizedColumn is Vector<T> normalizedVector)
+                {
+                    normalizedMatrix.SetColumn(i, normalizedVector);
+                    parametersList.Add(parameters);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
+                }
+            }
+            
+            return ((TInput)(object)normalizedMatrix, parametersList);
         }
-        return (normalizedMatrix, parametersList);
+        else if (data is Tensor<T> tensor && tensor.Shape.Length == 2)
+        {
+            // Convert 2D tensor to matrix for column-wise normalization
+            var rows = tensor.Shape[0];
+            var cols = tensor.Shape[1];
+            var newMatrix = new Matrix<T>(rows, cols);
+            
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    newMatrix[i, j] = tensor[i, j];
+                }
+            }
+            
+            // Normalize each column separately
+            var normalizedColumns = new List<Vector<T>>();
+            var parametersList = new List<NormalizationParameters<T>>();
+            
+            for (int i = 0; i < cols; i++)
+            {
+                var column = newMatrix.GetColumn(i);
+                // Convert column to TOutput for normalize method
+                var (normalizedColumn, parameters) = Normalize((TOutput)(object)column);
+                // Convert back to Vector<T>
+                if (normalizedColumn is Vector<T> normalizedVector)
+                {
+                    normalizedColumns.Add(normalizedVector);
+                    parametersList.Add(parameters);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
+                }
+            }
+            
+            // Convert back to tensor
+            var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
+            var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
+            
+            return ((TInput)(object)normalizedTensor, parametersList);
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported data type {typeof(TInput).Name}. " +
+            $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
-    /// Denormalizes a vector using the provided normalization parameters.
+    /// Reverses the normalization of data using the original normalization parameters.
     /// </summary>
-    /// <param name="vector">The normalized vector to denormalize.</param>
+    /// <param name="data">The normalized data to denormalize.</param>
     /// <param name="parameters">The normalization parameters containing the scale factor.</param>
     /// <returns>A denormalized vector with values converted back to their original scale.</returns>
     /// <remarks>
@@ -202,9 +278,33 @@ public class DecimalNormalizer<T> : INormalizer<T>
     /// the original values, without any loss of information.
     /// </para>
     /// </remarks>
-    public Vector<T> DenormalizeVector(Vector<T> vector, NormalizationParameters<T> parameters)
+    public override TOutput Denormalize(TOutput data, NormalizationParameters<T> parameters)
     {
-        return vector.Transform(x => _numOps.Multiply(x, parameters.Scale));
+        if (data is Vector<T> vector)
+        {
+            var denormalizedVector = vector.Transform(x => NumOps.Multiply(x, parameters.Scale));
+            return (TOutput)(object)denormalizedVector;
+        }
+        else if (data is Tensor<T> tensor)
+        {
+            // Flatten tensor for denormalization
+            var flattenedTensor = tensor.ToVector();
+            
+            var denormalizedVector = flattenedTensor.Transform(x => NumOps.Multiply(x, parameters.Scale));
+            
+            // Convert back to tensor with the same shape
+            var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
+            if (tensor.Shape.Length > 1)
+            {
+                denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
+            }
+            
+            return (TOutput)(object)denormalizedTensor;
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported data type {typeof(TOutput).Name}. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
@@ -239,21 +339,46 @@ public class DecimalNormalizer<T> : INormalizer<T>
     /// you get the correct prediction in the original output scale.
     /// </para>
     /// </remarks>
-    public Vector<T> DenormalizeCoefficients(Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
+    public override TOutput Denormalize(TOutput coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        var scalingFactors = xParams.Select(p => _numOps.Divide(yParams.Scale, p.Scale)).ToArray();
-        return coefficients.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
+        if (coefficients is Vector<T> vector)
+        {
+            var scalingFactors = xParams.Select(p => NumOps.Divide(yParams.Scale, p.Scale)).ToArray();
+            var denormalizedCoefficients = vector.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
+            return (TOutput)(object)denormalizedCoefficients;
+        }
+        else if (coefficients is Tensor<T> tensor)
+        {
+            // Flatten tensor for denormalization
+            var flattenedTensor = tensor.ToVector();
+            
+            var scalingFactors = xParams.Select(p => NumOps.Divide(yParams.Scale, p.Scale)).ToArray();
+            var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
+            
+            // Convert back to tensor with the same shape
+            var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
+            if (tensor.Shape.Length > 1)
+            {
+                denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
+            }
+            
+            return (TOutput)(object)denormalizedTensor;
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported coefficients type {typeof(TOutput).Name}. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
-    /// Denormalizes the y-intercept from a regression model that was trained on decimal-normalized data.
+    /// Calculates the denormalized Y-intercept (constant term) for a linear model.
     /// </summary>
     /// <param name="xMatrix">The original input feature matrix.</param>
-    /// <param name="y">The original output vector.</param>
-    /// <param name="coefficients">The regression coefficients.</param>
+    /// <param name="y">The original target vector.</param>
+    /// <param name="coefficients">The model coefficients.</param>
     /// <param name="xParams">The normalization parameters for the input features.</param>
     /// <param name="yParams">The normalization parameters for the output variable.</param>
-    /// <returns>A denormalized y-intercept that can be used with original, unnormalized data.</returns>
+    /// <returns>The denormalized Y-intercept for use with non-normalized data.</returns>
     /// <remarks>
     /// <para>
     /// This method returns zero as the y-intercept for models trained on decimal-normalized data.
@@ -275,9 +400,9 @@ public class DecimalNormalizer<T> : INormalizer<T>
     /// a non-zero intercept adjustment.
     /// </para>
     /// </remarks>
-    public T DenormalizeYIntercept(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients,
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        return _numOps.Zero; // The y-intercept for decimal normalization is always 0
+        return NumOps.Zero; // The y-intercept for decimal normalization is always 0
     }
 }

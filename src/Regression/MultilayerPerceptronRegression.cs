@@ -49,7 +49,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// to get better performance for your specific problem.
     /// </para>
     /// </remarks>
-    private readonly MultilayerPerceptronOptions<T> _options;
+    private readonly MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>> _options;
 
     /// <summary>
     /// The weights connecting the layers of the neural network.
@@ -114,7 +114,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// instead of following a fixed plan regardless of results.
     /// </para>
     /// </remarks>
-    private IOptimizer<T> _optimizer;
+    private IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultilayerPerceptronRegression{T}"/> class with optional custom options and regularization.
@@ -138,11 +138,11 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// but not yet trained on any data.
     /// </para>
     /// </remarks>
-    public MultilayerPerceptronRegression(MultilayerPerceptronOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public MultilayerPerceptronRegression(MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
-        _options = options ?? new MultilayerPerceptronOptions<T>();
-        _optimizer = _options.Optimizer ?? new AdamOptimizer<T>();
+        _options = options ?? new MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>>();
+        _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>();
         _weights = [];
         _biases = [];
 
@@ -357,10 +357,10 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
             Matrix<T> avgWeightGradient = weightGradients[i].Transform((g, _, _) => NumOps.Multiply(g, scaleFactor));
             Vector<T> avgBiasGradient = biasGradients[i].Transform(g => NumOps.Multiply(g, scaleFactor));
 
-            if (_optimizer is IGradientBasedOptimizer<T> gradientOptimizer)
+            if (_optimizer is IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> gradientOptimizer)
             {
-                _weights[i] = gradientOptimizer.UpdateMatrix(_weights[i], avgWeightGradient);
-                _biases[i] = gradientOptimizer.UpdateVector(_biases[i], avgBiasGradient);
+                _weights[i] = gradientOptimizer.UpdateParameters(_weights[i], avgWeightGradient);
+                _biases[i] = gradientOptimizer.UpdateParameters(_biases[i], avgBiasGradient);
             }
             else
             {
@@ -369,8 +369,8 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
             }
 
             // Apply regularization
-            _weights[i] = Regularization.RegularizeMatrix(_weights[i]);
-            _biases[i] = Regularization.RegularizeCoefficients(_biases[i]);
+            _weights[i] = Regularization.Regularize(_weights[i]);
+            _biases[i] = Regularization.Regularize(_biases[i]);
         }
     }
 
@@ -672,7 +672,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         }
 
         // Serialize optimizer
-        writer.Write((int)OptimizerFactory.GetOptimizerType(_optimizer));
+        writer.Write((int)OptimizerFactory<T, Matrix<T>, Vector<T>>.GetOptimizerType(_optimizer));
         byte[] optimizerData = _optimizer.Serialize();
         writer.Write(optimizerData.Length);
         writer.Write(optimizerData);
@@ -756,7 +756,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
         // Deserialize optimizer options
         string optionsJson = reader.ReadString();
-        var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions>(optionsJson);
+        var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions<T, Matrix<T>, Vector<T>>(optionsJson);
 
         if (options == null)
         {
@@ -764,7 +764,33 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         }
 
         // Create optimizer using factory
-        _optimizer = OptimizerFactory.CreateOptimizer<T>(optimizerType, options);
+        _optimizer = OptimizerFactory<T, Matrix<T>, Vector<T>>.CreateOptimizer(optimizerType, options);
         _optimizer.Deserialize(optimizerData);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the <see cref="MultilayerPerceptronRegression{T}"/> class with the same options and regularization as this instance.
+    /// </summary>
+    /// <returns>A new instance of the <see cref="MultilayerPerceptronRegression{T}"/> class.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new, uninitialized instance of the multilayer perceptron regression model with the same configuration
+    /// as the current instance. It is used for creating copies or clones of the model without copying the learned parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a brand new neural network with the same architecture as this one.
+    /// 
+    /// The new network:
+    /// - Uses the same layer sizes and structure
+    /// - Uses the same activation functions and learning parameters
+    /// - Uses the same regularization approach to prevent overfitting
+    /// - Is uninitialized (not trained yet) with fresh random weights
+    /// 
+    /// It's like creating a duplicate blueprint of the current network structure without copying
+    /// any of the learned knowledge, which is useful for ensemble methods or cross-validation.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new MultilayerPerceptronRegression<T>(_options, Regularization);
     }
 }

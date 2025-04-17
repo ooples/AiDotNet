@@ -9,7 +9,7 @@
 /// You can perform various mathematical operations on matrices such as addition, subtraction, and multiplication.
 /// Matrices are commonly used in AI for storing and manipulating data, like representing weights in neural networks.</para>
 /// </remarks>
-public class Matrix<T> : MatrixBase<T>
+public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
 {
     /// <summary>
     /// Initializes a new matrix with the specified number of rows and columns.
@@ -123,9 +123,9 @@ public class Matrix<T> : MatrixBase<T>
     /// <para><b>For Beginners:</b> This creates an exact duplicate of the matrix that can be modified
     /// independently without affecting the original.</para>
     /// </remarks>
-    public new Matrix<T> Copy()
+    public new Matrix<T> Clone()
     {
-        return (Matrix<T>)base.Copy();
+        return (Matrix<T>)base.Clone();
     }
 
     /// <summary>
@@ -1264,5 +1264,39 @@ public class Matrix<T> : MatrixBase<T>
         }
 
         return new Matrix<T>(newMatrix);
+    }
+
+    /// <summary>
+    /// Returns an enumerator that iterates through the matrix elements.
+    /// </summary>
+    /// <returns>An enumerator that can be used to iterate through the matrix.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to iterate through all elements of the matrix
+    /// in a row-by-row manner. It's useful when you need to process each element of the matrix sequentially,
+    /// regardless of its position in rows or columns.</para>
+    /// </remarks>
+    public IEnumerator<T> GetEnumerator()
+    {
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                yield return this[i, j];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns an enumerator that iterates through the matrix elements.
+    /// </summary>
+    /// <returns>An enumerator that can be used to iterate through the matrix.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method is an implementation of the non-generic IEnumerable interface.
+    /// It allows the matrix to be used in foreach loops and other constructs that expect an IEnumerable.
+    /// It simply calls the generic GetEnumerator method above.</para>
+    /// </remarks>
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
     }
 }

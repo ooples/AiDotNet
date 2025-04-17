@@ -42,7 +42,7 @@
 /// This class lets you configure the specific behavior of the RMSProp optimizer.
 /// </para>
 /// </remarks>
-public class RootMeanSquarePropagationOptimizerOptions : GradientBasedOptimizerOptions
+public class RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the decay rate for the moving average of squared gradients.

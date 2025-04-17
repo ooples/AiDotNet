@@ -16,7 +16,7 @@
 /// based on your symptoms - it uses the right approach for your specific situation.
 /// </para>
 /// </remarks>
-public class AdaptiveFitDetector<T> : FitDetectorBase<T>
+public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// A detector that analyzes model residuals (prediction errors) to determine fit.
@@ -25,7 +25,7 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     /// <b>For Beginners:</b> This detector looks at the pattern of errors your model makes to determine 
     /// if it's underfitting or overfitting.
     /// </remarks>
-    private readonly ResidualAnalysisFitDetector<T> _residualAnalyzer;
+    private readonly ResidualAnalysisFitDetector<T, TInput, TOutput> _residualAnalyzer;
     
     /// <summary>
     /// A detector that analyzes learning curves to determine fit.
@@ -34,7 +34,7 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     /// <b>For Beginners:</b> This detector examines how your model's performance changes as it sees 
     /// more training data to determine if it's underfitting or overfitting.
     /// </remarks>
-    private readonly LearningCurveFitDetector<T> _learningCurveDetector;
+    private readonly LearningCurveFitDetector<T, TInput, TOutput> _learningCurveDetector;
     
     /// <summary>
     /// A detector that combines multiple detection methods.
@@ -43,7 +43,7 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     /// <b>For Beginners:</b> This detector uses multiple approaches together to get a more comprehensive 
     /// assessment of your model's fit.
     /// </remarks>
-    private readonly HybridFitDetector<T> _hybridDetector;
+    private readonly HybridFitDetector<T, TInput, TOutput> _hybridDetector;
     
     /// <summary>
     /// Configuration options for the adaptive fit detector.
@@ -75,9 +75,9 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     public AdaptiveFitDetector(AdaptiveFitDetectorOptions? options = null)
     {
         _options = options ?? new AdaptiveFitDetectorOptions();
-        _residualAnalyzer = new ResidualAnalysisFitDetector<T>(_options.ResidualAnalysisOptions);
-        _learningCurveDetector = new LearningCurveFitDetector<T>(_options.LearningCurveOptions);
-        _hybridDetector = new HybridFitDetector<T>(_residualAnalyzer, _learningCurveDetector, _options.HybridOptions);
+        _residualAnalyzer = new ResidualAnalysisFitDetector<T, TInput, TOutput>(_options.ResidualAnalysisOptions);
+        _learningCurveDetector = new LearningCurveFitDetector<T, TInput, TOutput>(_options.LearningCurveOptions);
+        _hybridDetector = new HybridFitDetector<T, TInput, TOutput>(_residualAnalyzer, _learningCurveDetector, _options.HybridOptions);
     }
 
     /// <summary>
@@ -100,7 +100,7 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -135,7 +135,7 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var dataComplexity = AssessDataComplexity(evaluationData);
         var modelPerformance = AssessModelPerformance(evaluationData);
@@ -173,7 +173,7 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     /// method based on your data complexity and model performance.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var dataComplexity = AssessDataComplexity(evaluationData);
         var modelPerformance = AssessModelPerformance(evaluationData);
@@ -212,7 +212,7 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     /// complexity of your data and the current performance of your model.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
         var dataComplexity = AssessDataComplexity(evaluationData);
@@ -243,7 +243,7 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    private DataComplexity AssessDataComplexity(ModelEvaluationData<T> evaluationData)
+    private DataComplexity AssessDataComplexity(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var overallVariance = _numOps.Add(_numOps.Add(evaluationData.TrainingSet.ActualBasicStats.Variance, evaluationData.ValidationSet.ActualBasicStats.Variance), 
             evaluationData.TestSet.ActualBasicStats.Variance);
@@ -278,7 +278,7 @@ public class AdaptiveFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    private ModelPerformance AssessModelPerformance(ModelEvaluationData<T> evaluationData)
+    private ModelPerformance AssessModelPerformance(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var averageR2 = _numOps.Divide(
             _numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), evaluationData.TestSet.PredictionStats.R2),

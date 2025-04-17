@@ -25,7 +25,7 @@ namespace AiDotNet.FitnessCalculators;
 /// two words are related in meaning (pointing in similar directions) regardless of how common or rare they are.
 /// </para>
 /// </remarks>
-public class CosineSimilarityLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class CosineSimilarityLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the CosineSimilarityLossFitnessCalculator class.
@@ -75,7 +75,7 @@ public class CosineSimilarityLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// typically won't need to call it directly.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return NeuralNetworkHelper<T>.CosineSimilarityLoss(dataSet.Predicted, dataSet.Actual);
     }

@@ -38,14 +38,14 @@ public static class RegularizationFactory
     /// </list>
     /// </para>
     /// </remarks>
-    public static IRegularization<T> CreateRegularization<T>(RegularizationOptions options)
+    public static IRegularization<T, TInput, TOutput> CreateRegularization<T, TInput, TOutput>(RegularizationOptions options)
     {
         return options.Type switch
         {
-            RegularizationType.None => new NoRegularization<T>(),
-            RegularizationType.L1 => new L1Regularization<T>(options),
-            RegularizationType.L2 => new L2Regularization<T>(options),
-            RegularizationType.ElasticNet => new ElasticNetRegularization<T>(options),
+            RegularizationType.None => new NoRegularization<T, TInput, TOutput>(),
+            RegularizationType.L1 => new L1Regularization<T, TInput, TOutput>(options),
+            RegularizationType.L2 => new L2Regularization<T, TInput, TOutput>(options),
+            RegularizationType.ElasticNet => new ElasticNetRegularization<T, TInput, TOutput>(options),
             _ => throw new ArgumentException($"Unknown regularization type: {options.Type}", nameof(options.Type))
         };
     }
@@ -67,14 +67,14 @@ public static class RegularizationFactory
     /// when saving or loading models, or when working with models created elsewhere in your code.
     /// </para>
     /// </remarks>
-    public static RegularizationType GetRegularizationType<T>(IRegularization<T> regularization)
+    public static RegularizationType GetRegularizationType<T, TInput, TOutput>(IRegularization<T, TInput, TOutput> regularization)
     {
         return regularization switch
         {
-            NoRegularization<T> => RegularizationType.None,
-            L1Regularization<T> => RegularizationType.L1,
-            L2Regularization<T> => RegularizationType.L2,
-            ElasticNetRegularization<T> => RegularizationType.ElasticNet,
+            NoRegularization<T, TInput, TOutput> => RegularizationType.None,
+            L1Regularization<T, TInput, TOutput> => RegularizationType.L1,
+            L2Regularization<T, TInput, TOutput> => RegularizationType.L2,
+            ElasticNetRegularization<T, TInput, TOutput> => RegularizationType.ElasticNet,
             _ => throw new ArgumentException($"Unsupported regularization type: {regularization.GetType().Name}")
         };
     }

@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// how to improve your model.
 /// </para>
 /// </remarks>
-public abstract class FitDetectorBase<T> : IFitDetector<T>
+public abstract class FitDetectorBase<T, TInput, TOutput> : IFitDetector<T, TInput, TOutput>
 {
     /// <summary>
     /// Provides numeric operations for the specific type T.
@@ -60,7 +60,7 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
     /// to assess model fit.
     /// </para>
     /// </remarks>
-    public abstract FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData);
+    public abstract FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData);
 
     /// <summary>
     /// Determines the type of fit based on model performance metrics.
@@ -82,7 +82,7 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected abstract FitType DetermineFitType(ModelEvaluationData<T> evaluationData);
+    protected abstract FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData);
 
     /// <summary>
     /// Calculates the confidence level in the fit type determination.
@@ -99,7 +99,7 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
     /// confidence in the fit assessment.
     /// </para>
     /// </remarks>
-    protected abstract T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData);
+    protected abstract T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData);
 
     /// <summary>
     /// Generates recommendations for improving the model based on the detected fit type.
@@ -129,7 +129,7 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected virtual List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected virtual List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

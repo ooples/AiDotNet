@@ -25,7 +25,7 @@
 /// Generally, you want this value to be as close to 1 as possible.
 /// </para>
 /// </remarks>
-public class AdjustedRSquaredFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class AdjustedRSquaredFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the AdjustedRSquaredFitnessCalculator class.
@@ -65,7 +65,7 @@ public class AdjustedRSquaredFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// typically won't need to call it directly.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return dataSet.PredictionStats.AdjustedR2;
     }

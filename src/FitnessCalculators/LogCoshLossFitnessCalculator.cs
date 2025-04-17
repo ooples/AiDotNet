@@ -34,7 +34,7 @@ namespace AiDotNet.FitnessCalculators;
 /// but still has nice mathematical properties that make it easier to optimize than MAE.
 /// </para>
 /// </remarks>
-public class LogCoshLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class LogCoshLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the LogCoshLossFitnessCalculator class.
@@ -95,7 +95,7 @@ public class LogCoshLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// - Has good mathematical properties for optimization
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return NeuralNetworkHelper<T>.LogCoshLoss(dataSet.Predicted, dataSet.Actual);
     }

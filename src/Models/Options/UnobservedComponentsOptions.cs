@@ -36,7 +36,7 @@
 /// This class lets you configure which components to include and how to estimate them.
 /// </para>
 /// </remarks>
-public class UnobservedComponentsOptions<T> : TimeSeriesRegressionOptions<T>
+public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
 {
     /// <summary>
     /// Gets or sets the maximum number of iterations for the estimation algorithm.
@@ -158,7 +158,7 @@ public class UnobservedComponentsOptions<T> : TimeSeriesRegressionOptions<T>
     /// stuck in local optima.
     /// </para>
     /// </remarks>
-    public IOptimizer<T>? Optimizer { get; set; }
+    public IOptimizer<T, Matrix<T>, Vector<T>>? Optimizer { get; set; }
     
     /// <summary>
     /// Gets or sets the seasonal period for the model.

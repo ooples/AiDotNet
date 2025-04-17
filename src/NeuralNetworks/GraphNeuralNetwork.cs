@@ -196,6 +196,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         _activationLayerVectorActivation = activationLayerVectorActivation;
         _finalDenseLayerVectorActivation = finalDenseLayerVectorActivation;
         _finalActivationLayerVectorActivation = finalActivationLayerVectorActivation;
+
+        InitializeLayers();
     }
 
     /// <summary>
@@ -230,6 +232,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         _activationLayerScalarActivation = activationLayerActivation;
         _finalDenseLayerScalarActivation = finalDenseLayerActivation;
         _finalActivationLayerScalarActivation = finalActivationLayerActivation;
+
+        InitializeLayers();
     }
 
     /// <summary>
@@ -262,39 +266,6 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(Architecture));
         }
-    }
-
-    /// <summary>
-    /// Performs a forward pass through the network to generate a prediction from a vector input.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector containing the prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method processes an input vector through all layers of the network sequentially, transforming
-    /// it at each step according to the layer's function, and returns the final output vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method takes your input data and passes it through 
-    /// all the layers of the network to get a prediction.
-    /// 
-    /// The process is like an assembly line:
-    /// - Data enters the first layer
-    /// - Each layer transforms the data in some way
-    /// - The transformed data is passed to the next layer
-    /// - The final layer produces the prediction
-    /// 
-    /// This is the basic way to use the network after it's been trained.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-
-        return current;
     }
 
     /// <summary>
@@ -456,103 +427,355 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the neural network to a binary writer.
+    /// Performs a forward pass through the network to make a prediction using a standard input tensor.
     /// </summary>
-    /// <param name="writer">The binary writer to write the serialized network to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a null layer is encountered or when a layer type name cannot be determined.</exception>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor containing the prediction.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the neural network's structure and parameters to a binary format that can be stored
-    /// and later loaded. It writes the number of layers and then serializes each layer individually.
+    /// This method passes the input data through each layer of the network sequentially.
+    /// For a GraphNeuralNetwork, this method assumes the input tensor already contains the necessary
+    /// node features and adjacency information in a preprocessed format, or that the input is
+    /// for a portion of the network that uses standard layers rather than graph-specific ones.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained neural network to a file.
+    /// <para><b>For Beginners:</b> While GNNs work best with explicit graph data
+    /// (provided through the PredictGraph method), this method allows the network to
+    /// process pre-processed graph data or operate on non-graph portions of the network.
     /// 
-    /// After training a network (which can take a lot of time), you'll want to save it
-    /// so you can use it later without training again. This method:
+    /// It works by:
+    /// 1. Starting with your input data
+    /// 2. Passing it through each layer of the network in sequence
+    /// 3. Letting each layer transform the data based on its specific function
     /// 
-    /// 1. Counts how many layers your network has
-    /// 2. Writes this count to the file
-    /// 3. For each layer:
-    ///    - Writes the type of layer (what it does)
-    ///    - Saves all the learned values (parameters) for that layer
-    /// 
-    /// This is like saving a document so you can open it again later without redoing all your work.
+    /// The result is a prediction based on the trained network's understanding of graph patterns.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(Layers.Count);
+        // Reset any layer states
         foreach (var layer in Layers)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            layer.SetTrainingMode(false);
         }
+
+        // Forward pass through all layers
+        Tensor<T> current = input;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            // Skip graph-specific layers if this is a standard prediction
+            if (Layers[i] is GraphConvolutionalLayer<T>)
+            {
+                // For graph layers, we need adjacency information which is not available
+                // Just pass through without modification for standard prediction
+                continue;
+            }
+            else
+            {
+                // Process through standard layers
+                current = Layers[i].Forward(current);
+            }
+        }
+        
+        return current;
     }
 
     /// <summary>
-    /// Deserializes the neural network from a binary reader.
+    /// Trains the Graph Neural Network on a single input-output pair.
     /// </summary>
-    /// <param name="reader">The binary reader to read the serialized network from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when an empty layer type name is encountered, when a layer type cannot be found, when a type does not implement the required interface, or when a layer instance cannot be created.</exception>
+    /// <param name="input">The input tensor containing node features and adjacency information.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
     /// <remarks>
     /// <para>
-    /// This method loads a previously serialized neural network from a binary format. It reads the number of layers
-    /// and then deserializes each layer individually, recreating the network's structure and parameters.
+    /// This method trains the network on a single batch of data. For graph neural networks,
+    /// the input tensor needs to contain both node features and adjacency information in a
+    /// structured format. This implementation assumes the input tensor contains node features
+    /// in the first half and adjacency matrix in the second half.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved neural network from a file.
+    /// <para><b>For Beginners:</b> This method teaches the neural network using example data.
     /// 
-    /// When you want to use a network that was trained earlier, this method:
+    /// For a graph neural network, the training process:
+    /// 1. Extracts node features and connection information from the input
+    /// 2. Makes a prediction using this graph data
+    /// 3. Compares the prediction to the expected output to calculate error
+    /// 4. Updates the network's internal values to reduce the error
     /// 
-    /// 1. Reads how many layers the network should have
-    /// 2. Creates a new, empty network
-    /// 3. For each layer:
-    ///    - Reads what type of layer it should be
-    ///    - Creates that type of layer
-    ///    - Loads all the learned values (parameters) for that layer
-    /// 
-    /// This is like opening a saved document to continue working where you left off.
+    /// Over time, with many examples, the network learns to make accurate predictions
+    /// by understanding how nodes in a graph influence each other.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
+        if (!IsTrainingMode)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            SetTrainingMode(true);
         }
+
+        // Extract node features and adjacency matrix from the input tensor
+        // Assuming the format is [nodeFeatures; adjacencyMatrix]
+        int featuresDimension = input.Shape[0] / 2; // First half contains features
+        
+        // Extract node features
+        Tensor<T> nodeFeatures = input.Slice(0, featuresDimension);
+        
+        // Extract adjacency matrix
+        Tensor<T> adjacencyMatrix = input.Slice(featuresDimension, featuresDimension);
+
+        // Forward pass with graph data
+        Tensor<T> prediction = PredictGraph(nodeFeatures, adjacencyMatrix);
+
+        // Calculate loss
+        var flattenedPredictions = prediction.ToVector();
+        var flattenedExpected = expectedOutput.ToVector();
+        var loss = new MeanSquaredErrorLoss<T>().CalculateLoss(flattenedPredictions, flattenedExpected);
+
+        // Calculate output gradients
+        var outputGradients = new MeanSquaredErrorLoss<T>().CalculateDerivative(flattenedPredictions, flattenedExpected);
+
+        // Backpropagate to get parameter gradients
+        Vector<T> gradients = Backpropagate(outputGradients);
+
+        // Get parameter gradients for all trainable layers
+        Vector<T> parameterGradients = GetParameterGradients();
+
+        // Clip gradients to prevent exploding gradients
+        parameterGradients = ClipGradient(parameterGradients);
+
+        // Create optimizer
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
+
+        // Get current parameters
+        Vector<T> currentParameters = GetParameters();
+
+        // Update parameters using the optimizer
+        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+
+        // Apply updated parameters
+        UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Trains the Graph Neural Network directly on graph data.
+    /// </summary>
+    /// <param name="nodeFeatures">A tensor containing features for each node in the graph.</param>
+    /// <param name="adjacencyMatrix">A tensor representing the connections between nodes in the graph.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given graph input.</param>
+    /// <remarks>
+    /// <para>
+    /// This method provides a more direct interface for training the network on graph data by explicitly
+    /// accepting node features and adjacency matrix as separate parameters. This is often more intuitive
+    /// than combining them into a single input tensor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a more straightforward way to train your graph neural network.
+    /// 
+    /// Instead of combining node information and connection information into one input,
+    /// you can provide them separately:
+    /// - nodeFeatures: Information about each node (e.g., user profiles in a social network)
+    /// - adjacencyMatrix: Information about connections (e.g., who is friends with whom)
+    /// - expectedOutput: What the network should predict for this graph
+    /// 
+    /// The network then learns to make predictions based on both the node attributes
+    /// and how nodes are connected to each other.
+    /// </para>
+    /// </remarks>
+    public void TrainGraph(Tensor<T> nodeFeatures, Tensor<T> adjacencyMatrix, Tensor<T> expectedOutput)
+    {
+        if (!IsTrainingMode)
+        {
+            SetTrainingMode(true);
+        }
+
+        // Forward pass with graph data
+        Tensor<T> prediction = PredictGraph(nodeFeatures, adjacencyMatrix);
+
+        // Calculate loss
+        var flattenedPredictions = prediction.ToVector();
+        var flattenedExpected = expectedOutput.ToVector();
+        var loss = new MeanSquaredErrorLoss<T>().CalculateLoss(flattenedPredictions, flattenedExpected);
+
+        // Calculate output gradients
+        var outputGradients = new MeanSquaredErrorLoss<T>().CalculateDerivative(flattenedPredictions, flattenedExpected);
+
+        // Back-propagate the gradients
+        Vector<T> backpropGradients = Backpropagate(outputGradients);
+        
+        // Get parameter gradients
+        Vector<T> parameterGradients = GetParameterGradients();
+        
+        // Apply gradient clipping
+        parameterGradients = ClipGradient(parameterGradients);
+        
+        // Use adaptive optimizer (Adam)
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
+        
+        // Get current parameters
+        Vector<T> currentParameters = GetParameters();
+        
+        // Update parameters
+        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+        
+        // Apply updated parameters
+        UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Gets metadata about the Graph Neural Network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the Graph Neural Network, including its model type,
+    /// number of layers, types of activation functions used, and serialized model data. This information
+    /// is useful for model management and serialization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides a summary of your GNN's configuration.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (GraphNeuralNetwork)
+    /// - Details about the network structure (layers, activations)
+    /// - Performance metrics
+    /// - Data needed to save and load the model
+    /// 
+    /// This is useful for:
+    /// - Keeping track of different models you've created
+    /// - Understanding a model's properties
+    /// - Saving the model for later use
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.GraphNeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "LayerCount", Layers.Count },
+                { "GraphLayerCount", Layers.Count(l => l is GraphConvolutionalLayer<T>) },
+                { "StandardLayerCount", Layers.Count(l => !(l is GraphConvolutionalLayer<T>)) },
+                { "ParameterCount", GetParameterCount() },
+                { "ActivationTypes", string.Join(", ", GetActivationTypes()) }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Gets the types of activation functions used in the network.
+    /// </summary>
+    /// <returns>A collection of activation function types used in the network.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method identifies what kinds of activation functions
+    /// your neural network is using at different stages.
+    /// 
+    /// Activation functions determine how signals flow through the network and
+    /// are a key part of how neural networks learn complex patterns.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<string> GetActivationTypes()
+    {
+        var activationTypes = new List<string>();
+        
+        // Add scalar activations if they exist
+        if (_graphConvolutionalScalarActivation != null)
+            activationTypes.Add(_graphConvolutionalScalarActivation.GetType().Name);
+        
+        if (_activationLayerScalarActivation != null)
+            activationTypes.Add(_activationLayerScalarActivation.GetType().Name);
+        
+        if (_finalDenseLayerScalarActivation != null)
+            activationTypes.Add(_finalDenseLayerScalarActivation.GetType().Name);
+        
+        if (_finalActivationLayerScalarActivation != null)
+            activationTypes.Add(_finalActivationLayerScalarActivation.GetType().Name);
+        
+        // Add vector activations if they exist
+        if (_graphConvolutionalVectorActivation != null)
+            activationTypes.Add(_graphConvolutionalVectorActivation.GetType().Name);
+        
+        if (_activationLayerVectorActivation != null)
+            activationTypes.Add(_activationLayerVectorActivation.GetType().Name);
+        
+        if (_finalDenseLayerVectorActivation != null)
+            activationTypes.Add(_finalDenseLayerVectorActivation.GetType().Name);
+        
+        if (_finalActivationLayerVectorActivation != null)
+            activationTypes.Add(_finalActivationLayerVectorActivation.GetType().Name);
+        
+        return activationTypes.Distinct();
+    }
+
+    /// <summary>
+    /// Serializes Graph Neural Network-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the Graph Neural Network's specific configuration data to a binary stream.
+    /// This includes activation function types and any other GNN-specific parameters. This data
+    /// is needed to reconstruct the GNN when deserializing.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the special configuration of your GNN.
+    /// 
+    /// Think of it like writing down the recipe for your neural network:
+    /// - What activation functions it uses at different stages
+    /// - How its graph-specific components are configured
+    /// - Any other special settings that make this GNN unique
+    /// 
+    /// These details are crucial because they define how your GNN processes information,
+    /// and they need to be saved along with the weights for the model to work correctly
+    /// when loaded later.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Serialize activation functions if they exist
+        SerializationHelper<T>.SerializeInterface(writer, _graphConvolutionalScalarActivation);
+        SerializationHelper<T>.SerializeInterface(writer, _activationLayerScalarActivation);
+        SerializationHelper<T>.SerializeInterface(writer, _finalDenseLayerScalarActivation);
+        SerializationHelper<T>.SerializeInterface(writer, _finalActivationLayerScalarActivation);
+        
+        SerializationHelper<T>.SerializeInterface(writer, _graphConvolutionalVectorActivation);
+        SerializationHelper<T>.SerializeInterface(writer, _activationLayerVectorActivation);
+        SerializationHelper<T>.SerializeInterface(writer, _finalDenseLayerVectorActivation);
+        SerializationHelper<T>.SerializeInterface(writer, _finalActivationLayerVectorActivation);
+    }
+
+    /// <summary>
+    /// Deserializes Graph Neural Network-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the Graph Neural Network's specific configuration data from a binary stream.
+    /// This includes activation function types and any other GNN-specific parameters. After reading this data,
+    /// the GNN's state is fully restored to what it was when saved.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a previously saved GNN configuration.
+    /// 
+    /// Think of it like following a recipe to rebuild your neural network:
+    /// - Reading what activation functions were used at different stages
+    /// - Setting up the graph-specific components with the right configuration
+    /// - Restoring any other special settings that make this GNN unique
+    /// 
+    /// This ensures that your loaded model will process information exactly the same way
+    /// as when you saved it.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Deserialize activation functions
+        _graphConvolutionalScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
+        _activationLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
+        _finalDenseLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
+        _finalActivationLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
+        
+         _graphConvolutionalVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
+        _activationLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
+        _finalDenseLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
+        _finalActivationLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        throw new NotImplementedException();
     }
 }

@@ -46,7 +46,7 @@ public class MultivariateRegression<T> : RegressionBase<T>
     /// This typically helps the model perform better on new data it hasn't seen before.
     /// </para>
     /// </remarks>
-    public MultivariateRegression(RegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public MultivariateRegression(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
     }
@@ -84,7 +84,7 @@ public class MultivariateRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
             x = x.AddConstantColumn(NumOps.One);
         var xTx = x.Transpose().Multiply(x);
-        var regularizedXTx = xTx.Add(Regularization.RegularizeMatrix(xTx));
+        var regularizedXTx = xTx.Add(Regularization.Regularize(xTx));
         var xTy = x.Transpose().Multiply(y);
         var solution = SolveSystem(regularizedXTx, xTy);
         if (Options.UseIntercept)
@@ -154,5 +154,45 @@ public class MultivariateRegression<T> : RegressionBase<T>
     protected override ModelType GetModelType()
     {
         return ModelType.MultivariateRegression;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Multivariate Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Multivariate Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Multivariate Regression model, including its coefficients,
+    /// intercept, and configuration options. The new instance is completely independent of the original,
+    /// allowing modifications without affecting the original model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact copy of your trained model.
+    /// 
+    /// Think of it like making a perfect duplicate of your recipe:
+    /// - It copies all the configuration settings (like whether to use an intercept)
+    /// - It preserves the coefficients (the importance values for each feature)
+    /// - It maintains the intercept (the starting point or base value)
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before further modifying the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        var newModel = new MultivariateRegression<T>(Options, Regularization);
+        
+        // Copy coefficients if they exist
+        if (Coefficients != null)
+        {
+            newModel.Coefficients = Coefficients.Clone();
+        }
+        
+        // Copy the intercept
+        newModel.Intercept = Intercept;
+        
+        return newModel;
     }
 }

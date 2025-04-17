@@ -16,7 +16,7 @@ namespace AiDotNet.Interfaces;
 /// - Get information about how the model was created and how well it performs
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface IPredictiveModel<T> : IModelSerializer
+public interface IPredictiveModel<T, TInput, TOutput> : IModelSerializer
 {
     /// <summary>
     /// Makes predictions using the trained model on new input data.
@@ -41,7 +41,7 @@ public interface IPredictiveModel<T> : IModelSerializer
     /// <param name="input">A matrix containing the new data points to make predictions for.
     /// Each row is a separate data point, and each column is a feature.</param>
     /// <returns>A vector containing the predicted values, one for each input row.</returns>
-    Vector<T> Predict(Matrix<T> input);
+    TOutput Predict(TInput input);
 
     /// <summary>
     /// Retrieves metadata and performance information about the trained model.
@@ -63,5 +63,5 @@ public interface IPredictiveModel<T> : IModelSerializer
     /// - Deciding if your model needs to be improved or retrained
     /// </remarks>
     /// <returns>A metadata object containing information about the model's performance and configuration.</returns>
-    ModelMetadata<T> GetModelMetadata();
+    ModelMetaData<T> GetModelMetadata();
 }

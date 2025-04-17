@@ -92,7 +92,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     private Matrix<T> ComputeHessenbergHouseholder(Matrix<T> matrix)
     {
         var n = matrix.Rows;
-        var H = matrix.Copy();
+        var H = matrix.Clone();
 
         for (int k = 0; k < n - 2; k++)
         {
@@ -128,7 +128,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     private Matrix<T> ComputeHessenbergGivens(Matrix<T> matrix)
     {
         var n = matrix.Rows;
-        var H = matrix.Copy();
+        var H = matrix.Clone();
 
         for (int k = 0; k < n - 2; k++)
         {
@@ -162,7 +162,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     private Matrix<T> ComputeHessenbergElementaryTransformations(Matrix<T> matrix)
     {
         var n = matrix.Rows;
-        var H = matrix.Copy();
+        var H = matrix.Clone();
 
         for (int k = 0; k < n - 2; k++)
         {
@@ -202,7 +202,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     private Matrix<T> ComputeHessenbergImplicitQR(Matrix<T> matrix)
     {
         var n = matrix.Rows;
-        var H = matrix.Copy();
+        var H = matrix.Clone();
         var Q = Matrix<T>.CreateIdentity(n);
 
         for (int iter = 0; iter < 100; iter++) // Max iterations

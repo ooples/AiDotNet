@@ -30,7 +30,7 @@ namespace AiDotNet.Models.Options;
 /// This class lets you configure how L-BFGS behaves during training, including how much history it
 /// remembers and how it adjusts its learning rate.</para>
 /// </remarks>
-public class LBFGSOptimizerOptions : GradientBasedOptimizerOptions
+public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the memory size, which determines how many previous iterations' information

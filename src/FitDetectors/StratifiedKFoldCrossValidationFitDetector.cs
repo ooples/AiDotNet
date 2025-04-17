@@ -19,7 +19,7 @@ namespace AiDotNet.FitDetectors;
 /// which is important for real-world applications.
 /// </para>
 /// </remarks>
-public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
+public class StratifiedKFoldCrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Stratified K-Fold Cross-Validation fit detector.
@@ -62,7 +62,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// The result gives you both the diagnosis and a treatment plan for your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -110,7 +110,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     ///   This suggests there might be issues with your data or model setup.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var avgTrainingMetric = evaluationData.TrainingSet.PredictionStats.GetMetric(_options.PrimaryMetric);
         var avgValidationMetric = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
@@ -163,7 +163,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// "I'm only 50% sure of this diagnosis."
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var avgValidationMetric = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
         var testMetric = evaluationData.TestSet.PredictionStats.GetMetric(_options.PrimaryMetric);
@@ -214,7 +214,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// model is currently performing.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

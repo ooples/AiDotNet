@@ -19,22 +19,51 @@ namespace AiDotNet.Optimizers;
 /// This can be especially useful when some parts of your data are more important or occur less frequently.
 /// </para>
 /// </remarks>
-public class AdagradOptimizer<T> : GradientBasedOptimizerBase<T>
+public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
-    private AdagradOptimizerOptions _options;
+    /// <summary>
+    /// The configuration options specific to the Adagrad optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the configuration parameters that control the behavior of the Adagrad algorithm,
+    /// such as learning rate, epsilon value, and convergence criteria.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the instruction manual for our learning assistant.
+    /// It contains all the settings that determine how the optimizer behaves, such as how fast it learns
+    /// and when it should consider its job complete.
+    /// 
+    /// These settings can be customized to make the optimizer work better for different types of problems.
+    /// </para>
+    /// </remarks>
+    private AdagradOptimizerOptions<T, TInput, TOutput> _options;
+
+    /// <summary>
+    /// Stores the sum of squared gradients for each parameter during optimization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector accumulates the squared gradients for each parameter throughout the optimization process.
+    /// It's used to adapt the learning rate individually for each parameter - parameters with larger
+    /// accumulated gradients will have smaller learning rates and vice versa.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the optimizer's memory of how much each part of the solution
+    /// has changed over time.
+    /// 
+    /// Imagine you're learning different subjects:
+    /// - For subjects you've practiced a lot (large accumulated gradients), you take smaller learning steps
+    /// - For subjects you've rarely practiced (small accumulated gradients), you take larger learning steps
+    /// 
+    /// This helps the optimizer focus more on the parts of the solution that haven't received much attention,
+    /// which is especially useful when some parameters are more important than others or appear less frequently.
+    /// </para>
+    /// </remarks>
     private Vector<T>? _accumulatedSquaredGradients;
 
     /// <summary>
     /// Initializes a new instance of the AdagradOptimizer class.
     /// </summary>
     /// <param name="options">The options for configuring the Adagrad optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     /// <remarks>
     /// <para>
     /// This constructor sets up the Adagrad optimizer with the specified options and components.
@@ -52,17 +81,11 @@ public class AdagradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     public AdagradOptimizer(
-        AdagradOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        AdagradOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new AdagradOptimizerOptions();
+        _options = options ?? new AdagradOptimizerOptions<T, TInput, TOutput>();
+
         InitializeAdaptiveParameters();
     }
 
@@ -108,15 +131,15 @@ public class AdagradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This process repeats until we reach the maximum number of iterations or find a good enough solution.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _accumulatedSquaredGradients = new Vector<T>(currentSolution.Coefficients.Length);
+        _accumulatedSquaredGradients = new Vector<T>(currentSolution.GetParameters().Length);
         InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
@@ -199,21 +222,23 @@ public class AdagradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// and smaller steps for more frequently updated parts.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
             var adaptiveLearningRate = NumOps.Divide(
                 CurrentLearningRate,
                 NumOps.Add(NumOps.Sqrt(_accumulatedSquaredGradients![i]), NumOps.FromDouble(_options.Epsilon))
             );
             newCoefficients[i] = NumOps.Subtract(
-                currentSolution.Coefficients[i],
+                parameters[i],
                 NumOps.Multiply(adaptiveLearningRate, gradient[i])
             );
         }
-        return new VectorModel<T>(newCoefficients);
+
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -237,7 +262,7 @@ public class AdagradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// potentially making the learning process more efficient.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -276,9 +301,9 @@ public class AdagradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This helps prevent accidentally using the wrong type of settings, which could cause problems.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is AdagradOptimizerOptions adagradOptions)
+        if (options is AdagradOptimizerOptions<T, TInput, TOutput> adagradOptions)
         {
             _options = adagradOptions;
         }
@@ -306,7 +331,7 @@ public class AdagradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This can be useful for understanding how the optimizer is currently set up or for saving its configuration.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -378,7 +403,7 @@ public class AdagradOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<AdagradOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<AdagradOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
         }
     }
@@ -405,7 +430,7 @@ public class AdagradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// which can save time and computational resources.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_Adagrad_{_options.InitialLearningRate}_{_options.Epsilon}";

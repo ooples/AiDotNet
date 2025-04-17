@@ -19,7 +19,7 @@ namespace AiDotNet.FitDetectors;
 /// This detector will give you recommendations on how to improve your model based on this analysis.
 /// </para>
 /// </remarks>
-public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
+public class ShapleyValueFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Shapley value fit detector.
@@ -59,7 +59,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// and gives you specific recommendations on how to improve it.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var features = GetFeatures(evaluationData);
         var shapleyValues = CalculateShapleyValues(evaluationData, features);
@@ -96,7 +96,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// - Good fit: Your model has found the right balance
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var features = GetFeatures(evaluationData);
         var shapleyValues = CalculateShapleyValues(evaluationData, features);
@@ -167,7 +167,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// - If feature importance is more evenly distributed, confidence is lower
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var features = GetFeatures(evaluationData);
         var shapleyValues = CalculateShapleyValues(evaluationData, features);
@@ -217,7 +217,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// Higher Shapley values mean more important features.
     /// </para>
     /// </remarks>
-    private Dictionary<string, T> CalculateShapleyValues(ModelEvaluationData<T> evaluationData, List<string> features)
+    private Dictionary<string, T> CalculateShapleyValues(ModelEvaluationData<T, TInput, TOutput> evaluationData, List<string> features)
     {
         var shapleyValues = new Dictionary<string, T>();
         var n = features.Count;
@@ -258,7 +258,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// different pieces of information your model considers when making a decision.
     /// </para>
     /// </remarks>
-    private List<string> GetFeatures(ModelEvaluationData<T> evaluationData)
+    private List<string> GetFeatures(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         return evaluationData.ModelStats.FeatureNames;
     }
@@ -281,13 +281,13 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// (closer to 1.0) mean better performance.
     /// </para>
     /// </remarks>
-    private T CalculatePerformance(ModelEvaluationData<T> evaluationData, HashSet<string> features)
+    private T CalculatePerformance(ModelEvaluationData<T, TInput, TOutput> evaluationData, HashSet<string> features)
     {
         var subsetFeatures = evaluationData.ModelStats.FeatureValues
             .Where(kv => features.Contains(kv.Key))
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-        var featureMatrix = CreateFeatureMatrix(subsetFeatures);
+        var featureMatrix = CreateFeatures(subsetFeatures);
         var predictions = evaluationData.ModelStats.Model?.Predict(featureMatrix) ?? Vector<T>.Empty();
         return StatisticsHelper<T>.CalculateR2(evaluationData.ModelStats.Actual, predictions);
     }
@@ -307,7 +307,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// (a matrix) so your model can process all the data together.
     /// </para>
     /// </remarks>
-    private Matrix<T> CreateFeatureMatrix(Dictionary<string, Vector<T>> features)
+    private Matrix<T> CreateFeatures(Dictionary<string, Vector<T>> features)
     {
         int rowCount = features.First().Value.Length;
         int colCount = features.Count;
@@ -342,7 +342,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// This is like a doctor first running tests, then using the test results to recommend treatment.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var features = GetFeatures(evaluationData);
         var shapleyValues = CalculateShapleyValues(evaluationData, features);

@@ -24,7 +24,7 @@
 /// - Adjusting automatically to different parts of the solution space
 /// </para>
 /// </remarks>
-public class RootMeanSquarePropagationOptimizer<T> : GradientBasedOptimizerBase<T>
+public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Moving average of squared gradients for each parameter.
@@ -88,18 +88,12 @@ public class RootMeanSquarePropagationOptimizer<T> : GradientBasedOptimizerBase<
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private RootMeanSquarePropagationOptimizerOptions _options;
+    private RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RootMeanSquarePropagationOptimizer{T}"/> class with the specified options and components.
     /// </summary>
     /// <param name="options">The RMSProp optimization options, or null to use default options.</param>
-    /// <param name="predictionOptions">The prediction statistics options, or null to use default options.</param>
-    /// <param name="modelOptions">The model statistics options, or null to use default options.</param>
-    /// <param name="modelEvaluator">The model evaluator, or null to use the default evaluator.</param>
-    /// <param name="fitDetector">The fit detector, or null to use the default detector.</param>
-    /// <param name="fitnessCalculator">The fitness calculator, or null to use the default calculator.</param>
-    /// <param name="modelCache">The model cache, or null to use the default cache.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new RMSProp optimizer with the specified options and components.
@@ -119,14 +113,8 @@ public class RootMeanSquarePropagationOptimizer<T> : GradientBasedOptimizerBase<
     /// </para>
     /// </remarks>
     public RootMeanSquarePropagationOptimizer(
-        RootMeanSquarePropagationOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
+        RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
@@ -164,15 +152,15 @@ public class RootMeanSquarePropagationOptimizer<T> : GradientBasedOptimizerBase<
     /// of the optimization landscape.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _squaredGradient = new Vector<T>(currentSolution.Coefficients.Length);
+        _squaredGradient = new Vector<T>(currentSolution.GetParameters().Length);
         _t = 0;
         InitializeAdaptiveParameters();
 
@@ -232,7 +220,7 @@ public class RootMeanSquarePropagationOptimizer<T> : GradientBasedOptimizerBase<
     /// exactly the step size it needs.
     /// </para>
     /// </remarks>
-    public override Vector<T> UpdateVector(Vector<T> parameters, Vector<T> gradient)
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -277,8 +265,9 @@ public class RootMeanSquarePropagationOptimizer<T> : GradientBasedOptimizerBase<
     /// This adaptive movement helps the algorithm navigate efficiently toward better solutions.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        var parameters = currentSolution.GetParameters();
         for (int i = 0; i < gradient.Length; i++)
         {
             var gradientSquared = NumOps.Multiply(gradient[i], gradient[i]);
@@ -292,7 +281,7 @@ public class RootMeanSquarePropagationOptimizer<T> : GradientBasedOptimizerBase<
                 NumOps.Add(NumOps.Sqrt(_squaredGradient[i]), NumOps.FromDouble(_options.Epsilon))
             );
 
-            currentSolution.Coefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], update);
+            parameters[i] = NumOps.Subtract(parameters[i], update);
         }
 
         return currentSolution;
@@ -323,7 +312,7 @@ public class RootMeanSquarePropagationOptimizer<T> : GradientBasedOptimizerBase<
     /// This caching mechanism improves efficiency by avoiding duplicate work.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_RMSprop_{CurrentLearningRate}_{_options.Decay}_{_options.Epsilon}_{_t}";
@@ -375,7 +364,7 @@ public class RootMeanSquarePropagationOptimizer<T> : GradientBasedOptimizerBase<
     /// or for making a copy of the settings to modify and apply later.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -458,7 +447,7 @@ public class RootMeanSquarePropagationOptimizer<T> : GradientBasedOptimizerBase<
         _t = reader.ReadInt32();
         _squaredGradient = JsonConvert.DeserializeObject<Vector<T>>(reader.ReadString())
             ?? throw new InvalidOperationException("Failed to deserialize _squaredGradient.");
-        _options = JsonConvert.DeserializeObject<RootMeanSquarePropagationOptimizerOptions>(reader.ReadString())
+        _options = JsonConvert.DeserializeObject<RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>>(reader.ReadString())
             ?? throw new InvalidOperationException("Failed to deserialize _options.");
     }
 }

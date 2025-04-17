@@ -16,7 +16,7 @@
 /// you just specify what you need, and the factory provides it.
 /// </para>
 /// </remarks>
-public class NormalizerFactory<T>
+public class NormalizerFactory<T, TInput, TOutput>
 {
     /// <summary>
     /// Provides operations for numeric calculations with type T.
@@ -32,7 +32,7 @@ public class NormalizerFactory<T>
     /// </summary>
     /// <param name="method">The normalization method to use.</param>
     /// <param name="lpNormP">Optional parameter for Lp-norm normalization, defaults to 2 (Euclidean norm).</param>
-    /// <returns>An implementation of INormalizer<T> for the specified normalization method.</returns>
+    /// <returns>An implementation of INormalizer<T, TInput, TOutput> for the specified normalization method.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported normalization method is specified.</exception>
     /// <remarks>
     /// <para>
@@ -56,21 +56,21 @@ public class NormalizerFactory<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public static INormalizer<T> CreateNormalizer(NormalizationMethod method, T? lpNormP = default)
+    public static INormalizer<T, TInput, TOutput> CreateNormalizer(NormalizationMethod method, T? lpNormP = default)
     {
         return method switch
         {
-            NormalizationMethod.None => new NoNormalizer<T>(),
-            NormalizationMethod.MinMax => new MinMaxNormalizer<T>(),
-            NormalizationMethod.ZScore => new ZScoreNormalizer<T>(),
-            NormalizationMethod.RobustScaling => new RobustScalingNormalizer<T>(),
-            NormalizationMethod.Decimal => new DecimalNormalizer<T>(),
-            NormalizationMethod.Binning => new BinningNormalizer<T>(),
-            NormalizationMethod.MeanVariance => new MeanVarianceNormalizer<T>(),
-            NormalizationMethod.LogMeanVariance => new LogMeanVarianceNormalizer<T>(),
-            NormalizationMethod.GlobalContrast => new GlobalContrastNormalizer<T>(),
-            NormalizationMethod.LpNorm => new LpNormNormalizer<T>(lpNormP ?? _numOps.FromDouble(2)),
-            NormalizationMethod.Log => new LogNormalizer<T>(),
+            NormalizationMethod.None => new NoNormalizer<T, TInput, TOutput>(),
+            NormalizationMethod.MinMax => new MinMaxNormalizer<T, TInput, TOutput>(),
+            NormalizationMethod.ZScore => new ZScoreNormalizer<T, TInput, TOutput>(),
+            NormalizationMethod.RobustScaling => new RobustScalingNormalizer<T, TInput, TOutput>(),
+            NormalizationMethod.Decimal => new DecimalNormalizer<T, TInput, TOutput>(),
+            NormalizationMethod.Binning => new BinningNormalizer<T, TInput, TOutput>(),
+            NormalizationMethod.MeanVariance => new MeanVarianceNormalizer<T, TInput, TOutput>(),
+            NormalizationMethod.LogMeanVariance => new LogMeanVarianceNormalizer<T, TInput, TOutput>(),
+            NormalizationMethod.GlobalContrast => new GlobalContrastNormalizer<T, TInput, TOutput>(),
+            NormalizationMethod.LpNorm => new LpNormNormalizer<T, TInput, TOutput>(lpNormP ?? _numOps.FromDouble(2)),
+            NormalizationMethod.Log => new LogNormalizer<T, TInput, TOutput>(),
             _ => throw new ArgumentException($"Unsupported normalization method: {method}")
         };
     }

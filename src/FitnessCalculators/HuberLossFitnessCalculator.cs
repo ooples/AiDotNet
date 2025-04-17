@@ -35,7 +35,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - Situations where both small and large errors need to be handled appropriately
 /// </para>
 /// </remarks>
-public class HuberLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class HuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The threshold parameter that determines the transition point between quadratic and linear loss.
@@ -118,7 +118,7 @@ public class HuberLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// that could throw off a standard Mean Squared Error calculation.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return NeuralNetworkHelper<T>.HuberLoss(dataSet.Predicted, dataSet.Actual, _delta);
     }

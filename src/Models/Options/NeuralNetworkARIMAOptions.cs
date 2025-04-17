@@ -78,6 +78,32 @@ public class NeuralNetworkARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     public int AROrder { get; set; } = 1;
 
     /// <summary>
+    /// The order of differencing applied to the time series data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Specifies how many times the differencing operation is applied to the time series to achieve stationarity.
+    /// Differencing helps remove trends and seasonality by computing differences between consecutive observations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This determines how the model handles trends in your data.
+    /// 
+    /// Imagine you're tracking daily temperatures:
+    /// - If temperatures are steadily rising over time (a trend), it's harder to predict exact values
+    /// - Differencing transforms the data to focus on changes rather than absolute values
+    /// - For example, instead of predicting "it will be 75°F tomorrow," the model might work with 
+    ///   "it will be 2°F warmer than today"
+    /// 
+    /// The differencing order tells the model how many times to apply this transformation:
+    /// - Order 0: Use the original values (no differencing)
+    /// - Order 1: Use the differences between consecutive values
+    /// - Order 2: Use the differences of the differences
+    /// 
+    /// Higher orders help handle more complex trends, but too high may introduce unnecessary complexity.
+    /// </para>
+    /// </remarks>
+    public int DifferencingOrder { get; set; }
+
+    /// <summary>
     /// Gets or sets the Moving Average (MA) order, which determines how many previous error terms
     /// are used in the prediction model.
     /// </summary>
@@ -197,47 +223,6 @@ public class NeuralNetworkARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     public int ExogenousVariables { get; set; } = 0;
 
     /// <summary>
-    /// Gets or sets whether to use vector activations in the neural network portion of the model.
-    /// </summary>
-    /// <value>Whether to use vector activations, defaulting to false.</value>
-    /// <remarks>
-    /// <para>
-    /// When set to true, this option enables the neural network to process multiple time steps as
-    /// vectors rather than individual points, allowing for more efficient computation and potentially
-    /// better modeling of vector-based time series patterns. Vector activations can capture
-    /// relationships across multiple dimensions simultaneously, which may be beneficial for
-    /// multivariate time series or when using vector-based optimization techniques. This approach
-    /// is more computationally efficient for batch processing but may be less intuitive to interpret.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting determines whether the neural network
-    /// processes individual time points or entire sequences at once.
-    /// 
-    /// Think of it like this:
-    /// - Regular mode (false): The model looks at each day's temperature one at a time
-    /// - Vector mode (true): The model looks at an entire week's temperatures together as a pattern
-    /// 
-    /// The default value of false means:
-    /// - The neural network processes each time point individually
-    /// - This is more intuitive and often works well for many problems
-    /// 
-    /// You might want to set this to true if:
-    /// - You're working with multivariate time series (multiple related measurements)
-    /// - Your data has complex patterns that span multiple time points
-    /// - You need faster computation for very large datasets
-    /// 
-    /// You might want to keep it false if:
-    /// - You prefer a more interpretable model
-    /// - Your time series is relatively simple
-    /// - You're still exploring the data and want to start with simpler approaches
-    /// 
-    /// Vector activations are an advanced feature that can improve performance but adds
-    /// complexity to the model. It's often better to start with the default and only change
-    /// this after you have a baseline model working well.
-    /// </para>
-    /// </remarks>
-    public bool UseVectorActivations { get; set; } = false;
-
-    /// <summary>
     /// Gets or sets the neural network to use in the hybrid model.
     /// </summary>
     /// <value>The neural network instance, defaulting to null (in which case a default network will be created).</value>
@@ -317,5 +302,5 @@ public class NeuralNetworkARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// and only change it if you encounter specific training issues.
     /// </para>
     /// </remarks>
-    public IOptimizer<T>? Optimizer { get; set; }
+    public IOptimizer<T, Matrix<T>, Vector<T>>? Optimizer { get; set; }
 }

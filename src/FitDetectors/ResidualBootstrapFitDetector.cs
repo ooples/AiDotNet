@@ -12,7 +12,7 @@ namespace AiDotNet.FitDetectors;
 /// model is too complex (overfit), too simple (underfit), or just right (good fit).
 /// </para>
 /// </remarks>
-public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
+public class ResidualBootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the residual bootstrap fit detector.
@@ -53,7 +53,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// 3. What steps you might take to improve your model
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -84,7 +84,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// it suggests there might be a problem with how well your model fits the data.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var bootstrapMSEs = PerformResidualBootstrap(evaluationData);
         var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
@@ -126,7 +126,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// The final score is between 0 and 1, where 1 means completely confident and 0 means not confident at all.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var bootstrapMSEs = PerformResidualBootstrap(evaluationData);
         var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
@@ -157,7 +157,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// These recommendations are starting points that you can try to improve your model's performance.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -209,7 +209,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// - The resulting MSE distribution helps assess model stability and fit quality
     /// </para>
     /// </remarks>
-    private Vector<T> PerformResidualBootstrap(ModelEvaluationData<T> evaluationData)
+    private Vector<T> PerformResidualBootstrap(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         // Extract actual values and model predictions from the evaluation data
         var actual = evaluationData.ModelStats.Actual;

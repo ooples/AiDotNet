@@ -1,3 +1,5 @@
+global using AiDotNet.CrossValidators;
+
 namespace AiDotNet.Evaluation;
 
 /// <summary>
@@ -11,7 +13,7 @@ namespace AiDotNet.Evaluation;
 /// 
 /// Think of it like a report card for your AI model that shows its strengths and weaknesses.
 /// </remarks>
-public class ModelEvaluator<T> : IModelEvaluator<T>
+public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for prediction statistics calculations.
@@ -31,7 +33,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// <b>For Beginners:</b> This creates a new evaluator that will test how well your AI model works.
     /// You can customize how it evaluates by providing options, or just use the default settings.
     /// </remarks>
-    public ModelEvaluator(PredictionStatsOptions? predictionOptions = null)
+    public DefaultModelEvaluator(PredictionStatsOptions? predictionOptions = null)
     {
         _predictionOptions = predictionOptions ?? new PredictionStatsOptions();
     }
@@ -49,14 +51,14 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// 
     /// It returns detailed statistics about how well your model performs on each dataset.
     /// </remarks>
-    public ModelEvaluationData<T> EvaluateModel(ModelEvaluationInput<T> input)
+    public ModelEvaluationData<T, TInput, TOutput> EvaluateModel(ModelEvaluationInput<T, TInput, TOutput> input)
     {
-        var model = input.Model ?? new VectorModel<T>(Vector<T>.Empty());
+        var model = input.Model ?? new VectorModel<T, TInput, TOutput>(Vector<T>.Empty());
 
-        var evaluationData = new ModelEvaluationData<T>
+        var evaluationData = new ModelEvaluationData<T, TInput, TOutput>
         {
             TrainingSet = CalculateDataSetStats(input.InputData.XTrain, input.InputData.YTrain, model),
-            ValidationSet = CalculateDataSetStats(input.InputData.XVal, input.InputData.YVal, model),
+            ValidationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, model),
             TestSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, model),
             ModelStats = CalculateModelStats(model, input.InputData.XTrain, input.NormInfo)
         };
@@ -75,7 +77,7 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// then generates predictions for each data point. It processes each row of your data
     /// one by one and returns all the predictions as a collection.
     /// </remarks>
-    private static Vector<T> PredictWithSymbolicModel(ISymbolicModel<T> model, Matrix<T> X)
+    private static Vector<T> PredictWithSymbolicModel(IFullModel<T, TInput, TOutput> model, Matrix<T> X)
     {
         var predictions = new Vector<T>(X.Rows);
         for (int i = 0; i < X.Rows; i++)
@@ -103,11 +105,11 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// 
     /// This gives you a complete picture of your model's performance on this dataset.
     /// </remarks>
-    private DataSetStats<T> CalculateDataSetStats(Matrix<T> X, Vector<T> y, ISymbolicModel<T> model)
+    private DataSetStats<T, TInput, TOutput> CalculateDataSetStats(Matrix<T> X, Vector<T> y, IFullModel<T, TInput, TOutput> model)
     {
         var predictions = PredictWithSymbolicModel(model, X);
 
-        return new DataSetStats<T>
+        return new DataSetStats<T, TInput, TOutput>
         {
             ErrorStats = CalculateErrorStats(y, predictions, X.Columns),
             ActualBasicStats = CalculateBasicStats(y),
@@ -203,15 +205,57 @@ public class ModelEvaluator<T> : IModelEvaluator<T>
     /// 
     /// This helps you understand what makes your model tick and which inputs matter most.
     /// </remarks>
-    private static ModelStats<T> CalculateModelStats(ISymbolicModel<T> model, Matrix<T> xTrain, NormalizationInfo<T> normInfo)
+    private static ModelStats<T, TInput, TOutput> CalculateModelStats(IFullModel<T, TInput, TOutput> model, Matrix<T> xTrain, NormalizationInfo<T, TInput, TOutput> normInfo)
     {
-        var predictionModelResult = new PredictionModelResult<T>(model, new OptimizationResult<T>(), normInfo);
+        var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(model, new OptimizationResult<T, TInput, TOutput>(), normInfo);
 
-        return new ModelStats<T>(new ModelStatsInputs<T>
+        return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T>
         {
             XMatrix = xTrain,
             FeatureCount = xTrain.Columns,
             Model = predictionModelResult
         });
+    }
+
+    /// <summary>
+    /// Performs cross-validation on the given model using the provided data and options.
+    /// </summary>
+    /// <param name="model">The model to evaluate.</param>
+    /// <param name="X">The feature matrix.</param>
+    /// <param name="y">The target vector.</param>
+    /// <param name="crossValidator">Optional custom cross-validator implementation.</param>
+    /// <returns>A CrossValidationResult containing the evaluation metrics for each fold.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs cross-validation to assess how well the model generalizes to unseen data. It splits the data into 
+    /// multiple subsets (folds), trains the model on a portion of the data, and evaluates it on the held-out portion. This process 
+    /// is repeated multiple times to get a robust estimate of the model's performance. The method allows for customization of the 
+    /// cross-validation process through options and even allows for a custom cross-validator implementation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method tests how well your model performs on different subsets of your data.
+    /// 
+    /// Cross-validation:
+    /// - Splits your data into several parts (called folds)
+    /// - Trains the model multiple times, each time using a different part as a test set
+    /// - Helps understand how well the model will work on new, unseen data
+    /// 
+    /// This is useful for:
+    /// - Getting a more reliable estimate of model performance
+    /// - Detecting overfitting (when a model works well on training data but poorly on new data)
+    /// - Comparing different models to see which one generalizes better
+    /// 
+    /// For example, in 5-fold cross-validation, your data is split into 5 parts. The model is trained 5 times, 
+    /// each time using 4 parts for training and 1 for testing. The results are then averaged to get an overall performance score.
+    /// </para>
+    /// </remarks>
+    public CrossValidationResult<T> PerformCrossValidation(
+        IFullModel<T, Matrix<T>, Vector<T>> model,
+        Matrix<T> X,
+        Vector<T> y,
+        ICrossValidator<T>? crossValidator = null)
+    {
+        crossValidator ??= new StandardCrossValidator<T>();
+
+        return crossValidator.Validate(model, X, y);
     }
 }

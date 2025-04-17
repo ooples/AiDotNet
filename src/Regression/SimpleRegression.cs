@@ -62,7 +62,7 @@ public class SimpleRegression<T> : RegressionBase<T>
     /// limited data samples.
     /// </para>
     /// </remarks>
-    public SimpleRegression(RegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public SimpleRegression(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
     }
@@ -109,7 +109,7 @@ public class SimpleRegression<T> : RegressionBase<T>
             x = x.AddConstantColumn(NumOps.One);
 
         var xTx = x.Transpose().Multiply(x);
-        var regularizedXTx = xTx.Add(Regularization.RegularizeMatrix(xTx));
+        var regularizedXTx = xTx.Add(Regularization.Regularize(xTx));
         var xTy = x.Transpose().Multiply(y);
 
         var solution = SolveSystem(regularizedXTx, xTy);
@@ -123,6 +123,34 @@ public class SimpleRegression<T> : RegressionBase<T>
         {
             Coefficients = new Vector<T>([solution[0]]);
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the simple regression model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the simple regression model with the same configuration but no trained parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the simple regression model with the same configuration
+    /// options and regularization method as the current instance, but without copying the trained parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
+    /// any learned parameters.
+    /// 
+    /// Think of it like getting a clean notepad with the same paper type and line spacing, but 
+    /// without any writing on it yet. The new model has the same settings (like whether to include
+    /// an intercept term), but hasn't learned any coefficients from data.
+    /// 
+    /// This is primarily used internally by the framework when doing things like:
+    /// - Cross-validation (testing the model on different data splits)
+    /// - Building model ensembles
+    /// - Creating copies of models for experimentation
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create a new instance with the same options and regularization
+        return new SimpleRegression<T>(Options, Regularization);
     }
 
     /// <summary>

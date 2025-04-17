@@ -21,7 +21,7 @@ namespace AiDotNet.Helpers;
 /// the algorithm is making progress or getting stuck.
 /// </para>
 /// </remarks>
-public static class AdaptiveParametersHelper<T>
+public static class AdaptiveParametersHelper<T, TInput, TOutput>
 {
     /// <summary>
     /// Provides numeric operations appropriate for the generic type T.
@@ -66,9 +66,9 @@ public static class AdaptiveParametersHelper<T>
     public static void UpdateAdaptiveGeneticParameters(
         ref T currentCrossoverRate,
         ref T currentMutationRate,
-        OptimizationStepData<T> currentStepData,
-        OptimizationStepData<T> previousStepData,
-        GeneticAlgorithmOptimizerOptions options)
+        OptimizationStepData<T, TInput, TOutput> currentStepData,
+        OptimizationStepData<T, TInput, TOutput> previousStepData,
+        GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> options)
     {
         if (_numOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {

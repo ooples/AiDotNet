@@ -20,7 +20,7 @@ namespace AiDotNet.FitDetectors;
 /// specific categories or classes.
 /// </para>
 /// </remarks>
-public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
+public class PrecisionRecallCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     private readonly PrecisionRecallCurveFitDetectorOptions _options;
     
@@ -98,7 +98,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// and improve your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
@@ -139,7 +139,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// Think of it like getting a grade on your model's performance - A (Good), C (Moderate), or F (Poor).
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (Auc > _options.AreaUnderCurveThreshold && F1Score > _options.F1ScoreThreshold)
         {
@@ -171,7 +171,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// This can help you decide how much to trust the recommendations provided.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         // Calculate confidence level as a weighted average of AUC and F1 Score
         return _numOps.Add(_numOps.Multiply(_numOps.FromDouble(Auc), _numOps.FromDouble(_options.AucWeight)), _numOps.Multiply(_numOps.FromDouble(F1Score), _numOps.FromDouble(_options.F1ScoreWeight)));
@@ -196,7 +196,7 @@ public class PrecisionRecallCurveFitDetector<T> : FitDetectorBase<T>
     /// These recommendations are designed to be actionable steps you can take to improve your model's performance.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

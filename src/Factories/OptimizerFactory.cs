@@ -15,7 +15,7 @@ namespace AiDotNet.Factories;
 /// what you need, and the factory provides it.
 /// </para>
 /// </remarks>
-public static class OptimizerFactory
+public static class OptimizerFactory<T, TInput, TOutput>
 {
     /// <summary>
     /// A dictionary that maps optimizer types to their corresponding implementation classes.
@@ -36,14 +36,14 @@ public static class OptimizerFactory
     static OptimizerFactory()
     {
         // Register all optimizer types
-        RegisterOptimizerType(OptimizerType.Adam, typeof(AdamOptimizer<>));
-        RegisterOptimizerType(OptimizerType.GradientDescent, typeof(GradientDescentOptimizer<>));
-        RegisterOptimizerType(OptimizerType.StochasticGradientDescent, typeof(StochasticGradientDescentOptimizer<>));
-        RegisterOptimizerType(OptimizerType.AntColony, typeof(AntColonyOptimizer<>));
-        RegisterOptimizerType(OptimizerType.GeneticAlgorithm, typeof(GeneticAlgorithmOptimizer<>));
-        RegisterOptimizerType(OptimizerType.SimulatedAnnealing, typeof(SimulatedAnnealingOptimizer<>));
-        RegisterOptimizerType(OptimizerType.ParticleSwarm, typeof(ParticleSwarmOptimizer<>));
-        RegisterOptimizerType(OptimizerType.Normal, typeof(NormalOptimizer<>));
+        RegisterOptimizerType(OptimizerType.Adam, typeof(AdamOptimizer<T, TInput, TOutput>));
+        RegisterOptimizerType(OptimizerType.GradientDescent, typeof(GradientDescentOptimizer<T, TInput, TOutput>));
+        RegisterOptimizerType(OptimizerType.StochasticGradientDescent, typeof(StochasticGradientDescentOptimizer<T, TInput, TOutput>));
+        RegisterOptimizerType(OptimizerType.AntColony, typeof(AntColonyOptimizer<T, TInput, TOutput>));
+        RegisterOptimizerType(OptimizerType.GeneticAlgorithm, typeof(GeneticAlgorithmOptimizer<T, TInput, TOutput>));
+        RegisterOptimizerType(OptimizerType.SimulatedAnnealing, typeof(SimulatedAnnealingOptimizer<T, TInput, TOutput>));
+        RegisterOptimizerType(OptimizerType.ParticleSwarm, typeof(ParticleSwarmOptimizer<T, TInput, TOutput>));
+        RegisterOptimizerType(OptimizerType.Normal, typeof(NormalOptimizer<T, TInput, TOutput>));
     }
 
     /// <summary>
@@ -77,7 +77,7 @@ public static class OptimizerFactory
     /// when saving or loading models.
     /// </para>
     /// </remarks>
-    public static OptimizerType GetOptimizerType<T>(IOptimizer<T> optimizer)
+    public static OptimizerType GetOptimizerType(IOptimizer<T, TInput, TOutput> optimizer)
     {
         foreach (var kvp in _optimizerTypes)
         {
@@ -96,7 +96,7 @@ public static class OptimizerFactory
     /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
     /// <param name="optimizerTypeEnum">The type of optimizer to create.</param>
     /// <param name="options">Configuration options for the optimizer.</param>
-    /// <returns>An implementation of IOptimizer<T> for the specified optimizer type.</returns>
+    /// <returns>An implementation of IOptimizer<T, TInput, TOutput> for the specified optimizer type.</returns>
     /// <exception cref="ArgumentException">Thrown when an unknown optimizer type is specified.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the optimizer type is registered but null, or when instance creation fails.</exception>
     /// <remarks>
@@ -118,7 +118,7 @@ public static class OptimizerFactory
     /// </list>
     /// </para>
     /// </remarks>
-    public static IOptimizer<T> CreateOptimizer<T>(OptimizerType optimizerTypeEnum, OptimizationAlgorithmOptions options)
+    public static IOptimizer<T, TInput, TOutput> CreateOptimizer(OptimizerType optimizerTypeEnum, OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
         if (!_optimizerTypes.TryGetValue(optimizerTypeEnum, out Type? optimizerGenericType))
         {
@@ -135,6 +135,6 @@ public static class OptimizerFactory
 
         return instance == null
             ? throw new InvalidOperationException($"Failed to create instance of {concreteOptimizerType.Name}")
-            : (IOptimizer<T>)instance;
+            : (IOptimizer<T, TInput, TOutput>)instance;
     }
 }

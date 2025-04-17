@@ -84,7 +84,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public TBATSModel(TBATSModelOptions<T>? options = null) : base(options ?? new TBATSModelOptions<T>())
     {
-        _tbatsOptions = (TBATSModelOptions<T>)_options;
+        _tbatsOptions = (TBATSModelOptions<T>)Options;
 
         _level = new Vector<T>(1);
         _trend = new Vector<T>(1);
@@ -96,54 +96,6 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         _arCoefficients = new Vector<T>(_tbatsOptions.ARMAOrder);
         _maCoefficients = new Vector<T>(_tbatsOptions.ARMAOrder);
         _boxCoxLambda = NumOps.FromDouble(_tbatsOptions.BoxCoxLambda);
-    }
-
-    /// <summary>
-    /// Trains the TBATS model using the provided input data and target values.
-    /// </summary>
-    /// <param name="x">The input features matrix (not used in TBATS).</param>
-    /// <param name="y">The time series data to model.</param>
-    /// <remarks>
-    /// <para>
-    /// The training process iteratively estimates all components of the model (level, trend, seasonal patterns,
-    /// and ARMA coefficients) until convergence or the maximum number of iterations is reached.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Training a TBATS model is like teaching a chef to recreate a complex recipe by analyzing its ingredients:
-    /// 
-    /// 1. First, the model makes initial guesses about each component (level, trend, seasonal patterns)
-    /// 2. Then it iteratively refines these guesses by:
-    ///    - Updating the level, trend, and seasonal components
-    ///    - Estimating the ARMA coefficients for the remaining patterns in the errors
-    ///    - Checking if the model has improved significantly
-    /// 3. It stops when either:
-    ///    - The improvements become very small (less than the tolerance)
-    ///    - It reaches the maximum number of iterations
-    /// 
-    /// After training, the model will have learned the patterns in your data and can make predictions.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        // Initialize components
-        InitializeComponents(y);
-
-        // Main training loop
-        for (int iteration = 0; iteration < _tbatsOptions.MaxIterations; iteration++)
-        {
-            T oldLogLikelihood = CalculateLogLikelihood(y);
-
-            UpdateComponents(y);
-            UpdateARMACoefficients(y);
-
-            T newLogLikelihood = CalculateLogLikelihood(y);
-
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(newLogLikelihood, oldLogLikelihood)), NumOps.FromDouble(_tbatsOptions.Tolerance)))
-            {
-                break;
-            }
-        }
     }
 
     /// <summary>
@@ -1113,5 +1065,220 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         string optionsJson = reader.ReadString();
         _tbatsOptions = JsonConvert.DeserializeObject<TBATSModelOptions<T>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize TBATS model options.");
+    }
+
+    /// <summary>
+    /// Resets the model to its initial state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears all learned parameters and returns the model to its initial state,
+    /// as if it had just been created with the same options but not yet trained.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Resetting a model is like erasing what it has learned while keeping its configuration.
+    /// 
+    /// This is useful when you want to:
+    /// - Retrain the model on different data
+    /// - Try different initial values
+    /// - Compare training results with the same configuration
+    /// - Start fresh after experimenting
+    /// 
+    /// It's similar to keeping your recipe (the configuration) but throwing away the dish you've
+    /// already cooked (the learned parameters) to start cooking again from scratch.
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        _level = new Vector<T>(1);
+        _trend = new Vector<T>(1);
+    
+        _seasonalComponents = new List<Vector<T>>();
+        foreach (int period in _tbatsOptions.SeasonalPeriods)
+        {
+            _seasonalComponents.Add(new Vector<T>(period));
+        }
+    
+        _arCoefficients = new Vector<T>(_tbatsOptions.ARMAOrder);
+        _maCoefficients = new Vector<T>(_tbatsOptions.ARMAOrder);
+        _boxCoxLambda = NumOps.FromDouble(_tbatsOptions.BoxCoxLambda);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the TBATS model with the same options.
+    /// </summary>
+    /// <returns>A new TBATS model instance with the same configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the TBATS model with the same configuration options
+    /// as the current instance. The new instance is not trained and will need to be trained on data.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates a fresh copy of your model with the same settings but no training.
+    /// 
+    /// It's useful when you want to:
+    /// - Create multiple models with the same configuration
+    /// - Train models on different subsets of data
+    /// - Create ensemble models (combining multiple models)
+    /// - Compare training results with identical starting points
+    /// 
+    /// Think of it like copying a recipe to share with a friend. They get the same instructions
+    /// but will need to do their own cooking (training) to create the dish.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a new instance with the same options
+        return new TBATSModel<T>(_tbatsOptions);
+    }
+
+    /// <summary>
+    /// Gets metadata about the model, including its type, configuration, and learned parameters.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed metadata about the model, including its type, configuration options,
+    /// and information about the learned components. This metadata can be used for model selection,
+    /// comparison, and documentation.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method provides a summary of your model's configuration and what it has learned.
+    /// 
+    /// It includes information like:
+    /// - The type of model (TBATS)
+    /// - The configuration settings (seasonal periods, ARMA order, etc.)
+    /// - Details about the learned components (level, trend, seasonal patterns)
+    /// - Performance statistics
+    /// 
+    /// This metadata is useful for:
+    /// - Comparing different models
+    /// - Documenting your analysis
+    /// - Understanding what the model has learned
+    /// - Sharing model information with others
+    /// 
+    /// Think of it like getting a detailed report card for your model.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.TBATSModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include configuration options
+                { "SeasonalPeriods", _tbatsOptions.SeasonalPeriods },
+                { "ARMAOrder", _tbatsOptions.ARMAOrder },
+                { "BoxCoxLambda", _tbatsOptions.BoxCoxLambda },
+                { "MaxIterations", _tbatsOptions.MaxIterations },
+                { "Tolerance", _tbatsOptions.Tolerance },
+            
+                // Include information about learned components
+                { "LevelSize", _level.Length },
+                { "TrendSize", _trend.Length },
+                { "SeasonalComponentsCount", _seasonalComponents.Count },
+                { "LastLevel", _level.Length > 0 ? Convert.ToDouble(_level[_level.Length - 1]) : 0 },
+                { "LastTrend", _trend.Length > 0 ? Convert.ToDouble(_trend[_trend.Length - 1]) : 0 }
+            },
+            ModelData = this.Serialize()
+        };
+    
+        return metadata;
+    }
+
+    /// <summary>
+    /// Performs the core training logic for the TBATS model.
+    /// </summary>
+    /// <param name="x">The input features matrix.</param>
+    /// <param name="y">The time series data to model.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method implements the core training algorithm for the TBATS model.
+    /// It handles the actual mathematical operations that help the model learn
+    /// patterns from your time series data.
+    /// 
+    /// While the model primarily uses the time series values themselves (y) to learn patterns,
+    /// this method takes both an input matrix (x) and a target vector (y) to maintain
+    /// consistency with other models in the framework.
+    /// 
+    /// Think of this as the "engine" of the training process that coordinates all the
+    /// individual learning steps like initializing components, updating coefficients,
+    /// and checking for convergence.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Initialize components
+        InitializeComponents(y);
+
+        // Main training loop
+        for (int iteration = 0; iteration < _tbatsOptions.MaxIterations; iteration++)
+        {
+            T oldLogLikelihood = CalculateLogLikelihood(y);
+
+            UpdateComponents(y);
+            UpdateARMACoefficients(y);
+
+            T newLogLikelihood = CalculateLogLikelihood(y);
+
+            // Check for convergence
+            T improvement = NumOps.Abs(NumOps.Subtract(newLogLikelihood, oldLogLikelihood));
+            T tolerance = NumOps.FromDouble(_tbatsOptions.Tolerance);
+        
+            if (NumOps.LessThan(improvement, tolerance))
+            {
+                // Model has converged
+                break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Predicts a single value for the given input vector.
+    /// </summary>
+    /// <param name="input">The input vector containing features for prediction.</param>
+    /// <returns>The predicted value.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method predicts a single future value based on the model's learned patterns.
+    /// 
+    /// In TBATS models, we generally don't use external features (like temperature or
+    /// day of week) because predictions are based on the time series patterns themselves.
+    /// 
+    /// This method is required by the framework's interface, and it works by:
+    /// 1. Taking the input vector (which might represent time or other factors)
+    /// 2. Creating a simplified prediction request
+    /// 3. Getting the predicted value from the model
+    /// 
+    /// For example, if you want to predict tomorrow's sales, this method would give
+    /// you a single number representing the expected sales value.
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Create a matrix with a single row for the prediction request
+        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            inputMatrix[0, i] = input[i];
+        }
+    
+        // Generate the prediction
+        Vector<T> predictions = Predict(inputMatrix);
+    
+        // Check if we got any predictions
+        if (predictions.Length == 0)
+        {
+            throw new InvalidOperationException("No predictions were generated by the model.");
+        }
+    
+        // Return the first (and only) predicted value
+        return predictions[0];
     }
 }

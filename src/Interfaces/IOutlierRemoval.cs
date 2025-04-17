@@ -12,7 +12,7 @@
 /// techniques. By removing outliers, you can often improve the accuracy and reliability of your
 /// machine learning models.
 /// </remarks>
-public interface IOutlierRemoval<T>
+public interface IOutlierRemoval<T, TInput, TOutput>
 {
     /// <summary>
     /// Removes outliers from the input data and returns the cleaned dataset.
@@ -41,5 +41,5 @@ public interface IOutlierRemoval<T>
     /// After processing, the method returns both the cleaned inputs and outputs with outliers removed,
     /// maintaining the relationship between input features and their corresponding output values.
     /// </remarks>
-    (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs);
+    (TInput CleanedInputs, TOutput CleanedOutputs) RemoveOutliers(TInput inputs, TOutput outputs);
 }

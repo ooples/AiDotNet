@@ -22,33 +22,31 @@
 /// Without regularization, models often perform well on training data but poorly on new data.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface IRegularization<T>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
+public interface IRegularization<T, TInput, TOutput>
 {
     /// <summary>
-    /// Applies regularization to the features matrix.
+    /// Applies regularization to a matrix of input features.
     /// </summary>
     /// <remarks>
-    /// This method modifies the input features to help prevent overfitting.
+    /// This method applies regularization to a matrix of input features.
     /// 
-    /// <b>For Beginners:</b> This method prepares your input data for regularization by
-    /// applying transformations that will help the model focus on the most important patterns.
+    /// <b>For Beginners:</b> This method helps prevent overfitting by modifying
+    /// your input data according to the regularization strategy. It can reduce
+    /// the influence of extreme values or unnecessary features.
     /// 
-    /// Depending on the regularization type, this might:
-    /// - Scale features to similar ranges
-    /// - Apply special transformations to the data
-    /// - Prepare the data for the specific regularization technique
-    /// 
-    /// This is typically called during the model training process.
+    /// This is typically used when preparing data for model training.
     /// </remarks>
-    /// <param name="featuresMatrix">The matrix of input features to regularize.</param>
-    /// <returns>The regularized features matrix.</returns>
-    Matrix<T> RegularizeMatrix(Matrix<T> featuresMatrix);
+    /// <param name="data">The input matrix to regularize.</param>
+    /// <returns>The regularized matrix.</returns>
+    Matrix<T> Regularize(Matrix<T> data);
 
     /// <summary>
-    /// Applies regularization to the model coefficients.
+    /// Applies regularization to output data or model coefficients.
     /// </summary>
     /// <remarks>
-    /// This method adjusts the model coefficients (weights) according to the regularization strategy.
+    /// This method applies regularization to output data or model coefficients.
     /// 
     /// <b>For Beginners:</b> Model coefficients are the "importance weights" your model assigns to different features.
     /// This method helps keep these weights from getting too large, which can cause overfitting.
@@ -59,9 +57,9 @@ public interface IRegularization<T>
     /// 
     /// Think of it as encouraging your model to use simpler explanations by penalizing complex solutions.
     /// </remarks>
-    /// <param name="coefficients">The vector of model coefficients to regularize.</param>
-    /// <returns>The regularized coefficients.</returns>
-    Vector<T> RegularizeCoefficients(Vector<T> coefficients);
+    /// <param name="data">The output data or coefficients to regularize.</param>
+    /// <returns>The regularized data or coefficients.</returns>
+    Vector<T> Regularize(Vector<T> data);
 
     /// <summary>
     /// Applies regularization to the gradient during optimization.
@@ -75,14 +73,11 @@ public interface IRegularization<T>
     /// 
     /// It's like adding a gentle force that pulls the model toward simpler solutions during training.
     /// This helps prevent the model from becoming too complex and overfitting the training data.
-    /// 
-    /// This is an internal method used during the optimization process and typically isn't
-    /// called directly by users.
     /// </remarks>
     /// <param name="gradient">The original gradient vector from the optimization algorithm.</param>
     /// <param name="coefficients">The current coefficient values.</param>
     /// <returns>The regularized gradient vector.</returns>
-    Vector<T> RegularizeGradient(Vector<T> gradient, Vector<T> coefficients);
+    TOutput Regularize(TOutput gradient, TOutput coefficients);
 
     /// <summary>
     /// Retrieves the current regularization options.
@@ -96,11 +91,6 @@ public interface IRegularization<T>
     /// - The type of regularization (L1, L2, Elastic Net, etc.)
     /// - The strength of regularization (how much to penalize complex models)
     /// - Other specific settings for the chosen regularization method
-    /// 
-    /// You might use this to:
-    /// - Understand how regularization is configured
-    /// - Save these settings to reproduce the same model later
-    /// - Adjust settings based on model performance
     /// </remarks>
     /// <returns>The regularization options currently in use.</returns>
     RegularizationOptions GetOptions();

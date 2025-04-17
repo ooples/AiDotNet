@@ -209,56 +209,6 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the SARIMA model using the provided input data and target values.
-    /// </summary>
-    /// <param name="x">The input features matrix.</param>
-    /// <param name="y">The target values vector.</param>
-    /// <remarks>
-    /// <para>
-    /// The training process involves:
-    /// 1. Applying seasonal and non-seasonal differencing to make the series stationary
-    /// 2. Estimating AR and seasonal AR coefficients
-    /// 3. Calculating residuals
-    /// 4. Estimating MA and seasonal MA coefficients
-    /// 5. Estimating the constant term
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Training the model means teaching it to recognize patterns in your data. The process involves:
-    /// 1. Making the data more stable by removing trends and seasonal patterns (differencing)
-    /// 2. Figuring out how past values affect future values (AR coefficients)
-    /// 3. Calculating how wrong our predictions would have been (residuals)
-    /// 4. Figuring out how past errors affect future values (MA coefficients)
-    /// 5. Calculating a baseline value (constant term)
-    /// 
-    /// After training, the model will have learned the patterns in your data and can make predictions.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        // Step 1: Apply seasonal and non-seasonal differencing
-        Vector<T> diffY = ApplyDifferencing(y);
-
-        // Step 2: Estimate non-seasonal AR coefficients
-        _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(diffY, _p, MatrixDecompositionType.Qr);
-
-        // Step 3: Estimate seasonal AR coefficients
-        _sarCoefficients = EstimateSeasonalARCoefficients(diffY);
-
-        // Step 4: Calculate residuals after AR and SAR
-        Vector<T> arResiduals = CalculateARSARResiduals(diffY);
-
-        // Step 5: Estimate non-seasonal MA coefficients
-        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(arResiduals, _q);
-
-        // Step 6: Estimate seasonal MA coefficients
-        _smaCoefficients = EstimateSeasonalMACoefficients(arResiduals);
-
-        // Step 7: Estimate constant term
-        _constant = EstimateConstant(diffY);
-    }
-
-    /// <summary>
     /// Applies both seasonal and non-seasonal differencing to the input series.
     /// </summary>
     /// <param name="y">The original time series data.</param>
@@ -612,5 +562,226 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         _sarCoefficients = SerializationHelper<T>.DeserializeVector(reader);
         _smaCoefficients = SerializationHelper<T>.DeserializeVector(reader);
         _constant = NumOps.FromDouble(reader.ReadDouble());
+    }
+
+    /// <summary>
+    /// Core implementation of the training logic for the SARIMA model.
+    /// </summary>
+    /// <param name="x">The input features matrix.</param>
+    /// <param name="y">The target values vector.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This is the core method that performs the actual training of the SARIMA model.
+    /// It applies differencing to make the data stationary, then estimates the various
+    /// components of the model (AR, MA, seasonal AR, seasonal MA) to capture patterns in the data.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Validate input data
+        if (y == null || y.Length <= 0)
+        {
+            throw new ArgumentException("Target vector cannot be null or empty", nameof(y));
+        }
+    
+        // Check if we have enough data for the seasonal component
+        int minRequiredLength = Math.Max(_d + _m * _D, _p + _P * _m) + _m * Math.Max(_P, _Q);
+        if (y.Length < minRequiredLength)
+        {
+            throw new ArgumentException(
+                $"Time series is too short (length: {y.Length}) for the specified model parameters. " +
+                $"Minimum required length: {minRequiredLength}.", nameof(y));
+        }
+    
+        // Step 1: Apply seasonal and non-seasonal differencing
+        Vector<T> diffY = ApplyDifferencing(y);
+
+        // Step 2: Estimate non-seasonal AR coefficients
+        _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(diffY, _p, MatrixDecompositionType.Qr);
+
+        // Step 3: Estimate seasonal AR coefficients
+        _sarCoefficients = EstimateSeasonalARCoefficients(diffY);
+
+        // Step 4: Calculate residuals after AR and SAR
+        Vector<T> arResiduals = CalculateARSARResiduals(diffY);
+
+        // Step 5: Estimate non-seasonal MA coefficients
+        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(arResiduals, _q);
+
+        // Step 6: Estimate seasonal MA coefficients
+        _smaCoefficients = EstimateSeasonalMACoefficients(arResiduals);
+
+        // Step 7: Estimate constant term
+        _constant = EstimateConstant(diffY);
+    }
+
+    /// <summary>
+    /// Predicts a single value based on the input vector.
+    /// </summary>
+    /// <param name="input">The input vector containing historical values.</param>
+    /// <returns>The predicted value.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method predicts a single future value based on historical data provided in the input.
+    /// The input should contain the recent history needed to make a prediction.
+    /// 
+    /// For a SARIMA model, the input should include:
+    /// - At least p values for the non-seasonal AR component
+    /// - At least P*m values for the seasonal AR component
+    /// - Recent errors for the MA components (though these are often set to zero if unknown)
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Validate input
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input), "Input vector cannot be null");
+        }
+    
+        int minRequiredInputLength = Math.Max(_p, _P * _m);
+        if (input.Length < minRequiredInputLength)
+        {
+            throw new ArgumentException(
+                $"Input vector is too short. Length: {input.Length}, required: {minRequiredInputLength}", 
+                nameof(input));
+        }
+    
+        // Start with the constant term
+        T prediction = _constant;
+    
+        // Add non-seasonal AR component
+        for (int j = 0; j < _p && j < input.Length; j++)
+        {
+            prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[j], input[j]));
+        }
+    
+        // Add seasonal AR component
+        for (int j = 0; j < _P && (j + 1) * _m - 1 < input.Length; j++)
+        {
+            prediction = NumOps.Add(prediction, 
+                NumOps.Multiply(_sarCoefficients[j], input[(j + 1) * _m - 1]));
+        }
+    
+        // Note: For single-point prediction, we typically assume zero errors for MA terms
+        // since the actual errors are unknown until after the prediction is made and
+        // compared to the actual value.
+    
+        // If the input contains error terms (optional additional data), we could use them:
+        if (input.Length > minRequiredInputLength)
+        {
+            int errorStartIndex = minRequiredInputLength;
+            int errorLength = input.Length - errorStartIndex;
+        
+            // Add non-seasonal MA component if errors are provided
+            for (int j = 0; j < _q && j < errorLength; j++)
+            {
+                prediction = NumOps.Add(prediction, 
+                    NumOps.Multiply(_maCoefficients[j], input[errorStartIndex + j]));
+            }
+        
+            // Add seasonal MA component if errors are provided
+            for (int j = 0; j < _Q && j * _m < errorLength; j++)
+            {
+                int index = errorStartIndex + j * _m;
+                if (index < input.Length)
+                {
+                    prediction = NumOps.Add(prediction, 
+                        NumOps.Multiply(_smaCoefficients[j], input[index]));
+                }
+            }
+        }
+    
+        return prediction;
+    }
+
+    /// <summary>
+    /// Gets metadata about the model, including its type, parameters, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method provides information about the model's configuration and parameters.
+    /// It's useful for:
+    /// - Comparing different models
+    /// - Documenting the model's specifications
+    /// - Tracking which parameters worked best for different datasets
+    /// - Saving model metadata along with predictions
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.SARIMAModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // SARIMA parameters
+                { "P", _p },
+                { "D", _d },
+                { "Q", _q },
+                { "SeasonalP", _P },
+                { "SeasonalD", _D },
+                { "SeasonalQ", _Q },
+                { "SeasonalPeriod", _m },
+            
+                // Model coefficients
+                { "ARCoefficientsCount", _arCoefficients?.Length ?? 0 },
+                { "MACoefficientsCount", _maCoefficients?.Length ?? 0 },
+                { "SARCoefficientsCount", _sarCoefficients?.Length ?? 0 },
+                { "SMACoefficientsCount", _smaCoefficients?.Length ?? 0 },
+                { "Constant", Convert.ToDouble(_constant) },
+            
+                // Coefficient values if not too large
+                { "ARCoefficients", _arCoefficients?.Select(c => Convert.ToDouble(c)).ToArray() ?? [] },
+                { "MACoefficients", _maCoefficients?.Select(c => Convert.ToDouble(c)).ToArray() ?? [] },
+                { "SARCoefficients", _sarCoefficients ?.Select(c => Convert.ToDouble(c)).ToArray() ??[] },
+                { "SMACoefficients", _smaCoefficients ?.Select(c => Convert.ToDouble(c)).ToArray() ??[] },
+            
+                // Additional settings from options
+                { "MaxIterations", _sarimaOptions.MaxIterations },
+                { "Tolerance", _sarimaOptions.Tolerance }
+            },
+            ModelData = this.Serialize()
+        };
+    
+        return metadata;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the SARIMA model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the SARIMA model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates a fresh copy of the model with the same settings but no trained coefficients.
+    /// It's useful when you want to:
+    /// - Train the same model structure on different data
+    /// - Create multiple versions of the same model for ensemble methods
+    /// - Start fresh with the same configuration after experimenting
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a deep copy of the options
+        var newOptions = new SARIMAOptions<T>
+        {
+            P = _sarimaOptions.P,
+            D = _sarimaOptions.D,
+            Q = _sarimaOptions.Q,
+            SeasonalP = _sarimaOptions.SeasonalP,
+            SeasonalD = _sarimaOptions.SeasonalD,
+            SeasonalQ = _sarimaOptions.SeasonalQ,
+            SeasonalPeriod = _sarimaOptions.SeasonalPeriod,
+            MaxIterations = _sarimaOptions.MaxIterations,
+            Tolerance = _sarimaOptions.Tolerance
+        };
+    
+        // Create a new instance with the copied options
+        return new SARIMAModel<T>(newOptions);
     }
 }

@@ -21,7 +21,7 @@
 /// like simplicity or stability.
 /// </para>
 /// </remarks>
-public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
+public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options specific to Proximal Gradient Descent optimization.
@@ -43,7 +43,7 @@ public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private ProximalGradientDescentOptimizerOptions _options;
+    private ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -87,20 +87,12 @@ public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// Think of it as adding a preference for simpler, more stable solutions that are less likely to overfit.
     /// </para>
     /// </remarks>
-    private IRegularization<T> _regularization;
+    private IRegularization<T, TInput, TOutput> _regularization;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProximalGradientDescentOptimizer{T}"/> class with the specified options and components.
     /// </summary>
     /// <param name="options">The proximal gradient descent optimization options, or null to use default options.</param>
-    /// <param name="predictionOptions">The prediction statistics options, or null to use default options.</param>
-    /// <param name="modelOptions">The model statistics options, or null to use default options.</param>
-    /// <param name="modelEvaluator">The model evaluator, or null to use the default evaluator.</param>
-    /// <param name="fitDetector">The fit detector, or null to use the default detector.</param>
-    /// <param name="fitnessCalculator">The fitness calculator, or null to use the default calculator.</param>
-    /// <param name="modelCache">The model cache, or null to use the default cache.</param>
-    /// <param name="gradientCache">The gradient cache, or null to use the default cache.</param>
-    /// <param name="regularization">The regularization strategy, or null to use no regularization.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new proximal gradient descent optimizer with the specified options and components.
@@ -119,19 +111,12 @@ public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     public ProximalGradientDescentOptimizer(
-        ProximalGradientDescentOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null,
-        IRegularization<T>? regularization = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new ProximalGradientDescentOptimizerOptions();
-        _regularization = regularization ?? new NoRegularization<T>();
+        _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
+        _regularization = _options.Regularization ?? new NoRegularization<T, TInput, TOutput>();
+
         InitializeAdaptiveParameters();
     }
 
@@ -190,13 +175,13 @@ public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This approach efficiently finds solutions that both fit the data well and satisfy the regularization constraints.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
 
@@ -255,21 +240,22 @@ public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This combination of steps helps find solutions that both minimize the error and have good properties.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var stepSize = CurrentLearningRate;
+        var parameters = currentSolution.GetParameters();
 
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
             var gradientStep = NumOps.Multiply(gradient[i], stepSize);
-            newCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], gradientStep);
+            newCoefficients[i] = NumOps.Subtract(parameters[i], gradientStep);
         }
 
         // Apply regularization
-        newCoefficients = _regularization.RegularizeCoefficients(newCoefficients);
+        newCoefficients = _regularization.Regularize(newCoefficients);
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -295,7 +281,7 @@ public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// are going well and cautious when progress is difficult.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -338,9 +324,9 @@ public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This ensures that only appropriate settings are used with this specific optimizer.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is ProximalGradientDescentOptimizerOptions pgdOptions)
+        if (options is ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> pgdOptions)
         {
             _options = pgdOptions;
         }
@@ -369,7 +355,7 @@ public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// or for making a copy of the settings to modify and apply later.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -447,7 +433,7 @@ public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<ProximalGradientDescentOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();
@@ -479,7 +465,7 @@ public class ProximalGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This caching mechanism improves efficiency by avoiding duplicate work.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_PGD_{_options.InitialLearningRate}_{_regularization.GetType().Name}_{_options.Tolerance}_{_iteration}";

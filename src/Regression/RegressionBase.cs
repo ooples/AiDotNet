@@ -50,7 +50,7 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// <value>
     /// An object that implements regularization for the regression model.
     /// </value>
-    protected IRegularization<T> Regularization { get; private set; }
+    protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
 
     /// <summary>
     /// Gets or sets the coefficients (weights) of the regression model.
@@ -92,9 +92,9 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    protected RegressionBase(RegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    protected RegressionBase(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
     {
-        Regularization = regularization ?? new NoRegularization<T>();
+        Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new RegressionOptions<T>();
         Coefficients = new Vector<T>(0);
@@ -165,9 +165,9 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// comparing different models.
     /// </para>
     /// </remarks>
-    public virtual ModelMetadata<T> GetModelMetadata()
+    public virtual ModelMetaData<T> GetModelMetaData()
     {
-        return new ModelMetadata<T>
+        return new ModelMetaData<T>
         {
             ModelType = GetModelType(),
             FeatureCount = Coefficients.Length,
@@ -245,7 +245,7 @@ public abstract class RegressionBase<T> : IRegression<T>
             { "RegularizationOptions", Regularization.GetOptions() }
         };
 
-        var modelMetadata = GetModelMetadata();
+        var modelMetadata = GetModelMetaData();
         modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
 
         return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
@@ -271,7 +271,7 @@ public abstract class RegressionBase<T> : IRegression<T>
     public virtual void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetaData<T>>(jsonString);
 
         if (modelMetadata == null || modelMetadata.ModelData == null)
         {
@@ -293,7 +293,7 @@ public abstract class RegressionBase<T> : IRegression<T>
         var regularizationOptions = JsonConvert.DeserializeObject<RegularizationOptions>(regularizationOptionsJson) 
             ?? throw new InvalidOperationException("Deserialization failed: Unable to deserialize regularization options.");
     
-        Regularization = RegularizationFactory.CreateRegularization<T>(regularizationOptions);
+        Regularization = RegularizationFactory.CreateRegularization<T, Matrix<T>, Vector<T>>(regularizationOptions);
     }
 
     /// <summary>
@@ -356,5 +356,259 @@ public abstract class RegressionBase<T> : IRegression<T>
         // Use LU decomposition for solving the normal equation
         var normalDecomposition = new NormalDecomposition<T>(aTa);
         return normalDecomposition.Solve(aTb);
+    }
+
+    /// <summary>
+    /// Gets all model parameters (coefficients and intercept) as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all model parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns a vector containing all model parameters (coefficients followed by intercept) 
+    /// for use with optimization algorithms or model comparison.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method packages all the model's parameters into a single collection.
+    /// 
+    /// Think of the parameters as the "recipe" for your model's predictions:
+    /// - The coefficients represent how much each feature contributes to the prediction
+    /// - The intercept is the baseline prediction when all features are zero
+    /// 
+    /// Getting all parameters at once allows tools to optimize the model or compare different models.
+    /// For example, an optimization algorithm might try different combinations of parameters to find
+    /// the ones that give the most accurate predictions.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        // Create a new vector with enough space for coefficients + intercept (if used)
+        int paramCount = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
+        Vector<T> parameters = new Vector<T>(paramCount);
+    
+        // Copy coefficients to the parameters vector
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            parameters[i] = Coefficients[i];
+        }
+    
+        // Add the intercept as the last element (if used)
+        if (Options.UseIntercept)
+        {
+            parameters[Coefficients.Length] = Intercept;
+        }
+    
+        return parameters;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the model with specified parameters.
+    /// </summary>
+    /// <param name="parameters">A vector containing all model parameters (coefficients and intercept).</param>
+    /// <returns>A new model instance with the specified parameters.</returns>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has an incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new model with the same options but different parameter values.
+    /// The parameters vector should contain coefficients followed by the intercept (if the model uses one).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a new model using a specific set of parameters.
+    /// 
+    /// It's like creating a new recipe based on an existing one, but with different ingredient amounts.
+    /// You provide all the parameters (coefficients and intercept) in a single collection, and the method:
+    /// - Creates a new model
+    /// - Sets its parameters to the values you provided
+    /// - Returns this new model ready to use for predictions
+    /// 
+    /// This is useful for:
+    /// - Testing how different parameter values affect predictions
+    /// - Using optimization algorithms that try different parameter sets
+    /// - Creating ensemble models that combine multiple parameter variations
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    {
+        // Calculate expected parameter count
+        int expectedParamCount = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
+    
+        if (parameters.Length != expectedParamCount)
+        {
+            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}");
+        }
+    
+        // Create a new instance of the model
+        var newModel = (RegressionBase<T>)Clone();
+    
+        // Extract coefficients
+        Vector<T> newCoefficients = new Vector<T>(Coefficients.Length);
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            newCoefficients[i] = parameters[i];
+        }
+    
+        // Set the coefficients in the new model
+        newModel.Coefficients = newCoefficients;
+    
+        // Set the intercept if used
+        if (Options.UseIntercept)
+        {
+            newModel.Intercept = parameters[Coefficients.Length];
+        }
+        else
+        {
+            newModel.Intercept = NumOps.Zero;
+        }
+    
+        return newModel;
+    }
+
+    /// <summary>
+    /// Gets the indices of features that are actively used in the model.
+    /// </summary>
+    /// <returns>An enumerable collection of indices for features with non-zero coefficients.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method identifies which features are actually contributing to the model's predictions by
+    /// returning the indices of all features with non-zero coefficients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method tells you which input features actually matter in the model.
+    /// 
+    /// Not all features necessarily contribute to predictions. Some might have coefficients of zero,
+    /// meaning they're effectively ignored by the model. This method returns the positions (indices) of
+    /// features that do have an effect on predictions.
+    /// 
+    /// For example, if your model has 10 features but only features at positions 2, 5, and 7
+    /// have non-zero coefficients, this method would return [2, 5, 7].
+    /// 
+    /// This is useful for:
+    /// - Feature selection (identifying which features are most important)
+    /// - Model simplification (removing unused features)
+    /// - Understanding which inputs actually affect the prediction
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<int> GetActiveFeatureIndices()
+    {
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            // If the coefficient is not zero (using a threshold for floating-point comparison)
+            if (!NumOps.Equals(Coefficients[i], NumOps.Zero))
+            {
+                yield return i;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Determines whether a specific feature is used in the model.
+    /// </summary>
+    /// <param name="featureIndex">The zero-based index of the feature to check.</param>
+    /// <returns>True if the feature has a non-zero coefficient; otherwise, false.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the feature index is outside the valid range.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method checks whether a specific feature is actively contributing to the model's predictions
+    /// by verifying if its corresponding coefficient is non-zero.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method checks if a specific input feature affects the model's predictions.
+    /// 
+    /// You provide the position (index) of a feature, and the method tells you whether that feature
+    /// is actually used in making predictions. A feature is considered "used" if its coefficient
+    /// is not zero.
+    /// 
+    /// For example, if feature #3 has a coefficient of 0, this method would return false because
+    /// that feature doesn't affect the model's output.
+    /// 
+    /// This is useful when you want to check a specific feature's importance rather than
+    /// getting all important features at once.
+    /// </para>
+    /// </remarks>
+    public virtual bool IsFeatureUsed(int featureIndex)
+    {
+        if (featureIndex < 0 || featureIndex >= Coefficients.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(featureIndex), 
+                $"Feature index must be between 0 and {Coefficients.Length - 1}");
+        }
+    
+        return !NumOps.Equals(Coefficients[featureIndex], NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the regression model.
+    /// </summary>
+    /// <returns>A new instance of the model with the same parameters and options.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the regression model with the same parameters
+    /// and configuration options as the current instance.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact independent copy of your model.
+    /// 
+    /// The copy has the same:
+    /// - Coefficients (weights for each feature)
+    /// - Intercept (base prediction value)
+    /// - Configuration options (like regularization settings)
+    /// 
+    /// But it's completely separate from the original model - changes to one won't affect the other.
+    /// 
+    /// This is useful when you want to:
+    /// - Experiment with modifying a model without affecting the original
+    /// - Create multiple similar models to use in different contexts
+    /// - Save a "checkpoint" of your model before making changes
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        // The most reliable way to create a deep copy is through serialization/deserialization
+        byte[] serialized = Serialize();
+    
+        // Create a new instance of the same type as this network
+        var copy = CreateNewInstance();
+    
+        // Load the serialized data into the new instance
+        copy.Deserialize(serialized);
+    
+        return copy;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the same type as this neural network.
+    /// </summary>
+    /// <returns>A new instance of the same neural network type.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This creates a blank version of the same type of neural network.
+    /// 
+    /// It's used internally by methods like DeepCopy and Clone to create the right type of
+    /// network before copying the data into it.
+    /// </para>
+    /// </remarks>
+    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance();
+
+    /// <summary>
+    /// Creates a clone of the regression model.
+    /// </summary>
+    /// <returns>A new instance of the model with the same parameters and options.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the regression model with the same parameters and configuration
+    /// options as the current instance. Derived classes should override this method to provide proper cloning
+    /// behavior specific to their implementation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact independent copy of your model.
+    /// 
+    /// Cloning a model means creating a new model that's exactly the same as the original,
+    /// including all its learned parameters and settings. However, the clone is independent -
+    /// changes to one model won't affect the other.
+    /// 
+    /// Think of it like photocopying a document - the copy has all the same information,
+    /// but you can mark up the copy without changing the original.
+    /// 
+    /// Note: Specific regression algorithms will customize this method to ensure all their
+    /// unique properties are properly copied.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        // By default, Clone behaves the same as DeepCopy
+        return DeepCopy();
     }
 }

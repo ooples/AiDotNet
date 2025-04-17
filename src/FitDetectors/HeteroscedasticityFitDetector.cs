@@ -15,7 +15,7 @@ namespace AiDotNet.FitDetectors;
 /// This detector helps you identify if your model has this problem and suggests ways to fix it.
 /// </para>
 /// </remarks>
-public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
+public class HeteroscedasticityFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options that control how the detector evaluates heteroscedasticity.
@@ -51,7 +51,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// specific recommendations to improve your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -82,7 +82,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// show very inconsistent errors, it returns "Unstable". If the results are somewhere in between, it returns "Moderate".
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var breuschPaganTestStatistic = CalculateBreuschPaganTestStatistic(evaluationData);
         var whiteTestStatistic = CalculateWhiteTestStatistic(evaluationData);
@@ -116,7 +116,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// score means it's less certain.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var breuschPaganTestStatistic = CalculateBreuschPaganTestStatistic(evaluationData);
         var whiteTestStatistic = CalculateWhiteTestStatistic(evaluationData);
@@ -144,9 +144,9 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// If they can, it suggests the error size depends on the input values, indicating heteroscedasticity.
     /// </para>
     /// </remarks>
-    private T CalculateBreuschPaganTestStatistic(ModelEvaluationData<T> evaluationData)
+    private T CalculateBreuschPaganTestStatistic(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var X = evaluationData.ModelStats.FeatureMatrix;
+        var X = evaluationData.ModelStats.Features;
         var y = evaluationData.ModelStats.Actual;
         var yPredicted = evaluationData.ModelStats.Model?.Predict(X) ?? Vector<T>.Empty();
         var residuals = y.Subtract(yPredicted);
@@ -190,9 +190,9 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// not desirable for reliable predictions.
     /// </para>
     /// </remarks>
-    private T CalculateWhiteTestStatistic(ModelEvaluationData<T> evaluationData)
+    private T CalculateWhiteTestStatistic(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var X = evaluationData.ModelStats.FeatureMatrix;
+        var X = evaluationData.ModelStats.Features;
         var y = evaluationData.ModelStats.Actual;
         var yPredicted = evaluationData.ModelStats.Model?.Predict(X) ?? new Vector<T>(y.Length);
         var residuals = y.Subtract(yPredicted);
@@ -248,7 +248,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// the recommendations.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

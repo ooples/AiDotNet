@@ -17,17 +17,12 @@
 /// This method is particularly effective for problems with many local optima.
 /// </para>
 /// </remarks>
-public class TabuSearchOptimizer<T> : OptimizerBase<T>
+public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
-    /// <summary>
-    /// A random number generator used for stochastic operations in the optimizer.
-    /// </summary>
-    private readonly Random _random;
-
     /// <summary>
     /// The options specific to the Tabu Search algorithm.
     /// </summary>
-    private TabuSearchOptions _tabuOptions;
+    private TabuSearchOptions<T, TInput, TOutput> _tabuOptions;
 
     /// <summary>
     /// The current mutation rate used in generating neighboring solutions.
@@ -55,17 +50,11 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// <param name="fitnessCalculator">The fitness calculator to use.</param>
     /// <param name="modelCache">The model cache to use.</param>
     public TabuSearchOptimizer(
-        TabuSearchOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
+        TabuSearchOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _random = new Random();
-        _tabuOptions = options ?? new TabuSearchOptions();
+        _tabuOptions = options ?? new TabuSearchOptions<T, TInput, TOutput>();
+
         InitializeAdaptiveParameters();
     }
 
@@ -105,11 +94,11 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// This process helps find a good solution efficiently, even in complex landscapes.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var tabuList = new Queue<ISymbolicModel<T>>(_tabuOptions.TabuListSize);
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var tabuList = new Queue<IFullModel<T, TInput, TOutput>>(_tabuOptions.TabuListSize);
 
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
@@ -165,9 +154,9 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// </summary>
     /// <param name="currentSolution">The current solution to generate neighbors from.</param>
     /// <returns>A list of neighboring solutions.</returns>
-    private List<ISymbolicModel<T>> GenerateNeighbors(ISymbolicModel<T> currentSolution)
+    private List<IFullModel<T, TInput, TOutput>> GenerateNeighbors(IFullModel<T, TInput, TOutput> currentSolution)
     {
-        var neighbors = new List<ISymbolicModel<T>>();
+        var neighbors = new List<IFullModel<T, TInput, TOutput>>();
         for (int i = 0; i < _currentNeighborhoodSize; i++)
         {
             neighbors.Add(currentSolution.Mutate(_currentMutationRate));
@@ -182,7 +171,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// <param name="solution">The solution to check.</param>
     /// <param name="tabuList">The current tabu list.</param>
     /// <returns>True if the solution is in the tabu list, false otherwise.</returns>
-    private bool IsTabu(ISymbolicModel<T> solution, Queue<ISymbolicModel<T>> tabuList)
+    private bool IsTabu(IFullModel<T, TInput, TOutput> solution, Queue<IFullModel<T, TInput, TOutput>> tabuList)
     {
         return tabuList.Any(tabuSolution => tabuSolution.Equals(solution));
     }
@@ -192,7 +181,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// </summary>
     /// <param name="tabuList">The current tabu list to update.</param>
     /// <param name="solution">The solution to add to the tabu list.</param>
-    private void UpdateTabuList(Queue<ISymbolicModel<T>> tabuList, ISymbolicModel<T> solution)
+    private void UpdateTabuList(Queue<IFullModel<T, TInput, TOutput>> tabuList, IFullModel<T, TInput, TOutput> solution)
     {
         if (tabuList.Count >= _currentTabuListSize)
         {
@@ -207,9 +196,9 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// </summary>
     /// <param name="options">The new options to set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type TabuSearchOptions.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is TabuSearchOptions tabuOptions)
+        if (options is TabuSearchOptions<T, TInput, TOutput> tabuOptions)
         {
             _tabuOptions = tabuOptions;
         }
@@ -223,7 +212,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// Gets the current options for the Tabu Search algorithm.
     /// </summary>
     /// <returns>The current TabuSearchOptions.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _tabuOptions;
     }
@@ -283,7 +272,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
 
         // Deserialize Tabu Search-specific options
         string optionsJson = reader.ReadString();
-        _tabuOptions = JsonConvert.DeserializeObject<TabuSearchOptions>(optionsJson)
+        _tabuOptions = JsonConvert.DeserializeObject<TabuSearchOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
         // Initialize adaptive parameters after deserialization

@@ -24,7 +24,7 @@ namespace AiDotNet.FitnessCalculators;
 /// while students working on different projects should sit at least a certain distance apart.
 /// </para>
 /// </remarks>
-public class ContrastiveLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class ContrastiveLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The margin value that defines the minimum distance between dissimilar pairs.
@@ -90,7 +90,7 @@ public class ContrastiveLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// typically won't need to call it directly.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         var (output1, output2) = SplitOutputs(dataSet.Predicted);
         var (actual1, actual2) = SplitOutputs(dataSet.Actual);

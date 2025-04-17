@@ -20,23 +20,71 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class AdaDeltaOptimizer<T> : GradientBasedOptimizerBase<T>
+public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
-    private AdaDeltaOptimizerOptions _options;
+    /// <summary>
+    /// The configuration options specific to the AdaDelta optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the configuration parameters that control the behavior of the AdaDelta algorithm,
+    /// such as rho (decay rate), epsilon (small constant for numerical stability), and adaptive settings.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the instruction manual for our learning assistant.
+    /// It contains all the settings that determine how the optimizer behaves, such as how much it
+    /// remembers from previous steps and how it adapts over time.
+    /// 
+    /// These settings can be customized to make the optimizer work better for different types of problems.
+    /// </para>
+    /// </remarks>
+    private AdaDeltaOptimizerOptions<T, TInput, TOutput> _options;
+
+    /// <summary>
+    /// Stores the exponential moving average of squared gradients for each parameter.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector accumulates the squared gradients for each parameter with an exponential decay,
+    /// controlled by the rho parameter. It's used to normalize the parameter updates in the AdaDelta algorithm.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the optimizer's memory of how much each part of the solution
+    /// has been changing recently.
+    /// 
+    /// Imagine you're learning different subjects:
+    /// - For each subject, this keeps track of how much your knowledge has been changing
+    /// - It gives more weight to recent changes and gradually forgets older ones
+    /// - This information helps determine how big your next learning step should be
+    /// </para>
+    /// </remarks>
     private Vector<T>? _accumulatedSquaredGradients;
+
+    /// <summary>
+    /// Stores the exponential moving average of squared parameter updates for each parameter.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector accumulates the squared parameter updates with an exponential decay,
+    /// controlled by the rho parameter. It's used to adapt the effective learning rate in the AdaDelta algorithm,
+    /// allowing the optimizer to proceed without requiring an explicit learning rate setting.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like keeping track of how big your recent learning steps have been
+    /// for each part of what you're learning.
+    /// 
+    /// The optimizer uses this information to:
+    /// - Adjust future step sizes based on how big previous steps were
+    /// - Make learning more consistent across different parts of the model
+    /// - Allow the model to learn effectively without needing to set a specific learning rate
+    /// 
+    /// This is one of the key features that makes AdaDelta special - it can adapt its learning
+    /// process automatically based on past experience.
+    /// </para>
+    /// </remarks>
     private Vector<T>? _accumulatedSquaredUpdates;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AdaDeltaOptimizer{T}"/> class.
     /// </summary>
     /// <param name="options">The options for configuring the AdaDelta optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     /// <remarks>
     /// <para>
     /// This constructor sets up the AdaDelta optimizer with the specified options and components.
@@ -54,17 +102,11 @@ public class AdaDeltaOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     public AdaDeltaOptimizer(
-        AdaDeltaOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        AdaDeltaOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new AdaDeltaOptimizerOptions();
+        _options = options ?? new AdaDeltaOptimizerOptions<T, TInput, TOutput>();
+
         InitializeAdaptiveParameters();
     }
 
@@ -112,16 +154,17 @@ public class AdaDeltaOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This is like practicing a skill over and over, getting a little better each time, until you're satisfied with your performance.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var parameters = currentSolution.GetParameters();
 
-        _accumulatedSquaredGradients = new Vector<T>(currentSolution.Coefficients.Length);
-        _accumulatedSquaredUpdates = new Vector<T>(currentSolution.Coefficients.Length);
+        _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
+        _accumulatedSquaredUpdates = new Vector<T>(parameters.Length);
         InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
@@ -174,10 +217,11 @@ public class AdaDeltaOptimizer<T> : GradientBasedOptimizerBase<T>
     /// and smaller for those that need less change.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
             // Update accumulated squared gradients
             _accumulatedSquaredGradients![i] = NumOps.Add(
@@ -198,10 +242,10 @@ public class AdaDeltaOptimizer<T> : GradientBasedOptimizerBase<T>
             );
 
             // Update coefficients
-            newCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], update);
+            newCoefficients[i] = NumOps.Subtract(parameters[i], update);
         }
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
         /// <summary>
@@ -224,7 +268,7 @@ public class AdaDeltaOptimizer<T> : GradientBasedOptimizerBase<T>
     /// adapt to the current state of learning, potentially making it more efficient.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -258,9 +302,9 @@ public class AdaDeltaOptimizer<T> : GradientBasedOptimizerBase<T>
     /// type of settings, it will give you an error message.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is AdaDeltaOptimizerOptions adaDeltaOptions)
+        if (options is AdaDeltaOptimizerOptions<T, TInput, TOutput> adaDeltaOptions)
         {
             _options = adaDeltaOptions;
         }
@@ -284,7 +328,7 @@ public class AdaDeltaOptimizer<T> : GradientBasedOptimizerBase<T>
     /// if you want to understand its behavior or make changes.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -354,7 +398,7 @@ public class AdaDeltaOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<AdaDeltaOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<AdaDeltaOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
         }
     }
@@ -381,7 +425,7 @@ public class AdaDeltaOptimizer<T> : GradientBasedOptimizerBase<T>
     /// which can make the learning process faster.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_AdaDelta_{_options.Rho}_{_options.Epsilon}";

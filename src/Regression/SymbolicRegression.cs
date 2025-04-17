@@ -77,7 +77,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// Higher scores mean the formula better explains your data pattern.
     /// </para>
     /// </remarks>
-    private readonly IFitnessCalculator<T> _fitnessCalculator;
+    private readonly IFitnessCalculator<T, Matrix<T>, Vector<T>> _fitnessCalculator;
     
     /// <summary>
     /// The component responsible for normalizing input and output data.
@@ -98,7 +98,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// simply because of their scale, not their actual significance.
     /// </para>
     /// </remarks>
-    private readonly INormalizer<T> _normalizer;
+    private readonly INormalizer<T, Matrix<T>, Vector<T>> _normalizer;
     
     /// <summary>
     /// The component responsible for selecting relevant features from the input data.
@@ -120,7 +120,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// and location are important, but the house's street number isn't.
     /// </para>
     /// </remarks>
-    private readonly IFeatureSelector<T> _featureSelector;
+    private readonly IFeatureSelector<T, Matrix<T>> _featureSelector;
     
     /// <summary>
     /// The component that detects when a satisfactory model has been found.
@@ -141,7 +141,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// you've already found a formula that works well enough.
     /// </para>
     /// </remarks>
-    private readonly IFitDetector<T> _fitDetector;
+    private readonly IFitDetector<T, Matrix<T>, Vector<T>> _fitDetector;
     
     /// <summary>
     /// The component responsible for identifying and removing outliers from the data.
@@ -163,7 +163,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// the general pattern.
     /// </para>
     /// </remarks>
-    private readonly IOutlierRemoval<T> _outlierRemoval;
+    private readonly IOutlierRemoval<T, Matrix<T>, Vector<T>> _outlierRemoval;
     
     /// <summary>
     /// The component that handles data preprocessing tasks before model training.
@@ -185,7 +185,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// This preparation ensures the AI gets high-quality data that's ready for modeling.
     /// </para>
     /// </remarks>
-    private readonly IDataPreprocessor<T> _dataPreprocessor;
+    private readonly IDataPreprocessor<T, Matrix<T>, Vector<T>> _dataPreprocessor;
     
     /// <summary>
     /// The optimizer used to evolve and improve symbolic models.
@@ -208,7 +208,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// It mimics natural evolution, but for mathematical formulas instead of organisms.
     /// </para>
     /// </remarks>
-    private readonly IOptimizer<T> _optimizer;
+    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
     
     /// <summary>
     /// The best symbolic model found during the optimization process.
@@ -229,7 +229,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// expression that describes your data pattern.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> _bestModel;
+    private IFullModel<T, Matrix<T>, Vector<T>> _bestModel;
     
     /// <summary>
     /// The fitness score of the best model found.
@@ -313,30 +313,30 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public SymbolicRegression(
         SymbolicRegressionOptions? options = null, 
-        IRegularization<T>? regularization = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        INormalizer<T>? normalizer = null,
-        IFeatureSelector<T>? featureSelector = null,
-        IFitDetector<T>? fitDetector = null,
-        IOutlierRemoval<T>? outlierRemoval = null,
-        IDataPreprocessor<T>? dataPreprocessor = null)
+        IRegularization<T, Matrix<T>, Vector<T>>? regularization = null,
+        IFitnessCalculator<T, Matrix<T>, Vector<T>>? fitnessCalculator = null,
+        INormalizer<T, Matrix<T>, Vector<T>>? normalizer = null,
+        IFeatureSelector<T, Matrix<T>>? featureSelector = null,
+        IFitDetector<T, Matrix<T>, Vector<T>>? fitDetector = null,
+        IOutlierRemoval<T, Matrix<T>, Vector<T>>? outlierRemoval = null,
+        IDataPreprocessor<T, Matrix<T>, Vector<T>>? dataPreprocessor = null)
         : base(options, regularization)
     {
         _options = options ?? new SymbolicRegressionOptions();
-        _optimizer = new GeneticAlgorithmOptimizer<T>(new GeneticAlgorithmOptimizerOptions
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>
         {
             PopulationSize = _options.PopulationSize,
             MaxGenerations = _options.MaxGenerations,
             MutationRate = _options.MutationRate,
             CrossoverRate = _options.CrossoverRate
         });
-        _fitnessCalculator = fitnessCalculator ?? new RSquaredFitnessCalculator<T>();
-        _normalizer = normalizer ?? new NoNormalizer<T>();
-        _featureSelector = featureSelector ?? new NoFeatureSelector<T>();
-        _fitDetector = fitDetector ?? new DefaultFitDetector<T>();
-        _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T>();
-        _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T>(_normalizer, _featureSelector, _outlierRemoval);
-        _bestModel = SymbolicModelFactory<T>.CreateRandomModel(true, 1);
+        _fitnessCalculator = fitnessCalculator ?? new RSquaredFitnessCalculator<T, Matrix<T>, Vector<T>>();
+        _normalizer = normalizer ?? new NoNormalizer<T, Matrix<T>, Vector<T>>();
+        _featureSelector = featureSelector ?? new NoFeatureSelector<T, Matrix<T>>();
+        _fitDetector = fitDetector ?? new DefaultFitDetector<T, Matrix<T>, Vector<T>>();
+        _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T, Matrix<T>, Vector<T>>();
+        _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T, Matrix<T>, Vector<T>>(_normalizer, _featureSelector, _outlierRemoval);
+        _bestModel = SymbolicModelFactory<T, Matrix<T>, Vector<T>>.CreateRandomModel(true, 1);
         _bestFitness = _fitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue;
     }
 
@@ -376,7 +376,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         // Split the data
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
         // Optimize the model
-        var optimizationResult = _optimizer.Optimize(OptimizerHelper<T>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+        var optimizationResult = _optimizer.Optimize(OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
         _bestFitness = optimizationResult.BestFitnessScore;
         _bestModel = optimizationResult.BestSolution ?? throw new InvalidOperationException("Optimization result does not contain a valid symbolic model.");
     }
@@ -406,13 +406,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> X)
     {
-        var predictions = new Vector<T>(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
-        {
-            predictions[i] = _bestModel.Evaluate(X.GetRow(i));
-        }
-
-        return predictions;
+        return _bestModel.Predict(X);
     }
 
     /// <summary>
@@ -439,8 +433,8 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
-        Vector<T> regularizedInput = Regularization.RegularizeCoefficients(input);
-        return _bestModel.Evaluate(regularizedInput);
+        Vector<T> regularizedInput = Regularization.Regularize(input);
+        return _bestModel.Predict(Matrix<T>.FromVector(regularizedInput))[0];
     }
 
     /// <summary>
@@ -466,4 +460,54 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     protected override ModelType GetModelType() => ModelType.SymbolicRegression;
+
+    /// <summary>
+    /// Creates a new instance of the Symbolic Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Symbolic Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Symbolic Regression model, including its discovered 
+    /// formula, configuration options, fitness calculator, data preprocessors, and optimization components.
+    /// The new instance is completely independent of the original, allowing modifications without 
+    /// affecting the original model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact copy of the current symbolic regression model.
+    /// 
+    /// Think of it like making a perfect duplicate of your AI mathematician:
+    /// - It copies the winning formula that was discovered
+    /// - It maintains the same configuration settings (population size, mutation rates, etc.)
+    /// - It preserves all the specialty components (fitness calculator, normalizer, etc.)
+    /// - It remembers how good the best formula was (the fitness score)
+    /// 
+    /// This is useful when you want to:
+    /// - Create a backup before making changes
+    /// - Create variations of the same model for different purposes
+    /// - Share the model while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        var newModel = new SymbolicRegression<T>(
+            options: _options,
+            regularization: Regularization,
+            fitnessCalculator: _fitnessCalculator,
+            normalizer: _normalizer,
+            featureSelector: _featureSelector,
+            fitDetector: _fitDetector,
+            outlierRemoval: _outlierRemoval,
+            dataPreprocessor: _dataPreprocessor);
+        
+        // Copy the best model found (if any)
+        if (_bestModel != null)
+        {
+            newModel._bestModel = _bestModel.Clone();
+        }
+        
+        // Copy the best fitness score
+        newModel._bestFitness = _bestFitness;
+        
+        return newModel;
+    }
 }

@@ -9,7 +9,7 @@
 /// metrics across training, validation, and test datasets. It can detect common issues like
 /// overfitting and underfitting, and provide appropriate recommendations.
 /// </remarks>
-public class DefaultFitDetector<T> : FitDetectorBase<T>
+public class DefaultFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the DefaultFitDetector class.
@@ -43,7 +43,7 @@ public class DefaultFitDetector<T> : FitDetectorBase<T>
     /// 
     /// Based on this analysis, it provides practical recommendations to improve your model.
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -74,7 +74,7 @@ public class DefaultFitDetector<T> : FitDetectorBase<T>
     /// R² is a statistical measure that represents how well the model explains the variance in the data,
     /// with values closer to 1 indicating better fit.
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         T threshold09 = _numOps.FromDouble(0.9);
         T threshold07 = _numOps.FromDouble(0.7);
@@ -112,7 +112,7 @@ public class DefaultFitDetector<T> : FitDetectorBase<T>
     /// This average helps balance the performance across different datasets, ensuring the model
     /// works well on both seen and unseen data.
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         return _numOps.Divide(_numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), 
             evaluationData.TestSet.PredictionStats.R2), _numOps.FromDouble(3));

@@ -15,12 +15,12 @@ namespace AiDotNet.Optimizers;
 /// more effective than trying to adjust everything at once.
 /// </para>
 /// </remarks>
-public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
+public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Coordinate Descent optimization algorithm.
     /// </summary>
-    private CoordinateDescentOptimizerOptions _options;
+    private CoordinateDescentOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// Vector of learning rates for each coordinate (variable) in the optimization problem.
@@ -54,17 +54,10 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     public CoordinateDescentOptimizer(
-        CoordinateDescentOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        CoordinateDescentOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new CoordinateDescentOptimizerOptions();
+        _options = options ?? new CoordinateDescentOptimizerOptions<T, TInput, TOutput>();
         _learningRates = Vector<T>.Empty();
         _momentums = Vector<T>.Empty();
         _previousUpdate = Vector<T>.Empty();
@@ -79,10 +72,10 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// including learning rates, momentums, and previous updates for each coordinate (variable).
     /// </para>
     /// </remarks>
-    private void InitializeAdaptiveParameters(ISymbolicModel<T> currentSolution)
+    private void InitializeAdaptiveParameters(IFullModel<T, TInput, TOutput> currentSolution)
     {
         base.InitializeAdaptiveParameters();
-        int dimensions = currentSolution.Coefficients.Length;
+        int dimensions = currentSolution.GetParameters().Length;
         _learningRates = Vector<T>.CreateDefault(dimensions, NumOps.FromDouble(_options.InitialLearningRate));
         _momentums = Vector<T>.CreateDefault(dimensions, NumOps.FromDouble(_options.InitialMomentum));
         _previousUpdate = Vector<T>.CreateDefault(dimensions, NumOps.Zero);
@@ -99,13 +92,13 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// or meets the stopping criteria.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters(currentSolution);
 
@@ -145,9 +138,9 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's like fine-tuning each knob on a machine one at a time to get the best overall performance.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, OptimizationInputData<T> inputData)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var newCoefficients = currentSolution.Coefficients.Copy();
+        var newCoefficients = currentSolution.GetParameters().Clone();
 
         for (int i = 0; i < newCoefficients.Length; i++)
         {
@@ -156,7 +149,7 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
             newCoefficients[i] = NumOps.Add(newCoefficients[i], update);
         }
 
-        return currentSolution.UpdateCoefficients(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -171,18 +164,19 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// one specific variable. It helps determine which direction to move that variable to improve the solution.
     /// </para>
     /// </remarks>
-    private T CalculatePartialDerivative(ISymbolicModel<T> model, OptimizationInputData<T> inputData, int index)
+    private T CalculatePartialDerivative(IFullModel<T, TInput, TOutput> model, OptimizationInputData<T, TInput, TOutput> inputData, int index)
     {
         var epsilon = NumOps.FromDouble(1e-6);
-        var originalCoeff = model.Coefficients[index];
+        var parameters = model.GetParameters();
+        var originalCoeff = parameters[index];
 
-        var coefficientsPlus = model.Coefficients.Copy();
+        var coefficientsPlus = parameters.Clone();
         coefficientsPlus[index] = NumOps.Add(originalCoeff, epsilon);
-        var modelPlus = model.UpdateCoefficients(coefficientsPlus);
+        var modelPlus = model.WithParameters(coefficientsPlus);
 
-        var coefficientsMinus = model.Coefficients.Copy();
+        var coefficientsMinus = parameters.Clone();
         coefficientsMinus[index] = NumOps.Subtract(originalCoeff, epsilon);
-        var modelMinus = model.UpdateCoefficients(coefficientsMinus);
+        var modelMinus = model.WithParameters(coefficientsMinus);
 
         var lossPlus = CalculateLoss(modelPlus, inputData);
         var lossMinus = CalculateLoss(modelMinus, inputData);
@@ -223,7 +217,7 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// them to be more careful.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -257,9 +251,9 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It ensures that only the correct type of options (specific to Coordinate Descent) can be used.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is CoordinateDescentOptimizerOptions cdOptions)
+        if (options is CoordinateDescentOptimizerOptions<T, TInput, TOutput> cdOptions)
         {
             _options = cdOptions;
         }
@@ -278,7 +272,7 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's useful if you need to inspect or copy the current configuration.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -343,7 +337,7 @@ public class CoordinateDescentOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<CoordinateDescentOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<CoordinateDescentOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             // Deserialize _learningRates

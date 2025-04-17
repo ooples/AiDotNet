@@ -5,6 +5,8 @@
 /// absolute value of the magnitude of coefficients.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of input data structure.</typeparam>
+/// <typeparam name="TOutput">The type of output data structure.</typeparam>
 /// <remarks>
 /// <para>
 /// L1 regularization adds a penalty term to the loss function equal to the sum of the absolute values
@@ -17,17 +19,9 @@
 /// - It forces the model to focus only on the most important features
 /// - Less important features get their coefficients reduced to exactly zero
 /// - This means some features are completely eliminated from the model
-/// 
-/// For example, if you're predicting house prices with 50 features:
-/// - Without regularization, the model might use all 50 features
-/// - With L1 regularization, it might eliminate 30 features and only use the 20 most important ones
-/// - This makes the model simpler, faster, and often more accurate on new data
-/// 
-/// L1 regularization is particularly useful when you suspect many of your features aren't relevant
-/// or when you want to identify which features matter most.
 /// </para>
 /// </remarks>
-public class L1Regularization<T> : RegularizationBase<T>
+public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the L1Regularization class with optional custom options.
@@ -41,16 +35,6 @@ public class L1Regularization<T> : RegularizationBase<T>
     /// This constructor creates an L1 regularization instance with the specified options or default values.
     /// For L1 regularization, the L1Ratio is always set to 1.0, as it represents pure L1 regularization.
     /// </para>
-    /// <para><b>For Beginners:</b> This sets up your L1 regularization with your chosen settings.
-    /// 
-    /// When creating L1 regularization:
-    /// - The strength parameter determines how aggressively to eliminate less important features
-    /// - Higher strength values lead to more features being completely eliminated (set to zero)
-    /// - Lower strength values are more permissive, allowing more features to remain active
-    /// 
-    /// If you don't specify any options, it uses a default strength of 0.1, which provides
-    /// moderate feature selection without being too aggressive.
-    /// </para>
     /// </remarks>
     public L1Regularization(RegularizationOptions? options = null)
         : base(options ?? new RegularizationOptions
@@ -60,73 +44,6 @@ public class L1Regularization<T> : RegularizationBase<T>
             L1Ratio = 1.0  // For L1, this should always be 1.0
         })
     {
-    }
-
-    /// <summary>
-    /// Applies L1 regularization to a matrix.
-    /// </summary>
-    /// <param name="matrix">The input matrix to regularize.</param>
-    /// <returns>The regularized matrix, unchanged in this implementation.</returns>
-    /// <remarks>
-    /// <para>
-    /// For L1 regularization, this method typically returns the input matrix unchanged, as the regularization
-    /// is applied directly to the coefficients rather than to the input data matrix. This is consistent with how
-    /// L1 regularization is traditionally implemented in machine learning.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method doesn't change the input data.
-    /// 
-    /// L1 regularization works by:
-    /// - Leaving your original data (the matrix) completely unchanged
-    /// - Applying its effects later during the coefficient calculation phase
-    /// 
-    /// Think of it like keeping your raw ingredients the same, but changing the recipe for
-    /// how they're combined to create the final dish.
-    /// </para>
-    /// </remarks>
-    public override Matrix<T> RegularizeMatrix(Matrix<T> matrix)
-    {
-        // L1 regularization typically doesn't modify the input matrix
-        return matrix;
-    }
-
-    /// <summary>
-    /// Applies L1 regularization to model coefficients.
-    /// </summary>
-    /// <param name="coefficients">The coefficient vector to regularize.</param>
-    /// <returns>The regularized coefficient vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the core of L1 regularization by applying a soft thresholding operation to
-    /// the coefficients. Coefficients with absolute values less than the regularization strength are set to zero,
-    /// and those above the threshold are shrunk toward zero by the regularization strength amount.
-    /// This operation is also known as "soft thresholding."
-    /// </para>
-    /// <para><b>For Beginners:</b> This method reduces or eliminates the impact of less important features.
-    /// 
-    /// When regularizing coefficients:
-    /// - If a coefficient's absolute value is less than the regularization strength, it becomes zero
-    /// - If it's larger, it gets reduced by the regularization strength, but remains non-zero
-    /// - This is called "soft thresholding" - small effects are eliminated, large ones are just reduced
-    /// 
-    /// For example, with a regularization strength of 0.1:
-    /// - A coefficient of 0.05 would become 0 (eliminated completely)
-    /// - A coefficient of 0.3 would become 0.2 (reduced by 0.1)
-    /// - A coefficient of -0.4 would become -0.3 (reduced by 0.1, keeping its sign)
-    /// 
-    /// This creates a model that focuses only on the strongest, most important patterns in your data.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> RegularizeCoefficients(Vector<T> coefficients)
-    {
-        var regularizationStrength = NumOps.FromDouble(Options.Strength);
-        return coefficients.Transform(c =>
-        {
-            var sub = NumOps.Subtract(NumOps.Abs(c), regularizationStrength);
-            return NumOps.Multiply(
-                NumOps.SignOrZero(c),
-                NumOps.GreaterThan(sub, NumOps.Zero) ? sub : NumOps.Zero
-            );
-        });
     }
 
     /// <summary>
@@ -141,27 +58,103 @@ public class L1Regularization<T> : RegularizationBase<T>
     /// penalty. It adds the subdifferential of the L1 norm (the sign of each coefficient multiplied by
     /// the regularization strength) to the original gradient, steering the optimization toward sparse solutions.
     /// </para>
-    /// <para><b>For Beginners:</b> This method guides the model's learning toward simpler solutions.
-    /// 
-    /// During model training:
-    /// - The model adjusts its coefficients based on the gradient (direction of steepest improvement)
-    /// - This method modifies that gradient to include the effect of L1 regularization
-    /// - It pushes coefficients toward zero, with more pressure on smaller coefficients
-    /// 
-    /// Think of it like adding a constant force pulling all coefficients toward zero:
-    /// - For positive coefficients, it adds a positive value to the gradient (pushing them down)
-    /// - For negative coefficients, it adds a negative value to the gradient (pushing them up)
-    /// - For zero coefficients, it doesn't add anything (leaving them at zero)
-    /// 
-    /// This helps the model converge to a solution where many coefficients are exactly zero,
-    /// effectively selecting only the most important features.
+    /// </remarks>
+    public override TOutput Regularize(TOutput gradient, TOutput coefficients)
+    {
+        if (gradient is Vector<T> gradientVector && coefficients is Vector<T> coefficientVector)
+        {
+            var regularizationStrength = NumOps.FromDouble(Options.Strength);
+            var result = gradientVector.Add(coefficientVector.Transform(c => 
+                NumOps.Multiply(regularizationStrength, NumOps.SignOrZero(c))
+            ));
+            
+            return (TOutput)(object)result;
+        }
+        else if (gradient is Tensor<T> gradientTensor && coefficients is Tensor<T> coefficientTensor)
+        {
+            var regularizationStrength = NumOps.FromDouble(Options.Strength);
+            var gradientFlattenedVector = gradientTensor.ToVector();
+            var coefficientFlattenedVector = coefficientTensor.ToVector();
+            
+            var result = gradientFlattenedVector.Add(coefficientFlattenedVector.Transform(c => 
+                NumOps.Multiply(regularizationStrength, NumOps.SignOrZero(c))
+            ));
+            
+            // Convert back to tensor with the same shape as the gradient tensor
+            var resultTensor = Tensor<T>.FromVector(result);
+            if (gradientTensor.Shape.Length > 1)
+            {
+                resultTensor = resultTensor.Reshape(gradientTensor.Shape);
+            }
+            
+            return (TOutput)(object)resultTensor;
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported output types {typeof(TOutput).Name} for L1 regularization gradient. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
+    }
+
+    /// <summary>
+    /// Applies L1 regularization to a matrix.
+    /// </summary>
+    /// <param name="data">The matrix data to regularize.</param>
+    /// <returns>The regularized matrix data.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method applies L1 regularization to a matrix by performing soft thresholding on each element.
+    /// Elements with absolute values less than the regularization strength are set to zero,
+    /// while those above the threshold are shrunk toward zero by the regularization strength amount.
     /// </para>
     /// </remarks>
-    public override Vector<T> RegularizeGradient(Vector<T> gradient, Vector<T> coefficients)
+    public override Matrix<T> Regularize(Matrix<T> data)
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
-        return gradient.Add(coefficients.Transform(c => 
-            NumOps.Multiply(regularizationStrength, NumOps.SignOrZero(c))
-        ));
+        var result = new Matrix<T>(data.Rows, data.Columns);
+    
+        for (int i = 0; i < data.Rows; i++)
+        {
+            for (int j = 0; j < data.Columns; j++)
+            {
+                var value = data[i, j];
+                var sub = NumOps.Subtract(NumOps.Abs(value), regularizationStrength);
+                result[i, j] = NumOps.Multiply(
+                    NumOps.SignOrZero(value),
+                    NumOps.GreaterThan(sub, NumOps.Zero) ? sub : NumOps.Zero
+                );
+            }
+        }
+    
+        return result;
+    }
+
+    /// <summary>
+    /// Applies L1 regularization to a vector.
+    /// </summary>
+    /// <param name="data">The vector data to regularize.</param>
+    /// <returns>The regularized vector data.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the soft thresholding operation for L1 regularization on vector data.
+    /// Elements with absolute values less than the regularization strength are set to zero,
+    /// while those above the threshold are shrunk toward zero by the regularization strength amount.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Regularize(Vector<T> data)
+    {
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
+        var result = new Vector<T>(data.Length);
+    
+        for (int i = 0; i < data.Length; i++)
+        {
+            var value = data[i];
+            var sub = NumOps.Subtract(NumOps.Abs(value), regularizationStrength);
+            result[i] = NumOps.Multiply(
+                NumOps.SignOrZero(value),
+                NumOps.GreaterThan(sub, NumOps.Zero) ? sub : NumOps.Zero
+            );
+        }
+    
+        return result;
     }
 }

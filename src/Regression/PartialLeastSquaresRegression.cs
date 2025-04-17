@@ -1,6 +1,5 @@
 namespace AiDotNet.Regression;
 
-
 /// <summary>
 /// Implements Partial Least Squares Regression (PLS), a technique that combines features from principal 
 /// component analysis and multiple linear regression to handle situations with many correlated predictors.
@@ -106,7 +105,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    public PartialLeastSquaresRegression(PartialLeastSquaresRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public PartialLeastSquaresRegression(PartialLeastSquaresRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new PartialLeastSquaresRegressionOptions<T>();
@@ -156,8 +155,8 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _scores = new Matrix<T>(x.Rows, numComponents);
         _weights = new Matrix<T>(x.Columns, numComponents);
 
-        Matrix<T> xResidual = xScaled.Copy();
-        Vector<T> yResidual = yScaled.Copy();
+        Matrix<T> xResidual = xScaled.Clone();
+        Vector<T> yResidual = yScaled.Clone();
 
         for (int i = 0; i < numComponents; i++)
         {
@@ -185,7 +184,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         Coefficients = W.Multiply(invPtW).Multiply(_scores.Transpose()).Multiply(yScaled);
 
         // Apply regularization to coefficients
-        Coefficients = Regularization.RegularizeCoefficients(Coefficients);
+        Coefficients = Regularization.Regularize(Coefficients);
 
         // Adjust for scaling
         for (int i = 0; i < Coefficients.Length; i++)
@@ -197,9 +196,9 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         Intercept = NumOps.Subtract(_yMean[0], Coefficients.DotProduct(_xMean));
 
         // Apply regularization to the model matrices
-        _loadings = Regularization.RegularizeMatrix(_loadings);
-        _scores = Regularization.RegularizeMatrix(_scores);
-        _weights = Regularization.RegularizeMatrix(_weights);
+        _loadings = Regularization.Regularize(_loadings);
+        _scores = Regularization.Regularize(_scores);
+        _weights = Regularization.Regularize(_weights);
     }
 
     /// <summary>
@@ -286,9 +285,9 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// variables are most influential in making predictions.
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        return new ModelMetadata<T>
+        return new ModelMetaData<T>
         {
             ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
@@ -435,5 +434,81 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _xMean = SerializationHelper<T>.DeserializeVector(reader);
         _yStd = SerializationHelper<T>.ReadValue(reader);
         _xStd = SerializationHelper<T>.DeserializeVector(reader);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Partial Least Squares Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Partial Least Squares Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Partial Least Squares Regression model, including its options,
+    /// coefficients, intercept, loadings, scores, weights, and data scaling parameters. The new instance is completely 
+    /// independent of the original, allowing modifications without affecting the original model.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method creates an exact copy of your trained model.
+    /// 
+    /// Think of it like making a perfect duplicate:
+    /// - It copies all the configuration settings (like the number of components)
+    /// - It preserves the coefficients and intercept that define your regression model
+    /// - It duplicates all the internal matrices (loadings, scores, weights) that capture the patterns in your data
+    /// - It maintains the scaling information (means and standard deviations) needed to process new data
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before further modifying the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create a new instance with the same options and regularization
+        var newModel = new PartialLeastSquaresRegression<T>(_options, Regularization);
+        
+        // Copy coefficients and intercept from base class
+        if (Coefficients != null)
+        {
+            newModel.Coefficients = Coefficients.Clone();
+        }
+        newModel.Intercept = Intercept;
+        
+        // Copy PLS-specific components
+        if (_loadings != null)
+        {
+            newModel._loadings = _loadings.Clone();
+        }
+        
+        if (_scores != null)
+        {
+            newModel._scores = _scores.Clone();
+        }
+        
+        if (_weights != null)
+        {
+            newModel._weights = _weights.Clone();
+        }
+        
+        // Copy means and standard deviations used for scaling
+        if (_yMean != null)
+        {
+            newModel._yMean = _yMean.Clone();
+        }
+        
+        if (_xMean != null)
+        {
+            newModel._xMean = _xMean.Clone();
+        }
+        
+        newModel._yStd = _yStd;
+        
+        if (_xStd != null)
+        {
+            newModel._xStd = _xStd.Clone();
+        }
+        
+        return newModel;
     }
 }

@@ -16,7 +16,7 @@
 /// - Create different variations of models without writing repetitive code
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface IPredictionModelBuilder<T>
+public interface IPredictionModelBuilder<T, TInput, TOutput>
 {
     /// <summary>
     /// Configures the feature selector component for the model.
@@ -32,7 +32,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="selector">The feature selector implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T> ConfigureFeatureSelector(IFeatureSelector<T> selector);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector);
 
     /// <summary>
     /// Configures the data normalizer component for the model.
@@ -48,7 +48,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="normalizer">The normalizer implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T> ConfigureNormalizer(INormalizer<T> normalizer);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer);
 
     /// <summary>
     /// Configures the regularization component for the model.
@@ -63,7 +63,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="regularization">The regularization implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T> ConfigureRegularization(IRegularization<T> regularization);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRegularization(IRegularization<T, TInput, TOutput> regularization);
 
     /// <summary>
     /// Configures the fitness calculator component for the model.
@@ -78,7 +78,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="calculator">The fitness calculator implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T> ConfigureFitnessCalculator(IFitnessCalculator<T> calculator);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator);
 
     /// <summary>
     /// Configures the fit detector component for the model.
@@ -96,7 +96,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="detector">The fit detector implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T> ConfigureFitDetector(IFitDetector<T> detector);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector);
 
     /// <summary>
     /// Configures the regression algorithm for the model.
@@ -115,7 +115,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="regression">The regression implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T> ConfigureRegression(IRegression<T> regression);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRegression(IRegression<T> regression);
 
     /// <summary>
     /// Configures the optimization algorithm for the model.
@@ -133,7 +133,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="optimizationAlgorithm">The optimization algorithm implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T> ConfigureOptimizer(IOptimizer<T> optimizationAlgorithm);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm);
 
     /// <summary>
     /// Configures the data preprocessing component for the model.
@@ -152,7 +152,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="dataPreprocessor">The data preprocessor implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T> ConfigureDataPreprocessor(IDataPreprocessor<T> dataPreprocessor);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor);
 
     /// <summary>
     /// Configures the outlier removal component for the model.
@@ -168,7 +168,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="outlierRemoval">The outlier removal implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T> ConfigureOutlierRemoval(IOutlierRemoval<T> outlierRemoval);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval);
 
     /// <summary>
     /// Builds a predictive model using the configured components and training data.
@@ -185,7 +185,7 @@ public interface IPredictionModelBuilder<T>
     /// <param name="x">The input features matrix, where each row is a data point and each column is a feature.</param>
     /// <param name="y">The target values vector that the model will learn to predict.</param>
     /// <returns>A trained predictive model ready to make predictions.</returns>
-    IPredictiveModel<T> Build(Matrix<T> x, Vector<T> y);
+    IPredictiveModel<T, TInput, TOutput> Build(TInput x, TOutput y);
 
     /// <summary>
     /// Uses a trained model to make predictions on new data.
@@ -201,7 +201,7 @@ public interface IPredictionModelBuilder<T>
     /// <param name="newData">The new input data to make predictions for.</param>
     /// <param name="model">The trained model to use for making predictions.</param>
     /// <returns>A vector of predicted values.</returns>
-    Vector<T> Predict(Matrix<T> newData, IPredictiveModel<T> model);
+    TOutput Predict(TInput newData, IPredictiveModel<T, TInput, TOutput> model);
 
     /// <summary>
     /// Saves a trained model to a file.
@@ -215,7 +215,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="model">The trained model to save.</param>
     /// <param name="filePath">The file path where the model should be saved.</param>
-    void SaveModel(IPredictiveModel<T> model, string filePath);
+    void SaveModel(IPredictiveModel<T, TInput, TOutput> model, string filePath);
 
     /// <summary>
     /// Loads a previously saved model from a file.
@@ -229,7 +229,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="filePath">The file path where the model is stored.</param>
     /// <returns>The loaded predictive model.</returns>
-    IPredictiveModel<T> LoadModel(string filePath);
+    IPredictiveModel<T, TInput, TOutput> LoadModel(string filePath);
 
     /// <summary>
     /// Converts a trained model into a byte array for storage or transmission.
@@ -251,7 +251,7 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="model">The trained model to serialize.</param>
     /// <returns>A byte array containing the serialized model data.</returns>
-    byte[] SerializeModel(IPredictiveModel<T> model);
+    byte[] SerializeModel(IPredictiveModel<T, TInput, TOutput> model);
 
     /// <summary>
     /// Reconstructs a model from a previously serialized byte array.
@@ -271,5 +271,5 @@ public interface IPredictionModelBuilder<T>
     /// </remarks>
     /// <param name="modelData">The byte array containing the serialized model data.</param>
     /// <returns>The reconstructed predictive model.</returns>
-    IPredictiveModel<T> DeserializeModel(byte[] modelData);
+    IPredictiveModel<T, TInput, TOutput> DeserializeModel(byte[] modelData);
 }

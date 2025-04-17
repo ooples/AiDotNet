@@ -18,7 +18,7 @@ namespace AiDotNet.Models.Options;
 /// new areas and focusing on promising regions, making it efficient for finding optimal solutions when each evaluation 
 /// is time-consuming or expensive.</para>
 /// </remarks>
-public class BayesianOptimizerOptions<T> : OptimizationAlgorithmOptions
+public class BayesianOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the number of initial random samples to evaluate before starting the optimization process.
@@ -135,20 +135,4 @@ public class BayesianOptimizerOptions<T> : OptimizationAlgorithmOptions
     /// especially when the underlying function is smooth.</para>
     /// </remarks>
     public IKernelFunction<T> KernelFunction { get; set; } = new GaussianKernel<T>();
-
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <value>The random seed value, defaulting to 42.</value>
-    /// <remarks>
-    /// <para>
-    /// Setting a specific seed ensures that the random components of the algorithm (such as initial sampling)
-    /// produce the same results across different runs, which is useful for debugging and reproducibility.
-    /// </para>
-    /// <para><b>For Beginners:</b> This controls the randomness in the algorithm, making it predictable and reproducible. 
-    /// Using the same seed (default: 42) means running the algorithm multiple times will give identical results, which is 
-    /// helpful for testing and debugging. If you want different random behavior each time, you can change this value or 
-    /// set it based on the current time.</para>
-    /// </remarks>
-    public int Seed { get; set; } = 42;
 }

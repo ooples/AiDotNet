@@ -13,7 +13,7 @@ namespace AiDotNet.Models.Options;
 /// This helps the model learn more efficiently without requiring manual tuning of the learning rate.
 /// </para>
 /// </remarks>
-public class AdaDeltaOptimizerOptions : GradientBasedOptimizerOptions
+public class AdaDeltaOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the decay rate for the moving average of squared gradients.

@@ -17,7 +17,7 @@ namespace AiDotNet.FitDetectors;
 /// - What steps you can take to improve your model
 /// </para>
 /// </remarks>
-public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
+public class NeuralNetworkFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the neural network fit detector.
@@ -103,7 +103,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// - Additional information like loss values and overfitting score
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
@@ -151,7 +151,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// - Very Poor Fit: Very high validation loss and severe overfitting
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (_validationLoss <= _options.GoodFitThreshold && _overfittingScore <= _options.OverfittingThreshold)
             return FitType.GoodFit;
@@ -184,7 +184,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// between different fit categories.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var lossConfidence = Math.Max(0, 1 - (_validationLoss / _options.PoorFitThreshold));
         var overfittingConfidence = Math.Max(0, 1 - (_overfittingScore / (_options.OverfittingThreshold * 2)));
@@ -217,7 +217,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// These recommendations are practical steps you can take to improve your model's performance.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -271,7 +271,7 @@ public class NeuralNetworkFitDetector<T> : FitDetectorBase<T>
     /// dropout, or early stopping to help your model generalize better.
     /// </para>
     /// </remarks>
-    private double CalculateOverfittingScore(ModelEvaluationData<T> evaluationData)
+    private double CalculateOverfittingScore(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         return Math.Max(0, (_validationLoss - _trainingLoss) / _trainingLoss);
     }

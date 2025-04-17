@@ -17,7 +17,7 @@ namespace AiDotNet.FitDetectors;
 /// underfitting (performing poorly across all datasets).
 /// </para>
 /// </remarks>
-public class CrossValidationFitDetector<T> : FitDetectorBase<T>
+public class CrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the cross-validation fit detector.
@@ -100,7 +100,7 @@ public class CrossValidationFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -144,7 +144,7 @@ public class CrossValidationFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingR2 = evaluationData.TrainingSet.PredictionStats.R2;
         var validationR2 = evaluationData.ValidationSet.PredictionStats.R2;
@@ -203,7 +203,7 @@ public class CrossValidationFitDetector<T> : FitDetectorBase<T>
     /// will have higher confidence scores.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var r2Consistency = _numOps.Divide(
             _numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), evaluationData.TestSet.PredictionStats.R2),
@@ -244,7 +244,7 @@ public class CrossValidationFitDetector<T> : FitDetectorBase<T>
     /// highlighting areas where the model's performance could be improved.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

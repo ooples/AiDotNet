@@ -1,6 +1,5 @@
 namespace AiDotNet.Regression;
 
-
 /// <summary>
 /// Implements Quantile Regression, a technique that estimates the conditional quantiles of a response variable
 /// distribution in the linear model, providing a more complete view of the relationship between variables.
@@ -49,7 +48,7 @@ public class QuantileRegression<T> : RegressionBase<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    public QuantileRegression(QuantileRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public QuantileRegression(QuantileRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new QuantileRegressionOptions<T>();
@@ -89,7 +88,7 @@ public class QuantileRegression<T> : RegressionBase<T>
         Intercept = NumOps.Zero;
 
         // Apply regularization to the input matrix
-        x = Regularization.RegularizeMatrix(x);
+        x = Regularization.Regularize(x);
 
         // Gradient descent optimization
         for (int iter = 0; iter < _options.MaxIterations; iter++)
@@ -120,7 +119,7 @@ public class QuantileRegression<T> : RegressionBase<T>
             Intercept = NumOps.Add(Intercept, NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), interceptGradient));
 
             // Apply regularization to coefficients
-            Coefficients = Regularization.RegularizeCoefficients(Coefficients);
+            Coefficients = Regularization.Regularize(Coefficients);
         }
     }
 
@@ -185,9 +184,9 @@ public class QuantileRegression<T> : RegressionBase<T>
     /// This information can be useful for understanding and comparing different models.
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        var metadata = base.GetModelMetadata();
+        var metadata = base.GetModelMetaData();
         metadata.AdditionalInfo["Quantile"] = _options.Quantile;
 
         return metadata;
@@ -273,5 +272,36 @@ public class QuantileRegression<T> : RegressionBase<T>
         _options.Quantile = reader.ReadDouble();
         _options.LearningRate = reader.ReadDouble();
         _options.MaxIterations = reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the quantile regression model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the quantile regression model with the same configuration but no trained parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the quantile regression model with the same configuration
+    /// options and regularization method as the current instance, but without copying the trained parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
+    /// any learned parameters.
+    /// 
+    /// Think of it like getting a blank notepad with the same paper quality and size, 
+    /// but without any writing on it yet. The new model has the same:
+    /// - Quantile setting (which part of the distribution you're estimating)
+    /// - Learning rate (how quickly the model adjusts during training)
+    /// - Maximum iterations (how long the model will train)
+    /// - Regularization settings (safeguards against overfitting)
+    /// 
+    /// But it doesn't have any of the coefficient values that were learned from data.
+    /// 
+    /// This is mainly used internally when doing things like cross-validation or 
+    /// creating ensembles of similar models with different training data.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create a new instance with the same options and regularization
+        return new QuantileRegression<T>(_options, Regularization);
     }
 }

@@ -321,6 +321,58 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Gets the predicted columns based on the current cell states.
+    /// </summary>
+    /// <returns>A vector containing the predicted column activations.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method predicts which columns are likely to be active in the next time step based on the current
+    /// activation patterns of cells. A column is predicted to be active if any of its cells have a high activation state,
+    /// indicating that the pattern represented by that column is expected to occur based on the current context.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method tells you what patterns the network expects to see next.
+    /// 
+    /// The prediction process works like this:
+    /// - The layer examines the current state of all cells
+    /// - For each column, it determines if any cells are strongly activated
+    /// - If yes, that column is predicted to be active in the next time step
+    /// - The result is a vector where 1 means "predicted active" and 0 means "not predicted"
+    /// 
+    /// Think of it like predicting the next note in a melody based on what you've heard so far.
+    /// If you've heard a sequence like "do-re-mi" many times, when you hear "do-re", 
+    /// you would predict "mi" as the next note.
+    /// </para>
+    /// </remarks>
+    public Vector<T> GetPredictions()
+    {
+        var predictions = new Vector<T>(ColumnCount);
+    
+        // Prediction threshold - cells with activation above this value
+        // contribute to predicting their column will be active
+        T predictionThreshold = NumOps.FromDouble(0.3);
+    
+        for (int i = 0; i < ColumnCount; i++)
+        {
+            // A column is predicted if any of its cells have a high activation state
+            bool isPredicted = false;
+        
+            for (int j = 0; j < CellsPerColumn; j++)
+            {
+                if (NumOps.GreaterThan(CellStates[i, j], predictionThreshold))
+                {
+                    isPredicted = true;
+                    break;
+                }
+            }
+        
+            // Set prediction for this column
+            predictions[i] = isPredicted ? NumOps.One : NumOps.Zero;
+        }
+    
+        return predictions;
+    }
+
+    /// <summary>
     /// Performs the backward pass of the temporal memory layer.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>

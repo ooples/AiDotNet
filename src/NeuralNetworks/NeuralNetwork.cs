@@ -108,51 +108,6 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Makes a prediction using the neural network for the given input.
-    /// </summary>
-    /// <param name="input">The input data as a vector</param>
-    /// <returns>The predicted output as a vector</returns>
-    /// <remarks>
-    /// <para>
-    /// This method passes the input data through each layer of the neural network in sequence.
-    /// Each layer transforms the data according to its parameters and activation function.
-    /// 
-    /// For example, in a simple classification task:
-    /// 1. The input vector might contain features of an object
-    /// 2. The neural network processes these features through its layers
-    /// 3. The output vector contains the predicted probabilities for each class
-    /// </para>
-    /// <para><b>For Beginners:</b> This method takes your input data and passes it through the network to get a prediction.
-    /// 
-    /// The process works like this:
-    /// 1. Your input data enters the network (like an image or set of measurements)
-    /// 2. The data travels through each layer in sequence
-    /// 3. In each layer:
-    ///    - Neurons receive values from the previous layer
-    ///    - They apply weights, biases, and activation functions
-    ///    - They output new values to the next layer
-    /// 4. The final layer produces the prediction (like probabilities for each category)
-    /// 
-    /// For example, in a medical diagnosis system:
-    /// - Input: Patient symptoms, test results, and vital signs
-    /// - Process: The network analyzes patterns in this data
-    /// - Output: Probability of different possible diagnoses
-    /// 
-    /// This is how you use the network after it's been trained to make predictions on new data.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Updates the parameters (weights and biases) of the neural network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the entire network</param>
@@ -198,122 +153,252 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Saves the neural network's structure and parameters to a binary stream.
+    /// Makes a prediction using the neural network.
     /// </summary>
-    /// <param name="writer">The binary writer to write the data to</param>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null</exception>
-    /// <exception cref="InvalidOperationException">Thrown when serialization encounters an error</exception>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after processing through all layers.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the complete state of the neural network, including:
-    /// - The number and types of layers
-    /// - All weights, biases, and other parameters
-    /// 
-    /// The saved data can later be loaded using the Deserialize method to recreate
-    /// the exact same neural network without needing to train it again.
+    /// This method performs a forward pass through all layers of the neural network without updating any internal states.
+    /// It's used for making predictions on new data after the network has been trained.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained neural network to a file.
+    /// <para><b>For Beginners:</b> This method takes your input data and gives you the network's prediction.
     /// 
-    /// After spending time training a neural network (which can take hours or days),
-    /// you'll want to save it so you can use it later without training again. This method:
+    /// When making a prediction:
+    /// - Your input data (like an image or set of features) enters the network
+    /// - It passes through each layer, being transformed along the way
+    /// - Each neuron applies its weights, bias, and activation function
+    /// - The final layer produces the output (like a classification or regression value)
     /// 
-    /// 1. Records all the network's structural information:
-    ///    - How many layers it has
-    ///    - What type each layer is
-    ///    - How neurons are connected
-    /// 
-    /// 2. Saves all learned values:
-    ///    - All weights between neurons
-    ///    - All bias values
-    ///    - Any other parameters the network has learned
-    /// 
-    /// Think of it like taking a snapshot of the network's "brain" that you can reload later.
-    /// This is valuable because training is computationally expensive, but loading a pre-trained
-    /// network takes just seconds.
+    /// This is the main method you'll use when applying your trained network to new data.
+    /// For example, if you've trained a network to recognize handwritten digits,
+    /// you would use this method to classify new digit images.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(Layers.Count);
+        // Set network to inference mode (not training)
+        bool originalTrainingMode = IsTrainingMode;
+        SetTrainingMode(false);
+        
+        // Forward pass through all layers
+        Tensor<T> current = input;
+            
         foreach (var layer in Layers)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
+            current = layer.Forward(current);
+        }
 
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
+        // Restore original training mode
+        SetTrainingMode(originalTrainingMode);
+            
+        return current;
+    }
 
-            writer.Write(fullName);
-            layer.Serialize(writer);
+    /// <summary>
+    /// Trains the neural network on input-output pairs.
+    /// </summary>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor.</param>
+    /// <remarks>
+    /// <para>
+    /// This method performs one step of training on a single input-output pair or batch.
+    /// It computes the forward pass, calculates the error, and backpropagates to update the network's parameters.
+    /// For full training, this method should be called repeatedly with different inputs from the training dataset.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the network to make better predictions.
+    /// 
+    /// The training process works like this:
+    /// 1. Input data is fed into the network
+    /// 2. The network makes a prediction (forward pass)
+    /// 3. The prediction is compared to the expected output to calculate error
+    /// 4. The error is propagated backward through the network (backpropagation)
+    /// 5. The network's parameters are adjusted to reduce the error
+    /// 
+    /// Think of it like learning from mistakes:
+    /// - The network makes a guess
+    /// - It sees how far off it was
+    /// - It adjusts its approach to do better next time
+    /// 
+    /// This method performs one iteration of this process. To fully train a network,
+    /// you'd typically call this method many times with different examples from your training data.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Ensure we're in training mode
+        SetTrainingMode(true);
+        
+        // Step 1: Forward pass with memory for backpropagation
+        Vector<T> inputVector = input.ToVector();
+        Vector<T> outputVector = ForwardWithMemory(inputVector);
+        
+        // Step 2: Calculate loss/error (e.g., mean squared error)
+        Vector<T> expectedVector = expectedOutput.ToVector();
+        Vector<T> errorVector = new Vector<T>(expectedVector.Length);
+        
+        for (int i = 0; i < expectedVector.Length; i++)
+        {
+            // Error = expected - actual
+            errorVector[i] = NumOps.Subtract(expectedVector[i], outputVector[i]);
+        }
+        
+        // Step 3: Backpropagation to compute gradients
+        Backpropagate(errorVector);
+        
+        // Step 4: Update parameters using gradients and learning rate
+        T learningRate = NumOps.FromDouble(0.01);
+        
+        foreach (var layer in Layers)
+        {
+            if (layer.SupportsTraining && layer.ParameterCount > 0)
+            {
+                layer.UpdateParameters(learningRate);
+            }
         }
     }
 
     /// <summary>
-    /// Loads a neural network's structure and parameters from a binary stream.
+    /// Gets metadata about the neural network.
     /// </summary>
-    /// <param name="reader">The binary reader to read the data from</param>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null</exception>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization encounters an error</exception>
+    /// <returns>A ModelMetaData object containing information about the neural network.</returns>
     /// <remarks>
     /// <para>
-    /// This method reconstructs a neural network that was previously saved using the Serialize method.
-    /// It recreates:
-    /// - All layers with their original types
-    /// - All weights, biases, and other parameters
-    /// 
-    /// After deserialization, the neural network is ready to use for making predictions
-    /// without needing to be trained again.
+    /// This method returns comprehensive metadata about the neural network, including its architecture,
+    /// layer configuration, and other relevant parameters. This information is useful for model
+    /// management, tracking experiments, and reporting.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved neural network from a file.
+    /// <para><b>For Beginners:</b> This provides detailed information about your neural network.
     /// 
-    /// When you want to use a network that was trained earlier, this method:
+    /// The metadata includes:
+    /// - The type of neural network
+    /// - Details about its structure (layers, neurons, etc.)
+    /// - The total number of parameters (weights and biases)
+    /// - Additional configuration information
     /// 
-    /// 1. Reads how many layers the network should have
-    /// 2. Creates a new, empty network
-    /// 3. For each layer:
-    ///    - Reads what type of layer it should be
-    ///    - Creates that type of layer
-    ///    - Loads all the learned values for that layer
-    /// 
-    /// This is like restoring the network's "brain" from a snapshot.
-    /// 
-    /// For example, if you trained a network to recognize handwriting and saved it,
-    /// you could load it weeks later and immediately use it to recognize text without
-    /// having to retrain it on thousands of examples again.
+    /// This information is useful for:
+    /// - Documentation
+    /// - Comparing different network architectures
+    /// - Debugging and analyzing network behavior
+    /// - Creating reports or visualizations
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
+        // Count parameters by layer type
+        Dictionary<string, int> layerCounts = [];
+        
+        foreach (var layer in Layers)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            string layerType = layer.GetType().Name;
+            
+            if (layerCounts.ContainsKey(layerType))
+            {
+                layerCounts[layerType]++;
+            }
+            else
+            {
+                layerCounts[layerType] = 1;
+            }
         }
+        
+        // Get layer sizes
+        int[] layerSizes = Architecture.GetLayerSizes();
+        
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.NeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputSize", Architecture.InputSize },
+                { "OutputSize", Architecture.OutputSize },
+                { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
+                { "TotalLayers", Layers.Count },
+                { "TotalParameters", GetParameterCount() },
+                { "LayerTypes", layerCounts },
+                { "LayerSizes", layerSizes },
+                { "TaskType", Architecture.TaskType.ToString() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes neural network-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method saves any neural network-specific data to the binary stream.
+    /// In this implementation, there is no additional data beyond what the base class serializes,
+    /// but this method could be extended for specialized neural network types.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves neural network-specific information.
+    /// 
+    /// When saving a neural network to a file:
+    /// - The base class already saves the basic structure and weights
+    /// - This method saves any additional information specific to this type of network
+    /// 
+    /// For a standard neural network, there's typically no additional information needed
+    /// beyond what the base class already saves.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+    }
+
+    /// <summary>
+    /// Deserializes neural network-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method loads any neural network-specific data from the binary stream.
+    /// In this implementation, there is no additional data beyond what the base class deserializes,
+    /// but this method could be extended for specialized neural network types.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads neural network-specific information.
+    /// 
+    /// When loading a neural network from a file:
+    /// - The base class already loads the basic structure and weights
+    /// - This method loads any additional information specific to this type of network
+    /// 
+    /// For a standard neural network, there's typically no additional information needed
+    /// beyond what the base class already loads.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new instance of the neural network with the same architecture.
+    /// </summary>
+    /// <returns>A new instance of the neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new neural network with the same architecture as the current instance.
+    /// The new instance is initialized with fresh layers and parameters, making it useful for
+    /// creating multiple networks with the same structure or for resetting a network while preserving its architecture.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a brand new neural network with the same structure.
+    /// 
+    /// This is useful when you want to:
+    /// - Start over with a fresh network but keep the same structure
+    /// - Create multiple networks with identical layouts
+    /// - Reset a network to its initial state
+    /// 
+    /// The new network will have:
+    /// - The same number of layers and neurons
+    /// - The same activation functions
+    /// - Newly initialized weights and biases
+    /// 
+    /// Think of it like creating a twin of your neural network, but with a "blank slate" -
+    /// it has the same structure but hasn't learned anything yet.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new NeuralNetwork<T>(Architecture);
     }
 }

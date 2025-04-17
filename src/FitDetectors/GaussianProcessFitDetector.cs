@@ -16,7 +16,7 @@
 /// (high uncertainty and poor performance).
 /// </para>
 /// </remarks>
-public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
+public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Gaussian Process fit detector.
@@ -70,7 +70,7 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -111,7 +111,7 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var (meanPrediction, variancePrediction) = PerformGaussianProcessRegression(evaluationData);
 
@@ -161,7 +161,7 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// values indicating greater confidence in the fit assessment.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var (meanPrediction, variancePrediction) = PerformGaussianProcessRegression(evaluationData);
 
@@ -200,7 +200,7 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// hyperparameter tuning, and data preprocessing.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -262,9 +262,9 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    private (Vector<T>, Vector<T>) PerformGaussianProcessRegression(ModelEvaluationData<T> evaluationData)
+    private (Vector<T>, Vector<T>) PerformGaussianProcessRegression(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var X = evaluationData.ModelStats.FeatureMatrix;
+        var X = evaluationData.ModelStats.Features;
         var y = evaluationData.ModelStats.Actual;
 
         // Hyperparameter optimization

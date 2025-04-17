@@ -33,9 +33,127 @@ namespace AiDotNet.NeuralNetworks;
 public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     /// <summary>
+    /// Gets or sets the loss function used for training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The loss function measures how well the network's predictions match the expected outputs.
+    /// It provides a signal that guides the network's learning during training.
+    /// Different tasks require different loss functions, so this property allows specifying
+    /// the appropriate loss function for a specific task.
+    /// </para>
+    /// <para><b>For Beginners:</b> The loss function is like a scorecard that tells the network how well it's doing.
+    /// 
+    /// Think of it as:
+    /// - A way to measure the difference between the network's predictions and the correct answers
+    /// - A signal that guides the network's learning process
+    /// - Different tasks need different ways of measuring performance
+    /// 
+    /// If no loss function is provided, the network automatically selects one based on the task type:
+    /// - For classification tasks: Cross-entropy loss
+    /// - For regression tasks: Mean squared error loss
+    /// </para>
+    /// </remarks>
+    private ILossFunction<T>? _lossFunction;
+
+    /// <summary>
+    /// Gets or sets the learning rate for parameter updates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The learning rate controls how quickly the model adapts to the training data.
+    /// It determines the size of the steps taken during gradient descent optimization.
+    /// </para>
+    /// <para><b>For Beginners:</b> The learning rate is like the size of steps when learning.
+    /// 
+    /// Think of it as:
+    /// - Large steps (high learning rate): Move quickly toward the goal but might overshoot
+    /// - Small steps (low learning rate): Move carefully but might take a long time
+    /// 
+    /// Finding the right balance is important:
+    /// - Too high: learning becomes unstable, weights oscillate wildly
+    /// - Too low: learning takes very long, might get stuck in suboptimal solutions
+    /// 
+    /// Typical values range from 0.0001 to 0.1, with 0.01 being a common starting point.
+    /// </para>
+    /// </remarks>
+    private T _learningRate;
+
+    /// <summary>
+    /// Gets or sets the number of training epochs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An epoch represents one complete pass through the entire training dataset.
+    /// This property defines how many times the network will iterate through the training dataset.
+    /// </para>
+    /// <para><b>For Beginners:</b> Epochs are like complete study sessions with your training data.
+    /// 
+    /// Each epoch:
+    /// - Processes every example in your training dataset once
+    /// - Updates the network's understanding based on all examples
+    /// - Helps the network get incrementally better at its task
+    /// 
+    /// More epochs generally lead to better learning, but too many can cause the network
+    /// to memorize the training data rather than learning general patterns (overfitting).
+    /// </para>
+    /// </remarks>
+    private int _epochs;
+
+    /// <summary>
+    /// Gets or sets the batch size for training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The batch size determines how many training examples are processed before updating the model parameters.
+    /// Smaller batches provide more frequent updates but with higher variance, while larger batches
+    /// provide more stable but less frequent updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> Batch size is like how many examples you study at once before updating your knowledge.
+    /// 
+    /// When training the network:
+    /// - Small batch size (e.g., 16-32): More frequent but noisier updates
+    /// - Large batch size (e.g., 128-256): Less frequent but more stable updates
+    /// 
+    /// The benefits of batching:
+    /// - More efficient than processing one example at a time
+    /// - Provides a balance between update frequency and stability
+    /// - Helps avoid getting stuck in poor solutions
+    /// 
+    /// Common batch sizes range from 16 to 256, with 32 or 64 being popular choices.
+    /// </para>
+    /// </remarks>
+    private int _batchSize;
+
+    /// <summary>
+    /// Indicates whether this network supports training (learning from data).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the network is capable of learning from data through training.
+    /// For ResidualNeuralNetwork, this property always returns true since the network is designed for training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if the network can learn from data.
+    /// 
+    /// The Residual Neural Network supports training, which means:
+    /// - It can adjust its internal values based on examples
+    /// - It can improve its performance over time
+    /// - It can learn to recognize patterns in data
+    /// 
+    /// This property always returns true because ResNets are specifically designed
+    /// to be trainable, even when they're very deep (many layers).
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ResidualNeuralNetwork{T}"/> class with the specified architecture.
     /// </summary>
     /// <param name="architecture">The neural network architecture to use for the ResNet.</param>
+    /// <param name="learningRate">The learning rate for training. Default is 0.01 converted to type T.</param>
+    /// <param name="epochs">The number of training epochs. Default is 10.</param>
+    /// <param name="batchSize">The batch size for training. Default is 32.</param>
+    /// <param name="lossFunction">Optional custom loss function. If null, a default will be chosen based on task type.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Residual Neural Network with the specified architecture.
@@ -57,8 +175,18 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
     /// This combination of paths is what gives ResNets their special ability to train very deep networks.
     /// </para>
     /// </remarks>
-    public ResidualNeuralNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public ResidualNeuralNetwork(
+        NeuralNetworkArchitecture<T> architecture, 
+        T? learningRate = default, 
+        int epochs = 10, 
+        int batchSize = 32,
+        ILossFunction<T>? lossFunction = null) 
+        : base(architecture)
     {
+        _learningRate = learningRate ?? NumOps.FromDouble(0.01);
+        _epochs = epochs;
+        _batchSize = batchSize;
+        _lossFunction = lossFunction;
     }
 
     /// <summary>
@@ -103,43 +231,6 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Processes the input through the residual neural network to produce a prediction.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector after processing through the network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the forward pass of the Residual Neural Network. It processes the input
-    /// through each layer of the network in sequence, transforming it according to the operations defined
-    /// in each layer. For a ResNet, this includes both processing through convolutional layers and shortcuts
-    /// that allow information to bypass certain layers, with the results being combined.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is how the ResNet processes information and makes predictions.
-    /// 
-    /// During the prediction process:
-    /// - The input data (like an image) enters the network
-    /// - The data flows through each layer in sequence
-    /// - In residual blocks, the data travels down both paths:
-    ///   * The main path where it's processed through several layers
-    ///   * The shortcut path where it bypasses these layers
-    /// - The outputs from both paths are then added together
-    /// - This combined output continues to the next block
-    /// 
-    /// The shortcut paths ensure that even in very deep networks, information can flow easily from input to output,
-    /// allowing the network to learn more complex patterns without running into the vanishing gradient problem.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-        return current;
-    }
-
-    /// <summary>
     /// Updates the parameters of the residual neural network layers.
     /// </summary>
     /// <param name="parameters">The vector of parameter updates to apply.</param>
@@ -174,7 +265,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
             int layerParameterCount = layer.ParameterCount;
             if (layerParameterCount > 0)
             {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
+                Vector<T> layerParameters = parameters.GetSubVector(startIndex, layerParameterCount);
                 layer.UpdateParameters(layerParameters);
                 startIndex += layerParameterCount;
             }
@@ -182,102 +273,384 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Saves the state of the Residual Neural Network to a binary writer.
+    /// Gets the appropriate loss function based on the task type if none was provided.
     /// </summary>
-    /// <param name="writer">The binary writer to save the state to.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if layer serialization fails.</exception>
+    /// <returns>A loss function appropriate for the network's task.</returns>
     /// <remarks>
     /// <para>
-    /// This method serializes the entire state of the Residual Neural Network, including all layers and their
-    /// parameters. It writes the number of layers and the type and state of each layer to the provided binary writer.
-    /// This allows the network state to be saved and later restored, which is useful for deploying trained models or
-    /// continuing training from a checkpoint.
+    /// This method returns the loss function specified during initialization, or creates a default one
+    /// based on the task type if none was provided. For classification tasks, it creates a cross-entropy
+    /// loss function. For regression tasks, it creates a mean squared error loss function.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the entire state of the ResNet to a file.
+    /// <para><b>For Beginners:</b> This method picks the right scoring system for your task.
     /// 
-    /// When serializing:
-    /// - All the network's layers are saved (their types and internal values)
-    /// - The saved file can later be used to restore the exact same network state
+    /// If you didn't specify a loss function when creating the network:
+    /// - For classification (categorizing), it uses cross-entropy loss
+    /// - For regression (predicting values), it uses mean squared error loss
     /// 
-    /// This is useful for:
-    /// - Saving a trained model to use later
-    /// - Sharing a model with others
-    /// - Creating backups during long training processes
-    /// - Pausing and resuming training
-    /// 
-    /// Think of it like taking a complete snapshot of the network that can be restored later.
-    /// This is especially important for ResNets, which can be very large and take a long time to train.
+    /// These default choices work well for most common tasks, but you can always
+    /// specify a different loss function if you have specific requirements.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    private ILossFunction<T> GetLossFunction()
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
+        if (_lossFunction != null)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            return _lossFunction;
         }
+        
+        // Create a default loss function based on task type
+        return Architecture.TaskType switch
+        {
+            NeuralNetworkTaskType.BinaryClassification => new CrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => new CrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new CrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.ImageClassification => new CrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.SequenceClassification => new CrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.Regression => new MeanSquaredErrorLoss<T>(),
+            NeuralNetworkTaskType.TimeSeriesForecasting => new MeanSquaredErrorLoss<T>(),
+            // Default to MSE for other task types
+            _ => new MeanSquaredErrorLoss<T>()
+        };
     }
 
     /// <summary>
-    /// Loads the state of the Residual Neural Network from a binary reader.
+    /// Makes a prediction using the Residual Neural Network.
     /// </summary>
-    /// <param name="reader">The binary reader to load the state from.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if layer deserialization fails.</exception>
+    /// <param name="input">The input tensor to make a prediction for.</param>
+    /// <returns>The predicted output tensor.</returns>
     /// <remarks>
     /// <para>
-    /// This method deserializes the state of the Residual Neural Network from a binary reader. It reads
-    /// the number of layers, recreates each layer based on its type, and deserializes the layer state.
-    /// This allows a previously saved network state to be restored, which is essential for deploying trained
-    /// models or continuing training from a checkpoint.
+    /// This method performs a forward pass through the network to generate a prediction based on the input tensor.
+    /// The input flows through all layers sequentially, with residual connections allowing information to bypass
+    /// certain layers where applicable. The output represents the network's prediction, which depends on the task
+    /// (e.g., class probabilities for classification or continuous values for regression).
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved ResNet state from a file.
+    /// <para><b>For Beginners:</b> This method uses the network to make a prediction based on input data.
     /// 
-    /// When deserializing:
-    /// - The number and types of layers are read from the file
-    /// - Each layer is recreated and its state is restored
+    /// The prediction process works like this:
+    /// - Input data enters the network at the first layer
+    /// - The data passes through each layer in sequence
+    /// - At residual blocks, there are two paths:
+    ///   * A main path through multiple processing layers
+    ///   * A shortcut path that bypasses these layers
+    /// - The outputs from both paths are combined at the end of each block
+    /// - The final layer produces the prediction result
     /// 
-    /// This allows you to:
-    /// - Load a previously trained model
-    /// - Continue using or training a model from where you left off
-    /// - Use models created by others
-    /// 
-    /// For example, you might download a pre-trained ResNet model that was trained on millions of images,
-    /// and then use it directly or fine-tune it for your specific task. This saves enormous amounts of
-    /// computation time and resources compared to training from scratch.
+    /// For example, in an image recognition task:
+    /// - The input might be an image
+    /// - Each layer detects increasingly complex patterns
+    /// - The shortcuts help information flow through the entire network
+    /// - The output tells you what the image contains
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-        for (int i = 0; i < layerCount; i++)
+        // Perform forward pass through all layers sequentially
+        var current = input;
+        foreach (var layer in Layers)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            current = layer.Forward(current);
         }
+        
+        return current;
+    }
+
+    /// <summary>
+    /// Trains the Residual Neural Network on the provided data.
+    /// </summary>
+    /// <param name="input">The input training data.</param>
+    /// <param name="expectedOutput">The expected output for the given input.</param>
+    /// <remarks>
+    /// <para>
+    /// This method trains the Residual Neural Network on the provided data for the specified number of epochs.
+    /// It divides the data into batches and trains on each batch using backpropagation and gradient descent.
+    /// The method tracks and reports the average loss for each epoch to monitor training progress.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the ResNet to recognize patterns in your data.
+    /// 
+    /// The training process works like this:
+    /// 1. Divides your data into smaller batches for efficient processing
+    /// 2. For each batch:
+    ///    - Feeds the input data through the network
+    ///    - Compares the prediction with the expected output
+    ///    - Calculates how wrong the prediction was (the "loss")
+    ///    - Adjusts the network's parameters to reduce errors
+    /// 3. Repeats this process for multiple epochs (complete passes through the data)
+    /// 
+    /// The special residual connections in the ResNet help the error signals flow backward
+    /// through the network more effectively, making it possible to train very deep networks
+    /// that would otherwise suffer from the vanishing gradient problem.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Make sure we're in training mode
+        SetTrainingMode(true);
+        
+        for (int epoch = 0; epoch < _epochs; epoch++)
+        {
+            T totalLoss = NumOps.Zero;
+            
+            // Process data in batches
+            for (int batchStart = 0; batchStart < input.Shape[0]; batchStart += _batchSize)
+            {
+                // Get a batch of data
+                int batchEnd = Math.Min(batchStart + _batchSize, input.Shape[0]);
+                int actualBatchSize = batchEnd - batchStart;
+                var batchX = input.Slice(batchStart, 0, batchEnd, input.Shape[1]);
+                var batchY = expectedOutput.Slice(batchStart, 0, batchEnd, expectedOutput.Shape[1]);
+                
+                // Reset gradients at the start of each batch
+                var totalGradient = new Tensor<T>([GetParameterCount()], Vector<T>.CreateDefault(GetParameterCount(), NumOps.Zero));
+                
+                // Accumulate gradients for each example in the batch
+                for (int i = 0; i < actualBatchSize; i++)
+                {
+                    var x = batchX.GetRow(i);
+                    var y = batchY.GetRow(i);
+                    
+                    // Forward pass with memory to save intermediate states
+                    var prediction = ForwardWithMemory(x);
+                    
+                    // Calculate loss and gradients for this example
+                    T loss = CalculateLoss(prediction, y);
+                    totalLoss = NumOps.Add(totalLoss, loss);
+                    
+                    // Calculate output gradients
+                    Vector<T> outputGradients = CalculateOutputGradients(prediction, y);
+                    
+                    // Backpropagate to compute gradients for all parameters
+                    Backpropagate(outputGradients);
+                    
+                    // Accumulate gradients
+                    var gradients = GetParameterGradients();
+                    totalGradient = totalGradient.Add(Tensor<T>.FromVector(gradients));
+                }
+                
+                // Average the gradients across the batch
+                totalGradient = new Tensor<T>(totalGradient.Shape, totalGradient.ToVector().Divide(NumOps.FromDouble(actualBatchSize)));
+                
+                // Update parameters with averaged gradients
+                var currentParams = GetParameters();
+                var updatedParams = new Vector<T>(currentParams.Length);
+                for (int j = 0; j < currentParams.Length; j++)
+                {
+                    updatedParams[j] = NumOps.Subtract(
+                        currentParams[j], 
+                        NumOps.Multiply(_learningRate, totalGradient.ToVector()[j]));
+                }
+                
+                UpdateParameters(updatedParams);
+            }
+            
+            // Calculate average loss for the epoch
+            T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(input.Shape[0]));
+        }
+        
+        // Set back to inference mode after training
+        SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Calculates the loss between predicted and expected outputs.
+    /// </summary>
+    /// <param name="predicted">The predicted values from the network.</param>
+    /// <param name="expected">The expected (ground truth) values.</param>
+    /// <returns>The loss value based on the selected loss function.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the loss between the network's prediction and the expected output
+    /// using the loss function specified during initialization or a default one based on the task type.
+    /// The loss value provides a measure of how well the network is performing on the task.
+    /// </para>
+    /// <para><b>For Beginners:</b> This measures how wrong the network's predictions are.
+    /// 
+    /// The loss function:
+    /// - Compares the network's prediction with the correct answer
+    /// - Produces a number that's higher when predictions are worse
+    /// - Uses the appropriate calculation based on your task type
+    /// 
+    /// During training, we aim to minimize this loss, meaning the network gets better at
+    /// making accurate predictions for the specific task.
+    /// </para>
+    /// </remarks>
+    private T CalculateLoss(Vector<T> predicted, Vector<T> expected)
+    {
+        var lossFunction = GetLossFunction();
+        return lossFunction.CalculateLoss(predicted, expected);
+    }
+
+    /// <summary>
+    /// Calculates the gradients of the loss with respect to the network outputs.
+    /// </summary>
+    /// <param name="predicted">The predicted values from the network.</param>
+    /// <param name="expected">The expected (target) values.</param>
+    /// <returns>A vector of gradients for the output layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates how the loss changes with respect to changes in the network's outputs.
+    /// These gradients are used during backpropagation to update the network's parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how to adjust the network's outputs to reduce errors.
+    /// 
+    /// The gradient tells the network:
+    /// - How much each output value contributes to the overall error
+    /// - Which direction to adjust each output to reduce the error
+    /// - The size of adjustment needed for each output
+    /// 
+    /// This information flows backward through the network during training,
+    /// helping all parts of the network learn from its mistakes.
+    /// </para>
+    /// </remarks>
+    private Vector<T> CalculateOutputGradients(Vector<T> predicted, Vector<T> expected)
+    {
+        var lossFunction = GetLossFunction();
+        return lossFunction.CalculateDerivative(predicted, expected);
+    }
+
+    /// <summary>
+    /// Gets metadata about the Residual Neural Network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata that describes the Residual Neural Network, including its type,
+    /// architecture details, and training parameters. This information can be useful for model
+    /// management, documentation, and versioning.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides a summary of your network's configuration.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Residual Neural Network)
+    /// - The number of layers in the network
+    /// - Information about the network's structure
+    /// - Training parameters like learning rate and epochs
+    /// 
+    /// This is useful for:
+    /// - Documenting your model
+    /// - Comparing different model configurations
+    /// - Reproducing your model setup later
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var layerSizes = Layers.Select(layer => layer.GetOutputShape()[0]).ToList();
+        
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.ResidualNeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NumberOfLayers", Layers.Count },
+                { "LayerSizes", layerSizes },
+                { "Epochs", _epochs },
+                { "LearningRate", Convert.ToDouble(_learningRate) },
+                { "BatchSize", _batchSize },
+                { "InputSize", Architecture.CalculatedInputSize },
+                { "OutputSize", Architecture.CalculateOutputSize() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes network-specific data for the Residual Neural Network.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the training parameters specific to the Residual Neural Network to the provided BinaryWriter.
+    /// These parameters include the number of epochs, learning rate, and batch size, which are crucial for
+    /// reconstructing the network's training configuration during deserialization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the special settings for training this ResNet.
+    /// 
+    /// It writes:
+    /// - The number of times to train on the entire dataset (epochs)
+    /// - How quickly the network learns from its mistakes (learning rate)
+    /// - How many examples the network looks at before updating (batch size)
+    /// 
+    /// These settings are important because they affect how the network learns and performs.
+    /// Saving them allows you to recreate the exact same training setup later.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write training parameters
+        writer.Write(_epochs);
+        writer.Write(Convert.ToDouble(_learningRate));
+        writer.Write(_batchSize);
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data for the Residual Neural Network.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the training parameters specific to the Residual Neural Network from the provided BinaryReader.
+    /// It restores the number of epochs, learning rate, and batch size, ensuring that the network's training
+    /// configuration is accurately reconstructed during deserialization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads the special settings for training this ResNet.
+    /// 
+    /// It reads:
+    /// - The number of times to train on the entire dataset (epochs)
+    /// - How quickly the network learns from its mistakes (learning rate)
+    /// - How many examples the network looks at before updating (batch size)
+    /// 
+    /// Loading these settings ensures that you can continue training or use the network
+    /// with the exact same configuration it had when it was saved.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Read training parameters
+        _epochs = reader.ReadInt32();
+        _learningRate = NumOps.FromDouble(reader.ReadDouble());
+        _batchSize = reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the residual neural network with the same configuration.
+    /// </summary>
+    /// <returns>
+    /// A new instance of <see cref="ResidualNeuralNetwork{T}"/> with the same configuration as the current instance.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new residual neural network that has the same configuration as the current instance.
+    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
+    /// The new instance will have the same architecture, learning rate, epochs, batch size, and loss function
+    /// as the original, but will not share parameter values unless they are explicitly copied after creation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+    /// 
+    /// It's like creating a blueprint copy of your network that can be used to:
+    /// - Save your model's settings
+    /// - Create a new identical model
+    /// - Transfer your model's configuration to another system
+    /// 
+    /// This is useful when you want to:
+    /// - Create multiple similar residual neural networks
+    /// - Save a model's configuration for later use
+    /// - Reset a model while keeping its settings
+    /// 
+    /// Note that while the settings are copied, the learned parameters (like the weights for detecting features)
+    /// are not automatically transferred, so the new instance will need training or parameter copying
+    /// to match the performance of the original.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        // Create a new instance with the cloned architecture and the same parameters
+        return new ResidualNeuralNetwork<T>(
+            Architecture,
+            _learningRate,
+            _epochs,
+            _batchSize,
+            _lossFunction
+        );
     }
 }

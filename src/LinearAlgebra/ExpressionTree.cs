@@ -9,7 +9,7 @@
 /// Each node in the tree is either a number, a variable, or an operation (like addition or multiplication).
 /// This allows the AI to create and evolve mathematical formulas that can model your data.
 /// </remarks>
-public class ExpressionTree<T> : ISymbolicModel<T>
+public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets the type of this node (constant, variable, or operation).
@@ -28,7 +28,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <remarks>
     /// <b>For Beginners:</b> In operations like addition (a + b), the left child represents 'a'.
     /// </remarks>
-    public ExpressionTree<T>? Left { get; private set; }
+    public ExpressionTree<T, TInput, TOutput>? Left { get; private set; }
     
     /// <summary>
     /// Gets the right child node of this node.
@@ -36,12 +36,12 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <remarks>
     /// <b>For Beginners:</b> In operations like addition (a + b), the right child represents 'b'.
     /// </remarks>
-    public ExpressionTree<T>? Right { get; private set; }
+    public ExpressionTree<T, TInput, TOutput>? Right { get; private set; }
     
     /// <summary>
     /// Gets the parent node of this node.
     /// </summary>
-    public ExpressionTree<T>? Parent { get; private set; }
+    public ExpressionTree<T, TInput, TOutput>? Parent { get; private set; }
 
     /// <summary>
     /// Gets the complexity of this expression tree, measured as the total number of nodes.
@@ -74,7 +74,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// Sets the left child of this node and updates the parent reference of the child.
     /// </summary>
     /// <param name="left">The node to set as the left child.</param>
-    public void SetLeft(ExpressionTree<T>? left)
+    public void SetLeft(ExpressionTree<T, TInput, TOutput>? left)
     {
         Left = left;
         if (left != null)
@@ -87,7 +87,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// Sets the right child of this node and updates the parent reference of the child.
     /// </summary>
     /// <param name="right">The node to set as the right child.</param>
-    public void SetRight(ExpressionTree<T>? right)
+    public void SetRight(ExpressionTree<T, TInput, TOutput>? right)
     {
         Right = right;
         if (right != null)
@@ -135,7 +135,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// You can create simple nodes (like numbers or variables) or operation nodes
     /// (like addition or multiplication) that connect to other nodes.
     /// </remarks>
-    public ExpressionTree(NodeType type, T? value = default, ExpressionTree<T>? left = null, ExpressionTree<T>? right = null)
+    public ExpressionTree(NodeType type, T? value = default, ExpressionTree<T, TInput, TOutput>? left = null, ExpressionTree<T, TInput, TOutput>? right = null)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         Type = type;
@@ -198,7 +198,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// </summary>
     /// <param name="node">The node to check.</param>
     /// <returns>The number of features used.</returns>
-    private int CalculateFeatureCountRecursive(ExpressionTree<T> node)
+    private int CalculateFeatureCountRecursive(ExpressionTree<T, TInput, TOutput> node)
     {
         if (node.Type == NodeType.Variable)
         {
@@ -217,7 +217,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <param name="node">The node to check.</param>
     /// <param name="featureIndex">The index of the feature to check.</param>
     /// <returns>True if the feature is used, false otherwise.</returns>
-    private bool IsFeatureUsedRecursive(ExpressionTree<T> node, int featureIndex)
+    private bool IsFeatureUsedRecursive(ExpressionTree<T, TInput, TOutput> node, int featureIndex)
     {
         if (node.Type == NodeType.Variable && _numOps.ToInt32(node.Value) == featureIndex)
         {
@@ -279,16 +279,16 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <b>For Beginners:</b> This method reads a saved expression tree from binary data and reconstructs it.
     /// Think of it like opening a saved file that contains your mathematical formula.
     /// </remarks>
-    public ExpressionTree<T> Deserialize(BinaryReader reader)
+    public ExpressionTree<T, TInput, TOutput> Deserialize(BinaryReader reader)
     {
         NodeType type = (NodeType)reader.ReadInt32();
         T value = _numOps.FromDouble(reader.ReadDouble());
         bool hasLeft = reader.ReadBoolean();
-        ExpressionTree<T>? left = hasLeft ? Deserialize(reader) : null;
+        ExpressionTree<T, TInput, TOutput>? left = hasLeft ? Deserialize(reader) : null;
         bool hasRight = reader.ReadBoolean();
-        ExpressionTree<T>? right = hasRight ? Deserialize(reader) : null;
+        ExpressionTree<T, TInput, TOutput>? right = hasRight ? Deserialize(reader) : null;
 
-        return new ExpressionTree<T>(type, value, left, right);
+        return new ExpressionTree<T, TInput, TOutput>(type, value, left, right);
     }
 
     /// <summary>
@@ -301,9 +301,9 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// For example, changing a "+" to a "*" or changing a constant from 2.5 to 3.1.
     /// This is inspired by how genetic mutations work in nature and helps the AI explore different solutions.
     /// </remarks>
-    public ISymbolicModel<T> Mutate(double mutationRate)
+    public IFullModel<T, TInput, TOutput> Mutate(double mutationRate)
     {
-        ExpressionTree<T> mutatedTree = (ExpressionTree<T>)Copy();
+        ExpressionTree<T, TInput, TOutput> mutatedTree = (ExpressionTree<T, TInput, TOutput>)Copy();
         Random random = new Random();
 
         if (random.NextDouble() < mutationRate)
@@ -333,11 +333,11 @@ public class ExpressionTree<T> : ISymbolicModel<T>
         // Recursively mutate children
         if (mutatedTree.Left != null)
         {
-            mutatedTree.Left = (ExpressionTree<T>)mutatedTree.Left.Mutate(mutationRate);
+            mutatedTree.Left = (ExpressionTree<T, TInput, TOutput>)mutatedTree.Left.Mutate(mutationRate);
         }
         if (mutatedTree.Right != null)
         {
-            mutatedTree.Right = (ExpressionTree<T>)mutatedTree.Right.Mutate(mutationRate);
+            mutatedTree.Right = (ExpressionTree<T, TInput, TOutput>)mutatedTree.Right.Mutate(mutationRate);
         }
 
         return mutatedTree;
@@ -355,20 +355,20 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// crossover might create (x * 3) by taking parts from each. This mimics how genetic traits
     /// are passed from parents to children in nature.
     /// </remarks>
-    public ISymbolicModel<T> Crossover(ISymbolicModel<T> other, double crossoverRate)
+    public IFullModel<T, TInput, TOutput> Crossover(IFullModel<T, TInput, TOutput> other, double crossoverRate)
     {
-        if (!(other is ExpressionTree<T> otherTree))
+        if (!(other is ExpressionTree<T, TInput, TOutput> otherTree))
         {
             throw new ArgumentException("Crossover can only be performed with another ExpressionTree.");
         }
 
-        ExpressionTree<T> offspring = (ExpressionTree<T>)Copy();
+        ExpressionTree<T, TInput, TOutput> offspring = (ExpressionTree<T, TInput, TOutput>)Copy();
         Random random = new Random();
 
         if (random.NextDouble() < crossoverRate)
         {
             // Select a random subtree from the other parent
-            ExpressionTree<T> selectedSubtree = SelectRandomSubtree(otherTree);
+            ExpressionTree<T, TInput, TOutput> selectedSubtree = SelectRandomSubtree(otherTree);
 
             // Replace a random subtree in the offspring with the selected subtree
             ReplaceRandomSubtree(offspring, selectedSubtree);
@@ -385,13 +385,13 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <b>For Beginners:</b> This creates an exact duplicate of the formula, like making a photocopy.
     /// This is important because we often need to make changes to a formula without modifying the original.
     /// </remarks>
-    public ISymbolicModel<T> Copy()
+    public IFullModel<T, TInput, TOutput> Copy()
     {
-        return new ExpressionTree<T>(
+        return new ExpressionTree<T, TInput, TOutput>(
             Type,
             Value,
-            Left?.Copy() as ExpressionTree<T>,
-            Right?.Copy() as ExpressionTree<T>
+            Left?.Clone() as ExpressionTree<T, TInput, TOutput>,
+            Right?.Clone() as ExpressionTree<T, TInput, TOutput>
         );
     }
 
@@ -404,24 +404,24 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <b>For Beginners:</b> This creates a random mathematical formula with a limit on how complex it can be.
     /// The maxDepth parameter controls this complexity - higher values allow for more complex formulas.
     /// </remarks>
-    private ExpressionTree<T> GenerateRandomTree(int maxDepth)
+    private ExpressionTree<T, TInput, TOutput> GenerateRandomTree(int maxDepth)
     {
         Random random = new Random();
         if (maxDepth == 0 || random.NextDouble() < 0.3) // 30% chance of leaf node
         {
             if (random.NextDouble() < 0.5)
             {
-                return new ExpressionTree<T>(NodeType.Constant, _numOps.FromDouble(random.NextDouble() * 10 - 5));
+                return new ExpressionTree<T, TInput, TOutput>(NodeType.Constant, _numOps.FromDouble(random.NextDouble() * 10 - 5));
             }
             else
             {
-                return new ExpressionTree<T>(NodeType.Variable, _numOps.FromDouble(random.Next(10)));
+                return new ExpressionTree<T, TInput, TOutput>(NodeType.Variable, _numOps.FromDouble(random.Next(10)));
             }
         }
         else
         {
             NodeType operationType = (NodeType)random.Next(2, 6); // Add, Subtract, Multiply, or Divide
-            return new ExpressionTree<T>(
+            return new ExpressionTree<T, TInput, TOutput>(
                 operationType,
                 default,
                 GenerateRandomTree(maxDepth - 1),
@@ -439,7 +439,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <b>For Beginners:</b> This picks a random part of a formula. For example, in the formula (x + (y * 2)),
     /// it might select the whole formula, just (y * 2), or even just y or 2.
     /// </remarks>
-    private ExpressionTree<T> SelectRandomSubtree(ExpressionTree<T> tree)
+    private ExpressionTree<T, TInput, TOutput> SelectRandomSubtree(ExpressionTree<T, TInput, TOutput> tree)
     {
         Random random = new Random();
         if (tree.Left == null && tree.Right == null)
@@ -472,15 +472,15 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <b>For Beginners:</b> This replaces a random part of a formula with a different part.
     /// For example, in (x + y), it might replace y with (z * 2) to create (x + (z * 2)).
     /// </remarks>
-    private void ReplaceRandomSubtree(ExpressionTree<T> tree, ExpressionTree<T> replacement)
+    private void ReplaceRandomSubtree(ExpressionTree<T, TInput, TOutput> tree, ExpressionTree<T, TInput, TOutput> replacement)
     {
         Random random = new Random();
         if (random.NextDouble() < 0.3) // 30% chance of replacing current node
         {
             tree.Type = replacement.Type;
             tree.Value = replacement.Value;
-            tree.Left = replacement.Left?.Copy() as ExpressionTree<T>;
-            tree.Right = replacement.Right?.Copy() as ExpressionTree<T>;
+            tree.Left = replacement.Left?.Clone() as ExpressionTree<T, TInput, TOutput>;
+            tree.Right = replacement.Right?.Clone() as ExpressionTree<T, TInput, TOutput>;
         }
         else
         {
@@ -565,9 +565,9 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <b>For Beginners:</b> This provides useful information about your formula, like how complex it is
     /// and how many input variables it needs. Think of it as a summary sheet about your mathematical model.
     /// </remarks>
-    public ModelMetadata<T> GetModelMetadata()
+    public ModelMetaData<T> GetModelMetaData()
     {
-        return new ModelMetadata<T>
+        return new ModelMetaData<T>
         {
             ModelType = ModelType.ExpressionTree,
             FeatureCount = FeatureCount,
@@ -611,7 +611,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     {
         using MemoryStream ms = new(data);
         using BinaryReader reader = new(ms);
-        ExpressionTree<T> deserializedTree = Deserialize(reader);
+        ExpressionTree<T, TInput, TOutput> deserializedTree = Deserialize(reader);
         this.Type = deserializedTree.Type;
         this.Value = deserializedTree.Value;
         this.Left = deserializedTree.Left;
@@ -627,10 +627,11 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// For example, if your formula is (x + 2) * y, this would give you a list containing:
     /// the multiplication operation, the addition operation, the x variable, the constant 2, and the y variable.
     /// </remarks>
-    public List<ExpressionTree<T>> GetAllNodes()
+    public List<ExpressionTree<T, TInput, TOutput>> GetAllNodes()
     {
-        var nodes = new List<ExpressionTree<T>>();
+        var nodes = new List<ExpressionTree<T, TInput, TOutput>>();
         CollectNodes(this, nodes);
+
         return nodes;
     }
 
@@ -643,7 +644,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <b>For Beginners:</b> This is a helper method that walks through every part of your formula
     /// and adds each piece to a list. It uses recursion (calling itself) to visit every branch of the tree.
     /// </remarks>
-    private void CollectNodes(ExpressionTree<T>? node, List<ExpressionTree<T>> nodes)
+    private void CollectNodes(ExpressionTree<T, TInput, TOutput>? node, List<ExpressionTree<T, TInput, TOutput>> nodes)
     {
         if (node == null) return;
         nodes.Add(node);
@@ -660,7 +661,7 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// <b>For Beginners:</b> Every part of your formula has a unique ID number.
     /// This method helps you find a specific part by its ID, like finding a person by their social security number.
     /// </remarks>
-    public ExpressionTree<T>? FindNodeById(int id)
+    public ExpressionTree<T, TInput, TOutput>? FindNodeById(int id)
     {
         return GetAllNodes().FirstOrDefault(n => n.Id == id);
     }
@@ -690,17 +691,17 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     /// For example, if your formula is "2x + 3", this might change it to "4x + 1" by updating the coefficients 2 and 3.
     /// This is useful when fine-tuning a model to make better predictions.
     /// </remarks>
-    public ISymbolicModel<T> UpdateCoefficients(Vector<T> newCoefficients)
+    public IFullModel<T, TInput, TOutput> UpdateCoefficients(Vector<T> newCoefficients)
     {
         if (newCoefficients.Length != this.Coefficients.Length)
         {
             throw new ArgumentException($"The number of new coefficients ({newCoefficients.Length}) must match the current number of coefficients ({this.Coefficients.Length}).");
         }
 
-        ExpressionTree<T> updatedTree = (ExpressionTree<T>)this.Copy();
+        ExpressionTree<T, TInput, TOutput> updatedTree = (ExpressionTree<T, TInput, TOutput>)this.Clone();
         int coefficientIndex = 0;
 
-        void UpdateConstantNodes(ExpressionTree<T> node)
+        void UpdateConstantNodes(ExpressionTree<T, TInput, TOutput> node)
         {
             if (node.Type == NodeType.Constant)
             {
@@ -722,6 +723,270 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     }
 
     /// <summary>
+    /// Creates a deep copy of this expression tree.
+    /// </summary>
+    /// <returns>A new, identical expression tree.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This creates an exact duplicate of the entire formula tree.
+    /// Unlike the Copy method which returns a general IFullModel, this method returns 
+    /// a specific ExpressionTree. This is useful when you need to make changes to a
+    /// copy without affecting the original formula.
+    /// </remarks>
+    public IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        // Reuse existing Copy method which already creates a deep copy
+        return Copy();
+    }
+
+    /// <summary>
+    /// Creates a clone of this expression tree.
+    /// </summary>
+    /// <returns>A new expression tree with the same structure and values.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This creates an exact duplicate of your formula.
+    /// It's essentially the same as DeepCopy and Copy - it makes a complete
+    /// duplicate that you can modify without changing the original.
+    /// </remarks>
+    public IFullModel<T, TInput, TOutput> Clone()
+    {
+        // Reuse existing Copy method
+        return Copy();
+    }
+
+    /// <summary>
+    /// Gets the parameters of this expression tree.
+    /// </summary>
+    /// <returns>A vector containing all coefficient values in this expression tree.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This returns all the constant numbers from your formula.
+    /// For example, if your formula is "2x + 3y + 5", this would give you [2, 3, 5].
+    /// These numbers are the adjustable parameters that can be tuned to improve predictions.
+    /// </remarks>
+    public Vector<T> GetParameters()
+    {
+        // Return the coefficients which are the model's parameters
+        return Coefficients;
+    }
+
+    /// <summary>
+    /// Creates a new expression tree with updated parameters.
+    /// </summary>
+    /// <param name="parameters">The new parameter values to use.</param>
+    /// <returns>A new expression tree with the updated parameters.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This replaces all the constant numbers in your formula 
+    /// with new values. For example, changing "2x + 3" to "4x + 1" by providing [4, 1]
+    /// as the new parameters. The structure of the formula stays the same.
+    /// </remarks>
+    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        // This is equivalent to UpdateCoefficients
+        return UpdateCoefficients(parameters);
+    }
+
+    /// <summary>
+    /// Gets the indices of all features (variables) used in this expression tree.
+    /// </summary>
+    /// <returns>A collection of feature indices.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This tells you which input variables are actually used in your formula.
+    /// For example, if your formula only uses x[0] and x[2], this returns [0, 2], showing that
+    /// the formula uses the first and third variables but not the second one.
+    /// </remarks>
+    public IEnumerable<int> GetActiveFeatureIndices()
+    {
+        HashSet<int> activeIndices = new HashSet<int>();
+    
+        void CollectFeatureIndices(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node.Type == NodeType.Variable)
+            {
+                activeIndices.Add(_numOps.ToInt32(node.Value));
+            }
+        
+            if (node.Left != null)
+            {
+                CollectFeatureIndices(node.Left);
+            }
+        
+            if (node.Right != null)
+            {
+                CollectFeatureIndices(node.Right);
+            }
+        }
+    
+        CollectFeatureIndices(this);
+        return activeIndices;
+    }
+
+    /// <summary>
+    /// Trains the expression tree on a single input-output pair.
+    /// </summary>
+    /// <param name="input">The input data (Vector, Matrix, or Tensor).</param>
+    /// <param name="expectedOutput">The expected output value.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> For expression trees, training doesn't actually change the formula.
+    /// This method validates that the formula can process your input data correctly.
+    /// </remarks>
+    public void Train(TInput input, TOutput expectedOutput)
+    {
+        // For expression trees, we primarily validate input compatibility
+        if (input is Matrix<T> matrix)
+        {
+            ValidateMatrixFeatures(matrix);
+        }
+        else if (input is Vector<T> vector)
+        {
+            ValidateVectorFeatures(vector);
+        }
+        else if (input is Tensor<T> tensor)
+        {
+            ValidateTensorFeatures(tensor);
+        }
+        else
+        {
+            throw new ArgumentException($"Unsupported input type: {input?.GetType().Name ?? "null"}. Expected Matrix<T>, Vector<T>, or Tensor<T>.");
+        }
+    }
+
+    /// <summary>
+    /// Makes a prediction for an input example.
+    /// </summary>
+    /// <param name="input">The input data (Vector, Matrix, or Tensor).</param>
+    /// <returns>The predicted output.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method applies your mathematical formula to the input data
+    /// to calculate a prediction. It handles different types of inputs (vectors, matrices, or tensors).
+    /// </remarks>
+    public TOutput Predict(TInput input)
+    {
+        if (input is Matrix<T> matrix)
+        {
+            ValidateMatrixFeatures(matrix);
+            Vector<T> predictions = PredictMatrix(matrix);
+        
+            // Try to convert the result to TOutput
+            if (predictions is TOutput typedResult)
+            {
+                return typedResult;
+            }
+            else if (typeof(TOutput) == typeof(object))
+            {
+                return (TOutput)(object)predictions;
+            }
+        
+            throw new InvalidOperationException($"Cannot convert prediction vector to {typeof(TOutput).Name}.");
+        }
+        else if (input is Tensor<T> tensor)
+        {
+            ValidateTensorFeatures(tensor);
+            Vector<T> predictions = PredictTensor(tensor);
+        
+            // Try to convert the result to TOutput
+            if (predictions is TOutput typedResult)
+            {
+                return typedResult;
+            }
+            else if (typeof(TOutput) == typeof(object))
+            {
+                return (TOutput)(object)predictions;
+            }
+        
+            throw new InvalidOperationException($"Cannot convert prediction vector to {typeof(TOutput).Name}.");
+        }
+    
+        throw new ArgumentException($"Unsupported input type: {input?.GetType().Name ?? "null"}. Expected Matrix<T>, Vector<T>, or Tensor<T>.");
+    }
+
+    /// <summary>
+    /// Validates that a matrix has compatible features for this expression tree.
+    /// </summary>
+    /// <param name="matrix">The matrix to validate.</param>
+    private void ValidateMatrixFeatures(Matrix<T> matrix)
+    {
+        if (matrix.Columns < FeatureCount)
+        {
+            throw new ArgumentException($"Input matrix has {matrix.Columns} columns, but the model requires at least {FeatureCount} features.");
+        }
+    }
+
+    /// <summary>
+    /// Validates that a vector has compatible features for this expression tree.
+    /// </summary>
+    /// <param name="vector">The vector to validate.</param>
+    private void ValidateVectorFeatures(Vector<T> vector)
+    {
+        if (vector.Length < FeatureCount)
+        {
+            throw new ArgumentException($"Input vector has {vector.Length} elements, but the model requires at least {FeatureCount} features.");
+        }
+    }
+
+    /// <summary>
+    /// Validates that a tensor has compatible features for this expression tree.
+    /// </summary>
+    /// <param name="tensor">The tensor to validate.</param>
+    private void ValidateTensorFeatures(Tensor<T> tensor)
+    {
+        if (tensor.Shape.Length < 1 || tensor.Shape[tensor.Shape.Length - 1] < FeatureCount)
+        {
+            throw new ArgumentException($"Input tensor's last dimension is {(tensor.Shape.Length > 0 ? tensor.Shape[tensor.Shape.Length - 1] : 0)}, " +
+                $"but the model requires at least {FeatureCount} features.");
+        }
+    }
+
+    /// <summary>
+    /// Makes predictions for all rows in a matrix.
+    /// </summary>
+    /// <param name="matrix">The input matrix, where each row is a sample.</param>
+    /// <returns>A vector containing predictions for each row.</returns>
+    private Vector<T> PredictMatrix(Matrix<T> matrix)
+    {
+        Vector<T> predictions = new Vector<T>(matrix.Rows);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            predictions[i] = Evaluate(matrix.GetRow(i));
+        }
+        return predictions;
+    }
+
+    /// <summary>
+    /// Makes predictions for all samples in a tensor.
+    /// </summary>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A vector containing predictions for each sample.</returns>
+    private Vector<T> PredictTensor(Tensor<T> tensor)
+    {
+        // Calculate the batch size (product of all dimensions except the last one)
+        int batchSize = 1;
+        for (int i = 0; i < tensor.Shape.Length - 1; i++)
+        {
+            batchSize *= tensor.Shape[i];
+        }
+    
+        Vector<T> predictions = new Vector<T>(batchSize);
+        for (int i = 0; i < batchSize; i++)
+        {
+            // Extract vector for this batch item using the Flatten and Slice methods
+            // First, flatten the tensor then extract the appropriate slice
+            Vector<T> flatTensor = tensor.ToVector();
+            int featureSize = tensor.Shape[tensor.Shape.Length - 1];
+            int startIndex = i * featureSize;
+        
+            // Create a vector from the slice
+            Vector<T> inputVector = new Vector<T>(featureSize);
+            for (int j = 0; j < featureSize; j++)
+            {
+                inputVector[j] = flatTensor[startIndex + j];
+            }
+        
+            predictions[i] = Evaluate(inputVector);
+        }
+    
+        return predictions;
+    }
+
+    /// <summary>
     /// Gets a vector containing all coefficient values in this expression tree.
     /// </summary>
     /// <remarks>
@@ -733,9 +998,9 @@ public class ExpressionTree<T> : ISymbolicModel<T>
     {
         get
         {
-            List<T> coefficients = new List<T>();
+            List<T> coefficients = [];
 
-            void CollectCoefficients(ExpressionTree<T> node)
+            void CollectCoefficients(ExpressionTree<T, TInput, TOutput> node)
             {
                 if (node.Type == NodeType.Constant)
                 {

@@ -21,7 +21,7 @@ namespace AiDotNet.Caching;
 /// if you need to take a break.
 /// </para>
 /// </remarks>
-public class DefaultModelCache<T> : IModelCache<T>
+public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOutput>
 {
     /// <summary>
     /// The internal dictionary that stores optimization step data, allowing concurrent access from multiple threads.
@@ -29,7 +29,7 @@ public class DefaultModelCache<T> : IModelCache<T>
     /// <remarks>
     /// ConcurrentDictionary is used to ensure thread safety when multiple operations might access the cache simultaneously.
     /// </remarks>
-    private readonly ConcurrentDictionary<string, OptimizationStepData<T>> _cache = new();
+    private readonly ConcurrentDictionary<string, OptimizationStepData<T, TInput, TOutput>> _cache = new();
 
     /// <summary>
     /// Removes all cached optimization step data from the cache.
@@ -62,7 +62,7 @@ public class DefaultModelCache<T> : IModelCache<T>
     /// container that can be filled with fresh information.
     /// </para>
     /// </remarks>
-    public OptimizationStepData<T>? GetCachedStepData(string key)
+    public OptimizationStepData<T, TInput, TOutput>? GetCachedStepData(string key)
     {
         return _cache.TryGetValue(key, out var model) ? model : new();
     }
@@ -84,7 +84,7 @@ public class DefaultModelCache<T> : IModelCache<T>
     /// This is useful for updating the cache with the latest information as training progresses.
     /// </para>
     /// </remarks>
-    public void CacheStepData(string key, OptimizationStepData<T> stepData)
+    public void CacheStepData(string key, OptimizationStepData<T, TInput, TOutput> stepData)
     {
         _cache[key] = stepData;
     }

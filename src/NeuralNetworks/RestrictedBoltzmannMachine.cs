@@ -162,7 +162,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// smoothly transitions from 0 to 1. This models the probability of a neuron being "on" or "off".
     /// </para>
     /// </remarks>
-    private IActivationFunction<T>? _scalarActivation { get; }
+    private IActivationFunction<T>? _scalarActivation { get; set; }
 
     /// <summary>
     /// Gets or sets the vector activation function used in the RBM.
@@ -183,7 +183,51 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// This is an alternative to the scalar activation - an RBM will use either one or the other, not both.
     /// </para>
     /// </remarks>
-    private IVectorActivationFunction<T>? _vectorActivation { get; }
+    private IVectorActivationFunction<T>? _vectorActivation { get; set; }
+
+    /// <summary>
+    /// Gets or sets the learning rate for Contrastive Divergence training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The learning rate controls how quickly the RBM updates its weights and biases during training.
+    /// A higher learning rate leads to faster but potentially less stable learning, while a lower
+    /// learning rate provides more stable but slower learning.
+    /// </para>
+    /// <para><b>For Beginners:</b> The learning rate controls how big each learning step is.
+    /// 
+    /// Think of it like adjusting a dial:
+    /// - Higher values (like 0.1) make bigger adjustments but might overshoot
+    /// - Lower values (like 0.001) make smaller, more careful adjustments
+    /// 
+    /// Finding the right learning rate is important - too high and the network might never
+    /// converge to good weights; too low and it might take too long to learn anything useful.
+    /// </para>
+    /// </remarks>
+    private T _learningRate;
+
+    /// <summary>
+    /// Gets or sets the number of steps to run the Gibbs sampling chain during Contrastive Divergence.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This parameter determines how many times the RBM alternates between sampling hidden units and
+    /// reconstructing visible units during the Contrastive Divergence algorithm. Higher values provide
+    /// more accurate gradient estimates but are computationally more expensive.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how many back-and-forth cycles the RBM does during training.
+    /// 
+    /// During training, the RBM:
+    /// - Starts with real data (visible layer)
+    /// - Computes hidden layer activations
+    /// - Reconstructs the visible layer from those hidden activations
+    /// - Repeats this process several times
+    /// 
+    /// The cdSteps parameter controls how many times this cycle repeats for each training example.
+    /// Most often, just 1 step (called CD-1) works well, but more steps can sometimes give better results.
+    /// </para>
+    /// </remarks>
+    private int _cdSteps;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RestrictedBoltzmannMachine{T}"/> class with the specified architecture, sizes, and scalar activation function.
@@ -213,16 +257,17 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// This prepares the RBM for training, but it won't actually learn anything until you train it with data.
     /// </para>
     /// </remarks>
-    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, IActivationFunction<T>? scalarActivation = null) : 
-        base(architecture)
+    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1, 
+        IActivationFunction<T>? scalarActivation = null) : base(architecture)
     {
         VisibleSize = visibleSize;
         HiddenSize = hiddenSize;
         _weights = Matrix<T>.CreateRandom(hiddenSize, visibleSize);
         _visibleBiases = Vector<T>.CreateDefault(visibleSize, NumOps.Zero);
         _hiddenBiases = Vector<T>.CreateDefault(hiddenSize, NumOps.Zero);
-        _scalarActivation = scalarActivation;
-        _vectorActivation = null;
+        _scalarActivation = scalarActivation ?? new SigmoidActivation<T>();
+        _learningRate = NumOps.FromDouble(learningRate);
+        _cdSteps = cdSteps;
     }
 
     /// <summary>
@@ -255,68 +300,17 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// that can process all neurons in a layer simultaneously, which can be more efficient.
     /// </para>
     /// </remarks>
-    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, IVectorActivationFunction<T>? vectorActivation = null) : 
-        base(architecture)
+    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1, 
+        IVectorActivationFunction<T>? vectorActivation = null) : base(architecture)
     {
         VisibleSize = visibleSize;
         HiddenSize = hiddenSize;
         _weights = Matrix<T>.CreateRandom(hiddenSize, visibleSize);
         _visibleBiases = Vector<T>.CreateDefault(visibleSize, NumOps.Zero);
         _hiddenBiases = Vector<T>.CreateDefault(hiddenSize, NumOps.Zero);
-        _scalarActivation = null;
-        _vectorActivation = vectorActivation;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RestrictedBoltzmannMachine{T}"/> class using layer sizes from the provided architecture.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture to use for the RBM, containing layer size information.</param>
-    /// <exception cref="ArgumentException">Thrown when the architecture does not contain exactly two layers or if layer sizes are invalid.</exception>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new Restricted Boltzmann Machine by extracting the visible and hidden layer sizes
-    /// from the provided architecture. The architecture must define exactly two layers (visible and hidden),
-    /// and both layer sizes must be positive.
-    /// </para>
-    /// <para><b>For Beginners:</b> This sets up the RBM using the layer sizes defined in the architecture.
-    /// 
-    /// When creating a new RBM this way:
-    /// - You don't directly specify the layer sizes
-    /// - Instead, the architecture object contains this information
-    /// - The RBM extracts the sizes and validates that they make sense for an RBM
-    /// 
-    /// This constructor expects:
-    /// - Exactly two layers defined in the architecture (visible and hidden)
-    /// - Both layer sizes to be greater than zero
-    /// 
-    /// It will throw an error if these conditions aren't met. This approach is useful when you're
-    /// creating an RBM as part of a larger system that uses architecture objects to define networks.
-    /// </para>
-    /// </remarks>
-    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture) : base(architecture)
-    {
-        // Get the layer sizes
-        int[] layerSizes = architecture.GetLayerSizes();
-
-        // Check if we have exactly two layers (visible and hidden)
-        if (layerSizes.Length != 2)
-        {
-            throw new ArgumentException("RBM requires exactly two layers (visible and hidden units).");
-        }
-
-        VisibleSize = layerSizes[0];
-        HiddenSize = layerSizes[1];
-
-        if (VisibleSize <= 0 || HiddenSize <= 0)
-        {
-            throw new ArgumentException("Both visible and hidden unit counts must be positive for RBM.");
-        }
-
-        _visibleBiases = new Vector<T>(VisibleSize);
-        _hiddenBiases = new Vector<T>(HiddenSize);
-        _weights = new Matrix<T>(HiddenSize, VisibleSize);
-
-        InitializeParameters();
+        _vectorActivation = vectorActivation ?? new SigmoidActivation<T>();
+        _learningRate = NumOps.FromDouble(learningRate);
+        _cdSteps = cdSteps;
     }
 
     /// <summary>
@@ -387,38 +381,6 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Processes the input through the RBM to produce a reconstructed output.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The reconstructed output vector after processing through the network.</returns>
-    /// <remarks>
-    /// <para>
-    /// In an RBM, prediction typically means reconstructing the visible layer from the hidden layer activations
-    /// derived from the input. This method passes the input to the hidden layer, samples the hidden states,
-    /// and then passes those hidden states back to the visible layer to produce a reconstruction of the input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method shows what the RBM would reconstruct from your input data.
-    /// 
-    /// The prediction process has two steps:
-    /// 1. Forward pass: Convert the input data to hidden layer activations (find the features)
-    /// 2. Backward pass: Convert the hidden layer activations back to visible layer values (reconstruct the data)
-    /// 
-    /// For example, if you input an image of a face:
-    /// - The RBM first identifies which features it detects in the face
-    /// - Then it tries to reconstruct the face using just those features
-    /// 
-    /// In a well-trained RBM, the reconstructed output should closely match the original input.
-    /// This is different from classification networks that output a category or label.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        // In an RBM, prediction is typically done by reconstructing the visible layer
-        Vector<T> hiddenProbs = SampleHiddenGivenVisible(input);
-        return SampleVisibleGivenHidden(hiddenProbs);
-    }
-
-    /// <summary>
     /// Calculates the activation probabilities of the hidden layer given the visible layer.
     /// </summary>
     /// <param name="visibleLayer">The visible layer tensor.</param>
@@ -464,298 +426,6 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Samples the hidden layer states given the visible layer states.
-    /// </summary>
-    /// <param name="visible">The visible layer vector.</param>
-    /// <returns>A vector containing the probabilities of hidden layer activations.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the activation probabilities of the hidden layer given the visible layer states.
-    /// For each hidden unit, it calculates the weighted sum of visible unit values plus the hidden unit's bias,
-    /// and then applies a sigmoid activation function to obtain the probability of activation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method determines which features the RBM detects in the input.
-    /// 
-    /// When sampling the hidden layer:
-    /// - The RBM looks at each input value
-    /// - It calculates how strongly each hidden neuron should respond
-    /// - It applies the sigmoid function to get a probability between 0 and 1
-    /// 
-    /// This is like translating from the "language of data" (visible layer)
-    /// to the "language of features" (hidden layer).
-    /// 
-    /// The result tells you, for each feature the RBM knows about, how likely that
-    /// feature is present in the current input.
-    /// </para>
-    /// </remarks>
-    private Vector<T> SampleHiddenGivenVisible(Vector<T> visible)
-    {
-        Vector<T> hiddenProbs = new Vector<T>(HiddenSize);
-        for (int j = 0; j < HiddenSize; j++)
-        {
-            T activation = _hiddenBiases[j];
-            for (int i = 0; i < VisibleSize; i++)
-            {
-                activation = NumOps.Add(activation, NumOps.Multiply(_weights[i, j], visible[i]));
-            }
-
-            hiddenProbs[j] = new SigmoidActivation<T>().Activate(activation);
-        }
-
-        return hiddenProbs;
-    }
-
-    /// <summary>
-    /// Reconstructs the visible layer given the hidden layer.
-    /// </summary>
-    /// <param name="hiddenLayer">The hidden layer tensor.</param>
-    /// <returns>A tensor containing the reconstructed visible layer.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no activation function is specified.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs the visible layer based on the hidden layer states. It computes the weighted sum
-    /// of hidden unit activations for each visible unit, adds the visible bias, and applies the activation function
-    /// to obtain the reconstruction. This process is the inverse of the hidden layer activation calculation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method reconstructs the original data from the detected features.
-    /// 
-    /// When reconstructing the visible layer:
-    /// - Each visible neuron receives input from all hidden neurons
-    /// - The inputs are weighted by the connection strengths
-    /// - The visible neuron's bias is added
-    /// - An activation function converts this sum to a probability
-    /// 
-    /// This is like translating back from the "language of features" (hidden layer)
-    /// to the "language of data" (visible layer).
-    /// 
-    /// The result is what the RBM thinks the original data should look like,
-    /// based on the features it detected. In a well-trained RBM, this reconstruction
-    /// should closely match the original input.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> GetVisibleLayerReconstruction(Tensor<T> hiddenLayer)
-    {
-        var visibleActivations = _weights.Transpose().Multiply(hiddenLayer.ToMatrix()).Add(_visibleBiases.ToColumnMatrix());
-            
-        if (_vectorActivation != null)
-        {
-            return _vectorActivation.Activate(Tensor<T>.FromMatrix(visibleActivations));
-        }
-        else if (_scalarActivation != null)
-        {
-            return Tensor<T>.FromMatrix(visibleActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
-        }
-        else
-        {
-            throw new InvalidOperationException("No activation function specified.");
-        }
-    }
-
-    /// <summary>
-    /// Samples the visible layer states given the hidden layer states.
-    /// </summary>
-    /// <param name="hidden">The hidden layer vector.</param>
-    /// <returns>A vector containing the probabilities of visible layer activations.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the activation probabilities of the visible layer given the hidden layer states.
-    /// For each visible unit, it calculates the weighted sum of hidden unit values plus the visible unit's bias,
-    /// and then applies a sigmoid activation function to obtain the probability of activation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method recreates the input data based on the detected features.
-    /// 
-    /// When sampling the visible layer:
-    /// - The RBM looks at each feature (hidden neuron activation)
-    /// - It calculates how each feature affects each visible neuron
-    /// - It applies the sigmoid function to get a probability between 0 and 1
-    /// 
-    /// This is like asking: "If these features are present, what would the original data look like?"
-    /// 
-    /// The result is a reconstruction of the input data based solely on the features the RBM detected.
-    /// The closer this reconstruction is to the original input, the better the RBM has learned.
-    /// </para>
-    /// </remarks>
-    private Vector<T> SampleVisibleGivenHidden(Vector<T> hidden)
-    {
-        Vector<T> visibleProbs = new Vector<T>(VisibleSize);
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            T activation = _visibleBiases[i];
-            for (int j = 0; j < HiddenSize; j++)
-            {
-                activation = NumOps.Add(activation, NumOps.Multiply(_weights[i, j], hidden[j]));
-            }
-
-            visibleProbs[i] = new SigmoidActivation<T>().Activate(activation);
-        }
-
-        return visibleProbs;
-    }
-
-    /// <summary>
-    /// Trains the RBM on the provided data using Contrastive Divergence.
-    /// </summary>
-    /// <param name="data">The training data tensor.</param>
-    /// <param name="epochs">The number of training epochs.</param>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method implements the Contrastive Divergence algorithm to train the RBM. For each epoch,
-    /// it performs a positive phase (processing real data), a negative phase (processing reconstructed data),
-    /// and updates the weights and biases based on the difference between these phases. This approach
-    /// approximates the gradient of the log-likelihood, making the RBM increasingly better at modeling
-    /// the probability distribution of the training data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is the heart of RBM training - it's where the actual learning happens.
-    /// 
-    /// For each training epoch (complete pass through the data):
-    /// 
-    /// 1. Positive phase - working with real data:
-    ///    - Pass the training data through the RBM
-    ///    - Calculate which hidden features activate
-    ///    - Record the connection strengths between visible and hidden units
-    /// 
-    /// 2. Negative phase - working with the RBM's "imagination":
-    ///    - Let the RBM reconstruct the data from the hidden features
-    ///    - See which hidden features would activate from this reconstruction
-    ///    - Record the connection strengths in this imagined scenario
-    /// 
-    /// 3. Update the network:
-    ///    - Strengthen connections that appear strongly in the real data but not in the reconstruction
-    ///    - Weaken connections that appear strongly in the reconstruction but not in the real data
-    ///    - Update the bias values to make each neuron's activation more accurate
-    /// 
-    /// The learning rate controls how quickly the network parameters change - too high and training
-    /// might be unstable, too low and training might take too long.
-    /// </para>
-    /// </remarks>
-    public void Train(Tensor<T> data, int epochs, T learningRate)
-    {
-        for (int epoch = 0; epoch < epochs; epoch++)
-        {
-            // Positive phase
-            Tensor<T> visibleLayer = data;
-            Tensor<T> hiddenLayer = GetHiddenLayerActivation(visibleLayer);
-            Matrix<T> posGradient = TensorOuterProduct(visibleLayer, hiddenLayer);
-
-            // Negative phase
-            Tensor<T> visibleReconstruction = GetVisibleLayerReconstruction(hiddenLayer);
-            Tensor<T> hiddenReconstruction = GetHiddenLayerActivation(visibleReconstruction);
-            Matrix<T> negGradient = TensorOuterProduct(visibleReconstruction, hiddenReconstruction);
-
-            // Update weights and biases
-            _weights = _weights.Add(posGradient.Subtract(negGradient).Multiply(learningRate));
-    
-            // Update visible biases
-            Vector<T> visibleBiasGradient = TensorToVector(visibleLayer.Subtract(visibleReconstruction));
-            T visibleBiasMean = NumOps.Divide(visibleBiasGradient.Sum(), NumOps.FromDouble(visibleBiasGradient.Length));
-            _visibleBiases = _visibleBiases.Add(Vector<T>.CreateDefault(VisibleSize, NumOps.Multiply(visibleBiasMean, learningRate)));
-
-            // Update hidden biases
-            Vector<T> hiddenBiasGradient = TensorToVector(hiddenLayer.Subtract(hiddenReconstruction));
-            T hiddenBiasMean = NumOps.Divide(hiddenBiasGradient.Sum(), NumOps.FromDouble(hiddenBiasGradient.Length));
-            _hiddenBiases = _hiddenBiases.Add(Vector<T>.CreateDefault(HiddenSize, NumOps.Multiply(hiddenBiasMean, learningRate)));
-        }
-    }
-
-    /// <summary>
-    /// Computes the outer product of two tensors.
-    /// </summary>
-    /// <param name="t1">The first tensor.</param>
-    /// <param name="t2">The second tensor.</param>
-    /// <returns>A matrix representing the outer product.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the outer product of two tensors, which is a matrix where each element is the
-    /// product of corresponding elements from the flattened tensors. The outer product is used in the Contrastive
-    /// Divergence algorithm to compute weight updates based on the correlation between visible and hidden units.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method finds the relationship between every possible pair of neurons.
-    /// 
-    /// The outer product:
-    /// - Takes two sets of neuron activations (from the visible and hidden layers)
-    /// - Creates a matrix showing how each neuron in the first set relates to each neuron in the second set
-    /// - Each value in the matrix is the product of a visible neuron's value and a hidden neuron's value
-    /// 
-    /// This is used during training to understand which connections between neurons need to be
-    /// strengthened or weakened, based on the patterns in the data.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> TensorOuterProduct(Tensor<T> t1, Tensor<T> t2)
-    {
-        Vector<T> v1 = TensorToVector(t1);
-        Vector<T> v2 = TensorToVector(t2);
-        return OuterProduct(v1, v2);
-    }
-
-    /// <summary>
-    /// Converts a tensor to a vector by flattening.
-    /// </summary>
-    /// <param name="tensor">The tensor to convert.</param>
-    /// <returns>A flattened vector representation of the tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// This utility method converts a multi-dimensional tensor to a one-dimensional vector by flattening it.
-    /// This is useful for operations that require vector inputs, such as computing outer products.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method converts multi-dimensional data into a simple list.
-    /// 
-    /// For example, if you have a 2x3 matrix like:
-    /// [1, 2, 3]
-    /// [4, 5, 6]
-    /// 
-    /// This method converts it to a single vector:
-    /// [1, 2, 3, 4, 5, 6]
-    /// 
-    /// This makes it easier to perform certain mathematical operations that expect one-dimensional data.
-    /// </para>
-    /// </remarks>
-    private Vector<T> TensorToVector(Tensor<T> tensor)
-    {
-        return tensor.ToMatrix().Flatten();
-    }
-
-    /// <summary>
-    /// Computes the outer product of two vectors.
-    /// </summary>
-    /// <param name="v1">The first vector.</param>
-    /// <param name="v2">The second vector.</param>
-    /// <returns>A matrix representing the outer product.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the outer product of two vectors, which is a matrix where the element at position
-    /// (i,j) is the product of the i-th element of the first vector and the j-th element of the second vector.
-    /// The outer product is used in the weight update calculations during RBM training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a multiplication table between two lists of numbers.
-    /// 
-    /// If you have two vectors:
-    /// v1 = [a, b, c]
-    /// v2 = [x, y]
-    /// 
-    /// The outer product is a matrix where each cell is the product of one element from v1 and one from v2:
-    /// [a*x, a*y]
-    /// [b*x, b*y]
-    /// [c*x, c*y]
-    /// 
-    /// This is used in RBM training to understand how visible and hidden neurons relate to each other,
-    /// which helps the RBM learn the patterns in your data.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> OuterProduct(Vector<T> v1, Vector<T> v2)
-    {
-        Matrix<T> result = new Matrix<T>(v1.Length, v2.Length);
-        for (int i = 0; i < v1.Length; i++)
-        {
-            for (int j = 0; j < v2.Length; j++)
-            {
-                result[i, j] = NumOps.Multiply(v1[i], v2[j]);
-            }
-        }
-        return result;
-    }
-
-    /// <summary>
     /// Updates the parameters of the RBM. This method is not typically used in RBMs and throws a NotImplementedException.
     /// </summary>
     /// <param name="parameters">The vector of parameter updates to apply.</param>
@@ -779,118 +449,747 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     public override void UpdateParameters(Vector<T> parameters)
     {
         // This method is not typically used in RBMs
-        throw new NotImplementedException("UpdateParameters is not implemented for Restricted Boltzmann Machines.");
     }
 
     /// <summary>
-    /// Saves the state of the Restricted Boltzmann Machine to a binary writer.
+    /// Makes predictions using the RBM by computing hidden layer activations.
     /// </summary>
-    /// <param name="writer">The binary writer to save the state to.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the writer is null.</exception>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The hidden layer activations as a tensor.</returns>
     /// <remarks>
     /// <para>
-    /// This method serializes the entire state of the RBM, including the visible and hidden layer sizes,
-    /// visible and hidden biases, and weight matrix. It converts all numeric values to doubles before
-    /// writing them to ensure consistency across different numeric types.
+    /// This method performs a forward pass through the RBM, mapping the input data to its corresponding
+    /// hidden representation. For RBMs, "prediction" typically means extracting features or transforming
+    /// the input data to a different representation.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the entire state of the RBM to a file.
+    /// <para><b>For Beginners:</b> This method extracts patterns or features from the input data.
     /// 
-    /// When serializing:
-    /// - The sizes of both visible and hidden layers are saved
-    /// - All bias values for both layers are saved
-    /// - All connection weights between neurons are saved
+    /// Unlike standard neural networks that might predict a class or value:
+    /// - RBMs transform input data into a representation of detected patterns
+    /// - The output tells you which features or patterns were found in the input
+    /// - This can be used for feature extraction or dimensionality reduction
     /// 
-    /// This is useful for:
-    /// - Saving a trained model to use later
-    /// - Sharing a model with others
-    /// - Creating backups during long training processes
-    /// 
-    /// Think of it like taking a complete snapshot of the RBM that can be restored later.
+    /// For example, if your RBM has learned to recognize features in face images,
+    /// this method would tell you which of those features (like "has glasses" or
+    /// "is smiling") are present in a new face image you provide.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
+        // For RBMs, "prediction" is typically extracting the hidden layer representation
+        
+        // Ensure input has the right shape
+        if (input.Shape.Length != 2 || input.Shape[1] != VisibleSize)
+        {
+            // Reshape input if needed
+            var reshapedInput = new Tensor<T>(new[] { 1, VisibleSize });
+            Vector<T> inputVector = input.ToVector();
+            
+            for (int i = 0; i < Math.Min(inputVector.Length, VisibleSize); i++)
+            {
+                reshapedInput[0, i] = inputVector[i];
+            }
+            
+            input = reshapedInput;
+        }
+        
+        // Get hidden layer activations
+        return GetHiddenLayerActivation(input);
+    }
 
+    /// <summary>
+    /// Samples binary states from activation probabilities.
+    /// </summary>
+    /// <param name="activations">Tensor of activation probabilities.</param>
+    /// <returns>Tensor of binary states (0 or 1).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts activation probabilities to binary states using stochastic sampling.
+    /// Each unit has a probability of being active (1) equal to its activation value, and inactive (0) otherwise.
+    /// </para>
+    /// <para><b>For Beginners:</b> This converts probabilities to binary on/off states.
+    /// 
+    /// For each neuron:
+    /// - Its activation is a probability between 0 and 1
+    /// - We randomly decide if it should be "on" (1) or "off" (0)
+    /// - The higher the probability, the more likely it will be "on"
+    /// 
+    /// This introduces randomness into the RBM, which is important for its training
+    /// process and allows it to explore different configurations.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> SampleBinaryStates(Tensor<T> activations)
+    {
+        var result = new Tensor<T>(activations.Shape);
+        var random = new Random();
+        
+        for (int i = 0; i < activations.Length; i++)
+        {
+            double probability = Convert.ToDouble(activations.GetFlatIndexValue(i));
+            T state = NumOps.FromDouble(random.NextDouble() < probability ? 1.0 : 0.0);
+            result.SetFlatIndex(i, state);
+        }
+        
+        return result;
+    }
+
+    /// <summary>
+    /// Calculates the activation probabilities of the visible layer given the hidden layer.
+    /// </summary>
+    /// <param name="hiddenLayer">The hidden layer tensor.</param>
+    /// <returns>A tensor containing the activation probabilities of the visible layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no activation function is specified.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method computes the activation probabilities of each visible unit given the state of the hidden layer.
+    /// It calculates the weighted sum of hidden unit values for each visible unit, adds the visible bias, and
+    /// applies the activation function to obtain the probability of activation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method reconstructs the input data based on detected patterns.
+    /// 
+    /// When calculating visible layer activations:
+    /// - Each visible neuron receives input from all hidden neurons
+    /// - The inputs are weighted by the connection strengths
+    /// - The visible neuron's bias is added
+    /// - An activation function converts this sum to a probability
+    /// 
+    /// This is like asking each input neuron: "Based on the patterns the network detected,
+    /// what's the probability that you should be active?"
+    /// 
+    /// The result is a reconstruction of the input data based on the patterns detected,
+    /// which might not be identical to the original input.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> GetVisibleLayerActivation(Tensor<T> hiddenLayer)
+    {
+        // We need to transpose the weights matrix for the reverse direction
+        var visibleActivations = _weights.Transpose().Multiply(hiddenLayer.ToMatrix()).Add(_visibleBiases.ToColumnMatrix());
+            
+        if (_vectorActivation != null)
+        {
+            return _vectorActivation.Activate(Tensor<T>.FromMatrix(visibleActivations));
+        }
+        else if (_scalarActivation != null)
+        {
+            return Tensor<T>.FromMatrix(visibleActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
+        }
+        else
+        {
+            throw new InvalidOperationException("No activation function specified.");
+        }
+    }
+
+    /// <summary>
+    /// Trains the RBM using Contrastive Divergence.
+    /// </summary>
+    /// <param name="input">The input data tensor.</param>
+    /// <param name="expectedOutput">Not used for RBMs as they are unsupervised models.</param>
+    /// <remarks>
+    /// <para>
+    /// This method implements Contrastive Divergence (CD) training for the RBM. It compares the correlation
+    /// between visible and hidden units when driven by the data to the correlation when driven by the model's
+    /// own reconstructions, and updates the weights and biases accordingly.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the RBM to recognize patterns in your data.
+    /// 
+    /// The training process works like this:
+    /// 1. Start with real data (the visible layer)
+    /// 2. Compute which patterns (hidden layer) are activated by this data
+    /// 3. Reconstruct an approximation of the data from these patterns
+    /// 4. See what patterns this reconstruction would activate
+    /// 5. Update the weights based on the difference between steps 2 and 4
+    /// 
+    /// The goal is for the RBM to generate reconstructions that are statistically
+    /// similar to the real data, which means it has learned the underlying patterns.
+    /// 
+    /// Note that unlike supervised learning, RBMs don't use expected outputs - they
+    /// learn the structure of the input data on their own.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // For RBMs, we ignore expectedOutput as they are unsupervised models
+        
+        // Reshape input to batch format if needed
+        Tensor<T> batchInput;
+        if (input.Shape.Length == 1)
+        {
+            // Single sample, reshape to [1, visibleSize]
+            batchInput = new Tensor<T>(new[] { 1, VisibleSize });
+            for (int i = 0; i < Math.Min(input.Shape[0], VisibleSize); i++)
+            {
+                batchInput[0, i] = input[i];
+            }
+        }
+        else
+        {
+            // Assume batch format [batchSize, visibleSize]
+            batchInput = input;
+        }
+        
+        int batchSize = batchInput.Shape[0];
+        
+        // Initialize weight and bias updates
+        var weightUpdates = new Matrix<T>(HiddenSize, VisibleSize);
+        var visibleBiasUpdates = new Vector<T>(VisibleSize);
+        var hiddenBiasUpdates = new Vector<T>(HiddenSize);
+        
+        // Process each sample in the batch
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Extract single sample
+            var visibleSample = new Tensor<T>(new[] { 1, VisibleSize });
+            for (int i = 0; i < VisibleSize; i++)
+            {
+                visibleSample[0, i] = batchInput[b, i];
+            }
+            
+            // Positive phase
+            var hiddenActivations = GetHiddenLayerActivation(visibleSample);
+            var hiddenStates = SampleBinaryStates(hiddenActivations);
+            
+            // Store positive associations
+            var positiveAssociations = ComputeAssociations(visibleSample, hiddenActivations);
+            
+            // Negative phase (Contrastive Divergence)
+            var visibleReconstruction = visibleSample;
+            var hiddenReactivations = hiddenActivations;
+            
+            // Run Gibbs sampling chain for _cdSteps steps
+            for (int step = 0; step < _cdSteps; step++)
+            {
+                // Reconstruct visible layer
+                visibleReconstruction = GetVisibleLayerActivation(hiddenStates);
+                
+                // Compute hidden activations from reconstruction
+                hiddenReactivations = GetHiddenLayerActivation(visibleReconstruction);
+                
+                // Sample hidden states for next step (except last step)
+                if (step < _cdSteps - 1)
+                {
+                    hiddenStates = SampleBinaryStates(hiddenReactivations);
+                }
+            }
+            
+            // Store negative associations
+            var negativeAssociations = ComputeAssociations(visibleReconstruction, hiddenReactivations);
+            
+            // Compute updates for this sample
+            var sampleWeightUpdates = MatrixSubtract(positiveAssociations, negativeAssociations);
+            
+            // Accumulate updates
+            weightUpdates = MatrixAdd(weightUpdates, sampleWeightUpdates);
+            
+            // Update visible bias (visible data - visible reconstruction)
+            for (int i = 0; i < VisibleSize; i++)
+            {
+                visibleBiasUpdates[i] = NumOps.Add(
+                    visibleBiasUpdates[i], 
+                    NumOps.Subtract(visibleSample[0, i], visibleReconstruction[0, i])
+                );
+            }
+            
+            // Update hidden bias (hidden activations - hidden reactivations)
+            for (int j = 0; j < HiddenSize; j++)
+            {
+                hiddenBiasUpdates[j] = NumOps.Add(
+                    hiddenBiasUpdates[j], 
+                    NumOps.Subtract(hiddenActivations[0, j], hiddenReactivations[0, j])
+                );
+            }
+        }
+        
+        // Apply updates, normalized by batch size
+        T batchNormalization = NumOps.FromDouble(1.0 / batchSize);
+        T learningFactor = NumOps.Multiply(_learningRate, batchNormalization);
+        
+        // Update weights
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            for (int j = 0; j < VisibleSize; j++)
+            {
+                T update = NumOps.Multiply(weightUpdates[i, j], learningFactor);
+                _weights[i, j] = NumOps.Add(_weights[i, j], update);
+            }
+        }
+        
+        // Update biases
+        for (int i = 0; i < VisibleSize; i++)
+        {
+            T update = NumOps.Multiply(visibleBiasUpdates[i], learningFactor);
+            _visibleBiases[i] = NumOps.Add(_visibleBiases[i], update);
+        }
+        
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            T update = NumOps.Multiply(hiddenBiasUpdates[i], learningFactor);
+            _hiddenBiases[i] = NumOps.Add(_hiddenBiases[i], update);
+        }
+    }
+
+    /// <summary>
+    /// Computes the outer product of visible and hidden activations to get association matrix.
+    /// </summary>
+    /// <param name="visible">The visible layer tensor.</param>
+    /// <param name="hidden">The hidden layer tensor.</param>
+    /// <returns>Matrix of associations between visible and hidden units.</returns>
+    private Matrix<T> ComputeAssociations(Tensor<T> visible, Tensor<T> hidden)
+    {
+        var associations = new Matrix<T>(HiddenSize, VisibleSize);
+        
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            for (int j = 0; j < VisibleSize; j++)
+            {
+                associations[i, j] = NumOps.Multiply(hidden[0, i], visible[0, j]);
+            }
+        }
+        
+        return associations;
+    }
+    
+    /// <summary>
+    /// Adds two matrices element-wise.
+    /// </summary>
+    /// <param name="a">First matrix.</param>
+    /// <param name="b">Second matrix.</param>
+    /// <returns>Result of addition.</returns>
+    private Matrix<T> MatrixAdd(Matrix<T> a, Matrix<T> b)
+    {
+        if (a.Rows != b.Rows || a.Columns != b.Columns)
+        {
+            throw new ArgumentException("Matrix dimensions must match for addition.");
+        }
+        
+        var result = new Matrix<T>(a.Rows, a.Columns);
+        
+        for (int i = 0; i < a.Rows; i++)
+        {
+            for (int j = 0; j < a.Columns; j++)
+            {
+                result[i, j] = NumOps.Add(a[i, j], b[i, j]);
+            }
+        }
+        
+        return result;
+    }
+    
+    /// <summary>
+    /// Subtracts two matrices element-wise.
+    /// </summary>
+    /// <param name="a">First matrix.</param>
+    /// <param name="b">Second matrix.</param>
+    /// <returns>Result of subtraction.</returns>
+    private Matrix<T> MatrixSubtract(Matrix<T> a, Matrix<T> b)
+    {
+        if (a.Rows != b.Rows || a.Columns != b.Columns)
+        {
+            throw new ArgumentException("Matrix dimensions must match for subtraction.");
+        }
+        
+        var result = new Matrix<T>(a.Rows, a.Columns);
+        
+        for (int i = 0; i < a.Rows; i++)
+        {
+            for (int j = 0; j < a.Columns; j++)
+            {
+                result[i, j] = NumOps.Subtract(a[i, j], b[i, j]);
+            }
+        }
+        
+        return result;
+    }
+
+    /// <summary>
+    /// Generates samples from the RBM by starting with a random visible state and performing Gibbs sampling.
+    /// </summary>
+    /// <param name="numSamples">The number of samples to generate.</param>
+    /// <param name="numSteps">The number of Gibbs sampling steps to perform.</param>
+    /// <returns>Tensor containing the generated samples.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates new data samples that follow the distribution learned by the RBM.
+    /// It starts with random visible units, then repeatedly samples the hidden and visible layers
+    /// in a process called Gibbs sampling to get samples from the model's learned distribution.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates new data samples based on patterns the RBM has learned.
+    /// 
+    /// The generation process works like this:
+    /// 1. Start with random values for the visible layer
+    /// 2. Compute hidden layer activations based on these visible values
+    /// 3. Reconstruct a new visible layer from the hidden activations
+    /// 4. Repeat steps 2-3 multiple times (Gibbs sampling)
+    /// 5. Return the final visible layer as a generated sample
+    /// 
+    /// This allows the RBM to "dream up" new data that resembles the training data.
+    /// For example, if trained on face images, it might generate new faces that
+    /// don't exist but look realistic.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> GenerateSamples(int numSamples, int numSteps = 1000)
+    {
+        var samples = new Tensor<T>(new[] { numSamples, VisibleSize });
+        var random = new Random();
+        
+        for (int s = 0; s < numSamples; s++)
+        {
+            // Start with random visible state
+            var visibleState = new Tensor<T>(new[] { 1, VisibleSize });
+            for (int i = 0; i < VisibleSize; i++)
+            {
+                visibleState[0, i] = NumOps.FromDouble(random.NextDouble() > 0.5 ? 1.0 : 0.0);
+            }
+            
+            // Run Gibbs sampling
+            for (int step = 0; step < numSteps; step++)
+            {
+                // Visible -> Hidden
+                var hiddenActivations = GetHiddenLayerActivation(visibleState);
+                var hiddenState = SampleBinaryStates(hiddenActivations);
+                
+                // Hidden -> Visible
+                var visibleActivations = GetVisibleLayerActivation(hiddenState);
+                visibleState = SampleBinaryStates(visibleActivations);
+            }
+            
+            // Store the final sample
+            for (int i = 0; i < VisibleSize; i++)
+            {
+                samples[s, i] = visibleState[0, i];
+            }
+        }
+        
+        return samples;
+    }
+
+    public T ComputeReconstructionError(Tensor<T> input)
+    {
+        // Reshape input if needed
+        Tensor<T> reshapedInput;
+        if (input.Shape.Length == 1)
+        {
+            reshapedInput = new Tensor<T>(new[] { 1, input.Shape[0] });
+            for (int i = 0; i < input.Shape[0]; i++)
+            {
+                reshapedInput[0, i] = input[i];
+            }
+        }
+        else
+        {
+            reshapedInput = input;
+        }
+        
+        int batchSize = reshapedInput.Shape[0];
+        T totalError = NumOps.Zero;
+        
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Extract single sample
+            var visibleSample = new Tensor<T>(new[] { 1, VisibleSize });
+            for (int i = 0; i < VisibleSize; i++)
+            {
+                visibleSample[0, i] = reshapedInput[b, i];
+            }
+            
+            // Forward pass to hidden layer
+            var hiddenActivations = GetHiddenLayerActivation(visibleSample);
+            
+            // Reconstruct visible layer
+            var visibleReconstruction = GetVisibleLayerActivation(hiddenActivations);
+            
+            // Compute mean squared error
+            T sampleError = NumOps.Zero;
+            for (int i = 0; i < VisibleSize; i++)
+            {
+                T diff = NumOps.Subtract(visibleSample[0, i], visibleReconstruction[0, i]);
+                sampleError = NumOps.Add(sampleError, NumOps.Multiply(diff, diff));
+            }
+            
+            // Average error over features
+            sampleError = NumOps.Divide(sampleError, NumOps.FromDouble(VisibleSize));
+            
+            // Add to total error
+            totalError = NumOps.Add(totalError, sampleError);
+        }
+        
+        // Average error over batch
+        return NumOps.Divide(totalError, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Gets metadata about the RBM model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the RBM.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns comprehensive metadata about the RBM, including its architecture,
+    /// layer sizes, and other relevant parameters. This information is useful for model
+    /// management, tracking experiments, and reporting.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides detailed information about your RBM.
+    /// 
+    /// The metadata includes:
+    /// - The sizes of visible and hidden layers
+    /// - Information about the activation functions used
+    /// - The total number of parameters (weights and biases)
+    /// - Other configuration details
+    /// 
+    /// This information is useful for documentation, comparing different RBM configurations,
+    /// and understanding the structure of your model at a glance.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        // Count total parameters
+        int totalParams = (VisibleSize * HiddenSize) + VisibleSize + HiddenSize;
+        
+        // Determine activation type
+        string activationType = _vectorActivation != null 
+            ? _vectorActivation.GetType().Name 
+            : (_scalarActivation != null ? _scalarActivation.GetType().Name : "None");
+        
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.RestrictedBoltzmannMachine,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "VisibleSize", VisibleSize },
+                { "HiddenSize", HiddenSize },
+                { "TotalParameters", totalParams },
+                { "WeightCount", VisibleSize * HiddenSize },
+                { "VisibleBiasCount", VisibleSize },
+                { "HiddenBiasCount", HiddenSize },
+                { "ActivationType", activationType },
+                { "LearningRate", Convert.ToDouble(_learningRate) },
+                { "CDSteps", _cdSteps }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+    
+    /// <summary>
+    /// Serializes the RBM-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method saves RBM-specific data to the binary stream, including the weights, biases,
+    /// and configuration parameters like learning rate and CD steps.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves all the RBM's learned knowledge to a file.
+    /// 
+    /// The serialization process saves:
+    /// - All weights between visible and hidden neurons
+    /// - All bias values for both layers
+    /// - Configuration settings like learning rate
+    /// 
+    /// This allows you to save a trained RBM and reload it later without having to
+    /// retrain it from scratch, which can be time-consuming.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write layer sizes
         writer.Write(VisibleSize);
         writer.Write(HiddenSize);
-
-        for (int i = 0; i < VisibleSize; i++)
+        
+        // Write weights
+        for (int i = 0; i < HiddenSize; i++)
         {
-            writer.Write(Convert.ToDouble(_visibleBiases[i]));
-        }
-
-        for (int j = 0; j < HiddenSize; j++)
-        {
-            writer.Write(Convert.ToDouble(_hiddenBiases[j]));
-        }
-
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            for (int j = 0; j < HiddenSize; j++)
+            for (int j = 0; j < VisibleSize; j++)
             {
                 writer.Write(Convert.ToDouble(_weights[i, j]));
             }
         }
+        
+        // Write visible biases
+        for (int i = 0; i < VisibleSize; i++)
+        {
+            writer.Write(Convert.ToDouble(_visibleBiases[i]));
+        }
+        
+        // Write hidden biases
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            writer.Write(Convert.ToDouble(_hiddenBiases[i]));
+        }
+        
+        // Write configuration parameters
+        writer.Write(Convert.ToDouble(_learningRate));
+        writer.Write(_cdSteps);
+        
+        // Write activation type
+        bool hasVectorActivation = _vectorActivation != null;
+        writer.Write(hasVectorActivation);
+        
+        if (hasVectorActivation)
+        {
+            writer.Write(_vectorActivation!.GetType().FullName ?? "Unknown");
+        }
+        else if (_scalarActivation != null)
+        {
+            writer.Write(_scalarActivation.GetType().FullName ?? "Unknown");
+        }
+        else
+        {
+            writer.Write("None");
+        }
     }
 
     /// <summary>
-    /// Loads the state of the Restricted Boltzmann Machine from a binary reader.
+    /// Deserializes RBM-specific data from a binary reader.
     /// </summary>
-    /// <param name="reader">The binary reader to load the state from.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the reader is null.</exception>
+    /// <param name="reader">The binary reader to read from.</param>
     /// <remarks>
     /// <para>
-    /// This method deserializes the state of the RBM from a binary reader. It reads the visible and hidden
-    /// layer sizes, recreates the biases and weight matrix, and populates them with the values read from the
-    /// reader. This allows a previously saved RBM state to be restored.
+    /// This method loads RBM-specific data from the binary stream, including the weights, biases,
+    /// and configuration parameters like learning rate and CD steps. It restores the RBM to the
+    /// exact state it was in when serialized.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved RBM state from a file.
+    /// <para><b>For Beginners:</b> This method loads all the RBM's saved knowledge from a file.
     /// 
-    /// When deserializing:
-    /// - The sizes of both layers are read first
-    /// - New vectors and matrices are created with these sizes
-    /// - All bias values and weights are read and restored
+    /// The deserialization process loads:
+    /// - All weights between visible and hidden neurons
+    /// - All bias values for both layers
+    /// - Configuration settings like learning rate
     /// 
-    /// This allows you to:
-    /// - Load a previously trained model
-    /// - Continue using or training a model from where you left off
-    /// - Use models created by others
-    /// 
-    /// Think of it like restoring a complete snapshot of an RBM that was saved earlier.
-    /// Once loaded, the RBM will be in exactly the same state as when it was saved,
-    /// ready to make predictions or continue training.
+    /// This allows you to restore a previously trained RBM exactly as it was,
+    /// without needing to retrain it from scratch.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        VisibleSize = reader.ReadInt32();
-        HiddenSize = reader.ReadInt32();
-
-        _visibleBiases = new Vector<T>(VisibleSize);
-        _hiddenBiases = new Vector<T>(HiddenSize);
-        _weights = new Matrix<T>(VisibleSize, HiddenSize);
-
-        for (int i = 0; i < VisibleSize; i++)
+        // Read layer sizes (and validate they match)
+        int storedVisibleSize = reader.ReadInt32();
+        int storedHiddenSize = reader.ReadInt32();
+        
+        if (storedVisibleSize != VisibleSize || storedHiddenSize != HiddenSize)
         {
-            _visibleBiases[i] = NumOps.FromDouble(reader.ReadDouble());
+            throw new InvalidOperationException(
+                $"Size mismatch during deserialization. Expected {VisibleSize}x{HiddenSize}, " +
+                $"but found {storedVisibleSize}x{storedHiddenSize}."
+            );
         }
-
-        for (int j = 0; j < HiddenSize; j++)
+        
+        // Read weights
+        for (int i = 0; i < HiddenSize; i++)
         {
-            _hiddenBiases[j] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            for (int j = 0; j < HiddenSize; j++)
+            for (int j = 0; j < VisibleSize; j++)
             {
                 _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
+        
+        // Read visible biases
+        for (int i = 0; i < VisibleSize; i++)
+        {
+            _visibleBiases[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        
+        // Read hidden biases
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            _hiddenBiases[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        
+        // Read configuration parameters
+        _learningRate = NumOps.FromDouble(reader.ReadDouble());
+        _cdSteps = reader.ReadInt32();
+        
+        // Read activation type
+        bool hasVectorActivation = reader.ReadBoolean();
+        string activationType = reader.ReadString();
+        
+        if (hasVectorActivation)
+        {
+            // Default to sigmoid if the exact type can't be recreated
+            if (_vectorActivation == null)
+            {
+                _vectorActivation = new SigmoidActivation<T>();
+            }
+        }
+        else if (activationType != "None" && _scalarActivation == null)
+        {
+            // Default to sigmoid if the exact type can't be recreated
+            _scalarActivation = new SigmoidActivation<T>();
+        }
+    }
+    
+    /// <summary>
+    /// Sets the training parameters for the RBM.
+    /// </summary>
+    /// <param name="learningRate">The learning rate for weight updates.</param>
+    /// <param name="cdSteps">The number of Contrastive Divergence steps.</param>
+    /// <remarks>
+    /// <para>
+    /// This method configures the learning rate and the number of Contrastive Divergence steps
+    /// used during training. The learning rate controls how quickly the RBM updates its weights,
+    /// while the CD steps control how many Gibbs sampling steps are performed in each update.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you adjust how the RBM learns.
+    /// 
+    /// You can configure:
+    /// - Learning rate: How big each learning step is (typical values: 0.001 to 0.1)
+    /// - CD steps: How many back-and-forth cycles to run during training (often 1, sometimes more)
+    /// 
+    /// These parameters affect learning quality and speed:
+    /// - Higher learning rates learn faster but may be less stable
+    /// - More CD steps give more accurate updates but take longer
+    /// 
+    /// Finding the right balance for your specific data is important for effective training.
+    /// </para>
+    /// </remarks>
+    public void SetTrainingParameters(T learningRate, int cdSteps = 1)
+    {
+        _learningRate = learningRate;
+        _cdSteps = Math.Max(1, cdSteps); // Ensure at least 1 CD step
+    }
+    
+    /// <summary>
+    /// Extracts features from input data using the trained RBM.
+    /// </summary>
+    /// <param name="input">The input data tensor.</param>
+    /// <param name="binarize">Whether to binarize the hidden activations.</param>
+    /// <returns>The hidden layer features as a tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method transforms input data into features learned by the RBM's hidden layer.
+    /// It can be used for feature extraction, dimensionality reduction, or as a pre-processing
+    /// step before using the data with another algorithm.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method converts raw data into abstract features.
+    /// 
+    /// When extracting features:
+    /// - The input data is passed to the visible layer
+    /// - The hidden layer activations represent learned features
+    /// - These features can capture important patterns in the data
+    /// 
+    /// You can choose to get:
+    /// - Probability values (binarize=false) showing how strongly each feature is detected
+    /// - Binary values (binarize=true) indicating whether each feature is present or not
+    /// 
+    /// This is useful for:
+    /// - Reducing data dimensionality (e.g., compressing 784 pixels to 100 features)
+    /// - Extracting meaningful patterns for other algorithms to use
+    /// - Pre-processing data for classification or other tasks
+    /// </para>
+    /// </remarks>
+    public Tensor<T> ExtractFeatures(Tensor<T> input, bool binarize = false)
+    {
+        // For RBMs, feature extraction is simply getting the hidden layer activations
+        var hiddenActivations = Predict(input);
+        
+        // Optionally binarize the features
+        if (binarize)
+        {
+            return SampleBinaryStates(hiddenActivations);
+        }
+        
+        return hiddenActivations;
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        throw new NotImplementedException();
     }
 }

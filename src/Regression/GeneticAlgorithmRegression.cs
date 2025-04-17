@@ -32,47 +32,37 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// <summary>
     /// Configuration options for the genetic algorithm optimizer.
     /// </summary>
-    private readonly GeneticAlgorithmOptimizerOptions _gaOptions;
+    private readonly GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>> _gaOptions;
     
     /// <summary>
     /// The genetic algorithm optimizer that finds optimal model parameters.
     /// </summary>
-    private GeneticAlgorithmOptimizer<T> _optimizer;
-    
-    /// <summary>
-    /// Calculator that determines how well a solution fits the training data.
-    /// </summary>
-    private readonly IFitnessCalculator<T> _fitnessCalculator;
+    private GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
     
     /// <summary>
     /// Component responsible for normalizing feature values to a common scale.
     /// </summary>
-    private readonly INormalizer<T> _normalizer;
+    private readonly INormalizer<T, Matrix<T>, Vector<T>> _normalizer;
     
     /// <summary>
     /// Component that selects the most relevant features for the model.
     /// </summary>
-    private readonly IFeatureSelector<T> _featureSelector;
-    
-    /// <summary>
-    /// Component that detects and prevents overfitting or underfitting.
-    /// </summary>
-    private readonly IFitDetector<T> _fitDetector;
+    private readonly IFeatureSelector<T, Matrix<T>> _featureSelector;
     
     /// <summary>
     /// Component that identifies and removes outliers from the training data.
     /// </summary>
-    private readonly IOutlierRemoval<T> _outlierRemoval;
+    private readonly IOutlierRemoval<T, Matrix<T>, Vector<T>> _outlierRemoval;
     
     /// <summary>
     /// Component that handles all data preprocessing steps before training.
     /// </summary>
-    private readonly IDataPreprocessor<T> _dataPreprocessor;
+    private readonly IDataPreprocessor<T, Matrix<T>, Vector<T>> _dataPreprocessor;
     
     /// <summary>
     /// The best model found by the genetic algorithm.
     /// </summary>
-    private VectorModel<T> _bestModel;
+    private IFullModel<T, Matrix<T>, Vector<T>> _bestModel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GeneticAlgorithmRegression{T}"/> class.
@@ -80,10 +70,8 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// <param name="options">Optional regression options for the model.</param>
     /// <param name="gaOptions">Optional configuration options for the genetic algorithm optimizer.</param>
     /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
-    /// <param name="fitnessCalculator">Optional calculator for determining solution fitness.</param>
     /// <param name="normalizer">Optional component for normalizing feature values.</param>
     /// <param name="featureSelector">Optional component for selecting relevant features.</param>
-    /// <param name="fitDetector">Optional component for detecting model fit quality.</param>
     /// <param name="outlierRemoval">Optional component for removing outliers.</param>
     /// <param name="dataPreprocessor">Optional component for preprocessing data.</param>
     /// <remarks>
@@ -119,25 +107,20 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </remarks>
     public GeneticAlgorithmRegression(
         RegressionOptions<T>? options = null,
-        GeneticAlgorithmOptimizerOptions? gaOptions = null,
-        IRegularization<T>? regularization = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        INormalizer<T>? normalizer = null,
-        IFeatureSelector<T>? featureSelector = null,
-        IFitDetector<T>? fitDetector = null,
-        IOutlierRemoval<T>? outlierRemoval = null,
-        IDataPreprocessor<T>? dataPreprocessor = null)
+        GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>? gaOptions = null,
+        IRegularization<T, Matrix<T>, Vector<T>>? regularization = null,
+        INormalizer<T, Matrix<T>, Vector<T>>? normalizer = null,
+        IFeatureSelector<T, Matrix<T>>? featureSelector = null,
+        IOutlierRemoval<T, Matrix<T>, Vector<T>>? outlierRemoval = null,
+        IDataPreprocessor<T, Matrix<T>, Vector<T>>? dataPreprocessor = null)
         : base(options, regularization)
     {
-        _gaOptions = gaOptions ?? new GeneticAlgorithmOptimizerOptions();
-        _optimizer = new GeneticAlgorithmOptimizer<T>(gaOptions);
-        _fitnessCalculator = fitnessCalculator ?? new RSquaredFitnessCalculator<T>();
-        _normalizer = normalizer ?? new NoNormalizer<T>();
-        _featureSelector = featureSelector ?? new NoFeatureSelector<T>();
-        _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T>();
-        _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T>(_normalizer, _featureSelector, _outlierRemoval);
-        _fitDetector = fitDetector ?? new DefaultFitDetector<T>();
-        
+        _gaOptions = gaOptions ?? new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>();
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(gaOptions);
+        _normalizer = normalizer ?? new NoNormalizer<T, Matrix<T>, Vector<T>>();
+        _featureSelector = featureSelector ?? new NoFeatureSelector<T, Matrix<T>>();
+        _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T, Matrix<T>, Vector<T>>();
+        _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T, Matrix<T>, Vector<T>>(_normalizer, _featureSelector, _outlierRemoval);
         _bestModel = new VectorModel<T>(Vector<T>.Empty());
     }
 
@@ -183,7 +166,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         // Split the data
         var (xTrain, yTrain, xVal, yVal, xTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
-        var result = _optimizer.Optimize(OptimizerHelper<T>.CreateOptimizationInputData(xTrain, yTrain, xVal, yVal, xTest, yTest));
+        var result = _optimizer.Optimize(OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(xTrain, yTrain, xVal, yVal, xTest, yTest));
 
         _bestModel = (VectorModel<T>)result.BestSolution;
         UpdateCoefficientsAndIntercept();
@@ -228,7 +211,8 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </summary>
     private void UpdateCoefficientsAndIntercept()
     {
-        Coefficients = _bestModel.Coefficients;
+        Coefficients = _bestModel.GetParameters();
+
         if (HasIntercept)
         {
             Intercept = Coefficients[0];
@@ -284,10 +268,11 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         writer.Write(baseData);
 
         // Serialize GeneticAlgorithmRegression specific data
-        writer.Write(_bestModel.Coefficients.Length);
-        for (int i = 0; i < _bestModel.Coefficients.Length; i++)
+        var parameters = _bestModel.GetParameters();
+        writer.Write(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
-            writer.Write(Convert.ToDouble(_bestModel.Coefficients[i]));
+            writer.Write(Convert.ToDouble(parameters[i]));
         }
 
         // Serialize GeneticAlgorithmOptions
@@ -357,7 +342,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         _bestModel = new VectorModel<T>(new Vector<T>(coefficients));
 
         // Deserialize GeneticAlgorithmOptions
-        var gaOptions = new GeneticAlgorithmOptimizerOptions
+        var gaOptions = new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>
         {
             MaxGenerations = reader.ReadInt32(),
             PopulationSize = reader.ReadInt32(),
@@ -366,9 +351,44 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         };
 
         // Recreate the optimizer with the deserialized options
-        _optimizer = new GeneticAlgorithmOptimizer<T>(gaOptions);
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(gaOptions);
 
         // Update coefficients and intercept
         UpdateCoefficientsAndIntercept();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the GeneticAlgorithmRegression with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new GeneticAlgorithmRegression instance with the same options and components as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the GeneticAlgorithmRegression model with the same configuration options,
+    /// regularization settings, and preprocessing components as the current instance. This is useful for model cloning,
+    /// ensemble methods, or cross-validation scenarios where multiple instances of the same model with identical
+    /// configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of model with identical settings:
+    /// - This method creates a new, empty model with the same configuration
+    /// - It's like making a copy of a recipe before you start cooking
+    /// - The new model has the same settings but no trained data
+    /// - This is useful for techniques that need multiple models, like cross-validation
+    /// 
+    /// For example, when testing your model on different subsets of data,
+    /// you'd want each test to use a model with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        return new GeneticAlgorithmRegression<T>(
+            Options,
+            _gaOptions,
+            Regularization,
+            _normalizer,
+            _featureSelector,
+            _outlierRemoval,
+            _dataPreprocessor);
     }
 }

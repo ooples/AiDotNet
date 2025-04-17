@@ -76,7 +76,7 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public KNearestNeighborsRegression(KNearestNeighborsOptions? options = null, IRegularization<T>? regularization = null)
+    public KNearestNeighborsRegression(KNearestNeighborsOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new KNearestNeighborsOptions();
@@ -115,8 +115,8 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         // Apply regularization to the training data
         if (Regularization != null)
         {
-            _xTrain = Regularization.RegularizeMatrix(x);
-            _yTrain = Regularization.RegularizeCoefficients(y);
+            _xTrain = Regularization.Regularize(x);
+            _yTrain = Regularization.Regularize(y);
         }
         else
         {
@@ -155,7 +155,7 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         // Apply regularization to the input data if available
-        Matrix<T> regularizedInput = Regularization != null ? Regularization.RegularizeMatrix(input) : input;
+        Matrix<T> regularizedInput = Regularization != null ? Regularization.Regularize(input) : input;
 
         var predictions = new Vector<T>(regularizedInput.Rows);
         for (int i = 0; i < regularizedInput.Rows; i++)
@@ -366,8 +366,35 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         // Apply regularization to the deserialized data if available
         if (Regularization != null)
         {
-            _xTrain = Regularization.RegularizeMatrix(_xTrain);
-            _yTrain = Regularization.RegularizeCoefficients(_yTrain);
+            _xTrain = Regularization.Regularize(_xTrain);
+            _yTrain = Regularization.Regularize(_yTrain);
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the KNearestNeighborsRegression with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new KNearestNeighborsRegression instance with the same options and regularization as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the KNearestNeighborsRegression model with the same configuration options
+    /// and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
+    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of model with identical settings:
+    /// - This method creates a new, empty model with the same configuration
+    /// - It's like making a copy of a recipe before you start cooking
+    /// - The new model has the same settings but no trained data
+    /// - This is useful for techniques that need multiple models, like cross-validation
+    /// 
+    /// For example, when testing your model on different subsets of data,
+    /// you'd want each test to use a model with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new KNearestNeighborsRegression<T>(_options, Regularization);
     }
 }

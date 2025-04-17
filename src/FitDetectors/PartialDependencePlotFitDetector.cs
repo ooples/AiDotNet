@@ -12,7 +12,7 @@ namespace AiDotNet.FitDetectors;
 /// your model is learning appropriate patterns from your data.
 /// </para>
 /// </remarks>
-public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
+public class PartialDependencePlotFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Partial Dependence Plot fit detector.
@@ -51,7 +51,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// The method returns detailed results including specific recommendations to improve your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var pdpResults = CalculatePartialDependencePlots(evaluationData);
         var fitType = DetermineFitType(pdpResults);
@@ -81,7 +81,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// the right patterns from your data. It calculates PDPs and uses them to classify your model's fit.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var pdpResults = CalculatePartialDependencePlots(evaluationData);
         return DetermineFitType(pdpResults);
@@ -135,7 +135,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// the threshold for overfitting.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var pdpResults = CalculatePartialDependencePlots(evaluationData);
         var nonlinearityScores = CalculateNonlinearityScores(pdpResults);
@@ -166,7 +166,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// These plots help us understand which features have complex relationships with the target variable.
     /// </para>
     /// </remarks>
-    private Dictionary<string, Vector<T>> CalculatePartialDependencePlots(ModelEvaluationData<T> evaluationData)
+    private Dictionary<string, Vector<T>> CalculatePartialDependencePlots(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var pdpResults = new Dictionary<string, Vector<T>>();
         var features = evaluationData.ModelStats.FeatureNames;
@@ -203,7 +203,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// or a complex relationship (with many ups and downs) for each feature.
     /// </para>
     /// </remarks>
-    private Vector<T> CalculatePartialDependencePlot(ModelEvaluationData<T> evaluationData, string feature, Vector<T> featureValues)
+    private Vector<T> CalculatePartialDependencePlot(ModelEvaluationData<T, TInput, TOutput> evaluationData, string feature, Vector<T> featureValues)
     {
         var uniqueValues = featureValues.Distinct().OrderBy(v => v).ToList();
         var pdp = new Vector<T>(uniqueValues.Count);
@@ -236,9 +236,9 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// had the same age (say, 30), this method creates that modified dataset for you.
     /// </para>
     /// </remarks>
-    private Matrix<T> CreateModifiedDataset(ModelEvaluationData<T> evaluationData, string feature, T value)
+    private Matrix<T> CreateModifiedDataset(ModelEvaluationData<T, TInput, TOutput> evaluationData, string feature, T value)
     {
-        var modifiedData = evaluationData.ModelStats.FeatureMatrix.Copy();
+        var modifiedData = evaluationData.ModelStats.Features.Clone();
         var featureIndex = evaluationData.ModelStats.FeatureNames.IndexOf(feature);
 
         for (int i = 0; i < modifiedData.Rows; i++)
@@ -320,7 +320,7 @@ public class PartialDependencePlotFitDetector<T> : FitDetectorBase<T>
     /// then uses this information to provide targeted recommendations.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var pdpResults = CalculatePartialDependencePlots(evaluationData);
         return GenerateRecommendations(fitType, pdpResults);

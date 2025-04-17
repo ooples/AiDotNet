@@ -73,7 +73,7 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
         _numOps = MathHelper.GetNumericOperations<T>();
 
         int n = x.Length - 1;
-        _a = y.Copy();
+        _a = y.Clone();
         _b = new Vector<T>(n);
         _c = new Vector<T>(n + 1);
         _d = new Vector<T>(n);

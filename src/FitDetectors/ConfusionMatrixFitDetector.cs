@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// affect performance.
 /// </para>
 /// </remarks>
-public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
+public class ConfusionMatrixFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the confusion matrix fit detector.
@@ -71,7 +71,7 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -105,7 +105,7 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var confusionMatrix = CalculateConfusionMatrix(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
         var metric = CalculatePrimaryMetric(confusionMatrix);
@@ -141,7 +141,7 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// to a value between 0 and 1, with higher values indicating greater confidence.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var confusionMatrix = CalculateConfusionMatrix(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
         var metric = CalculatePrimaryMetric(confusionMatrix);
@@ -180,7 +180,7 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// the other in your dataset. If detected, it provides specific recommendations for addressing this issue.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
         var confusionMatrix = CalculateConfusionMatrix(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);

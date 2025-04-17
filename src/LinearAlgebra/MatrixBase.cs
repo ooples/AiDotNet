@@ -603,7 +603,7 @@ public abstract class MatrixBase<T>
     /// Changes made to the copy won't affect the original matrix, and vice versa.
     /// This is useful when you need to preserve the original matrix while performing operations that would modify it.</para>
     /// </remarks>
-    public virtual MatrixBase<T> Copy()
+    public virtual MatrixBase<T> Clone()
     {
         var result = CreateInstance(_rows, _cols);
         for (int i = 0; i < _rows; i++)

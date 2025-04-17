@@ -538,7 +538,7 @@ public class GRULayer<T> : LayerBase<T>
     
             if (_returnSequences && _allHiddenStates != null)
             {
-                _allHiddenStates.Add(h.Copy());
+                _allHiddenStates.Add(h.Clone());
             }
         }
 

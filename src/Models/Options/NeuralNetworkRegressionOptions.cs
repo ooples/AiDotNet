@@ -35,7 +35,7 @@
 /// (predicting continuous values like prices, temperatures, or scores), from its structure to how it learns.
 /// </para>
 /// </remarks>
-public class NeuralNetworkRegressionOptions<T> : NonLinearRegressionOptions
+public class NeuralNetworkRegressionOptions<T, TInput, TOutput> : NonLinearRegressionOptions
 {
     /// <summary>
     /// Gets or sets the sizes of each layer in the neural network, including input, hidden, and output layers.
@@ -234,40 +234,7 @@ public class NeuralNetworkRegressionOptions<T> : NonLinearRegressionOptions
     /// Unless you have specific reasons to change it, ReLU is usually a good starting point.
     /// </para>
     /// </remarks>
-    public Func<T, T> HiddenActivationFunction { get; set; } = NeuralNetworkHelper<T>.ReLU;
-
-    /// <summary>
-    /// Gets or sets the derivative of the hidden layer activation function, used during backpropagation.
-    /// </summary>
-    /// <value>The derivative of the hidden layer activation function, defaulting to ReLU derivative.</value>
-    /// <remarks>
-    /// <para>
-    /// This function represents the gradient of the hidden layer activation function, which is essential for
-    /// the backpropagation algorithm during training. The derivative is used to determine how much the weights
-    /// should be adjusted based on the error. For ReLU, the derivative is 1 for positive inputs and 0 for
-    /// negative or zero inputs. The derivative must be mathematically consistent with the corresponding
-    /// activation function to ensure correct gradient calculations and proper learning behavior.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting provides the mathematical derivative of the
-    /// hidden activation function, which is needed for the learning process.
-    /// 
-    /// When a neural network learns, it needs to know:
-    /// - How wrong its predictions are (the error)
-    /// - How to adjust each connection to reduce that error
-    /// 
-    /// The derivative helps determine how sensitive each neuron is to changes:
-    /// - For ReLU, the derivative is 1 for positive inputs (responsive to changes)
-    /// - For ReLU, the derivative is 0 for negative inputs (not responsive to changes)
-    /// 
-    /// You typically don't need to change this setting yourself:
-    /// - It should always match the HiddenActivationFunction you're using
-    /// - If you change the activation function, change this to the corresponding derivative
-    /// 
-    /// This pairing ensures the network can properly learn through a process called
-    /// backpropagation, where errors flow backward through the network to adjust connections.
-    /// </para>
-    /// </remarks>
-    public Func<T, T> HiddenActivationFunctionDerivative { get; set; } = NeuralNetworkHelper<T>.ReLUDerivative;
+    public IActivationFunction<T> HiddenActivationFunction { get; set; } = new ReLUActivation<T>();
 
     /// <summary>
     /// Gets or sets the activation function applied to the outputs of the final layer neurons.
@@ -302,39 +269,7 @@ public class NeuralNetworkRegressionOptions<T> : NonLinearRegressionOptions
     /// the default identity function works best.
     /// </para>
     /// </remarks>
-    public Func<T, T> OutputActivationFunction { get; set; } = (x) => x; // Linear for regression
-
-    /// <summary>
-    /// Gets or sets the derivative of the output layer activation function, used during backpropagation.
-    /// </summary>
-    /// <value>The derivative of the output activation function, defaulting to constant 1 (derivative of identity function).</value>
-    /// <remarks>
-    /// <para>
-    /// This function represents the gradient of the output layer activation function. For the linear (identity)
-    /// activation function typically used in regression, the derivative is the constant 1 across all inputs.
-    /// During backpropagation, this derivative is used to calculate how the network's error changes with respect
-    /// to the inputs to the output layer, which then propagates further back through the network. The derivative
-    /// must be mathematically consistent with the corresponding activation function.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting provides the mathematical derivative of the
-    /// output activation function for the learning process.
-    /// 
-    /// For the default identity function (f(x) = x):
-    /// - The derivative is always 1
-    /// - This means the error flows directly back into the network during learning
-    /// 
-    /// Like the hidden layer derivative:
-    /// - This should always match the OutputActivationFunction you're using
-    /// - If you change the output activation, change this to its corresponding derivative
-    /// 
-    /// For regression problems with the identity output activation:
-    /// - This derivative is constant and straightforward
-    /// - It simplifies the math in the learning process
-    /// 
-    /// You typically won't need to modify this unless you change the output activation function.
-    /// </para>
-    /// </remarks>
-    public Func<T, T> OutputActivationFunctionDerivative { get; set; } = (x) => MathHelper.GetNumericOperations<T>().One;
+    public IActivationFunction<T> OutputActivationFunction { get; set; } = new IdentityActivation<T>();
 
     /// <summary>
     /// Gets or sets the function used to calculate the error between predicted and actual values.
@@ -371,40 +306,7 @@ public class NeuralNetworkRegressionOptions<T> : NonLinearRegressionOptions
     /// - It's widely used and understood in regression problems
     /// </para>
     /// </remarks>
-    public Func<Vector<T>, Vector<T>, T> LossFunction { get; set; } = NeuralNetworkHelper<T>.MeanSquaredError;
-
-    /// <summary>
-    /// Gets or sets the derivative of the loss function, used during backpropagation.
-    /// </summary>
-    /// <value>The derivative of the loss function, defaulting to Mean Squared Error derivative.</value>
-    /// <remarks>
-    /// <para>
-    /// This function represents the gradient of the loss function with respect to the network's outputs, which
-    /// is essential for the backpropagation algorithm. For Mean Squared Error, the derivative with respect to
-    /// a single output is 2 * (predicted - actual) / n, where n is the number of samples. This gradient indicates
-    /// the direction and magnitude in which the network's weights should be adjusted to minimize the error.
-    /// The derivative must be mathematically consistent with the corresponding loss function.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting provides the mathematical derivative of the
-    /// loss function, which tells the network how to adjust its weights during learning.
-    /// 
-    /// When the network is learning:
-    /// - The loss function tells it how wrong it is
-    /// - This derivative tells it which direction to adjust to reduce the error
-    /// 
-    /// For Mean Squared Error:
-    /// - The derivative points in the direction of the error
-    /// - Larger errors produce stronger adjustment signals
-    /// 
-    /// Like the activation derivatives:
-    /// - This should always match the LossFunction you're using
-    /// - If you change the loss function, change this to its corresponding derivative
-    /// 
-    /// You typically won't need to modify this unless you change the loss function.
-    /// It ensures the network can properly perform gradient descent to minimize the error.
-    /// </para>
-    /// </remarks>
-    public Func<Vector<T>, Vector<T>, Vector<T>> LossFunctionDerivative { get; set; } = NeuralNetworkHelper<T>.MeanSquaredErrorDerivative;
+    public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
 
     /// <summary>
     /// Gets or sets the optimization algorithm used to update the network weights during training.
@@ -445,5 +347,5 @@ public class NeuralNetworkRegressionOptions<T> : NonLinearRegressionOptions
     /// explore different optimizers as you gain experience.
     /// </para>
     /// </remarks>
-    public IOptimizer<T>? Optimizer { get; set; }
+    public IOptimizer<T, TInput, TOutput>? Optimizer { get; set; }
 }

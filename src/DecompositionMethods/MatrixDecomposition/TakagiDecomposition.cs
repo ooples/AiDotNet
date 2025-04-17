@@ -117,7 +117,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
         int n = matrix.Rows;
         var S = new Matrix<T>(n, n);
         var U = Matrix<Complex<T>>.CreateIdentity(n);
-        var A = matrix.Copy();
+        var A = matrix.Clone();
 
         const int maxIterations = 100;
         var tolerance = _numOps.FromDouble(1e-10);
@@ -293,7 +293,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     {
         int n = A.Rows;
         var Q = Matrix<Complex<T>>.CreateIdentity(n);
-        var R = A.Copy();
+        var R = A.Clone();
 
         for (int j = 0; j < n - 1; j++)
         {

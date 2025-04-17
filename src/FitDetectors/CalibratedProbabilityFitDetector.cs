@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// model's probability predictions match the actual outcomes.
 /// </para>
 /// </remarks>
-public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
+public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the calibrated probability fit detector.
@@ -70,7 +70,7 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -104,7 +104,7 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var (expectedCalibration, observedCalibration) = CalculateCalibration(evaluationData);
 
@@ -141,7 +141,7 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
     /// between 0 and 1, where higher values indicate greater confidence.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var (expectedCalibration, observedCalibration) = CalculateCalibration(evaluationData);
 
@@ -171,7 +171,7 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -221,7 +221,7 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
     /// In a well-calibrated model, these values should be close to each other across all bins.
     /// </para>
     /// </remarks>
-    private (Vector<T>, Vector<T>) CalculateCalibration(ModelEvaluationData<T> evaluationData)
+    private (Vector<T>, Vector<T>) CalculateCalibration(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var predicted = evaluationData.ModelStats.Predicted;
         var actual = evaluationData.ModelStats.Actual;

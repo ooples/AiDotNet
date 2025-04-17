@@ -33,7 +33,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - Any task where you care about the overlap between predicted and actual regions
 /// </para>
 /// </remarks>
-public class JaccardLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class JaccardLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the JaccardLossFitnessCalculator class.
@@ -94,7 +94,7 @@ public class JaccardLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// your model is identifying, rather than just whether it's generally correct.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return NeuralNetworkHelper<T>.JaccardLoss(dataSet.Predicted, dataSet.Actual);
     }

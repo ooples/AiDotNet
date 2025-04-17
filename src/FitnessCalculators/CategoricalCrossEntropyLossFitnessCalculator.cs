@@ -24,7 +24,7 @@ namespace AiDotNet.FitnessCalculators;
 /// the right answer and loses points when it's confident about the wrong answer.
 /// </para>
 /// </remarks>
-public class CategoricalCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class CategoricalCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the CategoricalCrossEntropyLossFitnessCalculator class.
@@ -78,7 +78,7 @@ public class CategoricalCrossEntropyLossFitnessCalculator<T> : FitnessCalculator
     /// - The maximum value can be very large if predictions are completely wrong
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return NeuralNetworkHelper<T>.CategoricalCrossEntropyLoss(
             Matrix<T>.FromVector(dataSet.Predicted),

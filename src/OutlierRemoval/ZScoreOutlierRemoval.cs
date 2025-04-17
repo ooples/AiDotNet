@@ -4,6 +4,8 @@
 /// Implements outlier detection and removal based on the Z-Score method.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The type of input data structure.</typeparam>
+/// <typeparam name="TOutput">The type of output data structure.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides functionality to identify and remove outliers from a dataset using the Z-Score method.
@@ -27,7 +29,7 @@
 /// considered an outlier and removed from the dataset.
 /// </para>
 /// </remarks>
-public class ZScoreOutlierRemoval<T> : IOutlierRemoval<T>
+public class ZScoreOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, TOutput>
 {
     /// <summary>
     /// The threshold value for determining outliers. Points with a Z-Score exceeding this threshold
@@ -41,7 +43,7 @@ public class ZScoreOutlierRemoval<T> : IOutlierRemoval<T>
     private readonly INumericOperations<T> _numOps;
     
     /// <summary>
-    /// Initializes a new instance of the <see cref="ZScoreOutlierRemoval{T}"/> class with the specified threshold.
+    /// Initializes a new instance of the <see cref="ZScoreOutlierRemoval{T, TInput, TOutput}"/> class with the specified threshold.
     /// </summary>
     /// <param name="threshold">The threshold value for outlier detection, default is 3.</param>
     /// <remarks>
@@ -95,18 +97,21 @@ public class ZScoreOutlierRemoval<T> : IOutlierRemoval<T>
     /// be considered an outlier if it has a normal size and age but an extremely high price (high Z-Score for price).
     /// </para>
     /// </remarks>
-    public (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs)
+    public (TInput CleanedInputs, TOutput CleanedOutputs) RemoveOutliers(TInput inputs, TOutput outputs)
     {
+        // Convert to concrete types
+        var (inputMatrix, outputVector) = OutlierRemovalHelper<T, TInput, TOutput>.ConvertToMatrixVector(inputs, outputs);
+        
         var cleanedInputs = new List<Vector<T>>();
         var cleanedOutputs = new List<T>();
         
-        for (int i = 0; i < outputs.Length; i++)
+        for (int i = 0; i < outputVector.Length; i++)
         {
             bool isOutlier = false;
             
-            for (int j = 0; j < inputs.Columns; j++)
+            for (int j = 0; j < inputMatrix.Columns; j++)
             {
-                var column = inputs.GetColumn(j);
+                var column = inputMatrix.GetColumn(j);
                 (var mean, var std) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
                 var zScore = _numOps.Divide(_numOps.Subtract(column[i], mean), std);
                 
@@ -119,11 +124,19 @@ public class ZScoreOutlierRemoval<T> : IOutlierRemoval<T>
             
             if (!isOutlier)
             {
-                cleanedInputs.Add(inputs.GetRow(i));
-                cleanedOutputs.Add(outputs[i]);
+                cleanedInputs.Add(inputMatrix.GetRow(i));
+                cleanedOutputs.Add(outputVector[i]);
             }
         }
         
-        return (new Matrix<T>(cleanedInputs), new Vector<T>(cleanedOutputs));
+        var cleanedInputMatrix = new Matrix<T>(cleanedInputs);
+        var cleanedOutputVector = new Vector<T>(cleanedOutputs);
+        
+        // Convert back to original types
+        return OutlierRemovalHelper<T, TInput, TOutput>.ConvertToOriginalTypes(
+            cleanedInputMatrix, 
+            cleanedOutputVector, 
+            typeof(TInput), 
+            typeof(TOutput));
     }
 }

@@ -39,7 +39,7 @@
 /// - Situations where outliers should not have outsized influence
 /// </para>
 /// </remarks>
-public class MeanAbsoluteErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class MeanAbsoluteErrorFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the MeanAbsoluteErrorFitnessCalculator class.
@@ -97,7 +97,7 @@ public class MeanAbsoluteErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// - You don't want outliers to have an outsized influence on your error metric
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return dataSet.ErrorStats.MAE;
     }

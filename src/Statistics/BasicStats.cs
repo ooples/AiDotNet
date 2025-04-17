@@ -420,4 +420,88 @@ public class BasicStats<T>
         InterquartileRange = _numOps.Subtract(ThirdQuartile, FirstQuartile);
         MAD = StatisticsHelper<T>.CalculateMeanAbsoluteDeviation(values, Median);
     }
+
+    /// <summary>
+    /// Gets the value of a specific metric based on the provided MetricType.
+    /// </summary>
+    /// <param name="metricType">The type of metric to retrieve.</param>
+    /// <returns>The value of the requested metric.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method allows you to retrieve any of the calculated statistics by specifying the desired metric type.
+    /// It provides a flexible way to access individual metrics without needing separate properties for each.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method is like a vending machine for statistics.
+    /// 
+    /// You tell it which statistic you want (using the MetricType), and it gives you the value.
+    /// For example:
+    /// - If you ask for MetricType.Mean, it gives you the average
+    /// - If you ask for MetricType.StandardDeviation, it gives you the standard deviation
+    /// 
+    /// This is useful when you want to work with different statistics in a flexible way,
+    /// especially if you don't know in advance which statistic you'll need.
+    /// </para>
+    /// </remarks>
+    public T GetMetric(MetricType metricType)
+    {
+        return metricType switch
+        {
+            MetricType.Mean => Mean,
+            MetricType.Variance => Variance,
+            MetricType.StandardDeviation => StandardDeviation,
+            MetricType.Skewness => Skewness,
+            MetricType.Kurtosis => Kurtosis,
+            MetricType.Min => Min,
+            MetricType.Max => Max,
+            MetricType.N => _numOps.FromDouble(N),
+            MetricType.Median => Median,
+            MetricType.FirstQuartile => FirstQuartile,
+            MetricType.ThirdQuartile => ThirdQuartile,
+            MetricType.InterquartileRange => InterquartileRange,
+            MetricType.MAD => MAD,
+            _ => throw new ArgumentException($"Metric {metricType} is not available in BasicStats.", nameof(metricType)),
+        };
+    }
+
+    /// <summary>
+    /// Checks if a specific metric is available in this BasicStats instance.
+    /// </summary>
+    /// <param name="metricType">The type of metric to check for.</param>
+    /// <returns>True if the metric is available, false otherwise.</returns>
+    /// <remarks>
+    /// For Beginners:
+    /// This method allows you to check if a particular metric is available before trying to get its value.
+    /// It's useful when you're not sure if a specific metric was calculated for this set of basic stats.
+    /// 
+    /// For example:
+    /// <code>
+    /// if (stats.HasMetric(MetricType.Mean))
+    /// {
+    ///     var meanValue = stats.GetMetric(MetricType.Mean);
+    ///     // Use meanValue...
+    /// }
+    /// </code>
+    /// 
+    /// This prevents errors that might occur if you try to access a metric that wasn't calculated.
+    /// </remarks>
+    public bool HasMetric(MetricType metricType)
+    {
+        return metricType switch
+        {
+            MetricType.Mean => true,
+            MetricType.Variance => true,
+            MetricType.StandardDeviation => true,
+            MetricType.Skewness => true,
+            MetricType.Kurtosis => true,
+            MetricType.Min => true,
+            MetricType.Max => true,
+            MetricType.N => true,
+            MetricType.Median => true,
+            MetricType.FirstQuartile => true,
+            MetricType.ThirdQuartile => true,
+            MetricType.InterquartileRange => true,
+            MetricType.MAD => true,
+            _ => false,
+        };
+    }
 }

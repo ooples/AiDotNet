@@ -17,7 +17,7 @@ namespace AiDotNet.FitDetectors;
 /// autocorrelation.
 /// </para>
 /// </remarks>
-public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
+public class AutocorrelationFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the autocorrelation fit detector.
@@ -67,7 +67,7 @@ public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -102,7 +102,7 @@ public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var durbinWatsonStat = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestSet.ErrorStats.ErrorList);
 
@@ -140,7 +140,7 @@ public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
     /// A value closer to 1 indicates high confidence, while a value closer to 0 indicates low confidence.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var durbinWatsonStat = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestSet.ErrorStats.ErrorList);
         var idealDW = _numOps.FromDouble(2.0);
@@ -172,7 +172,7 @@ public class AutocorrelationFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

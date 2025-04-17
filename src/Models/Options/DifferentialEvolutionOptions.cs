@@ -16,7 +16,7 @@ namespace AiDotNet.Models.Options;
 /// to find even better ones. It's particularly good at finding optimal values for problems with continuous variables
 /// (like finding the best temperature, pressure, or other numeric values).</para>
 /// </remarks>
-public class DifferentialEvolutionOptions : GeneticAlgorithmOptimizerOptions
+public class DifferentialEvolutionOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the crossover rate for Differential Evolution.

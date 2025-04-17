@@ -32,7 +32,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - Any classification problem with imbalanced classes
 /// </para>
 /// </remarks>
-public class WeightedCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class WeightedCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The weights to apply to each class when calculating the cross entropy loss.
@@ -107,7 +107,7 @@ public class WeightedCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBas
     /// a new weights vector with equal weights for all classes.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         if (_weights == null || _weights.Length != dataSet.Actual.Length)
         {

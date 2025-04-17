@@ -19,7 +19,7 @@ namespace AiDotNet.FitDetectors;
 /// - Instability: When your model doesn't consistently perform well across different data arrangements
 /// </para>
 /// </remarks>
-public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
+public class KFoldCrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the K-Fold Cross-Validation fit detector.
@@ -55,7 +55,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// 3. Specific recommendations to improve your model
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -94,7 +94,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// - Test set: Completely new data used to evaluate the final model
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var avgTrainingR2 = evaluationData.TrainingSet.PredictionStats.R2;
         var avgValidationR2 = evaluationData.ValidationSet.PredictionStats.R2;
@@ -142,7 +142,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// A higher confidence value means you can trust the fit assessment more.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var avgValidationR2 = evaluationData.ValidationSet.PredictionStats.R2;
         var testR2 = evaluationData.TestSet.PredictionStats.R2;
@@ -178,7 +178,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// - Feature selection: Choosing which input variables to include in your model
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

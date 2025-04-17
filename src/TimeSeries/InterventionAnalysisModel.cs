@@ -47,7 +47,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// It's like the recipe that tells the model how to analyze your data.
     /// </para>
     /// </remarks>
-    private readonly InterventionAnalysisOptions<T> _iaOptions;
+    private readonly InterventionAnalysisOptions<T, Matrix<T>, Vector<T>> _iaOptions;
 
     /// <summary>
     /// The autoregressive (AR) parameters of the model.
@@ -177,7 +177,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// The optimizer automatically turns the dials until the reception is optimal.
     /// </para>
     /// </remarks>
-    private readonly IOptimizer<T> _optimizer;
+    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
 
     /// <summary>
     /// The target values (observed time series data) used for training.
@@ -220,56 +220,16 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// If you don't provide options, the model uses sensible defaults.
     /// </para>
     /// </remarks>
-    public InterventionAnalysisModel(InterventionAnalysisOptions<T>? options = null) : base(options ?? new())
+    public InterventionAnalysisModel(InterventionAnalysisOptions<T, Matrix<T>, Vector<T>>? options = null) : base(options ?? new())
     {
-        _iaOptions = options ?? new InterventionAnalysisOptions<T>();
-        _optimizer = _iaOptions.Optimizer ?? new LBFGSOptimizer<T>();
+        _iaOptions = options ?? new InterventionAnalysisOptions<T, Matrix<T>, Vector<T>>();
+        _optimizer = _iaOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
         _interventionEffects = [];
         _arParameters = Vector<T>.Empty();
         _maParameters = Vector<T>.Empty();
         _residuals = Vector<T>.Empty();
         _fitted = Vector<T>.Empty();
         _y = Vector<T>.Empty();
-    }
-
-    /// <summary>
-    /// Trains the intervention analysis model on the provided input and output data.
-    /// </summary>
-    /// <param name="x">The input features matrix (typically time indicators or related variables).</param>
-    /// <param name="y">The target values vector (the time series data to forecast).</param>
-    /// <exception cref="ArgumentException">Thrown when the input matrix rows do not match the output vector length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method trains the intervention analysis model by initializing parameters with random values,
-    /// optimizing these parameters to minimize prediction error, and then computing residuals. The
-    /// training process accounts for both the time series patterns and the effects of interventions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the model patterns in your data, including the effects of special events.
-    /// 
-    /// The training process follows these steps:
-    /// 1. Check that your input data is formatted correctly
-    /// 2. Set initial parameter values
-    /// 3. Find the best parameters by testing different combinations
-    /// 4. Calculate how well the model fits your historical data
-    /// 
-    /// After training, the model will have learned:
-    /// - The regular patterns in your data
-    /// - How much each intervention affected the data
-    /// - How to make forecasts that account for both
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        if (x.Rows != y.Length)
-        {
-            throw new ArgumentException("Input matrix rows must match output vector length.");
-        }
-
-        _y = y;
-
-        InitializeParameters();
-        OptimizeParameters(x, _y);
-        ComputeResiduals(x, _y);
     }
 
     /// <summary>
@@ -340,14 +300,14 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void OptimizeParameters(Matrix<T> x, Vector<T> y)
     {
-        var inputData = new OptimizationInputData<T>
+        var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>
         {
             XTrain = x,
             YTrain = y
         };
 
-        OptimizationResult<T> result = _optimizer.Optimize(inputData);
-        UpdateModelParameters(result.BestSolution.Coefficients);
+        OptimizationResult<T, Matrix<T>, Vector<T>> result = _optimizer.Optimize(inputData);
+        UpdateModelParameters(result.BestSolution.GetParameters());
     }
 
     /// <summary>
@@ -705,5 +665,200 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         // Read options
         _iaOptions.AROrder = reader.ReadInt32();
         _iaOptions.MAOrder = reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// Resets the model to its initial state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the intervention analysis model to its initial state, clearing any learned parameters
+    /// and returning to the initial configuration provided in the options. This allows the model to be
+    /// retrained from scratch with new data or different hyperparameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This resets the model to start fresh.
+    /// 
+    /// Resetting the model:
+    /// - Clears all learned parameters (AR parameters, MA parameters)
+    /// - Resets the intervention effects
+    /// - Empties stored residuals and fitted values
+    /// - Returns the model to its original state before training
+    /// 
+    /// This is useful when you want to:
+    /// - Train the model on different data
+    /// - Try different settings or approaches
+    /// - Experiment with different interventions
+    /// - Start with a clean slate after experimentation
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        _arParameters = Vector<T>.Empty();
+        _maParameters = Vector<T>.Empty();
+        _interventionEffects = [];
+        _residuals = Vector<T>.Empty();
+        _fitted = Vector<T>.Empty();
+        _y = Vector<T>.Empty();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the intervention analysis model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the intervention analysis model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the intervention analysis model with the same configuration options
+    /// as the current instance. This is useful for creating copies or clones of the model for purposes like
+    /// cross-validation or ensemble modeling.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new copy of the model with the same settings.
+    /// 
+    /// Creating a new instance:
+    /// - Makes a fresh copy of the model with the same configuration
+    /// - The new copy hasn't been trained yet
+    /// - You can train and use the copy independently from the original
+    /// 
+    /// This is helpful when you want to:
+    /// - Train multiple versions of the same model on different data subsets
+    /// - Create an ensemble of models for better predictions
+    /// - Share your model configuration with others
+    /// - Keep your original model while experimenting with variations
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new InterventionAnalysisModel<T>(_iaOptions);
+    }
+
+    /// <summary>
+    /// Returns metadata about the model, including its type, parameters, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed metadata about the intervention analysis model, including its type, 
+    /// current parameters (AR parameters, MA parameters, intervention effects), and configuration options.
+    /// This metadata can be used for model selection, comparison, documentation, and serialization purposes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about your model's settings and state.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Intervention Analysis)
+    /// - Current parameter values (AR parameters, MA parameters)
+    /// - Details about the interventions and their estimated effects
+    /// - Configuration settings from when you created the model
+    /// - A serialized version of the entire model
+    /// 
+    /// This information is useful for:
+    /// - Keeping track of different models you've created
+    /// - Comparing model configurations
+    /// - Documenting which settings worked best
+    /// - Sharing model information with others
+    /// - Understanding the relative importance of different interventions
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.InterventionAnalysisModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include the actual model state variables
+                { "ARParameters", _arParameters },
+                { "MAParameters", _maParameters },
+                { "InterventionEffects", _interventionEffects },
+            
+                // Include model configuration as well
+                { "AROrder", _iaOptions.AROrder },
+                { "MAOrder", _iaOptions.MAOrder },
+                { "InterventionCount", _iaOptions.Interventions.Count },
+            },
+            ModelData = this.Serialize()
+        };
+
+        return metadata;
+    }
+
+    /// <summary>
+    /// Core implementation of the training logic for the intervention analysis model.
+    /// </summary>
+    /// <param name="x">The input features matrix (typically time indicators or related variables).</param>
+    /// <param name="y">The target values vector (the time series data to forecast).</param>
+    /// <remarks>
+    /// <para>
+    /// This method implements the core training mechanism for the intervention analysis model.
+    /// It delegates to the main training process, which initializes parameters, optimizes them, and
+    /// computes the model residuals.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the engine that powers the model's learning process.
+    /// 
+    /// This method:
+    /// - Stores your time series data internally
+    /// - Sets up initial parameter values for the model
+    /// - Uses an optimizer to find the best parameter values
+    /// - Calculates how well the model fits your historical data
+    /// 
+    /// Think of it as the actual learning process that happens behind the scenes when
+    /// you train the model to recognize patterns in your data.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Store the target values for later use
+        _y = y;
+    
+        // Initialize the model parameters with small random values
+        InitializeParameters();
+    
+        // Find the optimal parameter values using the optimizer
+        OptimizeParameters(x, y);
+    
+        // Calculate the residuals (errors) between actual and predicted values
+        ComputeResiduals(x, y);
+    }
+
+    /// <summary>
+    /// Predicts a single value based on the input vector.
+    /// </summary>
+    /// <param name="input">The input vector containing features for the prediction.</param>
+    /// <returns>The predicted value for the given input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the single-value prediction capability required by the model interface.
+    /// It creates a context for the prediction and then calls the internal prediction logic that applies
+    /// the AR terms, MA terms, and intervention effects.
+    /// </para>
+    /// <para><b>For Beginners:</b> This generates a prediction for a single point in time.
+    /// 
+    /// When you need a forecast for just one specific time point, this method:
+    /// - Takes the input features for that time point
+    /// - Creates a temporary context with appropriate historical information
+    /// - Calls the internal prediction engine to generate a forecast
+    /// - Returns that single prediction
+    /// 
+    /// It handles the case where you need just one forecast rather than a whole series of them.
+    /// For example, predicting tomorrow's sales figure rather than forecasting sales for the next month.
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Create a matrix with a single row for the prediction
+        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            inputMatrix[0, i] = input[i];
+        }
+    
+        // Get the prediction vector (which will have only one element)
+        Vector<T> predictions = Predict(inputMatrix);
+    
+        // Return that single prediction
+        if (predictions.Length == 0)
+        {
+            throw new InvalidOperationException("Failed to generate a prediction. The model may not be properly trained.");
+        }
+    
+        return predictions[0];
     }
 }

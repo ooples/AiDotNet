@@ -213,4 +213,30 @@ public class SpectralAnalysisOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int OverlapPercentage { get; set; } = 50;
+
+    /// <summary>
+    /// Gets or sets the sampling rate of the time series data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sampling rate is the number of samples per unit time (typically seconds).
+    /// For example, a sampling rate of 1000 means 1000 samples per second (1 kHz).
+    /// This is used to convert normalized frequencies to actual frequencies in the original units.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// The sampling rate tells the model how frequently your data was collected. For example:
+    /// - For hourly temperature data, the sampling rate would be 1/3600 (one sample per 3600 seconds)
+    /// - For audio data, common sampling rates are 44100 Hz (CD quality) or 48000 Hz (DVD quality)
+    /// - For ECG data, sampling rates might be around 250 Hz or 500 Hz
+    /// 
+    /// When you provide the sampling rate, the model can express frequencies in real-world units
+    /// (like Hz or cycles per day) rather than just normalized values between 0 and 0.5.
+    /// 
+    /// If you don't specify a sampling rate, the default value of 1.0 is used, meaning frequencies
+    /// will be expressed as cycles per sample. To get frequencies in Hz, set this to your actual
+    /// sampling rate in Hz.
+    /// </para>
+    /// </remarks>
+    public double SamplingRate { get; set; } = 1.0; // Default to 1.0 (cycles per sample)
 }

@@ -39,7 +39,7 @@
 /// - When you want a differentiable loss function for optimization
 /// </para>
 /// </remarks>
-public class MeanSquaredErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class MeanSquaredErrorFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the MeanSquaredErrorFitnessCalculator class.
@@ -66,7 +66,8 @@ public class MeanSquaredErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// - It's differentiable everywhere, which helps with gradient-based optimization
     /// </para>
     /// </remarks>
-    public MeanSquaredErrorFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) : base(isHigherScoreBetter: false, dataSetType)
+    public MeanSquaredErrorFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) : 
+        base(isHigherScoreBetter: false, dataSetType)
     {
     }
 
@@ -104,7 +105,7 @@ public class MeanSquaredErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// you might consider Root Mean Squared Error (RMSE) or Mean Absolute Error (MAE).
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return dataSet.ErrorStats.MSE;
     }

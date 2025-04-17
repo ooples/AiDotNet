@@ -19,7 +19,7 @@ namespace AiDotNet.Optimizers;
 /// making progress and staying reliable.
 /// </para>
 /// </remarks>
-public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
+public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options for configuring the Trust Region optimizer.
@@ -29,7 +29,7 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It includes parameters such as initial trust region radius, expansion and contraction factors,
     /// and thresholds for determining the success of each optimization step.
     /// </remarks>
-    private TrustRegionOptimizerOptions _options;
+    private TrustRegionOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The current radius of the trust region.
@@ -55,26 +55,13 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
     /// Initializes a new instance of the TrustRegionOptimizer class.
     /// </summary>
     /// <param name="options">Options for configuring the Trust Region optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     public TrustRegionOptimizer(
-        TrustRegionOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        TrustRegionOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new TrustRegionOptimizerOptions();
+        _options = options ?? new TrustRegionOptimizerOptions<T, TInput, TOutput>();
         _trustRegionRadius = NumOps.Zero;
+
         InitializeAdaptiveParameters();
     }
 
@@ -84,6 +71,7 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
+
         _trustRegionRadius = NumOps.FromDouble(_options.InitialTrustRegionRadius);
         _iteration = 0;
     }
@@ -93,13 +81,13 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </summary>
     /// <param name="inputData">The input data for optimization.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
 
@@ -167,9 +155,9 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
     /// - Calculating it accurately is crucial for making good decisions in the optimization process.
     /// </para>
     /// </remarks>
-    private Matrix<T> CalculateHessian(ISymbolicModel<T> currentSolution, OptimizationInputData<T> inputData)
+    private Matrix<T> CalculateHessian(IFullModel<T, TInput, TOutput> currentSolution, OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var coefficients = currentSolution.Coefficients;
+        var coefficients = currentSolution.GetParameters();
         var hessian = new Matrix<T>(coefficients.Length, coefficients.Length);
         var epsilon = NumOps.FromDouble(1e-8);
 
@@ -177,15 +165,15 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
         {
             for (int j = i; j < coefficients.Length; j++)
             {
-                var perturbed1 = currentSolution.Copy();
-                var perturbed2 = currentSolution.Copy();
-                var perturbed3 = currentSolution.Copy();
-                var perturbed4 = currentSolution.Copy();
+                var perturbed1 = currentSolution.Clone();
+                var perturbed2 = currentSolution.Clone();
+                var perturbed3 = currentSolution.Clone();
+                var perturbed4 = currentSolution.Clone();
 
-                var coeffs1 = coefficients.Copy();
-                var coeffs2 = coefficients.Copy();
-                var coeffs3 = coefficients.Copy();
-                var coeffs4 = coefficients.Copy();
+                var coeffs1 = coefficients.Clone();
+                var coeffs2 = coefficients.Clone();
+                var coeffs3 = coefficients.Clone();
+                var coeffs4 = coefficients.Clone();
 
                 coeffs1[i] = NumOps.Add(coeffs1[i], epsilon);
                 coeffs1[j] = NumOps.Add(coeffs1[j], epsilon);
@@ -199,10 +187,10 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
                 coeffs4[i] = NumOps.Subtract(coeffs4[i], epsilon);
                 coeffs4[j] = NumOps.Subtract(coeffs4[j], epsilon);
 
-                perturbed1 = perturbed1.UpdateCoefficients(coeffs1);
-                perturbed2 = perturbed2.UpdateCoefficients(coeffs2);
-                perturbed3 = perturbed3.UpdateCoefficients(coeffs3);
-                perturbed4 = perturbed4.UpdateCoefficients(coeffs4);
+                perturbed1 = perturbed1.WithParameters(coeffs1);
+                perturbed2 = perturbed2.WithParameters(coeffs2);
+                perturbed3 = perturbed3.WithParameters(coeffs3);
+                perturbed4 = perturbed4.WithParameters(coeffs4);
 
                 var f11 = EvaluateSolution(perturbed1, inputData).FitnessScore;
                 var f12 = EvaluateSolution(perturbed2, inputData).FitnessScore;
@@ -232,10 +220,10 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="direction">The direction to move in.</param>
     /// <param name="stepSize">The size of the step to take.</param>
     /// <returns>A new solution model after moving in the specified direction.</returns>
-    private ISymbolicModel<T> MoveInDirection(ISymbolicModel<T> currentSolution, Vector<T> direction, T stepSize)
+    private IFullModel<T, TInput, TOutput> MoveInDirection(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, T stepSize)
     {
-        var newModel = currentSolution.Copy();
-        var currentCoefficients = newModel.Coefficients;
+        var newModel = currentSolution.Clone();
+        var currentCoefficients = newModel.GetParameters();
         var newCoefficients = new Vector<T>(currentCoefficients.Length);
 
         for (int i = 0; i < currentCoefficients.Length; i++)
@@ -243,7 +231,7 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
             newCoefficients[i] = NumOps.Add(currentCoefficients[i], NumOps.Multiply(direction[i], stepSize));
         }
 
-        return newModel.UpdateCoefficients(newCoefficients);
+        return newModel.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -266,8 +254,8 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
     private Vector<T> SolveSubproblem(Vector<T> gradient, Matrix<T> hessian)
     {
         var z = new Vector<T>(gradient.Length);
-        var r = gradient.Copy();
-        var d = r.Copy();
+        var r = gradient.Clone();
+        var d = r.Clone();
         for (int i = 0; i < d.Length; i++)
         {
             d[i] = NumOps.Negate(d[i]);
@@ -296,7 +284,7 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
             var rNext = r.Add(Hd.Multiply(alpha));
             var beta = NumOps.Divide(rNext.DotProduct(rNext), r.DotProduct(r));
         
-            var dNext = rNext.Copy();
+            var dNext = rNext.Clone();
             for (int j = 0; j < dNext.Length; j++)
             {
                 dNext[j] = NumOps.Negate(dNext[j]);
@@ -457,7 +445,7 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
     ///   based on whether recent steps have been successful or not.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -494,9 +482,9 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
     /// - If you try to use the wrong type of settings, it will let you know with an error.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is TrustRegionOptimizerOptions trustRegionOptions)
+        if (options is TrustRegionOptimizerOptions<T, TInput, TOutput> trustRegionOptions)
         {
             _options = trustRegionOptions;
         }
@@ -520,7 +508,7 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
     /// - It doesn't change anything; it just lets you look at the current setup.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -586,7 +574,7 @@ public class TrustRegionOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<TrustRegionOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<TrustRegionOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();

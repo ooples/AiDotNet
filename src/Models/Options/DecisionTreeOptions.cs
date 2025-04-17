@@ -13,7 +13,7 @@ namespace AiDotNet.Models.Options;
 /// These settings control how detailed the questions can get, how many questions to ask, and how to decide which
 /// questions are most important.</para>
 /// </remarks>
-public class DecisionTreeOptions
+public class DecisionTreeOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the maximum depth (number of levels) of the decision tree.
@@ -54,20 +54,6 @@ public class DecisionTreeOptions
     /// trees, which is especially useful when combining multiple trees together.</para>
     /// </remarks>
     public double MaxFeatures { get; set; } = 1.0;
-
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <value>
-    /// The random seed value, or null if randomness should not be controlled.
-    /// </value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is like setting the starting point for a random number generator.
-    /// If you set a specific seed value, the "random" decisions the algorithm makes will be the same each time you run it.
-    /// This is useful when you want consistent results or when debugging. If left as null (the default),
-    /// the algorithm will make truly random decisions each time it runs.</para>
-    /// </remarks>
-    public int? Seed { get; set; }
 
     /// <summary>
     /// Gets or sets the criterion used to evaluate the quality of a split.

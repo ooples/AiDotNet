@@ -14,12 +14,12 @@ namespace AiDotNet.Optimizers;
 /// where the function being optimized is smooth but potentially has many variables.
 /// </para>
 /// </remarks>
-public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
+public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the BFGS optimization algorithm.
     /// </summary>
-    private BFGSOptimizerOptions _options;
+    private BFGSOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The approximation of the inverse Hessian matrix.
@@ -58,17 +58,10 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     public BFGSOptimizer(
-        BFGSOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        BFGSOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new BFGSOptimizerOptions();
+        _options = options ?? new BFGSOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
     }
 
@@ -98,15 +91,16 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// The process continues until it reaches the maximum number of iterations or meets the convergence criteria.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var parameters = currentSolution.GetParameters();
 
-        _inverseHessian = Matrix<T>.CreateIdentity(currentSolution.Coefficients.Length);
+        _inverseHessian = Matrix<T>.CreateIdentity(parameters.Length);
         _previousGradient = null;
         _previousParameters = null;
         InitializeAdaptiveParameters();
@@ -133,7 +127,7 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
             }
 
             _previousGradient = gradient;
-            _previousParameters = currentSolution.Coefficients;
+            _previousParameters = parameters;
             currentSolution = newSolution;
             previousStepData = currentStepData;
         }
@@ -153,11 +147,12 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It uses the inverse Hessian approximation to determine the direction and magnitude of the update.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient, OptimizationInputData<T> inputData)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient, OptimizationInputData<T, TInput, TOutput> inputData)
     {
+        var parameters = currentSolution.GetParameters();
         if (_previousGradient != null && _previousParameters != null)
         {
-            UpdateInverseHessian(currentSolution.Coefficients, gradient);
+            UpdateInverseHessian(parameters, gradient);
         }
 
         var direction = _inverseHessian!.Multiply(gradient);
@@ -165,7 +160,7 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
 
         var step = LineSearch(currentSolution, direction, gradient, inputData);
         var scaledDirection = direction.Transform(x => NumOps.Multiply(x, step));
-        var newCoefficients = currentSolution.Coefficients.Add(scaledDirection);
+        var newCoefficients = parameters.Add(scaledDirection);
 
         return new VectorModel<T>(newCoefficients);
     }
@@ -208,7 +203,7 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It tries to find a step size that sufficiently decreases the function value while not being too small.
     /// </para>
     /// </remarks>
-    private T LineSearch(ISymbolicModel<T> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T> inputData)
+    private T LineSearch(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var alpha = NumOps.FromDouble(1.0);
         var c1 = NumOps.FromDouble(1e-4);
@@ -221,7 +216,7 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
 
         while (true)
         {
-            var newCoefficients = currentSolution.Coefficients.Add(direction.Multiply(alpha));
+            var newCoefficients = currentSolution.GetParameters().Add(direction.Multiply(alpha));
             var newSolution = new VectorModel<T>(newCoefficients);
             var newValue = CalculateLoss(newSolution, inputData);
 
@@ -256,7 +251,7 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// otherwise, it's decreased. This helps the optimizer adapt to the landscape of the problem.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -287,9 +282,9 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It checks to make sure you're providing the right kind of options specific to the BFGS algorithm.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is BFGSOptimizerOptions bfgsOptions)
+        if (options is BFGSOptimizerOptions<T, TInput, TOutput> bfgsOptions)
         {
             _options = bfgsOptions;
         }
@@ -307,7 +302,7 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <para><b>For Beginners:</b> This method lets you see what settings the BFGS optimizer is currently using.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -360,7 +355,7 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<BFGSOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<BFGSOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();
@@ -380,7 +375,7 @@ public class BFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// The key includes BFGS-specific information to ensure it's unique to this optimizer's current state.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_BFGS_{_options.InitialLearningRate}_{_options.Tolerance}_{_iteration}";

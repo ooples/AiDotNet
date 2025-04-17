@@ -17,7 +17,7 @@ namespace AiDotNet.Models.Options;
 /// tricky landscapes where simple "always go downhill" approaches would get stuck. This class lets you configure 
 /// how that search process works.</para>
 /// </remarks>
-public class CMAESOptimizerOptions<T> : GeneticAlgorithmOptimizerOptions
+public class CMAESOptimizerOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the number of candidate solutions evaluated in each generation.
@@ -92,21 +92,4 @@ public class CMAESOptimizerOptions<T> : GeneticAlgorithmOptimizerOptions
     /// absolute best solution.</para>
     /// </remarks>
     public double StopTolerance { get; set; } = 1e-12;
-
-    /// <summary>
-    /// Gets or sets the random seed for the algorithm's internal random number generator.
-    /// </summary>
-    /// <value>The random seed, defaulting to 42.</value>
-    /// <remarks>
-    /// <para>
-    /// Setting a specific seed makes the optimization process deterministic,
-    /// which is useful for reproducibility and debugging. Different seeds may lead to different optimization paths.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting controls the starting point for the algorithm's randomness. 
-    /// Using the same seed (like the default 42) means the algorithm will make the same "random" decisions 
-    /// each time you run it, which is helpful for testing and debugging. If you want different results each time, 
-    /// you can set this to a different value or use a random value. Think of it like setting the starting position 
-    /// for a board game - starting from the same position means the game can unfold in a predictable way.</para>
-    /// </remarks>
-    public int Seed { get; set; } = 42;
 }

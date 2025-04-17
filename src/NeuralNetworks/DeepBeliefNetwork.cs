@@ -31,34 +31,137 @@ namespace AiDotNet.NeuralNetworks;
 public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 {
     /// <summary>
-    /// Gets or sets the list of Restricted Boltzmann Machines that form the layers of the Deep Belief Network.
+    /// Gets or sets the list of RBM layers for greedy layer-wise pre-training.
     /// </summary>
-    /// <value>A list of Restricted Boltzmann Machine layers.</value>
     /// <remarks>
     /// <para>
-    /// This property contains the Restricted Boltzmann Machines (RBMs) that make up the Deep Belief Network.
-    /// Each RBM is trained to model the distribution of its input data, and the hidden layer of one RBM serves
-    /// as the visible layer for the next RBM in the stack. This greedy layer-wise training allows the network
-    /// to learn increasingly abstract representations of the data.
+    /// This property stores the Restricted Boltzmann Machine (RBM) layers that form the core of the DBN.
+    /// These layers are used during the pre-training phase, where each layer is trained greedily as a separate RBM.
     /// </para>
-    /// <para><b>For Beginners:</b> These are the floors of our pattern-recognition tower.
+    /// <para><b>For Beginners:</b> These are the individual "floors" of our pattern-recognition tower.
     /// 
-    /// Think of RBMLayers as:
-    /// - The individual floors in our tower (the Deep Belief Network)
-    /// - Each floor (RBM) learns patterns from the floor below it
-    /// - The floors are trained one at a time, starting from the bottom
-    /// - Each floor transforms the data into a more abstract representation before passing it up
+    /// Each RBM layer:
+    /// - Learns patterns independently during pre-training
+    /// - Takes input from the layer below and provides output to the layer above
+    /// - Has its own set of weights and biases that capture patterns at different levels of abstraction
     /// 
-    /// This approach is powerful because each layer can focus on learning specific patterns
-    /// without worrying about the entire network at once.
+    /// During pre-training, we train each floor separately, then combine them into a complete tower.
     /// </para>
     /// </remarks>
-    private List<RestrictedBoltzmannMachine<T>> _rbmLayers { get; set; }
+    private List<RBMLayer<T>> _rbmLayers;
+
+    /// <summary>
+    /// Gets or sets the learning rate for parameter updates during fine-tuning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The learning rate controls how quickly the model adapts to the training data during fine-tuning.
+    /// A higher learning rate means bigger parameter updates, which can lead to faster convergence but risks overshooting.
+    /// A lower learning rate means smaller updates, which can be more precise but may take longer to converge.
+    /// </para>
+    /// <para><b>For Beginners:</b> The learning rate is like the size of steps when fine-tuning the network.
+    /// 
+    /// Think of it as:
+    /// - Large steps (high learning rate): Move quickly toward the goal but might overshoot
+    /// - Small steps (low learning rate): Move carefully but might take a long time
+    /// 
+    /// Finding the right balance is important for effective training.
+    /// Typical values range from 0.0001 to 0.1, with 0.01 being a common starting point.
+    /// </para>
+    /// </remarks>
+    private T _learningRate;
+
+    /// <summary>
+    /// Gets or sets the number of epochs for fine-tuning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An epoch represents one complete pass through the entire training dataset.
+    /// This property defines how many times the network will iterate through the training dataset during fine-tuning.
+    /// </para>
+    /// <para><b>For Beginners:</b> Epochs are like complete study sessions with your training data.
+    /// 
+    /// Each epoch:
+    /// - Processes every example in your training dataset once
+    /// - Updates the network's understanding based on all examples
+    /// - Helps the network get incrementally better at its task
+    /// 
+    /// More epochs generally lead to better learning, but too many can cause the network to memorize
+    /// the training data rather than learning general patterns (overfitting).
+    /// </para>
+    /// </remarks>
+    private int _epochs;
+    
+    /// <summary>
+    /// Gets or sets the batch size for training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The batch size determines how many training examples are processed before updating the model parameters.
+    /// Smaller batches provide more frequent updates but with higher variance, while larger batches
+    /// provide more stable but less frequent updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> Batch size is like how many examples you study at once before updating your knowledge.
+    /// 
+    /// When training the network:
+    /// - Small batch size (e.g., 16-32): More frequent but noisier updates
+    /// - Large batch size (e.g., 128-256): Less frequent but more stable updates
+    /// 
+    /// The benefits of batching:
+    /// - More efficient than processing one example at a time
+    /// - Provides a balance between update frequency and stability
+    /// - Helps avoid getting stuck in poor solutions
+    /// 
+    /// Common batch sizes range from 16 to 256, with 32 or 64 being popular choices.
+    /// </para>
+    /// </remarks>
+    private int _batchSize;
+    
+    /// <summary>
+    /// Gets or sets the loss function used for fine-tuning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The loss function measures how well the network's predictions match the expected outputs.
+    /// It provides a signal that guides the network's learning during the fine-tuning phase.
+    /// Different tasks require different loss functions, so this property allows you to specify
+    /// the appropriate loss function for your specific task.
+    /// </para>
+    /// <para><b>For Beginners:</b> The loss function is like a scorecard that tells the network how well it's doing.
+    /// 
+    /// Think of it as:
+    /// - A way to measure the difference between the network's predictions and the correct answers
+    /// - A signal that guides the network's learning process
+    /// - Different tasks need different ways of measuring performance
+    /// 
+    /// If no loss function is provided, the network automatically selects one based on the task type:
+    /// - For classification tasks: Cross-entropy loss
+    /// - For regression tasks: Mean squared error loss
+    /// </para>
+    /// </remarks>
+    private ILossFunction<T>? _lossFunction;
+
+    /// <summary>
+    /// Indicates whether the network supports training (learning from data).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This tells you if the network can learn from data.
+    /// 
+    /// The Deep Belief Network supports both:
+    /// - Unsupervised pre-training (learning patterns without labels)
+    /// - Supervised fine-tuning (improving performance for specific tasks)
+    /// 
+    /// This property always returns true because DBNs are designed to learn and improve with training.
+    /// </remarks>
+    public override bool SupportsTraining => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeepBeliefNetwork{T}"/> class with the specified architecture.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration, which must include RBM layers.</param>
+    /// <param name="learningRate">The learning rate for fine-tuning. Default is 0.01 converted to type T.</param>
+    /// <param name="epochs">The number of epochs for fine-tuning. Default is 10.</param>
+    /// <param name="batchSize">The batch size for training. Default is 32.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Deep Belief Network with the specified architecture. The architecture
@@ -75,9 +178,21 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// Think of it like designing a blueprint for the tower before construction begins.
     /// </para>
     /// </remarks>
-    public DeepBeliefNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public DeepBeliefNetwork(
+        NeuralNetworkArchitecture<T> architecture, 
+        T? learningRate = default, 
+        int epochs = 10, 
+        int batchSize = 32,
+        ILossFunction<T>? lossFunction = null) 
+        : base(architecture)
     {
-        _rbmLayers = architecture.RbmLayers;
+        _learningRate = learningRate ?? NumOps.FromDouble(0.01);
+        _epochs = epochs;
+        _batchSize = batchSize;
+        _lossFunction = lossFunction;
+        _rbmLayers = [];
+
+        InitializeLayers();
     }
 
     /// <summary>
@@ -116,129 +231,225 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultDeepBeliefNetworkLayers(Architecture));
         }
 
-        ValidateAndInitializeRbmLayers();
-    }
+        _rbmLayers.AddRange(Layers.OfType<RBMLayer<T>>());
 
+        ValidateRbmLayers();
+    }
+    
     /// <summary>
-    /// Validates and initializes the RBM layers of the Deep Belief Network.
+    /// Validates that the RBM layers form a valid sequence for a Deep Belief Network.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when no RBM layers are provided, when an RBM layer is null, or when there is a dimension mismatch between layers.
-    /// </exception>
     /// <remarks>
     /// <para>
-    /// This method validates the Restricted Boltzmann Machine (RBM) layers to ensure they form a valid Deep Belief Network.
-    /// It checks that RBM layers are provided, that none of them is null, and that the dimensions of consecutive layers
-    /// are compatible (the hidden size of one layer matches the visible size of the next). If the validation passes,
-    /// it initializes the RBM layers for use in pre-training.
+    /// This method checks that the RBM layers are properly configured for a Deep Belief Network.
+    /// It ensures that the input size of each RBM matches the output size of the previous RBM,
+    /// creating a chain where each layer's output becomes the next layer's input.
     /// </para>
-    /// <para><b>For Beginners:</b> This method checks that all the floors of our tower will fit together properly.
+    /// <para><b>For Beginners:</b> This makes sure all the RBM layers connect properly to each other.
     /// 
-    /// During validation:
-    /// - It makes sure you've included RBM layers (you can't build a tower with no floors!)
-    /// - It checks that each floor is properly defined
-    /// - It ensures that each floor connects correctly to the floor above it
-    ///   (the output size of one floor must match the input size of the next floor)
-    /// - It makes sure the bottom floor fits the size of your input data
+    /// For a valid tower of RBMs:
+    /// - The first RBM's input layer size must match the network's input size
+    /// - Each RBM's output size must match the next RBM's input size
+    /// - This creates a chain where information flows smoothly up the tower
     /// 
-    /// If any of these checks fail, the method will stop and tell you what's wrong,
-    /// like a building inspector finding problems with your blueprint.
+    /// If these connections don't match up, the network can't function properly,
+    /// similar to how misaligned floors would make a building structurally unsound.
     /// </para>
     /// </remarks>
-    private void ValidateAndInitializeRbmLayers()
+    /// <exception cref="ArgumentException">Thrown when RBM layers are not properly configured.</exception>
+    private void ValidateRbmLayers()
     {
-        if (Architecture.RbmLayers == null || Architecture.RbmLayers.Count == 0)
+        if (_rbmLayers.Count == 0)
         {
-            throw new InvalidOperationException("RBM layers are required for a Deep Belief Network but none were provided.");
+            throw new ArgumentException("Deep Belief Network requires at least one RBM layer.");
         }
 
-        // Validate RBM layers
-        for (int i = 0; i < Architecture.RbmLayers.Count; i++)
+        // Check that the first RBM's input size matches the network's input size
+        var firstRbmInputShape = _rbmLayers[0].GetInputShape();
+        var firstRbmInputSize = firstRbmInputShape[0];
+        
+        if (firstRbmInputSize != Architecture.CalculatedInputSize)
         {
-            var rbm = Architecture.RbmLayers[i];
-            if (rbm == null)
-            {
-                throw new InvalidOperationException($"RBM layer at index {i} is null.");
-            }
-
-            if (i > 0)
-            {
-                var prevRbm = Architecture.RbmLayers[i - 1];
-                if (rbm.VisibleSize != prevRbm.HiddenSize)
-                {
-                    throw new InvalidOperationException($"Mismatch in RBM layer dimensions. Layer {i-1} hidden size ({prevRbm.HiddenSize}) " +
-                        $"do not match layer {i} visible size ({rbm.VisibleSize}).");
-                }
-            }
-            else
-            {
-                // Check if the first RBM layer matches the input dimension
-                if (rbm.VisibleSize != Architecture.CalculatedInputSize)
-                {
-                    throw new InvalidOperationException($"The first RBM layer's visible units ({rbm.VisibleSize}) " +
-                        $"do not match the network's calculated input size ({Architecture.CalculatedInputSize}).");
-                }
-            }
+            throw new ArgumentException($"The first RBM layer's input size ({firstRbmInputSize}) must match the network's input size ({Architecture.CalculatedInputSize}).");
         }
 
-        // If validation passes, initialize RBMLayers
-        _rbmLayers = [.. Architecture.RbmLayers];
+        // Check that each RBM's output size matches the next RBM's input size
+        for (int i = 0; i < _rbmLayers.Count - 1; i++)
+        {
+            var currentRbmOutputShape = _rbmLayers[i].GetOutputShape();
+            var nextRbmInputShape = _rbmLayers[i + 1].GetInputShape();
+            
+            var currentRbmOutputSize = currentRbmOutputShape[0];
+            var nextRbmInputSize = nextRbmInputShape[0];
+            
+            if (currentRbmOutputSize != nextRbmInputSize)
+            {
+                throw new ArgumentException($"RBM layer {i}'s output size ({currentRbmOutputSize}) must match RBM layer {i + 1}'s input size ({nextRbmInputSize}).");
+            }
+        }
     }
 
     /// <summary>
-    /// Pretrains the Restricted Boltzmann Machine layers of the Deep Belief Network.
+    /// Performs unsupervised pre-training of the DBN using greedy layer-wise approach.
     /// </summary>
-    /// <param name="trainingData">The input training data tensor.</param>
-    /// <param name="epochs">The number of training epochs for each RBM layer.</param>
-    /// <param name="learningRate">The learning rate for the training process.</param>
+    /// <param name="trainingData">The training data tensor.</param>
+    /// <param name="pretrainingEpochs">The number of epochs for pre-training each RBM layer. Default is 10.</param>
+    /// <param name="pretrainingLearningRate">The learning rate for pre-training. Default is 0.1 converted to type T.</param>
+    /// <param name="cdSteps">The number of contrastive divergence steps. Default is 1.</param>
     /// <remarks>
     /// <para>
-    /// This method performs the unsupervised pre-training phase of the Deep Belief Network. It trains each RBM layer
-    /// in sequence, from the bottom up. After training an RBM layer, the method transforms the training data through
-    /// that layer to create the input for the next layer. This greedy layer-wise pre-training helps the network
-    /// learn meaningful representations of the data before fine-tuning.
+    /// This method implements the greedy layer-wise pre-training algorithm for Deep Belief Networks.
+    /// Each RBM layer is trained separately, starting from the bottom layer and moving up. After a layer
+    /// is trained, the training data is transformed through that layer to create the training data for the next layer.
+    /// This bottom-up approach helps the network learn a hierarchical representation of the data.
     /// </para>
-    /// <para><b>For Beginners:</b> This method builds and trains our tower one floor at a time.
+    /// <para><b>For Beginners:</b> This method teaches each floor of the tower one at a time, from bottom to top.
     /// 
     /// The pre-training process works like this:
-    /// - We start with the bottom floor (the first RBM)
-    /// - We train it for a number of rounds (epochs) using our original data
-    /// - Once trained, we use this floor to transform our data
-    /// - We then use the transformed data to train the next floor up
-    /// - We repeat this process for each floor, working our way up the tower
+    /// 1. Start with the raw input data and train the bottom RBM layer
+    /// 2. Use the bottom layer to transform the data and train the second layer
+    /// 3. Continue this process, training each layer with data transformed by all layers below it
     /// 
-    /// This step-by-step approach is what makes Deep Belief Networks special. Each floor
-    /// learns patterns based on what the floor below it has already discovered,
-    /// creating increasingly sophisticated representations of the data.
+    /// This step-by-step approach:
+    /// - Helps the network learn increasingly abstract patterns
+    /// - Makes training more stable and effective
+    /// - Allows the network to learn useful features even without labeled data
+    /// 
+    /// After pre-training, the network has learned general patterns in your data and is ready
+    /// for fine-tuning on specific tasks.
     /// </para>
     /// </remarks>
-    public void PretrainRBMs(Tensor<T> trainingData, int epochs, T learningRate)
+    public void PretrainGreedyLayerwise(
+        Tensor<T> trainingData, 
+        int pretrainingEpochs = 10, 
+        T? pretrainingLearningRate = default,
+        int cdSteps = 1)
     {
-        for (int i = 0; i < _rbmLayers.Count; i++)
+        var learningRate = pretrainingLearningRate ?? NumOps.FromDouble(0.1);
+        
+        Console.WriteLine("Starting greedy layer-wise pre-training...");
+        
+        // Initialize variable to hold input for the current layer
+        var layerInput = trainingData;
+        
+        // Train each RBM layer one by one, from bottom to top
+        for (int layerIdx = 0; layerIdx < _rbmLayers.Count; layerIdx++)
         {
-            Console.WriteLine($"Pretraining RBM layer {i + 1}");
-            var rbm = _rbmLayers[i];
-
-            for (int epoch = 0; epoch < epochs; epoch++)
+            var rbm = _rbmLayers[layerIdx];
+            Console.WriteLine($"Pre-training layer {layerIdx + 1}/{_rbmLayers.Count}...");
+            
+            // Train the current RBM layer
+            for (int epoch = 0; epoch < pretrainingEpochs; epoch++)
             {
-                rbm.Train(trainingData, 1, learningRate);
+                T totalLoss = NumOps.Zero;
+                
+                // Process data in batches
+                for (int batchStart = 0; batchStart < layerInput.Shape[0]; batchStart += _batchSize)
+                {
+                    // Get a batch of data
+                    int batchEnd = Math.Min(batchStart + _batchSize, layerInput.Shape[0]);
+                    int actualBatchSize = batchEnd - batchStart;
+                    var batch = layerInput.Slice(batchStart, 0, batchEnd, layerInput.Shape[1]);
+                    
+                    // Train the RBM on the current batch using contrastive divergence
+                    for (int i = 0; i < actualBatchSize; i++)
+                    {
+                        var example = batch.GetRow(i);
+                        rbm.TrainWithContrastiveDivergence(example, learningRate, cdSteps);
+                    }
+                    
+                    // Calculate reconstruction error for monitoring
+                    for (int i = 0; i < actualBatchSize; i++)
+                    {
+                        var example = batch.GetRow(i);
+                        var hidden = rbm.Forward(Tensor<T>.FromVector(example));
+                        // Use RBMLayer Backward method to reconstruct the input
+                        var reconstruction = rbm.Backward(hidden);
+                        
+                        T sampleLoss = CalculateReconstructionError(
+                            Tensor<T>.FromVector(example), 
+                            reconstruction);
+                        totalLoss = NumOps.Add(totalLoss, sampleLoss);
+                    }
+                }
+                
+                // Calculate average loss for the epoch
+                T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(layerInput.Shape[0]));
+                Console.WriteLine($"Layer {layerIdx + 1}, Epoch {epoch + 1}/{pretrainingEpochs}, Average Loss: {avgLoss}");
             }
-
-            // Transform the data through this RBM for the next layer
-            trainingData = rbm.GetHiddenLayerActivation(trainingData);
+            
+            // If not the last layer, transform data for the next layer
+            if (layerIdx < _rbmLayers.Count - 1)
+            {
+                var transformedData = new Tensor<T>(new[] { layerInput.Shape[0], rbm.GetOutputShape()[0] });
+                
+                for (int i = 0; i < layerInput.Shape[0]; i++)
+                {
+                    var example = layerInput.GetRow(i);
+                    var hidden = rbm.Forward(Tensor<T>.FromVector(example));
+                    transformedData.SetRow(i, hidden.ToVector());
+                }
+                
+                layerInput = transformedData;
+            }
         }
+        
+        Console.WriteLine("Greedy layer-wise pre-training complete.");
+    }
+    
+    /// <summary>
+    /// Calculates the reconstruction error between original and reconstructed data.
+    /// </summary>
+    /// <param name="original">The original input data.</param>
+    /// <param name="reconstruction">The reconstructed data after passing through the network.</param>
+    /// <returns>The mean squared error between the original and reconstructed data.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the mean squared error (MSE) between the original input and its reconstruction.
+    /// The MSE is computed by taking the average of the squared differences between the original and reconstructed values.
+    /// This provides a measure of how well the network can reconstruct its input, which is a key aspect of RBM and DBN training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This measures how well the network can recreate what it was shown.
+    /// 
+    /// The reconstruction error:
+    /// - Compares the original input with the network's attempt to recreate it
+    /// - Calculates the average squared difference between original and reconstructed values
+    /// - Lower values mean better reconstruction and better pattern learning
+    /// 
+    /// During training, we aim to minimize this error, meaning the network gets better at
+    /// recognizing and recreating patterns from the input data.
+    /// </para>
+    /// </remarks>
+    private T CalculateReconstructionError(Tensor<T> original, Tensor<T> reconstruction)
+    {
+        // Check that shapes match
+        if (!Enumerable.SequenceEqual(original.Shape, reconstruction.Shape))
+        {
+            throw new ArgumentException("Original and reconstruction tensors must have the same shape.");
+        }
+        
+        // Calculate mean squared error
+        T sumSquaredError = NumOps.Zero;
+        for (int i = 0; i < original.Length; i++)
+        {
+            T diff = NumOps.Subtract(original.ToArray()[i], reconstruction.ToArray()[i]);
+            T squaredDiff = NumOps.Multiply(diff, diff);
+            sumSquaredError = NumOps.Add(sumSquaredError, squaredDiff);
+        }
+        
+        return NumOps.Divide(sumSquaredError, NumOps.FromDouble(original.Length));
     }
 
     /// <summary>
     /// Makes a prediction using the current state of the Deep Belief Network.
     /// </summary>
-    /// <param name="input">The input vector to make a prediction for.</param>
-    /// <returns>The predicted output vector after passing through all layers of the network.</returns>
+    /// <param name="input">The input tensor to make a prediction for.</param>
+    /// <returns>The predicted output tensor after passing through all layers of the network.</returns>
     /// <remarks>
     /// <para>
-    /// This method generates a prediction by passing the input vector through each layer of the Deep Belief Network
+    /// This method generates a prediction by passing the input tensor through each layer of the Deep Belief Network
     /// in sequence. Each layer processes the output of the previous layer, transforming the data until it reaches
-    /// the final output layer. The result is a vector representing the network's prediction.
+    /// the final output layer. The result is a tensor representing the network's prediction.
     /// </para>
     /// <para><b>For Beginners:</b> This method uses the network to make a prediction based on input data.
     /// 
@@ -252,12 +463,12 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// classify new data, or make predictions.
     /// </para>
     /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
         var current = input;
         foreach (var layer in Layers)
         {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
+            current = layer.Forward(current);
         }
 
         return current;
@@ -294,7 +505,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
             int layerParameterCount = layer.ParameterCount;
             if (layerParameterCount > 0)
             {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
+                Vector<T> layerParameters = parameters.GetSubVector(startIndex, layerParameterCount);
                 layer.UpdateParameters(layerParameters);
                 startIndex += layerParameterCount;
             }
@@ -302,112 +513,395 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the Deep Belief Network to a binary stream.
+    /// Performs supervised fine-tuning of the Deep Belief Network after pre-training.
     /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a null layer is encountered or a layer type name cannot be determined.</exception>
+    /// <param name="input">The input training data.</param>
+    /// <param name="expectedOutput">The expected output for the given input data.</param>
     /// <remarks>
     /// <para>
-    /// This method saves the state of the Deep Belief Network to a binary stream. It writes the number of layers,
-    /// followed by the type name and serialized state of each layer. This allows the Deep Belief Network
-    /// to be saved to disk and later restored with its trained parameters intact.
+    /// This method implements the supervised fine-tuning phase of training a Deep Belief Network.
+    /// After the unsupervised pre-training of individual RBM layers, this method uses backpropagation
+    /// and gradient descent to fine-tune the entire network for a specific task. This phase helps the
+    /// network adapt its pre-trained features to perform well on the specific supervised learning task.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the network to a file.
+    /// <para><b>For Beginners:</b> This method fine-tunes the entire network for a specific task.
     /// 
-    /// When saving the Deep Belief Network:
-    /// - First, it saves how many layers the network has
-    /// - Then, for each layer, it saves:
-    ///   - What type of layer it is
-    ///   - All the values and settings for that layer
+    /// After pre-training each layer individually:
+    /// - We now train the entire network end-to-end
+    /// - We use labeled data (inputs with known correct outputs)
+    /// - The network compares its predictions with the expected outputs
+    /// - It adjusts its parameters to make its predictions more accurate
     /// 
-    /// This is like taking a complete snapshot of the network so you can reload it later
-    /// without having to train it all over again.
+    /// Think of it like:
+    /// - Pre-training: Teaching general pattern recognition (like learning to see)
+    /// - Fine-tuning: Teaching a specific task using those patterns (like identifying specific objects)
+    /// 
+    /// This two-phase approach often works better than training from scratch, especially
+    /// when you don't have a lot of labeled examples.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
+        // Make sure we're in training mode
+        SetTrainingMode(true);
+        
+        Console.WriteLine("Starting supervised fine-tuning...");
+        
+        for (int epoch = 0; epoch < _epochs; epoch++)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            T totalLoss = NumOps.Zero;
+            
+            // Process data in batches
+            for (int batchStart = 0; batchStart < input.Shape[0]; batchStart += _batchSize)
+            {
+                // Get a batch of data
+                int batchEnd = Math.Min(batchStart + _batchSize, input.Shape[0]);
+                int actualBatchSize = batchEnd - batchStart;
+                var batchX = input.Slice(batchStart, 0, batchEnd, input.Shape[1]);
+                var batchY = expectedOutput.Slice(batchStart, 0, batchEnd, expectedOutput.Shape[1]);
+                
+                // Reset gradients at the start of each batch
+                int[] gradientShape = GetGradientShape();
+                Tensor<T> totalGradient = Tensor<T>.CreateDefault(gradientShape, NumOps.Zero);
+                
+                // Accumulate gradients for each example in the batch
+                for (int i = 0; i < actualBatchSize; i++)
+                {
+                    var x = batchX.GetRow(i);
+                    var y = batchY.GetRow(i);
+                    
+                    // Forward pass with memory to save intermediate states
+                    var prediction = ForwardWithMemory(x);
+                    
+                    // Calculate loss and gradients for this example
+                    T loss = CalculateLoss(Tensor<T>.FromVector(prediction), Tensor<T>.FromVector(y));
+                    totalLoss = NumOps.Add(totalLoss, loss);
+                    
+                    // Calculate output gradients
+                    Vector<T> outputGradients = CalculateOutputGradients(prediction, y);
+                    
+                    // Backpropagate to compute gradients for all parameters
+                    Backpropagate(outputGradients);
+                    
+                    // Accumulate gradients
+                    var gradients = GetParameterGradients();
+                    for (int j = 0; j < gradients.Length; j++)
+                    {
+                        totalGradient[j] = NumOps.Add(totalGradient[j], gradients[j]);
+                    }
+                }
+                
+                // Average the gradients across the batch
+                for (int j = 0; j < totalGradient.Length; j++)
+                {
+                    totalGradient[j] = NumOps.Divide(totalGradient[j], NumOps.FromDouble(actualBatchSize));
+                }
+                
+                // Update parameters with averaged gradients
+                var currentParams = GetParameters();
+                var updatedParams = new Vector<T>(currentParams.Length);
+                for (int j = 0; j < currentParams.Length; j++)
+                {
+                    updatedParams[j] = NumOps.Subtract(
+                        currentParams[j], 
+                        NumOps.Multiply(_learningRate, totalGradient[j]));
+                }
+                
+                UpdateParameters(updatedParams);
+            }
+            
+            // Calculate average loss for the epoch
+            T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(input.Shape[0]));
+            Console.WriteLine($"Epoch {epoch + 1}/{_epochs}, Average Loss: {avgLoss}");
         }
+        
+        // Set back to inference mode after training
+        SetTrainingMode(false);
     }
 
     /// <summary>
-    /// Deserializes the Deep Belief Network from a binary stream.
+    /// Gets the shape of the gradient tensor for all layers in the Deep Belief Network.
     /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer type information is invalid or instance creation fails.</exception>
+    /// <returns>An array of integers representing the shape of the gradient tensor.</returns>
     /// <remarks>
     /// <para>
-    /// This method restores the state of the Deep Belief Network from a binary stream. It reads the number of layers,
-    /// followed by the type name and serialized state of each layer. This allows a previously saved
-    /// Deep Belief Network to be restored from disk with all its trained parameters. It also reconstructs
-    /// the list of RBM layers by identifying RestrictedBoltzmannMachine instances among the deserialized layers.
+    /// This method calculates the shape of the gradient tensor by iterating through all layers in the network.
+    /// For each layer, it adds the length of its parameter gradients to the shape array. The resulting array
+    /// represents the structure of the gradient tensor, which is used for accumulating gradients during training.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved network from a file.
+    /// <para><b>For Beginners:</b> This method determines the size and structure of the network's gradients.
     /// 
-    /// When loading the Deep Belief Network:
-    /// - First, it reads how many layers the network had
-    /// - Then, for each layer, it:
-    ///   - Reads what type of layer it was
-    ///   - Creates a new layer of that type
-    ///   - Loads all the values and settings for that layer
-    ///   - Adds the layer to the network
-    /// - It also identifies which layers are RBM layers and rebuilds the tower structure
+    /// The gradient shape:
+    /// - Represents how many adjustable values (parameters) are in each layer
+    /// - Helps organize the gradients for all layers into a single structure
+    /// - Is used to create a tensor that can hold all gradients for the entire network
     /// 
-    /// This is like restoring a complete snapshot of your network, bringing back
-    /// all the patterns it had learned before.
+    /// Think of it like creating a blueprint for a container that can hold all the
+    /// network's learning information in an organized way.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    private int[] GetGradientShape()
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-        _rbmLayers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
+        List<int> shape = [];
+        foreach (var layer in Layers)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
-
-            // Reconstruct RBM layers
-            if (layer is RestrictedBoltzmannMachine<T> rbm)
+            var layerGradients = layer.GetParameterGradients();
+            if (layerGradients != null)
             {
-                _rbmLayers.Add(rbm);
+                shape.Add(layerGradients.Length);
             }
         }
+
+        return [.. shape];
+    }
+    
+    /// <summary>
+    /// Gets the appropriate loss function based on the task type if none was provided.
+    /// </summary>
+    /// <returns>A loss function appropriate for the network's task.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the loss function specified during initialization, or creates a default one
+    /// based on the task type if none was provided. For classification tasks, it creates a cross-entropy
+    /// loss function. For regression tasks, it creates a mean squared error loss function.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method picks the right scoring system for your task.
+    /// 
+    /// If you didn't specify a loss function when creating the network:
+    /// - For classification (categorizing), it uses cross-entropy loss
+    /// - For regression (predicting values), it uses mean squared error loss
+    /// 
+    /// These default choices work well for most common tasks, but you can always
+    /// specify a different loss function if you have specific requirements.
+    /// </para>
+    /// </remarks>
+    private ILossFunction<T> GetLossFunction()
+    {
+        if (_lossFunction != null)
+        {
+            return _lossFunction;
+        }
+        
+        // Create a default loss function based on task type
+        return Architecture.TaskType switch
+        {
+            NeuralNetworkTaskType.BinaryClassification => new CrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => new CrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new CrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.ImageClassification => new CrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.SequenceClassification => new CrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.Regression => new MeanSquaredErrorLoss<T>(),
+            NeuralNetworkTaskType.TimeSeriesForecasting => new MeanSquaredErrorLoss<T>(),
+            // Default to MSE for other task types
+            _ => new MeanSquaredErrorLoss<T>()
+        };
+    }
+    
+    /// <summary>
+    /// Calculates the loss between predicted and expected outputs using the appropriate loss function.
+    /// </summary>
+    /// <param name="predicted">The predicted output from the network.</param>
+    /// <param name="expected">The expected (ground truth) output.</param>
+    /// <returns>The loss value based on the selected loss function.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the loss between the network's prediction and the expected output
+    /// using the loss function specified during initialization or a default one based on the task type.
+    /// The loss value provides a measure of how well the network is performing on the task.
+    /// </para>
+    /// <para><b>For Beginners:</b> This measures how wrong the network's predictions are.
+    /// 
+    /// The loss function:
+    /// - Compares the network's prediction with the correct answer
+    /// - Produces a number that's higher when predictions are worse
+    /// - Uses the appropriate calculation based on your task type
+    /// 
+    /// During training, we aim to minimize this loss, meaning the network gets better at
+    /// making accurate predictions for the specific task.
+    /// </para>
+    /// </remarks>
+    private T CalculateLoss(Tensor<T> predicted, Tensor<T> expected)
+    {
+        var lossFunction = GetLossFunction();
+        return lossFunction.CalculateLoss(predicted.ToVector(), expected.ToVector());
+    }
+    
+    /// <summary>
+    /// Calculates the gradients of the loss with respect to the network outputs.
+    /// </summary>
+    /// <param name="predicted">The predicted values from the network.</param>
+    /// <param name="expected">The expected (target) values.</param>
+    /// <returns>A vector of gradients for the output layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates how the loss changes with respect to changes in the network's outputs.
+    /// These gradients are used during backpropagation to update the network's parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how to adjust the network's outputs to reduce errors.
+    /// 
+    /// The gradient tells the network:
+    /// - How much each output value contributes to the overall error
+    /// - Which direction to adjust each output to reduce the error
+    /// - The size of adjustment needed for each output
+    /// 
+    /// This information flows backward through the network during training,
+    /// helping all parts of the network learn from its mistakes.
+    /// </para>
+    /// </remarks>
+    private Vector<T> CalculateOutputGradients(Vector<T> predicted, Vector<T> expected)
+    {
+        var lossFunction = GetLossFunction();
+        return lossFunction.CalculateDerivative(predicted, expected);
+    }
+    
+    /// <summary>
+    /// Gets metadata about the Deep Belief Network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata that describes the Deep Belief Network, including its type,
+    /// architecture details, and training parameters. This information can be useful for model
+    /// management, documentation, and versioning.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides a summary of your network's configuration.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Deep Belief Network)
+    /// - The number of RBM layers in the network
+    /// - The size of each layer
+    /// - Training parameters like learning rate and epochs
+    /// 
+    /// This is useful for:
+    /// - Documenting your model
+    /// - Comparing different model configurations
+    /// - Reproducing your model setup later
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var layerSizes = new List<int>();
+        
+        // Collect layer sizes from RBM layers
+        foreach (var rbm in _rbmLayers)
+        {
+            layerSizes.Add(rbm.GetInputShape()[0]);
+        }
+        
+        // Add the size of the final hidden layer
+        if (_rbmLayers.Count > 0)
+        {
+            layerSizes.Add(_rbmLayers[_rbmLayers.Count - 1].GetOutputShape()[0]);
+        }
+        
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.DeepBeliefNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NumberOfLayers", layerSizes.Count },
+                { "LayerSizes", layerSizes },
+                { "Epochs", _epochs },
+                { "LearningRate", Convert.ToDouble(_learningRate) },
+                { "BatchSize", _batchSize }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes network-specific data for the Deep Belief Network.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the specific configuration and state of the Deep Belief Network
+    /// to a binary stream. This includes training parameters and RBM layer configurations
+    /// that need to be preserved for later reconstruction of the network.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the unique settings of your Deep Belief Network.
+    /// 
+    /// It writes:
+    /// - The number of RBM layers
+    /// - The configuration of each RBM layer
+    /// - Training parameters like learning rate, epochs, and batch size
+    /// 
+    /// Saving these details allows you to recreate the exact same network structure and state later.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write training parameters
+        writer.Write(_epochs);
+        writer.Write(Convert.ToDouble(_learningRate));
+        writer.Write(_batchSize);
+
+        // Serialize the loss function using the helper method
+        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data for the Deep Belief Network.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the specific configuration and state of the Deep Belief Network from a binary stream.
+    /// It reconstructs the network's structure, including RBM layers and training parameters, to match
+    /// the state of the network when it was serialized.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads the unique settings of your Deep Belief Network.
+    /// 
+    /// It reads:
+    /// - The number of RBM layers
+    /// - The configuration of each RBM layer
+    /// - Training parameters like learning rate, epochs, and batch size
+    /// 
+    /// Loading these details allows you to recreate the exact same network structure and state that was previously saved.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Read training parameters
+        _epochs = reader.ReadInt32();
+        _learningRate = NumOps.FromDouble(reader.ReadDouble());
+        _batchSize = reader.ReadInt32();
+
+        // Read and set the loss function if a custom one was used
+        _lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the deep belief network model.
+    /// </summary>
+    /// <returns>A new instance of the deep belief network model with the same configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the deep belief network model with the same configuration as the current instance.
+    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
+    /// with the serialized data. The new instance will have the same architecture, learning rate, epochs, batch size,
+    /// and loss function as the original.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a copy of the network structure without copying the learned data.
+    /// 
+    /// Think of it like making a blueprint copy of the tower:
+    /// - It copies the same overall design (architecture)
+    /// - It preserves settings like learning rate and batch size
+    /// - It maintains the same RBM layer structure
+    /// - But it doesn't copy any of the learned patterns and weights
+    /// 
+    /// This is primarily used when saving or loading models, creating an empty framework that the saved parameters
+    /// can be loaded into later.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new DeepBeliefNetwork<T>(
+            Architecture,
+            _learningRate,
+            _epochs,
+            _batchSize,
+            _lossFunction
+        );
     }
 }

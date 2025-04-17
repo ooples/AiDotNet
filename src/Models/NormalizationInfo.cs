@@ -28,7 +28,7 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class NormalizationInfo<T>
+public class NormalizationInfo<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the normalizer used to normalize input data and denormalize predictions.
@@ -58,7 +58,7 @@ public class NormalizationInfo<T>
     /// or you'll get an error when trying to use it.
     /// </para>
     /// </remarks>
-    public INormalizer<T>? Normalizer { get; set; }
+    public INormalizer<T, TInput, TOutput>? Normalizer { get; set; }
     
     /// <summary>
     /// Gets or sets the normalization parameters for each input feature.

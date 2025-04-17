@@ -348,7 +348,7 @@ public class QuantumLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Return a copy of the rotation angles
-        return _rotationAngles.Copy();
+        return _rotationAngles.Clone();
     }
 
     /// <summary>
@@ -486,7 +486,7 @@ public class QuantumLayer<T> : LayerBase<T>
         var negativeImaginary = new Complex<T>(NumOps.Zero, NumOps.Negate(NumOps.One));
 
         // Create a temporary copy of the circuit for the transformation
-        var tempCircuit = _quantumCircuit.Copy();
+        var tempCircuit = _quantumCircuit.Clone();
 
         for (int i = 0; i < dimension; i++)
         {

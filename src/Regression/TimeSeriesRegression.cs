@@ -80,7 +80,7 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// on new data because it learned the noise rather than the true patterns.
     /// </para>
     /// </remarks>
-    private readonly IRegularization<T> _regularization;
+    private readonly IRegularization<T, Matrix<T>, Vector<T>> _regularization;
 
     /// <summary>
     /// Initializes a new instance of the TimeSeriesRegression class with specified options and optional regularization.
@@ -102,12 +102,12 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// you choose will affect how well it works for your specific type of data.
     /// </para>
     /// </remarks>
-    public TimeSeriesRegression(TimeSeriesRegressionOptions<T> options, IRegularization<T>? regularization = null)
+    public TimeSeriesRegression(TimeSeriesRegressionOptions<T> options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options;
-        _regularization = regularization ?? new NoRegularization<T>();
-        _timeSeriesModel = TimeSeriesModelFactory<T>.CreateModel(options.ModelType, options);
+        _regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
+        _timeSeriesModel = TimeSeriesModelFactory<T, Matrix<T>, Vector<T>>.CreateModel(options.ModelType, options);
     }
 
     /// <summary>
@@ -141,7 +141,7 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
         // Apply regularization to the prepared input data
         if (Regularization != null)
         {
-            preparedX = Regularization.RegularizeMatrix(preparedX);
+            preparedX = Regularization.Regularize(preparedX);
         }
 
         // Train the time series model
@@ -180,7 +180,7 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     {
         if (Coefficients != null && Regularization != null)
         {
-            Coefficients = Regularization.RegularizeCoefficients(Coefficients);
+            Coefficients = Regularization.Regularize(Coefficients);
         }
     }
 
@@ -364,7 +364,7 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
         // Apply regularization
         if (_regularization != null)
         {
-            preparedX = _regularization.RegularizeMatrix(preparedX);
+            preparedX = _regularization.Regularize(preparedX);
         }
 
         return preparedX;
@@ -682,8 +682,38 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
             // Deserialize the time series model
             int modelDataLength = reader.ReadInt32();
             byte[] timeSeriesModelData = reader.ReadBytes(modelDataLength);
-            _timeSeriesModel = TimeSeriesModelFactory<T>.CreateModel(_options.ModelType, _options);
+            _timeSeriesModel = TimeSeriesModelFactory<T, Matrix<T>, Vector<T>>.CreateModel(_options.ModelType, _options);
             _timeSeriesModel.Deserialize(timeSeriesModelData);
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the time series regression model with the same configuration.
+    /// </summary>
+    /// <returns>
+    /// A new instance of <see cref="TimeSeriesRegression{T}"/> with the same configuration as the current instance.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new time series regression model that has the same configuration as the current instance.
+    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+    /// 
+    /// It's like creating a blueprint copy of your model that can be used to:
+    /// - Save your model's settings
+    /// - Create a new identical model
+    /// - Transfer your model's configuration to another system
+    /// 
+    /// This is useful when you want to:
+    /// - Create multiple similar models
+    /// - Save a model's configuration for later use
+    /// - Reset a model while keeping its settings
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create and return a new instance with the same configuration
+        return new TimeSeriesRegression<T>(_options, _regularization);
     }
 }

@@ -19,7 +19,7 @@ namespace AiDotNet.Models.Options;
 /// successful for online advertising and recommendation systems where models need to update continuously
 /// as new data arrives.</para>
 /// </remarks>
-public class FTRLOptimizerOptions : GradientBasedOptimizerOptions
+public class FTRLOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the alpha parameter, which controls the learning rate.

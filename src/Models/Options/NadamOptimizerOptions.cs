@@ -31,7 +31,7 @@ namespace AiDotNet.Models.Options;
 /// information, and how it adapts its learning rate during training.
 /// </para>
 /// </remarks>
-public class NadamOptimizerOptions : GradientBasedOptimizerOptions
+public class NadamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the initial learning rate that controls the step size in parameter updates.

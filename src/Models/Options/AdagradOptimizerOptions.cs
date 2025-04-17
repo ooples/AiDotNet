@@ -14,7 +14,7 @@ namespace AiDotNet.Models.Options;
 /// This helps the model learn more efficiently, especially when some parameters need more tuning than others.
 /// </para>
 /// </remarks>
-public class AdagradOptimizerOptions : GradientBasedOptimizerOptions
+public class AdagradOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets a small constant added to the denominator to prevent division by zero.

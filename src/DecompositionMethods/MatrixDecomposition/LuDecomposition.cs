@@ -102,7 +102,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         if (n != matrix.Columns)
             throw new ArgumentException("Matrix must be square for LU decomposition.");
 
-        Matrix<T> A = matrix.Copy();
+        Matrix<T> A = matrix.Clone();
         Matrix<T> L = new(n, n);
         Vector<int> P = new(n);
 
@@ -182,7 +182,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         if (n != matrix.Columns)
             throw new ArgumentException("Matrix must be square for LU decomposition.");
 
-        Matrix<T> A = matrix.Copy();
+        Matrix<T> A = matrix.Clone();
         Matrix<T> L = new(n, n);
         Vector<int> P = new(n);
         Vector<int> Q = new(n);

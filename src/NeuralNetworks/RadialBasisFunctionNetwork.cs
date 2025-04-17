@@ -173,7 +173,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         }
     
         // Set the properties
-        _inputSize = inputShape[0]; // Assuming 1D input for simplicity
+        _inputSize = inputShape[0];
         _hiddenSize = hiddenSize;
         _outputSize = outputSize;
     
@@ -223,43 +223,6 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Processes the input through the radial basis function network to produce a prediction.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector after processing through the network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the forward pass of the Radial Basis Function Network. It processes the input
-    /// through each layer of the network in sequence, transforming it according to the operations defined
-    /// in each layer. For an RBFN, this typically involves measuring the similarity of the input to each
-    /// RBF center in the hidden layer, and then linearly combining these similarities in the output layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is how the RBFN processes information and makes predictions.
-    /// 
-    /// During the prediction process:
-    /// - The input data enters the network
-    /// - In the hidden layer, each "expert" (RBF) measures how similar the input is to their specialty
-    /// - In the output layer, these similarity scores are combined using weights to produce the final prediction
-    /// 
-    /// For example, if predicting tomorrow's temperature:
-    /// 1. Input data about today's weather is fed into the network
-    /// 2. Each expert reports a similarity score (how similar is today to the patterns they recognize?)
-    /// 3. The output layer combines these scores, giving more weight to experts who have been reliable in the past
-    /// 4. The result is the predicted temperature
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Updates the parameters of the radial basis function network layers.
     /// </summary>
     /// <param name="parameters">The vector of parameter updates to apply.</param>
@@ -302,125 +265,259 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Saves the state of the Radial Basis Function Network to a binary writer.
+    /// Makes a prediction using the current state of the Radial Basis Function Network.
     /// </summary>
-    /// <param name="writer">The binary writer to save the state to.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if layer serialization fails or if the RBF function type name cannot be determined.</exception>
+    /// <param name="input">The input tensor to make a prediction for.</param>
+    /// <returns>The predicted output tensor after passing through all layers of the network.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the input tensor is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the input tensor has incorrect dimensions.</exception>
     /// <remarks>
     /// <para>
-    /// This method serializes the entire state of the Radial Basis Function Network, including all layers and the
-    /// type of radial basis function used. It writes the number of layers, the type and state of each layer, and
-    /// the type of the radial basis function to the provided binary writer.
+    /// This method performs a forward pass through the network, transforming the input data through each layer
+    /// to produce a final prediction. It includes input validation to ensure the provided tensor matches the
+    /// expected input shape of the network.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the entire state of the RBFN to a file.
+    /// <para><b>For Beginners:</b> This is how the network makes predictions based on new data.
     /// 
-    /// When serializing:
-    /// - All the network's layers are saved (their types and internal values)
-    /// - The type of similarity function (RBF) being used is saved
-    /// - The saved file can later be used to restore the exact same network state
+    /// The prediction process:
+    /// 1. Checks if the input data is valid and has the correct shape
+    /// 2. Passes the input through each layer of the network
+    /// 3. Each layer transforms the data in some way
+    /// 4. The final layer produces the network's prediction
     /// 
-    /// This is useful for:
-    /// - Saving a trained model to use later
-    /// - Sharing a model with others
-    /// - Creating backups during long training processes
-    /// 
-    /// Think of it like taking a complete snapshot of the network that can be restored later.
+    /// Think of it like a factory assembly line:
+    /// - The input data enters the first station (layer)
+    /// - Each station processes the data and passes it to the next
+    /// - The last station outputs the final product (prediction)
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
+        // Validate input
+        if (input == null)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
         }
 
-        // Serialize the RBF function type
-        writer.Write(_radialBasisFunction.GetType().FullName ?? throw new InvalidOperationException("Unable to get full name for RBF function type"));
+        var inputShape = input.Shape;
+        var expectedShape = Architecture.GetInputShape();
+
+        // Ensure input has correct shape
+        if (inputShape.Length != expectedShape.Length)
+        {
+            throw new ArgumentException($"Input tensor has wrong number of dimensions. Expected {expectedShape.Length}, got {inputShape.Length}.");
+        }
+
+        // Check if dimensions match
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (inputShape[i] != expectedShape[i])
+            {
+                throw new ArgumentException($"Input dimension mismatch at index {i}. Expected {expectedShape[i]}, got {inputShape[i]}.");
+            }
+        }
+
+        // Forward pass through each layer in the network
+        Tensor<T> currentOutput = input;
+        foreach (var layer in Layers)
+        {
+            currentOutput = layer.Forward(currentOutput);
+        }
+
+        return currentOutput;
     }
 
     /// <summary>
-    /// Loads the state of the Radial Basis Function Network from a binary reader.
+    /// Trains the Radial Basis Function Network using the provided input and expected output.
     /// </summary>
-    /// <param name="reader">The binary reader to load the state from.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if layer deserialization fails or if the RBF function type cannot be instantiated.</exception>
+    /// <param name="input">The input tensor used for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
+    /// <exception cref="ArgumentNullException">Thrown when either input or expectedOutput is null.</exception>
     /// <remarks>
     /// <para>
-    /// This method deserializes the state of the Radial Basis Function Network from a binary reader. It reads
-    /// the number of layers, recreates each layer based on its type, deserializes the layer state, and finally
-    /// recreates the radial basis function based on its type.
+    /// This method implements the training process for the RBFN. It performs a forward pass, calculates the error
+    /// between the network's prediction and the expected output, and then backpropagates this error to adjust
+    /// the network's parameters.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved RBFN state from a file.
+    /// <para><b>For Beginners:</b> This is how the network learns from examples.
     /// 
-    /// When deserializing:
-    /// - The number and types of layers are read from the file
-    /// - Each layer is recreated and its state is restored
-    /// - The type of similarity function (RBF) is read and recreated
+    /// The training process:
+    /// 1. Takes an input and its correct answer (expected output)
+    /// 2. Makes a prediction using the current network state
+    /// 3. Compares the prediction to the correct answer to calculate the error
+    /// 4. Uses this error to adjust the network's internal settings (backpropagation)
     /// 
-    /// This allows you to:
-    /// - Load a previously trained model
-    /// - Continue using or training a model from where you left off
-    /// - Use models created by others
-    /// 
-    /// Think of it like restoring a complete snapshot of the network that was saved earlier.
+    /// It's like a student solving math problems:
+    /// - The student (network) tries to solve a problem (make a prediction)
+    /// - They check their answer against the correct one
+    /// - If they're wrong, they figure out why and adjust their approach
+    /// - Over time, they get better at solving similar problems
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
+        if (input == null)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
         }
 
-        // Deserialize the RBF function type
-        string rbfTypeName = reader.ReadString();
-        Type? rbfType = Type.GetType(rbfTypeName);
-        if (rbfType == null)
-            throw new InvalidOperationException($"Cannot find type {rbfTypeName}");
+        if (expectedOutput == null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput), "Expected output tensor cannot be null.");
+        }
 
-        if (!typeof(IRadialBasisFunction<T>).IsAssignableFrom(rbfType))
-            throw new InvalidOperationException($"Type {rbfTypeName} does not implement IRadialBasisFunction<T>");
+        // Forward pass with memory for backpropagation
+        Vector<T> inputVector = input.ToVector();
+        Vector<T> outputVector = ForwardWithMemory(inputVector);
 
-        object? rbfInstance = Activator.CreateInstance(rbfType);
-        if (rbfInstance == null)
-            throw new InvalidOperationException($"Failed to create an instance of {rbfTypeName}");
+        // Calculate error/loss
+        Vector<T> expectedOutputVector = expectedOutput.ToVector();
+        Vector<T> errorVector = outputVector.Subtract(expectedOutputVector);
 
-        _radialBasisFunction = (IRadialBasisFunction<T>)rbfInstance;
+        // Backpropagate error through the network
+        Backpropagate(errorVector);
+    }
+
+    /// <summary>
+    /// Gets metadata about the Radial Basis Function Network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata that describes the RBFN, including its type, architecture details,
+    /// and other relevant information. This metadata can be useful for model management, documentation,
+    /// and versioning.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides a summary of your network's setup and characteristics.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Radial Basis Function Network)
+    /// - How many inputs, hidden neurons, and outputs the network has
+    /// - What type of radial basis function is being used
+    /// - A description of the network's structure
+    /// 
+    /// This is useful for:
+    /// - Keeping track of different versions of your model
+    /// - Comparing different network configurations
+    /// - Documenting your model's setup for future reference
+    /// 
+    /// Think of it like a spec sheet for a car, listing all its important features and capabilities.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.NeuralNetworkRegression,
+            FeatureCount = _inputSize,
+            Description = $"RBFN with {_inputSize} inputs, {_hiddenSize} RBF neurons, and {_outputSize} outputs",
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputSize", _inputSize },
+                { "HiddenSize", _hiddenSize },
+                { "OutputSize", _outputSize },
+                { "RadialBasisFunction", _radialBasisFunction.GetType().Name }
+            },
+            ModelData = this.Serialize()
+        };
+
+        return metadata;
+    }
+
+    /// <summary>
+    /// Serializes network-specific data for the Radial Basis Function Network.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the specific configuration and state of the RBFN to a binary stream.
+    /// It includes the network's structural parameters and the type of radial basis function used.
+    /// This data is essential for later reconstruction of the network.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the unique settings of your RBFN.
+    /// 
+    /// It writes:
+    /// - The number of inputs, hidden neurons, and outputs
+    /// - Information about the specific type of radial basis function used
+    /// 
+    /// Saving these details allows you to recreate the exact same network structure later.
+    /// It's like writing down a recipe so you can make the same dish again in the future.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write RBFN-specific data
+        writer.Write(_inputSize);
+        writer.Write(_hiddenSize);
+        writer.Write(_outputSize);
+    
+        SerializationHelper<T>.SerializeInterface(writer, _radialBasisFunction);
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data for the Radial Basis Function Network.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the specific configuration and state of the RBFN from a binary stream.
+    /// It reconstructs the network's structural parameters and radial basis function type to match
+    /// the state of the network when it was serialized.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads the unique settings of your RBFN.
+    /// 
+    /// It reads:
+    /// - The number of inputs, hidden neurons, and outputs
+    /// - Information about the specific type of radial basis function used
+    /// 
+    /// Loading these details allows you to recreate the exact same network structure that was previously saved.
+    /// It's like following a recipe to recreate a dish exactly as it was made before.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Read RBFN-specific data
+        _inputSize = reader.ReadInt32();
+        _hiddenSize = reader.ReadInt32();
+        _outputSize = reader.ReadInt32();
+    
+        // Read and set the radial basis function if a custom one was used
+        _radialBasisFunction = DeserializationHelper.DeserializeInterface<IRadialBasisFunction<T>>(reader) ?? new GaussianRBF<T>();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the radial basis function network with the same configuration.
+    /// </summary>
+    /// <returns>
+    /// A new instance of <see cref="RadialBasisFunctionNetwork{T}"/> with the same configuration as the current instance.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new radial basis function network that has the same configuration as the current instance.
+    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
+    /// The new instance will have the same architecture and radial basis function type as the original,
+    /// but will not share parameter values unless they are explicitly copied after creation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+    /// 
+    /// It's like creating a blueprint copy of your network that can be used to:
+    /// - Save your model's settings
+    /// - Create a new identical model
+    /// - Transfer your model's configuration to another system
+    /// 
+    /// This is useful when you want to:
+    /// - Create multiple similar radial basis function networks
+    /// - Save a model's configuration for later use
+    /// - Reset a model while keeping its settings
+    /// 
+    /// Note that while the settings are copied, the learned parameters (like the centers of the "experts" 
+    /// and the output weights) are not automatically transferred, so the new instance will need training 
+    /// or parameter copying to match the performance of the original.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        // Create a new instance with the cloned architecture and RBF
+        return new RadialBasisFunctionNetwork<T>(Architecture, _radialBasisFunction);
     }
 }

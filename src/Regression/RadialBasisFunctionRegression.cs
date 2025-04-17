@@ -65,7 +65,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    public RadialBasisFunctionRegression(RadialBasisFunctionOptions? options = null, IRegularization<T>? regularization = null)
+    public RadialBasisFunctionRegression(RadialBasisFunctionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new RadialBasisFunctionOptions();
@@ -104,13 +104,13 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         Matrix<T> rbfFeatures = ComputeRBFFeatures(x);
 
         // Apply regularization to the RBF features
-        rbfFeatures = Regularization.RegularizeMatrix(rbfFeatures);
+        rbfFeatures = Regularization.Regularize(rbfFeatures);
 
         // Solve for weights using linear regression
         _weights = SolveLinearRegression(rbfFeatures, y);
 
         // Apply regularization to the weights
-        _weights = Regularization.RegularizeCoefficients(_weights);
+        _weights = Regularization.Regularize(_weights);
     }
 
     /// <summary>
@@ -134,7 +134,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     {
         Matrix<T> rbfFeatures = ComputeRBFFeatures(input);
         // Apply regularization to the RBF features before prediction
-        rbfFeatures = Regularization.RegularizeMatrix(rbfFeatures);
+        rbfFeatures = Regularization.Regularize(rbfFeatures);
 
         return rbfFeatures.Multiply(_weights);
     }
@@ -160,7 +160,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     {
         Vector<T> rbfFeatures = ComputeRBFFeaturesSingle(input);
         // Apply regularization to the RBF features before prediction
-        rbfFeatures = Regularization.RegularizeCoefficients(rbfFeatures);
+        rbfFeatures = Regularization.Regularize(rbfFeatures);
 
         return rbfFeatures.DotProduct(_weights);
     }
@@ -540,5 +540,36 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         {
             _weights[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the radial basis function regression model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the RBF regression model with the same configuration but no trained parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the radial basis function regression model with the same 
+    /// configuration options as the current instance, but without copying the trained parameters (centers and weights).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
+    /// any learned parameters. It's like getting a blank template with the same settings.
+    /// 
+    /// Think of it like getting a fresh copy of a form with all the same fields and settings,
+    /// but without any of the data filled in. The new model has the same:
+    /// - Number of centers
+    /// - Gamma parameter (controls how quickly the influence of each center drops off)
+    /// - Regularization settings
+    /// - Other configuration options
+    /// 
+    /// But it doesn't have the learned centers or weights from training.
+    /// 
+    /// This is mainly used internally by the framework when performing operations like
+    /// cross-validation or creating ensembles of similar models.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a new instance with the same options and regularization
+        return new RadialBasisFunctionRegression<T>(_options, Regularization);
     }
 }

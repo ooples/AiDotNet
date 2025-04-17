@@ -68,7 +68,7 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public IsotonicRegression(NonLinearRegressionOptions? options = null, IRegularization<T>? regularization = null)
+    public IsotonicRegression(NonLinearRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _xValues = Vector<T>.Empty();
@@ -109,7 +109,7 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
         ValidateInputs(x, y);
         
         // Apply regularization to the input matrix
-        var regularizedX = Regularization.RegularizeMatrix(x);
+        var regularizedX = Regularization.Regularize(x);
         
         _xValues = regularizedX.GetColumn(0); // Isotonic regression typically works with 1D input
         _yValues = y;
@@ -177,7 +177,7 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
         } while (changed);
 
         // Apply regularization to the coefficients
-        yhat = Regularization.RegularizeCoefficients(yhat);
+        yhat = Regularization.Regularize(yhat);
 
         SupportVectors = new Matrix<T>(n, 1);
         for (int i = 0; i < n; i++)
@@ -414,5 +414,32 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
         {
             _yValues[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the IsotonicRegression with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new IsotonicRegression instance with the same options and regularization as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the IsotonicRegression model with the same configuration options
+    /// and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
+    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of model with identical settings:
+    /// - This method creates a new, empty model with the same configuration
+    /// - It's like making a copy of a recipe before you start cooking
+    /// - The new model has the same settings but no trained data
+    /// - This is useful for techniques that need multiple models, like cross-validation
+    /// 
+    /// For example, when testing your model on different subsets of data,
+    /// you'd want each test to use a model with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new IsotonicRegression<T>(Options, Regularization);
     }
 }

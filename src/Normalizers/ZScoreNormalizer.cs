@@ -26,227 +26,261 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class ZScoreNormalizer<T> : INormalizer<T>
+/// <typeparam name="TInput">The type of input data structure.</typeparam>
+/// <typeparam name="TOutput">The type of output data structure.</typeparam>
+public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutput>
 {
     /// <summary>
-    /// Provides operations for mathematical calculations on the generic type T.
+    /// Initializes a new instance of the <see cref="ZScoreNormalizer{T, TInput, TOutput}"/> class.
     /// </summary>
-    /// <remarks>
-    /// This field holds the numeric operations (addition, subtraction, multiplication, etc.)
-    /// appropriate for the generic type T.
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-    
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ZScoreNormalizer{T}"/> class.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The constructor automatically acquires the appropriate numeric operations for the specified type T
-    /// (such as float, double, or decimal) using the MathHelper utility.
-    /// </para>
-    /// <para><b>For Beginners:</b> This constructor creates a new ZScoreNormalizer.
-    /// 
-    /// When you create a new ZScoreNormalizer:
-    /// - It automatically sets up the correct math operations for your chosen number type (T)
-    /// - You don't need to provide any additional parameters
-    /// - It's ready to use immediately for normalizing data
-    /// 
-    /// For example: var normalizer = new ZScoreNormalizer&lt;double&gt;();
-    /// </para>
-    /// </remarks>
-    public ZScoreNormalizer()
+    public ZScoreNormalizer() : base()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
     
     /// <summary>
-    /// Normalizes a vector using Z-Score normalization.
+    /// Normalizes output data using Z-Score normalization.
     /// </summary>
-    /// <param name="vector">The vector to normalize.</param>
+    /// <param name="data">The output data to normalize.</param>
     /// <returns>
-    /// A tuple containing:
-    /// - The normalized vector where each value has been transformed to its Z-score
-    /// - The normalization parameters (mean and standard deviation) used for the transformation
+    /// A tuple containing the normalized data and the normalization parameters, which include the mean and standard deviation.
     /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the mean and standard deviation of the input vector, then transforms each value
-    /// using the formula: (value - mean) / standardDeviation. The normalization parameters are returned
-    /// alongside the normalized vector to enable denormalization later if needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms a list of numbers to their Z-scores.
-    /// 
-    /// What happens in this method:
-    /// 1. It calculates the average (mean) of all values
-    /// 2. It calculates how spread out the values are (standard deviation)
-    /// 3. It transforms each value using: (value - mean) / standardDeviation
-    /// 4. It returns both the transformed values and the parameters used (mean and standard deviation)
-    /// 
-    /// For example, if your data is [2, 4, 6, 8, 10]:
-    /// - Mean = 6
-    /// - Standard deviation = 3.16
-    /// - Z-scores would be approximately [-1.26, -0.63, 0, 0.63, 1.26]
-    /// 
-    /// Keeping the mean and standard deviation lets you convert back to the original values later.
-    /// </para>
-    /// </remarks>
-    public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
+    public override (TOutput, NormalizationParameters<T>) Normalize(TOutput data)
+    {
+        if (data is Vector<T> vector)
+        {
+            T mean = StatisticsHelper<T>.CalculateMean(vector);
+            T variance = StatisticsHelper<T>.CalculateVariance(vector, mean);
+            T stdDev = NumOps.Sqrt(variance);
+            
+            Vector<T> normalizedVector = vector.Transform(x => 
+                NumOps.Divide(NumOps.Subtract(x, mean), stdDev)
+            );
+            
+            return ((TOutput)(object)normalizedVector, new NormalizationParameters<T> { 
+                Method = NormalizationMethod.ZScore, 
+                Mean = mean, 
+                StdDev = stdDev 
+            });
+        }
+        else if (data is Tensor<T> tensor)
+        {
+            // For tensors, calculate mean and stddev from flattened data
+            var flattenedVector = tensor.ToVector();
+            T mean = StatisticsHelper<T>.CalculateMean(flattenedVector);
+            T variance = StatisticsHelper<T>.CalculateVariance(flattenedVector, mean);
+            T stdDev = NumOps.Sqrt(variance);
+            
+            // Create normalized tensor with the same shape
+            var normalizedTensor = tensor.Transform(x => 
+                NumOps.Divide(NumOps.Subtract(x, mean), stdDev)
+            );
+            
+            return ((TOutput)(object)normalizedTensor, new NormalizationParameters<T> { 
+                Method = NormalizationMethod.ZScore, 
+                Mean = mean, 
+                StdDev = stdDev 
+            });
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported output type {typeof(TOutput).Name} for Z-Score normalization. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
+    }
+    
+    /// <summary>
+    /// Normalizes input data using Z-Score normalization, applying normalization separately to each column.
+    /// </summary>
+    /// <param name="data">The input data to normalize.</param>
+    /// <returns>
+    /// A tuple containing the normalized data and a list of normalization parameters for each column.
+    /// </returns>
+    public override (TInput, List<NormalizationParameters<T>>) Normalize(TInput data)
+    {
+        if (data is Matrix<T> matrix)
+        {
+            var normalizedColumns = new List<Vector<T>>();
+            var parameters = new List<NormalizationParameters<T>>();
+            
+            for (int i = 0; i < matrix.Columns; i++)
+            {
+                var column = matrix.GetColumn(i);
+                var (normalizedColumn, columnParams) = NormalizeVector(column);
+                normalizedColumns.Add(normalizedColumn);
+                parameters.Add(columnParams);
+            }
+            
+            return ((TInput)(object)Matrix<T>.FromColumnVectors(normalizedColumns), parameters);
+        }
+        else if (data is Tensor<T> tensor)
+        {
+            // For 2D tensor, normalize each column (dimension 1)
+            if (tensor.Shape.Length != 2)
+            {
+                throw new InvalidOperationException(
+                    "Z-Score normalization for tensors requires a 2D tensor (matrix-like).");
+            }
+            
+            var parameters = new List<NormalizationParameters<T>>();
+            var normalizedTensor = new Tensor<T>(tensor.Shape);
+            
+            // Process each column
+            for (int i = 0; i < tensor.Shape[1]; i++)
+            {
+                // Extract column as vector
+                var column = new Vector<T>(tensor.Shape[0]);
+                for (int j = 0; j < tensor.Shape[0]; j++)
+                {
+                    column[j] = tensor[j, i];
+                }
+                
+                // Normalize column
+                var (normalizedColumn, columnParams) = NormalizeVector(column);
+                
+                // Put normalized column back into tensor
+                for (int j = 0; j < tensor.Shape[0]; j++)
+                {
+                    normalizedTensor[j, i] = normalizedColumn[j];
+                }
+                
+                parameters.Add(columnParams);
+            }
+            
+            return ((TInput)(object)normalizedTensor, parameters);
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported input type {typeof(TInput).Name} for Z-Score normalization. " +
+            $"Supported types are Matrix<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
+    }
+    
+    /// <summary>
+    /// Helper method to normalize a vector using Z-Score normalization.
+    /// </summary>
+    private (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
     {
         T mean = StatisticsHelper<T>.CalculateMean(vector);
         T variance = StatisticsHelper<T>.CalculateVariance(vector, mean);
-        T stdDev = _numOps.Sqrt(variance);
-        Vector<T> normalizedVector = vector.Transform(x => _numOps.Divide(_numOps.Subtract(x, mean), stdDev));
-        return (normalizedVector, new NormalizationParameters<T> { Method = NormalizationMethod.ZScore, Mean = mean, StdDev = stdDev });
+        T stdDev = NumOps.Sqrt(variance);
+        
+        Vector<T> normalizedVector = vector.Transform(x => 
+            NumOps.Divide(NumOps.Subtract(x, mean), stdDev)
+        );
+        
+        return (normalizedVector, new NormalizationParameters<T> { 
+            Method = NormalizationMethod.ZScore, 
+            Mean = mean, 
+            StdDev = stdDev 
+        });
     }
     
     /// <summary>
-    /// Normalizes each column in a matrix using Z-Score normalization.
+    /// Denormalizes data using the provided normalization parameters.
     /// </summary>
-    /// <param name="matrix">The matrix to normalize.</param>
-    /// <returns>
-    /// A tuple containing:
-    /// - The normalized matrix where each column has been independently normalized
-    /// - A list of normalization parameters (mean and standard deviation) for each column
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method normalizes each column of the input matrix independently, treating each column as a separate feature.
-    /// For each column, the mean and standard deviation are calculated, and values are transformed using the
-    /// Z-Score formula. The normalization parameters for each column are returned to enable denormalization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method normalizes a table of data, column by column.
-    /// 
-    /// In machine learning, a matrix often represents:
-    /// - Multiple data points (rows)
-    /// - Multiple features for each data point (columns)
-    /// 
-    /// This method:
-    /// 1. Takes each column separately (each feature)
-    /// 2. Normalizes it using Z-Score normalization
-    /// 3. Returns the normalized matrix and parameters for each column
-    /// 
-    /// For example, in a dataset of houses, columns might be price, size, and age.
-    /// Each column gets normalized independently because each feature has its own scale and distribution.
-    /// </para>
-    /// </remarks>
-    public (Matrix<T>, List<NormalizationParameters<T>>) NormalizeMatrix(Matrix<T> matrix)
+    /// <param name="data">The normalized data to denormalize.</param>
+    /// <param name="parameters">The normalization parameters containing the mean and standard deviation.</param>
+    /// <returns>A denormalized data with values converted back to their original scale.</returns>
+    public override TOutput Denormalize(TOutput data, NormalizationParameters<T> parameters)
     {
-        var normalizedColumns = new List<Vector<T>>();
-        var parameters = new List<NormalizationParameters<T>>();
-        for (int i = 0; i < matrix.Columns; i++)
+        if (data is Vector<T> vector)
         {
-            var (normalizedColumn, columnParams) = NormalizeVector(matrix.GetColumn(i));
-            normalizedColumns.Add(normalizedColumn);
-            parameters.Add(columnParams);
+            var denormalized = vector.Transform(x => 
+                NumOps.Add(NumOps.Multiply(x, parameters.StdDev), parameters.Mean)
+            );
+            
+            return (TOutput)(object)denormalized;
         }
-        return (Matrix<T>.FromColumnVectors(normalizedColumns), parameters);
+        else if (data is Tensor<T> tensor)
+        {
+            var denormalizedTensor = tensor.Transform(x => 
+                NumOps.Add(NumOps.Multiply(x, parameters.StdDev), parameters.Mean)
+            );
+            
+            return (TOutput)(object)denormalizedTensor;
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported output type {typeof(TOutput).Name} for Z-Score denormalization. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
     
     /// <summary>
-    /// Reverses the normalization process, converting Z-scores back to the original scale.
+    /// Denormalizes coefficients from a regression model that was trained on Z-Score normalized data.
     /// </summary>
-    /// <param name="vector">The normalized vector (containing Z-scores).</param>
-    /// <param name="parameters">The normalization parameters that were used during normalization.</param>
-    /// <returns>A vector with values converted back to their original scale.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method transforms normalized values back to their original scale using the formula:
-    /// (normalizedValue * standardDeviation) + mean. The normalization parameters (mean and standard deviation)
-    /// must be the same ones used during the normalization process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method converts Z-scores back to their original values.
-    /// 
-    /// When you have normalized data and want to return to the original scale:
-    /// 1. You need the Z-scores (normalized values)
-    /// 2. You need the mean and standard deviation used for normalization
-    /// 3. The formula is: originalValue = (zScore * standardDeviation) + mean
-    /// 
-    /// For example, if your Z-scores were [-1.26, -0.63, 0, 0.63, 1.26]:
-    /// - With mean = 6 and standard deviation = 3.16
-    /// - Original values would be approximately [2, 4, 6, 8, 10]
-    /// 
-    /// This is useful when you need to present results in the original units or scale.
-    /// </para>
-    /// </remarks>
-    public Vector<T> DenormalizeVector(Vector<T> vector, NormalizationParameters<T> parameters)
+    /// <param name="coefficients">The regression coefficients to denormalize.</param>
+    /// <param name="xParams">The normalization parameters for the input features.</param>
+    /// <param name="yParams">The normalization parameters for the output variable.</param>
+    /// <returns>Denormalized coefficients that can be applied to original, unnormalized data.</returns>
+    public override TOutput Denormalize(TOutput coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        return vector.Transform(x => _numOps.Add(_numOps.Multiply(x, parameters.StdDev), parameters.Mean));
+        if (coefficients is Vector<T> coefs)
+        {
+            var denormalizedCoefs = coefs.PointwiseMultiply(
+                Vector<T>.FromEnumerable(xParams.Select(p => 
+                    NumOps.Divide(p.StdDev, yParams.StdDev)
+                ))
+            );
+            
+            return (TOutput)(object)denormalizedCoefs;
+        }
+        else if (coefficients is Tensor<T> tensor)
+        {
+            // For tensor coefficients, we flatten them, denormalize, and then reshape
+            var flattenedVector = tensor.ToVector();
+            
+            if (flattenedVector.Length != xParams.Count)
+            {
+                throw new InvalidOperationException(
+                    "Number of coefficients does not match the number of input features.");
+            }
+            
+            var denormalizedCoefs = flattenedVector.PointwiseMultiply(
+                Vector<T>.FromEnumerable(xParams.Select(p => 
+                    NumOps.Divide(p.StdDev, yParams.StdDev)
+                ))
+            );
+            
+            var result = Tensor<T>.FromVector(denormalizedCoefs);
+            
+            // If the original tensor had a specific shape, try to reshape the result
+            if (tensor.Shape.Length > 1)
+            {
+                result = result.Reshape(tensor.Shape);
+            }
+            
+            return (TOutput)(object)result;
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported coefficient type {typeof(TOutput).Name} for Z-Score denormalization. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
     
     /// <summary>
-    /// Adjusts model coefficients to account for the normalization of input and output variables.
+    /// Denormalizes the y-intercept from a regression model that was trained on Z-Score normalized data.
     /// </summary>
-    /// <param name="coefficients">The coefficients obtained from model training on normalized data.</param>
-    /// <param name="xParams">The normalization parameters used for each input feature.</param>
-    /// <param name="yParams">The normalization parameters used for the output variable.</param>
-    /// <returns>Coefficients adjusted to work with non-normalized data.</returns>
-    /// <remarks>
-    /// <para>
-    /// When a model is trained on normalized data, its coefficients need to be adjusted to work correctly with
-    /// non-normalized data. This method performs that adjustment by scaling each coefficient by the ratio of 
-    /// the input feature's standard deviation to the output variable's standard deviation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts model weights when moving from normalized to original data.
-    /// 
-    /// When you train a model (like linear regression) on normalized data:
-    /// - The model learns coefficients (weights) that work with normalized values
-    /// - To use the model with original (non-normalized) data, these coefficients need adjustment
-    /// - This method performs that adjustment
-    /// 
-    /// For example, in a house price prediction model:
-    /// - If you trained the model on normalized data (house size, number of rooms, etc.)
-    /// - But want to predict prices using raw input values
-    /// - This method transforms the coefficients so they work correctly
-    /// 
-    /// This saves you from having to normalize every new input before making predictions.
-    /// </para>
-    /// </remarks>
-    public Vector<T> DenormalizeCoefficients(Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
-    {
-        return coefficients.PointwiseMultiply(Vector<T>.FromEnumerable(xParams.Select(p => _numOps.Divide(p.StdDev, yParams.StdDev))));
-    }
-    
-    /// <summary>
-    /// Calculates the appropriate y-intercept for a model trained on normalized data.
-    /// </summary>
-    /// <param name="xMatrix">The original input matrix before normalization.</param>
-    /// <param name="y">The original output vector before normalization.</param>
-    /// <param name="coefficients">The coefficients obtained from model training on normalized data.</param>
-    /// <param name="xParams">The normalization parameters used for each input feature.</param>
-    /// <param name="yParams">The normalization parameters used for the output variable.</param>
-    /// <returns>The y-intercept adjusted to work with non-normalized data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the appropriate y-intercept (constant term) for a model trained on normalized data
-    /// so that it can be used with non-normalized data. It uses the means of the input and output variables
-    /// along with the denormalized coefficients to compute the correct intercept term.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method finds the correct starting point (y-intercept) for your model.
-    /// 
-    /// The y-intercept is the predicted value when all inputs are zero.
-    /// 
-    /// When moving from normalized to original data:
-    /// - The y-intercept needs special calculation
-    /// - This method computes the right value using:
-    ///   - The original data means
-    ///   - The adjusted coefficients
-    ///   - The normalization parameters
-    /// 
-    /// For example, in a linear regression model for house prices:
-    /// - The y-intercept might represent the "base price" before considering features
-    /// - This method ensures this base price is correct when using non-normalized inputs
-    /// 
-    /// Together with denormalized coefficients, this gives you a complete model that works with original data.
-    /// </para>
-    /// </remarks>
-    public T DenormalizeYIntercept(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients, 
+    /// <param name="xMatrix">The original input feature matrix.</param>
+    /// <param name="y">The original output vector.</param>
+    /// <param name="coefficients">The regression coefficients.</param>
+    /// <param name="xParams">The normalization parameters for the input features.</param>
+    /// <param name="yParams">The normalization parameters for the output variable.</param>
+    /// <returns>A denormalized y-intercept that can be used with original, unnormalized data.</returns>
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        T yMean = yParams.Mean;
-        var xMeans = Vector<T>.FromEnumerable(xParams.Select(p => p.Mean));
-        var denormalizedCoefficients = DenormalizeCoefficients(coefficients, xParams, yParams);
-         
-        return _numOps.Subtract(yMean, xMeans.DotProduct(denormalizedCoefficients));
+        if (coefficients is Vector<T> coefs)
+        {
+            T yMean = yParams.Mean;
+            var xMeans = Vector<T>.FromEnumerable(xParams.Select(p => p.Mean));
+            var denormalizedCoefs = coefs.PointwiseMultiply(
+                Vector<T>.FromEnumerable(xParams.Select(p => 
+                    NumOps.Divide(p.StdDev, yParams.StdDev)
+                ))
+            );
+            
+            return NumOps.Subtract(yMean, xMeans.DotProduct(denormalizedCoefs));
+        }
+        
+        // Default fallback if coefficient type is not a vector
+        return NumOps.Zero;
     }
 }

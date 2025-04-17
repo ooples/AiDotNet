@@ -25,7 +25,7 @@ namespace AiDotNet.FitDetectors;
 /// It also provides specific recommendations to improve your model based on these findings.
 /// </para>
 /// </remarks>
-public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
+public class TimeSeriesCrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the time series cross-validation fit detector.
@@ -65,7 +65,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// your model's performance and what steps to take next.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -107,7 +107,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// - Unstable: When your model doesn't fit into the other categories
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingRMSE = evaluationData.TrainingSet.ErrorStats.RMSE;
         var validationRMSE = evaluationData.ValidationSet.ErrorStats.RMSE;
@@ -164,7 +164,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// sensitive to small changes in the data.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var rmseStability = _numOps.Divide(
             _numOps.Abs(_numOps.Subtract(evaluationData.TestSet.ErrorStats.RMSE, evaluationData.ValidationSet.ErrorStats.RMSE)),
@@ -218,7 +218,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     ///   Values closer to 1 are better. Think of it as a percentage of how much your model "understands" the data.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

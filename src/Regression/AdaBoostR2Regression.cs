@@ -89,7 +89,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// for many regression problems.
     /// </para>
     /// </remarks>
-    public AdaBoostR2Regression(AdaBoostR2RegressionOptions options, IRegularization<T>? regularization = null)
+    public AdaBoostR2Regression(AdaBoostR2RegressionOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options;
@@ -209,7 +209,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var regularizedInput = Regularization.RegularizeMatrix(input);
+        var regularizedInput = Regularization.Regularize(input);
         var sumWeights = _ensemble.Aggregate(NumOps.Zero, (acc, e) => NumOps.Add(acc, e.Weight));
         var result = new T[input.Rows];
 
@@ -230,7 +230,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         var finalPredictions = new Vector<T>(result);
-        return Regularization.RegularizeCoefficients(finalPredictions);
+        return Regularization.Regularize(finalPredictions);
     }
 
     /// <summary>
@@ -398,7 +398,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Gets metadata about the trained model.
     /// </summary>
-    /// <returns>A <see cref="ModelMetadata{T}"/> object containing information about the model.</returns>
+    /// <returns>A <see cref="ModelMetaData{T}"/> object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns metadata about the trained AdaBoost.R2 regression model, including
@@ -418,9 +418,9 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// their characteristics without having to retrain or examine the internal structure.
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        return new ModelMetadata<T>
+        return new ModelMetaData<T>
         {
             ModelType = ModelType.AdaBoostR2,
             AdditionalInfo = new Dictionary<string, object>
@@ -540,5 +540,32 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
         })];
 
         _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the AdaBoostR2Regression with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new AdaBoostR2Regression instance with the same options and regularization as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the AdaBoostR2Regression model with the same configuration options
+    /// and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
+    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of model with identical settings:
+    /// - This method creates a new, empty model with the same configuration
+    /// - It's like making a copy of a recipe before you start cooking
+    /// - The new model has the same settings but no trained data
+    /// - This is useful for techniques that need multiple models, like cross-validation
+    /// 
+    /// For example, when testing your model on different subsets of data,
+    /// you'd want each test to use a model with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        return new AdaBoostR2Regression<T>(_options, Regularization);
     }
 }

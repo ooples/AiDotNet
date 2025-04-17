@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.NeuralNetworks;
+﻿global using AiDotNet.LossFunctions;
+
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents an autoencoder neural network that can compress data into a lower-dimensional representation and reconstruct it.
@@ -57,36 +59,109 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     public int EncodedSize { get; private set; }
 
     /// <summary>
+    /// The learning rate used for training the autoencoder.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The learning rate determines the step size at each iteration while moving toward a minimum of the loss function.
+    /// It influences how quickly the model adapts to the problem.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of the learning rate as the size of the steps the model takes when learning.
+    /// 
+    /// - A larger learning rate means bigger steps, potentially learning faster but risking overshooting the optimal solution.
+    /// - A smaller learning rate means smaller steps, learning more slowly but potentially finding a more precise solution.
+    /// 
+    /// Typical values range from 0.1 to 0.0001, depending on the specific problem and model architecture.
+    /// </para>
+    /// </remarks>
+    private T _learningRate;
+
+    /// <summary>
+    /// The number of training epochs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An epoch is one complete pass through the entire training dataset. The number of epochs determines
+    /// how many times the learning algorithm will work through the entire dataset.
+    /// </para>
+    /// <para><b>For Beginners:</b> Epochs are like complete study sessions of your data.
+    /// 
+    /// - If _epochs is 10, it means the autoencoder will study the entire dataset 10 times.
+    /// - More epochs often lead to better learning, but too many can cause overfitting (memorizing instead of generalizing).
+    /// - The right number of epochs depends on your data and problem. It's common to start with 10-100 and adjust based on results.
+    /// </para>
+    /// </remarks>
+    private int _epochs;
+
+    /// <summary>
+    /// The size of each batch used in training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Batch size determines how many training examples are processed together before updating the model's parameters.
+    /// It affects both the speed of training and the model's ability to generalize.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of batch size as how many examples the model looks at before making adjustments.
+    /// 
+    /// - A smaller batch size (e.g., 32) means more frequent updates, potentially leading to faster convergence but with more fluctuations.
+    /// - A larger batch size (e.g., 256) means more stable updates but potentially slower learning.
+    /// 
+    /// Common batch sizes are powers of 2, like 32, 64, or 128, due to memory considerations in GPUs.
+    /// </para>
+    /// </remarks>
+    private int _batchSize;
+
+    /// <summary>
+    /// The loss function used to measure the difference between the input and the reconstructed output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The loss function quantifies how well the autoencoder is performing by measuring the difference between
+    /// the original input and the reconstructed output. It guides the learning process by providing a metric to minimize.
+    /// </para>
+    /// <para><b>For Beginners:</b> The loss function is like a score that tells the autoencoder how well it's doing.
+    /// 
+    /// - A lower score means the reconstruction is closer to the original input.
+    /// - The autoencoder tries to minimize this score during training.
+    /// - Common loss functions for autoencoders include Mean Squared Error (MSE) and Binary Cross-Entropy.
+    /// 
+    /// The choice of loss function depends on the nature of your data and the specific goals of your autoencoder.
+    /// </para>
+    /// </remarks>
+    private readonly ILossFunction<T> _lossFunction;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Autoencoder{T}"/> class.
     /// </summary>
     /// <param name="architecture">The architecture specification for the autoencoder.</param>
+    /// <param name="learningRate">The learning rate for training the autoencoder.</param>
+    /// <param name="epochs">The number of training epochs to perform.</param>
+    /// <param name="batchSize">The batch size to use during training.</param>
+    /// <param name="lossFunction">The loss function to use for training. If null, Mean Squared Error will be used.</param>
     /// <remarks>
     /// <para>
-    /// This constructor creates an autoencoder with the specified architecture. It initializes the layers according to
-    /// the architecture specification or uses default layers if none are provided. It also sets the EncodedSize property
-    /// based on the size of the middle layer.
+    /// This constructor creates an autoencoder with the specified architecture and training parameters.
+    /// It initializes the layers according to the architecture specification or uses default layers
+    /// if none are provided. It also sets the EncodedSize property based on the size of the middle layer.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new autoencoder with the specified settings.
     /// 
-    /// The architecture parameter determines:
-    /// - How many layers the autoencoder has
-    /// - How many neurons are in each layer
-    /// - What activation functions are used
-    /// - How the data flows through the network
+    /// The architecture parameter determines the structure of your network, while:
+    /// - learningRate controls how quickly the model learns (typically 0.001 to 0.1)
+    /// - epochs specifies how many times to process the entire dataset (often 10-100)
+    /// - batchSize determines how many examples to process at once (typically 32-256)
     /// 
-    /// A typical autoencoder architecture might look like:
-    /// - Input: 784 neurons (for a 28×28 image)
-    /// - Encoder: 500 neurons, then 250 neurons
-    /// - Latent space: 50 neurons
-    /// - Decoder: 250 neurons, then 500 neurons
-    /// - Output: 784 neurons (same as input)
-    /// 
-    /// The architecture is symmetric, with the decoder mirroring the encoder.
+    /// These parameters balance learning speed against stability and accuracy.
     /// </para>
     /// </remarks>
-    public Autoencoder(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public Autoencoder(NeuralNetworkArchitecture<T> architecture, T learningRate, int epochs = 1, int batchSize = 32, ILossFunction<T>? lossFunction = null) 
+        : base(architecture)
     {
         EncodedSize = 0;
+        _learningRate = learningRate;
+        _epochs = epochs;
+        _batchSize = batchSize;
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();
     }
@@ -199,8 +274,8 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Encodes the input data into the latent space representation.
     /// </summary>
-    /// <param name="input">The input vector to encode.</param>
-    /// <returns>The encoded vector (latent space representation).</returns>
+    /// <param name="input">The input tensor to encode.</param>
+    /// <returns>The encoded tensor (latent space representation).</returns>
     /// <remarks>
     /// <para>
     /// This method performs the encoding part of the autoencoder, passing the input data through the encoder layers
@@ -222,12 +297,12 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// For example, you might encode images into a small vector to cluster similar images together.
     /// </para>
     /// </remarks>
-    public Vector<T> Encode(Vector<T> input)
+    public Tensor<T> Encode(Tensor<T> input)
     {
         var current = input;
         for (int i = 0; i < Layers.Count / 2; i++)
         {
-            current = Layers[i].Forward(Tensor<T>.FromVector(current)).ToVector();
+            current = Layers[i].Forward(current);
         }
 
         return current;
@@ -236,8 +311,8 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Decodes the latent space representation back to the original space.
     /// </summary>
-    /// <param name="encodedInput">The encoded vector (latent space representation) to decode.</param>
-    /// <returns>The reconstructed vector in the original space.</returns>
+    /// <param name="encodedInput">The encoded tensor (latent space representation) to decode.</param>
+    /// <returns>The reconstructed tensor in the original space.</returns>
     /// <remarks>
     /// <para>
     /// This method performs the decoding part of the autoencoder, passing the latent space representation through
@@ -259,22 +334,229 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// For example, you might create a new face image by decoding a point in the latent space.
     /// </para>
     /// </remarks>
-    public Vector<T> Decode(Vector<T> encodedInput)
+    public Tensor<T> Decode(Tensor<T> encodedInput)
     {
         var current = encodedInput;
         for (int i = Layers.Count / 2; i < Layers.Count; i++)
         {
-            current = Layers[i].Forward(Tensor<T>.FromVector(current)).ToVector();
+            current = Layers[i].Forward(current);
         }
 
         return current;
     }
 
     /// <summary>
+    /// Calculates the loss between the predicted output and the expected output.
+    /// </summary>
+    /// <param name="predicted">The predicted output tensor.</param>
+    /// <param name="expected">The expected output tensor.</param>
+    /// <returns>The calculated loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the loss between the predicted output and the expected output using the
+    /// loss function specified during initialization. For autoencoders, this typically measures how well
+    /// the network reconstructs the input data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method measures how different the reconstructed output is from the expected output.
+    /// 
+    /// It uses the loss function that was specified when creating the autoencoder to calculate:
+    /// - How far off the reconstruction is from the original
+    /// - A single number representing the total error
+    /// 
+    /// Lower values mean better reconstruction (less difference between original and reconstructed data).
+    /// This value guides the training process to improve the network's performance.
+    /// </para>
+    /// </remarks>
+    protected T CalculateLoss(Tensor<T> predicted, Tensor<T> expected)
+    {
+        // Flatten the tensors to vectors for the loss function
+        Vector<T> predictedVector = predicted.ToVector();
+        Vector<T> expectedVector = expected.ToVector();
+        
+        // Calculate loss using the specified loss function
+        return _lossFunction.CalculateLoss(predictedVector, expectedVector);
+    }
+
+    /// <summary>
+    /// Calculates the gradient of the loss function with respect to the network output.
+    /// </summary>
+    /// <param name="predicted">The predicted output tensor.</param>
+    /// <param name="expected">The expected output tensor.</param>
+    /// <returns>The gradient tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the gradient of the loss function with respect to the network output.
+    /// This gradient is then used as the starting point for backpropagation to update the network weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates how to adjust the network to reduce the reconstruction error.
+    /// 
+    /// It works by:
+    /// - Comparing the predicted output with the expected output
+    /// - Calculating how the output needs to change to reduce the error
+    /// - Creating a "gradient" that shows the direction and amount of recommended change
+    /// 
+    /// This gradient is then used to update the network's parameters during training,
+    /// helping the autoencoder gradually improve its reconstruction ability.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> CalculateOutputGradient(Tensor<T> predicted, Tensor<T> expected)
+    {
+        // Flatten the tensors to vectors for the loss function
+        Vector<T> predictedVector = predicted.ToVector();
+        Vector<T> expectedVector = expected.ToVector();
+        
+        // Calculate the derivative of the loss function
+        Vector<T> gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
+        
+        // Reshape the gradient back to the original tensor shape
+        return new Tensor<T>(predicted.Shape, gradientVector);
+    }
+
+    /// <summary>
+    /// Trains the autoencoder on the provided data.
+    /// </summary>
+    /// <param name="input">The input data to train on.</param>
+    /// <param name="expectedOutput">The expected output, typically the same as the input for standard autoencoders.</param>
+    /// <remarks>
+    /// <para>
+    /// This method trains the autoencoder to reproduce the input as its output. For standard autoencoders,
+    /// the expectedOutput is typically the same as the input. For denoising autoencoders, the input might be
+    /// a noisy version while expectedOutput is the clean version.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the autoencoder to compress and reconstruct your data effectively.
+    /// 
+    /// During training:
+    /// - The autoencoder processes your input data through all its layers
+    /// - It compares the reconstructed output with the expected output
+    /// - It calculates how to adjust its internal parameters to make the reconstruction better
+    /// - It updates all parameters to gradually improve performance
+    /// 
+    /// For a standard autoencoder, the expected output is the same as the input (it learns to recreate what it sees).
+    /// For specialized autoencoders like denoising autoencoders, the input could be noisy data while the expected output is clean data.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Basic validation
+        if (input.Shape[1] != Layers[0].GetInputShape()[0])
+        {
+            throw new ArgumentException($"Input shape {input.Shape[1]} does not match expected input shape {Layers[0].GetInputShape()[0]}");
+        }
+    
+        if (expectedOutput.Shape[1] != Layers[Layers.Count - 1].GetOutputShape()[0])
+        {
+            throw new ArgumentException($"Expected output shape {expectedOutput.Shape[1]} does not match network output shape {Layers[Layers.Count - 1].GetOutputShape()[0]}");
+        }
+
+        // Training loop
+        for (int epoch = 0; epoch < _epochs; epoch++)
+        {
+            T epochLoss = NumOps.Zero;
+        
+            // Process in batches
+            for (int i = 0; i < input.Shape[0]; i += _batchSize)
+            {
+                int currentBatchSize = Math.Min(_batchSize, input.Shape[0] - i);
+                var batchInput = input.Slice(0, i, 0, i + currentBatchSize);
+                var batchExpected = expectedOutput.Slice(0, i, 0, i + currentBatchSize);
+            
+                // Forward pass
+                var current = batchInput;
+                List<Tensor<T>> layerOutputs = new List<Tensor<T>>(Layers.Count + 1) { batchInput };
+            
+                for (int j = 0; j < Layers.Count; j++)
+                {
+                    current = Layers[j].Forward(current);
+                    layerOutputs.Add(current);
+                }
+            
+                // Calculate loss
+                var loss = CalculateLoss(current, batchExpected);
+                epochLoss = NumOps.Add(epochLoss, loss);
+            
+                // Backward pass (calculate gradients)
+                var outputGradient = CalculateOutputGradient(current, batchExpected);
+            
+                for (int j = Layers.Count - 1; j >= 0; j--)
+                {
+                    outputGradient = Layers[j].Backward(outputGradient);
+                }
+            
+                // Update parameters
+                for (int j = 0; j < Layers.Count; j++)
+                {
+                    if (Layers[j].SupportsTraining)
+                    {
+                        Layers[j].UpdateParameters(_learningRate);
+                    }
+                }
+            }
+        
+            // Report progress
+            epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(input.Shape[0]));
+            Console.WriteLine($"Epoch {epoch + 1}/{_epochs}, Loss: {epochLoss}");
+        }
+    }
+
+    /// <summary>
+    /// Generates new data samples by sampling points in the latent space and decoding them.
+    /// </summary>
+    /// <param name="count">The number of samples to generate.</param>
+    /// <param name="mean">The mean value for random sampling (typically 0).</param>
+    /// <param name="stdDev">The standard deviation for random sampling (typically 1).</param>
+    /// <returns>A tensor containing the generated samples.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates new data samples by randomly sampling points in the latent space
+    /// and decoding them. It's useful for creative applications and exploring the learned data manifold.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates new data samples similar to what the autoencoder has seen.
+    /// 
+    /// It works by:
+    /// - Creating random points in the compressed representation space
+    /// - Passing these points through the decoder part of the network
+    /// - Producing new, synthetic data samples that resemble the training data
+    /// 
+    /// This can be used for:
+    /// - Generating new content (like images or music)
+    /// - Data augmentation (creating additional training examples)
+    /// - Exploring what the autoencoder has learned
+    /// </para>
+    /// </remarks>
+    public Tensor<T> GenerateSamples(int count, double mean = 0, double stdDev = 1)
+    {
+        // Create a random normal distribution in the latent space
+        var random = new Random();
+        var latentSamples = new Matrix<T>(count, EncodedSize);
+    
+        // Generate random points in the latent space
+        for (int i = 0; i < count; i++)
+        {
+            for (int j = 0; j < EncodedSize; j++)
+            {
+                // Generate random numbers from a normal distribution
+                double u1 = 1.0 - random.NextDouble();
+                double u2 = 1.0 - random.NextDouble();
+                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+            
+                // Apply mean and standard deviation
+                double value = mean + z * stdDev;
+                latentSamples[i, j] = NumOps.FromDouble(value);
+            }
+        }
+    
+        // Convert to tensor
+        var latentTensor = new Tensor<T>([count, EncodedSize], latentSamples);
+    
+        // Decode the latent samples
+        return Decode(latentTensor);
+    }
+
+    /// <summary>
     /// Makes a prediction using the autoencoder by encoding and then decoding the input.
     /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The reconstructed output vector.</returns>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The reconstructed output tensor.</returns>
     /// <remarks>
     /// <para>
     /// This method performs a full forward pass through the autoencoder, encoding the input into the latent space
@@ -295,9 +577,16 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// as the autoencoder learns to focus on the important features and ignore the noise.
     /// </para>
     /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        return Decode(Encode(input));
+        // Process input as a tensor through the network
+        var current = input;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+        }
+
+        return current;
     }
 
     /// <summary>
@@ -338,102 +627,119 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the autoencoder to a binary writer.
+    /// Gets metadata about the autoencoder model.
     /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when serialization encounters an error.</exception>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
     /// <remarks>
-    /// <para>
-    /// This method serializes the autoencoder by writing the number of layers and then serializing each layer
-    /// in sequence. For each layer, it writes the full type name followed by the layer's serialized data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the autoencoder to a file or stream so it can be used later.
-    /// 
-    /// Serialization is like taking a snapshot of the autoencoder:
-    /// - It saves the structure of the network (number and types of layers)
-    /// - It saves all the learned parameters (weights, biases, etc.)
-    /// - It ensures everything can be reconstructed exactly as it was
-    /// 
-    /// This is useful for:
-    /// - Saving a trained model for later use
-    /// - Sharing a model with others
-    /// - Creating backups during long training processes
-    /// </para>
+    /// This method returns metadata about the autoencoder, including the model type, input/output dimensions,
+    /// encoded size, and layer configuration. This information is useful for model management, serialization,
+    /// and transfer learning.
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
+        return new ModelMetaData<T>
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-
-            writer.Write(fullName);
-            layer.Serialize(writer);
-        }
+            ModelType = ModelType.Autoencoder,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputDimension", Layers[0].GetInputShape()[0] },
+                { "EncodedSize", EncodedSize },
+                { "LayerCount", Layers.Count },
+                { "IsSymmetric", true },
+                { "LayerSizes", Layers.Select(l => l.GetOutputShape()[0]).ToArray() }
+            }
+        };
     }
 
     /// <summary>
-    /// Deserializes the autoencoder from a binary reader.
+    /// Serializes network-specific data for the Autoencoder.
     /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization encounters an error.</exception>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
     /// <remarks>
     /// <para>
-    /// This method deserializes the autoencoder by reading the number of layers and then deserializing each layer
-    /// in sequence. For each layer, it reads the full type name, creates an instance of that type, and then deserializes
-    /// the layer's data.
+    /// This method writes the specific configuration and state of the Autoencoder to a binary stream.
+    /// It includes network-specific parameters that are essential for later reconstruction of the network.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved autoencoder from a file or stream.
+    /// <para><b>For Beginners:</b> This method saves the unique settings of your Autoencoder.
     /// 
-    /// Deserialization is like reconstructing the autoencoder from a snapshot:
-    /// - It reads the structure of the network (number and types of layers)
-    /// - It loads all the learned parameters (weights, biases, etc.)
-    /// - It recreates the autoencoder exactly as it was when saved
+    /// It writes:
+    /// - The encoded size (size of the compressed representation)
+    /// - The learning rate used for training
+    /// - The number of epochs and batch size used in training
+    /// - The configuration of each layer
     /// 
-    /// This allows you to:
-    /// - Use a previously trained model without retraining it
-    /// - Continue training from where you left off
-    /// - Deploy the same model across different systems
+    /// Saving these details allows you to recreate the exact same network structure later.
+    /// It's like writing down a detailed recipe so you can make the same dish again in the future.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
+        writer.Write(EncodedSize);
+        writer.Write(Convert.ToDouble(_learningRate));
+        writer.Write(_epochs);
+        writer.Write(_batchSize);
+    }
 
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
+    /// <summary>
+    /// Deserializes network-specific data for the Autoencoder.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the specific configuration and state of the Autoencoder from a binary stream.
+    /// It reconstructs the network-specific parameters to match the state of the network when it was serialized.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads the unique settings of your Autoencoder.
+    /// 
+    /// It reads:
+    /// - The encoded size (size of the compressed representation)
+    /// - The learning rate used for training
+    /// - The number of epochs and batch size used in training
+    /// - The configuration of each layer
+    /// 
+    /// Loading these details allows you to recreate the exact same network structure that was previously saved.
+    /// It's like following a detailed recipe to recreate a dish exactly as it was made before.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        EncodedSize = reader.ReadInt32();
+        _learningRate = NumOps.FromDouble(reader.ReadDouble());
+        _epochs = reader.ReadInt32();
+        _batchSize = reader.ReadInt32();
+    }
 
-        for (int i = 0; i < layerCount; i++)
-        {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
-        }
+    /// <summary>
+    /// Creates a new instance of the autoencoder model.
+    /// </summary>
+    /// <returns>A new instance of the autoencoder model with the same configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the autoencoder model with the same configuration as the current instance.
+    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
+    /// with the serialized data. The new instance will have the same architecture, learning rate, epochs, batch size,
+    /// and loss function as the original.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a copy of the model structure without copying the learned data.
+    /// 
+    /// Think of it like creating a blueprint of the autoencoder:
+    /// - It copies the same overall design (how many layers, how they're arranged)
+    /// - It preserves settings like learning rate and batch size
+    /// - It keeps the same encoded size (compression level)
+    /// - But it doesn't copy any of the learned knowledge yet
+    /// 
+    /// This is primarily used when saving or loading models, creating a framework that the saved parameters
+    /// can be loaded into later.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new Autoencoder<T>(
+            Architecture,
+            _learningRate,
+            _epochs,
+            _batchSize,
+            _lossFunction
+        );
     }
 }

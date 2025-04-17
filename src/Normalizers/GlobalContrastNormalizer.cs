@@ -36,29 +36,12 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GlobalContrastNormalizer<T> : INormalizer<T>
+/// <typeparam name="TInput">The type of input data structure.</typeparam>
+/// <typeparam name="TOutput">The type of output data structure.</typeparam>
+public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutput>
 {
     /// <summary>
-    /// The numeric operations provider for the specified type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field holds a reference to an object that provides operations for the numeric type T.
-    /// These operations include addition, subtraction, multiplication, division, and statistical calculations
-    /// like mean and standard deviation that are needed for global contrast normalization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like having a specialized calculator for the type of numbers you're using.
-    /// 
-    /// Since this normalizer needs to perform various mathematical operations (addition, subtraction,
-    /// multiplication, division, square roots, etc.) on different types of numbers, it uses this
-    /// helper to ensure the calculations work correctly regardless of whether you're using
-    /// decimals, doubles, or other numeric types.
-    /// </para>
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GlobalContrastNormalizer{T}"/> class.
+    /// Initializes a new instance of the <see cref="GlobalContrastNormalizer{T, TInput, TOutput}"/> class.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -77,21 +60,21 @@ public class GlobalContrastNormalizer<T> : INormalizer<T>
     /// adjust the settings automatically to improve visibility.
     /// </para>
     /// </remarks>
-    public GlobalContrastNormalizer()
+    public GlobalContrastNormalizer() : base()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        // Base constructor already initializes NumOps
     }
 
     /// <summary>
-    /// Normalizes a vector using the global contrast approach.
+    /// Normalizes output data using the global contrast approach.
     /// </summary>
-    /// <param name="vector">The input vector to normalize.</param>
+    /// <param name="data">The input data to normalize.</param>
     /// <returns>
-    /// A tuple containing the normalized vector and the normalization parameters, which include the mean and standard deviation.
+    /// A tuple containing the normalized data and the normalization parameters, which include the mean and standard deviation.
     /// </returns>
     /// <remarks>
     /// <para>
-    /// This method normalizes a vector by:
+    /// This method normalizes data by:
     /// 1. Computing the mean (average) of all values
     /// 2. Computing the standard deviation to measure data spread
     /// 3. Standardizing each value using the formula: ((value - mean) / (2 * stdDev)) + 0.5
@@ -123,30 +106,66 @@ public class GlobalContrastNormalizer<T> : INormalizer<T>
     /// - Now you can easily see that 30K is 0.3 below average, and 70K is 0.3 above average
     /// </para>
     /// </remarks>
-    public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
+    public override (TOutput, NormalizationParameters<T>) Normalize(TOutput data)
     {
-        T mean = vector.Average();
-        T variance = vector.Select(x => _numOps.Multiply(_numOps.Subtract(x, mean), _numOps.Subtract(x, mean))).Average();
-        T stdDev = _numOps.Sqrt(variance);
-        var normalizedVector = vector.Transform(x => 
-            _numOps.Add(
-                _numOps.Divide(
-                    _numOps.Subtract(x, mean),
-                    _numOps.Multiply(_numOps.FromDouble(2), stdDev)
-                ),
-                _numOps.FromDouble(0.5)
-            )
-        );
-        var parameters = new NormalizationParameters<T> { Mean = mean, StdDev = stdDev, Method = NormalizationMethod.GlobalContrast };
-        return (normalizedVector, parameters);
+        if (data is Vector<T> vector)
+        {
+            T mean = vector.Average();
+            T variance = vector.Select(x => NumOps.Multiply(NumOps.Subtract(x, mean), NumOps.Subtract(x, mean))).Average();
+            T stdDev = NumOps.Sqrt(variance);
+            var normalizedVector = vector.Transform(x => 
+                NumOps.Add(
+                    NumOps.Divide(
+                        NumOps.Subtract(x, mean),
+                        NumOps.Multiply(NumOps.FromDouble(2), stdDev)
+                    ),
+                    NumOps.FromDouble(0.5)
+                )
+            );
+            var parameters = new NormalizationParameters<T> { Mean = mean, StdDev = stdDev, Method = NormalizationMethod.GlobalContrast };
+            return ((TOutput)(object)normalizedVector, parameters);
+        }
+        else if (data is Tensor<T> tensor)
+        {
+            // Flatten tensor to apply global contrast normalization
+            var flattenedTensor = tensor.ToVector();
+            
+            T mean = flattenedTensor.Average();
+            T variance = flattenedTensor.Select(x => NumOps.Multiply(NumOps.Subtract(x, mean), NumOps.Subtract(x, mean))).Average();
+            T stdDev = NumOps.Sqrt(variance);
+            
+            var normalizedVector = flattenedTensor.Transform(x => 
+                NumOps.Add(
+                    NumOps.Divide(
+                        NumOps.Subtract(x, mean),
+                        NumOps.Multiply(NumOps.FromDouble(2), stdDev)
+                    ),
+                    NumOps.FromDouble(0.5)
+                )
+            );
+            
+            // Convert back to tensor with the same shape
+            var normalizedTensor = Tensor<T>.FromVector(normalizedVector);
+            if (tensor.Shape.Length > 1)
+            {
+                normalizedTensor = normalizedTensor.Reshape(tensor.Shape);
+            }
+            
+            var parameters = new NormalizationParameters<T> { Mean = mean, StdDev = stdDev, Method = NormalizationMethod.GlobalContrast };
+            return ((TOutput)(object)normalizedTensor, parameters);
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported data type {typeof(TOutput).Name}. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
-    /// Normalizes a matrix using the global contrast approach, applying normalization separately to each column.
+    /// Normalizes input data using the global contrast approach, applying normalization separately to each column.
     /// </summary>
-    /// <param name="matrix">The input matrix to normalize.</param>
+    /// <param name="data">The input data to normalize.</param>
     /// <returns>
-    /// A tuple containing the normalized matrix and a list of normalization parameters for each column.
+    /// A tuple containing the normalized data and a list of normalization parameters for each column.
     /// </returns>
     /// <remarks>
     /// <para>
@@ -171,26 +190,88 @@ public class GlobalContrastNormalizer<T> : INormalizer<T>
     /// - The statistics for each column, so you can convert back to original values later if needed
     /// </para>
     /// </remarks>
-    public (Matrix<T>, List<NormalizationParameters<T>>) NormalizeMatrix(Matrix<T> matrix)
+    public override (TInput, List<NormalizationParameters<T>>) Normalize(TInput data)
     {
-        var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
-        var parametersList = new List<NormalizationParameters<T>>();
-        for (int i = 0; i < matrix.Columns; i++)
+        if (data is Matrix<T> matrix)
         {
-            var column = matrix.GetColumn(i);
-            var (normalizedColumn, parameters) = NormalizeVector(column);
-            normalizedMatrix.SetColumn(i, normalizedColumn);
-            parametersList.Add(parameters);
+            var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
+            var parametersList = new List<NormalizationParameters<T>>();
+            
+            for (int i = 0; i < matrix.Columns; i++)
+            {
+                var column = matrix.GetColumn(i);
+                // Convert column to TOutput for normalize method
+                var (normalizedColumn, parameters) = Normalize((TOutput)(object)column);
+                // Convert back to Vector<T>
+                if (normalizedColumn is Vector<T> normalizedVector)
+                {
+                    normalizedMatrix.SetColumn(i, normalizedVector);
+                    parametersList.Add(parameters);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
+                }
+            }
+            
+            return ((TInput)(object)normalizedMatrix, parametersList);
         }
-        return (normalizedMatrix, parametersList);
+        else if (data is Tensor<T> tensor && tensor.Shape.Length == 2)
+        {
+            // Convert 2D tensor to matrix for column-wise normalization
+            var rows = tensor.Shape[0];
+            var cols = tensor.Shape[1];
+            var newMatrix = new Matrix<T>(rows, cols);
+            
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    newMatrix[i, j] = tensor[i, j];
+                }
+            }
+            
+            // Normalize each column separately
+            var normalizedColumns = new List<Vector<T>>();
+            var parametersList = new List<NormalizationParameters<T>>();
+            
+            for (int i = 0; i < cols; i++)
+            {
+                var column = newMatrix.GetColumn(i);
+                // Convert column to TOutput for normalize method
+                var (normalizedColumn, parameters) = Normalize((TOutput)(object)column);
+                // Convert back to Vector<T>
+                if (normalizedColumn is Vector<T> normalizedVector)
+                {
+                    normalizedColumns.Add(normalizedVector);
+                    parametersList.Add(parameters);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
+                }
+            }
+            
+            // Convert back to tensor
+            var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
+            var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
+            
+            return ((TInput)(object)normalizedTensor, parametersList);
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported data type {typeof(TInput).Name}. " +
+            $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
-    /// Denormalizes a vector using the provided normalization parameters.
+    /// Reverses the normalization of data using the provided normalization parameters.
     /// </summary>
-    /// <param name="vector">The normalized vector to denormalize.</param>
+    /// <param name="data">The normalized data to denormalize.</param>
     /// <param name="parameters">The normalization parameters containing mean and standard deviation.</param>
-    /// <returns>A denormalized vector with values converted back to their original scale.</returns>
+    /// <returns>A denormalized data with values converted back to their original scale.</returns>
     /// <remarks>
     /// <para>
     /// This method reverses the global contrast normalization by applying the inverse of the original formula:
@@ -212,12 +293,40 @@ public class GlobalContrastNormalizer<T> : INormalizer<T>
     /// on the normalized data.
     /// </para>
     /// </remarks>
-    public Vector<T> DenormalizeVector(Vector<T> vector, NormalizationParameters<T> parameters)
+    public override TOutput Denormalize(TOutput data, NormalizationParameters<T> parameters)
     {
-        return vector
-            .Transform(x => _numOps.Subtract(x, _numOps.FromDouble(0.5)))
-            .Transform(x => _numOps.Multiply(x, _numOps.Multiply(_numOps.FromDouble(2), parameters.StdDev)))
-            .Transform(x => _numOps.Add(x, parameters.Mean));
+        if (data is Vector<T> vector)
+        {
+            var denormalizedVector = vector
+                .Transform(x => NumOps.Subtract(x, NumOps.FromDouble(0.5)))
+                .Transform(x => NumOps.Multiply(x, NumOps.Multiply(NumOps.FromDouble(2), parameters.StdDev)))
+                .Transform(x => NumOps.Add(x, parameters.Mean));
+                
+            return (TOutput)(object)denormalizedVector;
+        }
+        else if (data is Tensor<T> tensor)
+        {
+            // Flatten tensor for denormalization
+            var flattenedTensor = tensor.ToVector();
+            
+            var denormalizedVector = flattenedTensor
+                .Transform(x => NumOps.Subtract(x, NumOps.FromDouble(0.5)))
+                .Transform(x => NumOps.Multiply(x, NumOps.Multiply(NumOps.FromDouble(2), parameters.StdDev)))
+                .Transform(x => NumOps.Add(x, parameters.Mean));
+            
+            // Convert back to tensor with the same shape
+            var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
+            if (tensor.Shape.Length > 1)
+            {
+                denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
+            }
+            
+            return (TOutput)(object)denormalizedTensor;
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported data type {typeof(TOutput).Name}. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
@@ -255,26 +364,58 @@ public class GlobalContrastNormalizer<T> : INormalizer<T>
     /// This ensures that predictions made using original data will be properly scaled.
     /// </para>
     /// </remarks>
-    public Vector<T> DenormalizeCoefficients(Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
+    public override TOutput Denormalize(TOutput coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        var scalingFactors = xParams.Select(p => 
-            _numOps.Divide(
-                _numOps.Multiply(_numOps.FromDouble(2), yParams.StdDev),
-                _numOps.Multiply(_numOps.FromDouble(2), p.StdDev)
-            )
-        ).ToArray();
-        return coefficients.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
+        if (coefficients is Vector<T> vector)
+        {
+            var scalingFactors = xParams.Select(p => 
+                NumOps.Divide(
+                    NumOps.Multiply(NumOps.FromDouble(2), yParams.StdDev),
+                    NumOps.Multiply(NumOps.FromDouble(2), p.StdDev)
+                )
+            ).ToArray();
+            
+            var denormalizedCoefficients = vector.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
+            return (TOutput)(object)denormalizedCoefficients;
+        }
+        else if (coefficients is Tensor<T> tensor)
+        {
+            // Flatten tensor for denormalization
+            var flattenedTensor = tensor.ToVector();
+            
+            var scalingFactors = xParams.Select(p => 
+                NumOps.Divide(
+                    NumOps.Multiply(NumOps.FromDouble(2), yParams.StdDev),
+                    NumOps.Multiply(NumOps.FromDouble(2), p.StdDev)
+                )
+            ).ToArray();
+            
+            var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
+            
+            // Convert back to tensor with the same shape
+            var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
+            if (tensor.Shape.Length > 1)
+            {
+                denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
+            }
+            
+            return (TOutput)(object)denormalizedTensor;
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported coefficients type {typeof(TOutput).Name}. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
-    /// Denormalizes the y-intercept from a regression model that was trained on global contrast normalized data.
+    /// Calculates the denormalized Y-intercept (constant term) for a linear model.
     /// </summary>
     /// <param name="xMatrix">The original input feature matrix.</param>
-    /// <param name="y">The original output vector.</param>
-    /// <param name="coefficients">The regression coefficients.</param>
+    /// <param name="y">The original target vector.</param>
+    /// <param name="coefficients">The model coefficients.</param>
     /// <param name="xParams">The normalization parameters for the input features.</param>
     /// <param name="yParams">The normalization parameters for the output variable.</param>
-    /// <returns>A denormalized y-intercept that can be used with original, unnormalized data.</returns>
+    /// <returns>The denormalized Y-intercept for use with non-normalized data.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the appropriate y-intercept for a model trained on normalized data
@@ -301,29 +442,48 @@ public class GlobalContrastNormalizer<T> : INormalizer<T>
     /// gained from training on normalized data.
     /// </para>
     /// </remarks>
-    public T DenormalizeYIntercept(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients, 
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        T denormalizedIntercept = _numOps.Subtract(
+        // Extract vector from coefficients
+        Vector<T> coefficientsVector;
+        if (coefficients is Vector<T> vector)
+        {
+            coefficientsVector = vector;
+        }
+        else if (coefficients is Tensor<T> tensor)
+        {
+            coefficientsVector = tensor.ToVector();
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Unsupported coefficients type {typeof(TOutput).Name}. " +
+                $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
+        }
+        
+        // Calculate y-intercept
+        T denormalizedIntercept = NumOps.Subtract(
             yParams.Mean,
-            _numOps.Multiply(
-                _numOps.FromDouble(0.5),
-                _numOps.Multiply(_numOps.FromDouble(2), yParams.StdDev)
+            NumOps.Multiply(
+                NumOps.FromDouble(0.5),
+                NumOps.Multiply(NumOps.FromDouble(2), yParams.StdDev)
             )
         );
-        for (int i = 0; i < coefficients.Length; i++)
+        
+        for (int i = 0; i < coefficientsVector.Length; i++)
         {
-            T term1 = _numOps.Multiply(
+            T term1 = NumOps.Multiply(
                 xParams[i].Mean,
-                _numOps.Divide(
-                    _numOps.Multiply(_numOps.FromDouble(2), yParams.StdDev),
-                    _numOps.Multiply(_numOps.FromDouble(2), xParams[i].StdDev)
+                NumOps.Divide(
+                    NumOps.Multiply(NumOps.FromDouble(2), yParams.StdDev),
+                    NumOps.Multiply(NumOps.FromDouble(2), xParams[i].StdDev)
                 )
             );
-            T term2 = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Multiply(_numOps.FromDouble(2), yParams.StdDev));
-            T difference = _numOps.Subtract(term1, term2);
-            T product = _numOps.Multiply(coefficients[i], difference);
-            denormalizedIntercept = _numOps.Subtract(denormalizedIntercept, product);
+            T term2 = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Multiply(NumOps.FromDouble(2), yParams.StdDev));
+            T difference = NumOps.Subtract(term1, term2);
+            T product = NumOps.Multiply(coefficientsVector[i], difference);
+            denormalizedIntercept = NumOps.Subtract(denormalizedIntercept, product);
         }
 
         return denormalizedIntercept;

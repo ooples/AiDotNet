@@ -16,7 +16,7 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MiniBatchGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
+public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Mini-Batch Gradient Descent algorithm.
@@ -27,18 +27,7 @@ public class MiniBatchGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T
     /// how many times to repeat the process, and how to adjust your step size.
     /// </para>
     /// </remarks>
-    private MiniBatchGradientDescentOptions _options;
-
-    /// <summary>
-    /// A random number generator used for shuffling the data.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b>
-    /// This is like a dice you roll to decide which part of the map to look at next. It helps ensure you don't always
-    /// take the same path, which could lead to getting stuck in a local valley instead of finding the deepest one.
-    /// </para>
-    /// </remarks>
-    private Random _random;
+    private MiniBatchGradientDescentOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// Initializes a new instance of the MiniBatchGradientDescentOptimizer class.
@@ -54,18 +43,11 @@ public class MiniBatchGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T
     /// </para>
     /// </remarks>
     public MiniBatchGradientDescentOptimizer(
-        MiniBatchGradientDescentOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new MiniBatchGradientDescentOptions();
-        _random = new Random(_options.Seed ?? Environment.TickCount);
+        _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
+
         InitializeAdaptiveParameters();
     }
 
@@ -105,50 +87,59 @@ public class MiniBatchGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        ValidationHelper<T>.ValidateInputData(inputData);
-
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
-
+        // Initialize with random solution
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
+    
+        // Get dimensions
+        var batchSize = InputHelper<T, TInput>.GetBatchSize(inputData.XTrain);
+    
+        // Initialize parameters
         InitializeAdaptiveParameters();
-
-        for (int epoch = 0; epoch < _options.MaxEpochs; epoch++)
+    
+        for (int epoch = 0; epoch < Options.MaxIterations; epoch++)
         {
-            var shuffledIndices = Enumerable.Range(0, inputData.XTrain.Rows).OrderBy(x => _random.Next());
-            
-            for (int i = 0; i < inputData.XTrain.Rows; i += _options.BatchSize)
+            // Shuffle indices for stochastic gradient descent
+            var shuffledIndices = Enumerable.Range(0, batchSize).OrderBy(x => Random.Next()).ToArray();
+        
+            for (int i = 0; i < batchSize; i += _options.BatchSize)
             {
-                var batchIndices = shuffledIndices.Skip(i).Take(_options.BatchSize);
-                var xBatch = inputData.XTrain.GetRows(batchIndices);
-                var yBatch = new Vector<T>([.. batchIndices.Select(index => inputData.YTrain[index])]);
-
-                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
-                gradient = ApplyMomentum(gradient);
+                // Get batch indices
+                var batchIndices = shuffledIndices.Skip(i).Take(_options.BatchSize).ToArray();
+            
+                // Process batch and calculate gradient using our existing methods
+                var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain, batchIndices);
+            
+                // Update solution
                 var newSolution = UpdateSolution(currentSolution, gradient);
-
+            
+                // Evaluate the solution
                 var currentStepData = EvaluateSolution(newSolution, inputData);
                 UpdateBestSolution(currentStepData, ref bestStepData);
-
                 UpdateAdaptiveParameters(currentStepData, previousStepData);
-
-                if (UpdateIterationHistoryAndCheckEarlyStopping(epoch * (inputData.XTrain.Rows / _options.BatchSize) + i / _options.BatchSize, bestStepData))
+            
+                // Check early stopping criteria
+                if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
                 {
                     return CreateOptimizationResult(bestStepData, inputData);
                 }
-
-                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            
+                // Check convergence
+                if (NumOps.LessThan(
+                    NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), 
+                    NumOps.FromDouble(_options.Tolerance)))
                 {
                     return CreateOptimizationResult(bestStepData, inputData);
                 }
-
+            
                 currentSolution = newSolution;
                 previousStepData = currentStepData;
             }
         }
-
+    
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
@@ -168,15 +159,16 @@ public class MiniBatchGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T
     /// <param name="currentSolution">The current model solution.</param>
     /// <param name="gradient">The calculated gradient.</param>
     /// <returns>An updated symbolic model with improved coefficients.</returns>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
-            newCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], NumOps.Multiply(CurrentLearningRate, gradient[i]));
+            newCoefficients[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(CurrentLearningRate, gradient[i]));
         }
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -194,7 +186,7 @@ public class MiniBatchGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -229,9 +221,9 @@ public class MiniBatchGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T
     /// </remarks>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is MiniBatchGradientDescentOptions mbgdOptions)
+        if (options is MiniBatchGradientDescentOptions<T, TInput, TOutput> mbgdOptions)
         {
             _options = mbgdOptions;
         }
@@ -254,7 +246,7 @@ public class MiniBatchGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T
     /// </para>
     /// </remarks>
     /// <returns>The current MiniBatchGradientDescentOptions object.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -314,7 +306,7 @@ public class MiniBatchGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T
         base.Deserialize(baseData);
 
         string optionsJson = reader.ReadString();
-        _options = JsonConvert.DeserializeObject<MiniBatchGradientDescentOptions>(optionsJson)
+        _options = JsonConvert.DeserializeObject<MiniBatchGradientDescentOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
     }
 
@@ -337,7 +329,7 @@ public class MiniBatchGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T
     /// <param name="X">The input data matrix.</param>
     /// <param name="y">The target output vector.</param>
     /// <returns>A string representing the unique gradient cache key.</returns>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_MiniBatchGD_{_options.BatchSize}_{_options.MaxEpochs}";

@@ -85,7 +85,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     {
         int m = A.Rows;
         int n = A.Columns;
-        B = A.Copy();
+        B = A.Clone();
         U = Matrix<T>.CreateIdentity(m);
         V = Matrix<T>.CreateIdentity(n);
 
@@ -133,7 +133,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     {
         int m = A.Rows;
         int n = A.Columns;
-        B = A.Copy();
+        B = A.Clone();
         U = Matrix<T>.CreateIdentity(m);
         V = Matrix<T>.CreateIdentity(n);
 
@@ -255,7 +255,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     private Vector<T> HouseholderVector(Vector<T> x)
     {
         T norm = x.Norm();
-        Vector<T> v = x.Copy();
+        Vector<T> v = x.Clone();
         v[0] = _numOps.Add(v[0], _numOps.Multiply(_numOps.SignOrZero(x[0]), norm));
 
         return v.Divide(v.Norm());

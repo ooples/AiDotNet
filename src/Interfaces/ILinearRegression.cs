@@ -1,7 +1,7 @@
 namespace AiDotNet.Interfaces;
 
 /// <summary>
-/// Defines an interface for linear models in machine learning, which predict outputs as a weighted sum of inputs plus an optional constant.
+/// Defines an interface for linear regression in machine learning, which predict outputs as a weighted sum of inputs plus an optional constant.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
@@ -35,7 +35,7 @@ namespace AiDotNet.Interfaces;
 /// - Easy to interpret (you can see exactly how each feature affects the prediction)
 /// - Often surprisingly effective despite their simplicity
 /// </remarks>
-public interface ILinearModel<T> : IFullModel<T>
+public interface ILinearRegression<T> : IRegression<T>
 {
     /// <summary>
     /// Gets the weights (coefficients) assigned to each input feature in the linear model.

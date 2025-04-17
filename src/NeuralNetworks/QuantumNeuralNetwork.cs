@@ -50,6 +50,10 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private int _numQubits;
 
+    private readonly INormalizer<T, Tensor<T>, Tensor<T>> _normalizer;
+    private readonly ILossFunction<T> _lossFunction;
+
+
     /// <summary>
     /// Initializes a new instance of the <see cref="QuantumNeuralNetwork{T}"/> class with the specified architecture and number of qubits.
     /// </summary>
@@ -74,9 +78,14 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// This is like setting up a specialized calculator before you start using it for calculations.
     /// </para>
     /// </remarks>
-    public QuantumNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numQubits) : base(architecture)
+
+    public QuantumNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numQubits, 
+        INormalizer<T, Tensor<T>, Tensor<T>> normalizer, ILossFunction<T> lossFunction) : base(architecture)
     {
         _numQubits = numQubits;
+        _normalizer = normalizer;
+        _lossFunction = lossFunction;
+
         InitializeLayers();
     }
 
@@ -114,43 +123,6 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultQuantumNetworkLayers(Architecture, _numQubits));
         }
-    }
-
-    /// <summary>
-    /// Processes the input through the quantum neural network to produce a prediction.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector after processing through the quantum neural network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the forward pass of the Quantum Neural Network. It processes the input
-    /// through each layer of the network in sequence, transforming it according to quantum-inspired
-    /// operations defined in each layer. The final transformed vector represents the network's prediction.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is how the quantum neural network processes information and makes predictions.
-    /// 
-    /// During the prediction process:
-    /// - The input data enters the network
-    /// - The data flows through each layer in sequence
-    /// - Each layer performs its quantum-inspired operations on the data
-    /// - The final output represents the network's prediction or answer
-    /// 
-    /// Unlike a regular neural network, the layers in a quantum neural network may perform operations
-    /// that simulate quantum behaviors, potentially allowing the network to find patterns or solutions
-    /// that would be difficult to discover with classical methods.
-    /// 
-    /// This is conceptually similar to how a regular neural network makes predictions,
-    /// but the internal processing takes advantage of quantum principles.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-        return current;
     }
 
     /// <summary>
@@ -194,99 +166,414 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Saves the state of the Quantum Neural Network to a binary writer.
+    /// Makes a prediction using the quantum neural network for the given input.
     /// </summary>
-    /// <param name="writer">The binary writer to save the state to.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if layer serialization fails.</exception>
+    /// <param name="input">The input tensor to make a prediction for.</param>
+    /// <returns>The predicted output tensor.</returns>
     /// <remarks>
     /// <para>
-    /// This method serializes the entire state of the Quantum Neural Network, including all layers and the
-    /// number of qubits. It writes the number of layers, the number of qubits, and the type and state of each layer
-    /// to the provided binary writer.
+    /// This method performs a forward pass through the quantum neural network, applying quantum operations
+    /// simulated on classical hardware.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the entire state of the quantum neural network to a file.
-    /// 
-    /// When serializing:
-    /// - The number of qubits is saved
-    /// - All the network's layers are saved (their types and internal values)
-    /// - The saved file can later be used to restore the exact same network state
-    /// 
-    /// This is useful for:
-    /// - Saving a trained model to use later
-    /// - Sharing a model with others
-    /// - Creating backups during long training processes
-    /// 
-    /// Think of it like taking a complete snapshot of the network that can be restored later.
+    /// <para>
+    /// <b>For Beginners:</b> This is where the quantum neural network processes input data and makes a prediction.
+    /// It simulates quantum operations on a classical computer, giving an approximation of how a true
+    /// quantum computer might behave.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-        writer.Write(Layers.Count);
-        writer.Write(_numQubits);
+        // Ensure input is correctly shaped
+        if (input.Shape != Architecture.GetInputShape())
+        {
+            throw new ArgumentException("Input shape does not match the expected input shape.");
+        }
+
+        // Simulate quantum state preparation
+        var quantumState = PrepareQuantumState(input);
+
+        // Apply quantum layers
         foreach (var layer in Layers)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            var realInput = ExtractRealPart(quantumState);
+            var realOutput = layer.Forward(realInput);
+            quantumState = ConvertToComplexTensor(realOutput);
+        }
+
+        // Measure the quantum state to get classical output
+        return MeasureQuantumState(quantumState);
+    }
+
+    /// <summary>
+    /// Trains the quantum neural network using the provided input and expected output.
+    /// </summary>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
+    /// <remarks>
+    /// <para>
+    /// This method performs one training iteration, including forward pass, loss calculation,
+    /// backward pass, and parameter update using a quantum-inspired optimization technique.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is how the quantum neural network learns. It processes an input,
+    /// compares its prediction to the expected output, and adjusts its internal settings to improve
+    /// future predictions. The adjustments are made using techniques inspired by quantum computing.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Forward pass
+        var prediction = Predict(input);
+
+        // Backward pass (quantum-inspired gradient calculation)
+        var gradients = CalculateQuantumGradients(input, expectedOutput);
+
+        // Update parameters
+        UpdateQuantumParameters(gradients);
+    }
+
+    /// <summary>
+    /// Retrieves metadata about the quantum neural network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method collects and returns various pieces of information about the quantum neural network's
+    /// structure and configuration.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This provides a summary of the quantum neural network's setup, including
+    /// its structure, the number of qubits it uses, and other important details. It's like getting
+    /// a blueprint of the network's current state.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.QuantumNeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputShape", Architecture.GetInputShape() },
+                { "OutputShape", Layers[Layers.Count - 1].GetOutputShape() },
+                { "LayerCount", Layers.Count },
+                { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() },
+                { "NumberOfQubits", _numQubits }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes quantum neural network-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the specific parameters and state of the quantum neural network to a binary stream.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This saves the current state of the quantum neural network to a file.
+    /// It records all the important information about the network so you can reload it later exactly as it is now.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_numQubits);
+    }
+
+    /// <summary>
+    /// Deserializes quantum neural network-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the specific parameters and state of the quantum neural network from a binary stream.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This loads a saved quantum neural network state from a file. It rebuilds the
+    /// network exactly as it was when you saved it, including all its learned information and quantum-specific settings.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _numQubits = reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// Calculates the gradients for the quantum neural network layers.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="expectedOutput">The expected output tensor.</param>
+    /// <returns>A list of gradient tensors for each layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs a forward pass through the network, then calculates gradients
+    /// during a backward pass, handling the transition between complex and real tensors.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is where the quantum neural network figures out how to
+    /// improve its predictions. It processes the input, compares the result to the expected
+    /// output, and calculates how to adjust each part of the network to get closer to the
+    /// correct answer next time.
+    /// </para>
+    /// </remarks>
+    private List<Tensor<T>> CalculateQuantumGradients(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        var gradients = new List<Tensor<T>>();
+        var quantumState = PrepareQuantumState(input);
+
+        // Forward pass
+        var layerOutputs = new List<Tensor<Complex<T>>> { quantumState };
+        foreach (var layer in Layers)
+        {
+            var realInput = ExtractRealPart(quantumState);
+            var realOutput = layer.Forward(realInput);
+            quantumState = ConvertToComplexTensor(realOutput);
+            layerOutputs.Add(quantumState);
+        }
+
+        // Backward pass
+        var outputGradient = _lossFunction.CalculateDerivative(MeasureQuantumState(quantumState).ToVector(), expectedOutput.ToVector());
+        var complexOutputGradient = ConvertToComplexTensor(outputGradient);
+
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            var realOutputGradient = ExtractRealPart(complexOutputGradient);
+            var realLayerGradient = Layers[i].Backward(realOutputGradient);
+            var complexLayerGradient = ConvertToComplexTensor(realLayerGradient);
+        
+            gradients.Insert(0, ClipGradient(realLayerGradient));
+            complexOutputGradient = complexLayerGradient;
+        }
+
+        return gradients;
+    }
+
+    /// <summary>
+    /// Prepares a quantum state from a classical input tensor.
+    /// </summary>
+    /// <param name="input">The classical input tensor.</param>
+    /// <returns>A complex tensor representing the quantum state.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method normalizes the input and converts it into a quantum state representation.
+    /// Each classical value is transformed into a complex amplitude, where the magnitude is
+    /// the square root of the normalized input value, and the phase is set to zero.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like translating regular numbers into a special "quantum language".
+    /// It takes your input and turns it into a form that a quantum system can understand and process.
+    /// </para>
+    /// </remarks>
+    private Tensor<Complex<T>> PrepareQuantumState(Tensor<T> input)
+    {
+        var (normalizedInput, _) = _normalizer.Normalize(input);
+        var quantumState = new Tensor<Complex<T>>([normalizedInput.Length]);
+
+        for (int i = 0; i < normalizedInput.Length; i++)
+        {
+            var amplitude = NumOps.Sqrt(normalizedInput[i]);
+            quantumState[i] = new Complex<T>(amplitude, NumOps.Zero);
+        }
+
+        return quantumState;
+    }
+
+    /// <summary>
+    /// Measures the quantum state to produce a classical output.
+    /// </summary>
+    /// <param name="quantumState">The quantum state to measure.</param>
+    /// <returns>A classical tensor representing the measurement outcome.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method simulates the measurement of a quantum state, collapsing the superposition
+    /// into classical probabilities. It calculates the magnitude squared of each complex amplitude.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like "asking" the quantum system for an answer we can understand.
+    /// It converts the special quantum information back into regular numbers we can use.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> MeasureQuantumState(Tensor<Complex<T>> quantumState)
+    {
+        var measuredState = new Tensor<T>([quantumState.Length]);
+
+        for (int i = 0; i < quantumState.Length; i++)
+        {
+            var magnitudeSquared = NumOps.Add(
+                NumOps.Multiply(quantumState[i].Real, quantumState[i].Real),
+                NumOps.Multiply(quantumState[i].Imaginary, quantumState[i].Imaginary)
+            );
+            measuredState[i] = magnitudeSquared;
+        }
+
+        return measuredState;
+    }
+
+    /// <summary>
+    /// Updates the parameters of the quantum neural network layers based on calculated gradients.
+    /// </summary>
+    /// <param name="gradients">A list of gradient tensors for each layer.</param>
+    /// <remarks>
+    /// <para>
+    /// This method applies the calculated gradients to update the parameters of each layer in the network.
+    /// It ensures that the number of gradient tensors matches the number of layers before updating.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is how the network "learns". It takes the lessons from the training
+    /// (in the form of gradients) and uses them to adjust how each part of the network behaves.
+    /// </para>
+    /// </remarks>
+    private void UpdateQuantumParameters(List<Tensor<T>> gradients)
+    {
+        if (gradients.Count != Layers.Count)
+            throw new ArgumentException("Number of gradient tensors must match number of layers.");
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            Layers[i].UpdateParameters(gradients[i].ToVector());
         }
     }
 
     /// <summary>
-    /// Loads the state of the Quantum Neural Network from a binary reader.
+    /// Converts a real-valued tensor to a complex-valued tensor.
     /// </summary>
-    /// <param name="reader">The binary reader to load the state from.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if layer deserialization fails.</exception>
+    /// <param name="realTensor">The real-valued tensor to convert.</param>
+    /// <returns>A complex-valued tensor with zero imaginary parts.</returns>
     /// <remarks>
     /// <para>
-    /// This method deserializes the state of the Quantum Neural Network from a binary reader. It reads
-    /// the number of layers, the number of qubits, recreates each layer based on its type, and deserializes
-    /// the layer state.
+    /// This method creates a new complex tensor where each element's real part is set to the
+    /// corresponding value from the input tensor, and the imaginary part is set to zero.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved quantum neural network state from a file.
-    /// 
-    /// When deserializing:
-    /// - The number of layers and qubits are read from the file
-    /// - Each layer is recreated and its state is restored
-    /// 
-    /// This allows you to:
-    /// - Load a previously trained model
-    /// - Continue using or training a model from where you left off
-    /// - Use models created by others
-    /// 
-    /// Think of it like restoring a complete snapshot of the network that was saved earlier.
+    /// <para>
+    /// <b>For Beginners:</b> This is like adding an extra dimension to our numbers. It turns
+    /// regular numbers into complex numbers, which are needed for quantum calculations.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    private Tensor<Complex<T>> ConvertToComplexTensor(Tensor<T> realTensor)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-        int layerCount = reader.ReadInt32();
-        _numQubits = reader.ReadInt32();
-        Layers.Clear();
-        for (int i = 0; i < layerCount; i++)
+        var complexTensor = new Tensor<Complex<T>>(realTensor.Shape);
+        for (int i = 0; i < realTensor.Length; i++)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            complexTensor[i] = new Complex<T>(realTensor[i], NumOps.Zero);
         }
+
+        return complexTensor;
+    }
+
+    /// <summary>
+    /// Calculates the loss between the predicted output and the expected output.
+    /// </summary>
+    /// <param name="prediction">The predicted output tensor.</param>
+    /// <param name="expectedOutput">The expected output tensor.</param>
+    /// <returns>The calculated loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the specified loss function to calculate how far off the network's
+    /// prediction is from the expected output.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This measures how "wrong" the network's guess is. A lower number
+    /// means the network is doing better at predicting the correct output.
+    /// </para>
+    /// </remarks>
+    private T CalculateLoss(Tensor<T> prediction, Tensor<T> expectedOutput)
+    {
+        return _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+    }
+
+    /// <summary>
+    /// Extracts the real part from a complex-valued tensor.
+    /// </summary>
+    /// <param name="complexTensor">The complex-valued tensor.</param>
+    /// <returns>A real-valued tensor containing the real parts of the complex tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new real-valued tensor by extracting the real part of each complex number
+    /// in the input tensor.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like focusing on just one part of our special quantum numbers.
+    /// We're taking the "regular" part and ignoring the "imaginary" part for certain calculations.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ExtractRealPart(Tensor<Complex<T>> complexTensor)
+    {
+        var realTensor = new Tensor<T>(complexTensor.Shape);
+        for (int i = 0; i < complexTensor.Length; i++)
+        {
+            realTensor[i] = complexTensor[i].Real;
+        }
+
+        return realTensor;
+    }
+
+    /// <summary>
+    /// Converts a real-valued vector to a complex-valued tensor.
+    /// </summary>
+    /// <param name="realVector">The real-valued vector to convert.</param>
+    /// <returns>A complex-valued tensor with zero imaginary parts.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new complex tensor where each element's real part is set to the
+    /// corresponding value from the input vector, and the imaginary part is set to zero.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is similar to the other conversion method, but it works with
+    /// a different type of input (a vector instead of a tensor). It's another way of preparing
+    /// our numbers for quantum-style calculations.
+    /// </para>
+    /// </remarks>
+    private Tensor<Complex<T>> ConvertToComplexTensor(Vector<T> realVector)
+    {
+        var complexTensor = new Tensor<Complex<T>>([realVector.Length]);
+        for (int i = 0; i < realVector.Length; i++)
+        {
+            complexTensor[i] = new Complex<T>(realVector[i], NumOps.Zero);
+        }
+
+        return complexTensor;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the quantum neural network with the same configuration.
+    /// </summary>
+    /// <returns>
+    /// A new instance of <see cref="QuantumNeuralNetwork{T}"/> with the same configuration as the current instance.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new quantum neural network that has the same configuration as the current instance.
+    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
+    /// The new instance will have the same architecture, number of qubits, normalizer, and loss function
+    /// as the original, but will not share parameter values unless they are explicitly copied after creation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+    /// 
+    /// It's like creating a blueprint copy of your quantum neural network that can be used to:
+    /// - Save your model's settings
+    /// - Create a new identical model
+    /// - Transfer your model's configuration to another system
+    /// 
+    /// This is useful when you want to:
+    /// - Create multiple similar quantum neural networks
+    /// - Save a model's configuration for later use
+    /// - Reset a model while keeping its quantum-specific settings
+    /// 
+    /// Note that while the settings are copied, the learned parameters are not automatically
+    /// transferred, so the new instance will need training or parameter copying to match
+    /// the performance of the original.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        // Create a new instance with the cloned architecture and same configuration
+        return new QuantumNeuralNetwork<T>(
+            Architecture,
+            _numQubits,
+            _normalizer,
+            _lossFunction
+        );
     }
 }

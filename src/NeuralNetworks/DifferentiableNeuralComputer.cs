@@ -284,6 +284,21 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     private List<Vector<T>> _readVectors;
 
     /// <summary>
+    /// Gets or sets the scalar activation function for the network.
+    /// </summary>
+    private IActivationFunction<T>? _activationFunction;
+
+    /// <summary>
+    /// Gets or sets the vector activation function for the network.
+    /// </summary>
+    private IVectorActivationFunction<T>? _vectorActivationFunction;
+
+    /// <summary>
+    /// The output weight matrix for combining controller output with read vectors.
+    /// </summary>
+    private Matrix<T> _outputWeights;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="DifferentiableNeuralComputer{T}"/> class with the specified parameters.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -291,6 +306,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// <param name="memoryWordSize">The size of each memory word or location.</param>
     /// <param name="controllerSize">The size of the controller network's output.</param>
     /// <param name="readHeads">The number of read heads that can access the memory simultaneously.</param>
+    /// <param name="activationFunction">The scalar activation function to use. If null, defaults based on task type.</param>
     /// <remarks>
     /// <para>
     /// This constructor initializes a new Differentiable Neural Computer with the specified architecture and memory parameters.
@@ -311,7 +327,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// a notepad of specific size to help them remember and reason about information.
     /// </para>
     /// </remarks>
-    public DifferentiableNeuralComputer(NeuralNetworkArchitecture<T> architecture, int memorySize, int memoryWordSize, int controllerSize, int readHeads) 
+    public DifferentiableNeuralComputer(
+        NeuralNetworkArchitecture<T> architecture, 
+        int memorySize, 
+        int memoryWordSize, 
+        int controllerSize, 
+        int readHeads,
+        IActivationFunction<T>? activationFunction = null) 
         : base(architecture)
     {
         _memorySize = memorySize;
@@ -323,6 +345,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         _writeWeighting = new Vector<T>(_memorySize);
         _readWeightings = [];
         _readVectors = [];
+            
+        // Calculate combinedSize (controller output + read vectors)
+        int outputSize = architecture.OutputSize;
+        int combinedSize = controllerSize + (_readHeads * _memoryWordSize);
+            
+        // Determine appropriate activation function based on task type
+        _activationFunction = activationFunction ?? NeuralNetworkHelper<T>.GetDefaultActivationFunction(architecture.TaskType);
 
         for (int i = 0; i < _readHeads; i++)
         {
@@ -331,9 +360,92 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
 
         _precedenceWeighting = new Vector<T>(_memorySize);
         _temporalLinkMatrix = new Matrix<T>(_memorySize, _memorySize);
+        _outputWeights = new Matrix<T>(combinedSize, outputSize);
 
+        InitializeOutputWeights();
         InitializeMemory();
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DifferentiableNeuralComputer{T}"/> class with the specified parameters.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="memorySize">The number of memory locations in the memory matrix.</param>
+    /// <param name="memoryWordSize">The size of each memory word or location.</param>
+    /// <param name="controllerSize">The size of the controller network's output.</param>
+    /// <param name="readHeads">The number of read heads that can access the memory simultaneously.</param>
+    /// <param name="activationFunction">The scalar activation function to use. If null, defaults based on task type.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor initializes a new Differentiable Neural Computer with the specified architecture and memory parameters.
+    /// It sets up the memory matrix, usage tracking vectors, read/write weightings, and temporal link matrix. The memory
+    /// is initialized with small random values, and the usage vector is initialized to indicate that all memory locations
+    /// are free.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up a new DNC with a specific notepad size and reading capacity.
+    /// 
+    /// When creating a new DNC:
+    /// - The architecture defines the neural network's structure
+    /// - memorySize determines how many pages are in the notepad
+    /// - memoryWordSize determines how much information fits on each page
+    /// - controllerSize determines how powerful the "brain" of the system is
+    /// - readHeads determines how many pages can be read simultaneously
+    /// 
+    /// Think of it like configuring a new assistant with specific mental capabilities and
+    /// a notepad of specific size to help them remember and reason about information.
+    /// </para>
+    /// </remarks>
+    public DifferentiableNeuralComputer(
+        NeuralNetworkArchitecture<T> architecture, 
+        int memorySize, 
+        int memoryWordSize, 
+        int controllerSize, 
+        int readHeads,
+        IVectorActivationFunction<T>? vectorActivationFunction = null) 
+        : base(architecture)
+    {
+        _memorySize = memorySize;
+        _memoryWordSize = memoryWordSize;
+        _controllerSize = controllerSize;
+        _readHeads = readHeads;
+        _memory = new Matrix<T>(_memorySize, _memoryWordSize);
+        _usageFree = new Vector<T>(_memorySize);
+        _writeWeighting = new Vector<T>(_memorySize);
+        _readWeightings = [];
+        _readVectors = [];
+            
+        // Calculate combinedSize (controller output + read vectors)
+        int outputSize = architecture.OutputSize;
+        int combinedSize = controllerSize + (_readHeads * _memoryWordSize);
+            
+        // Determine appropriate vector activation function based on task type
+        _vectorActivationFunction = vectorActivationFunction ?? NeuralNetworkHelper<T>.GetDefaultVectorActivationFunction(architecture.TaskType);
+
+        for (int i = 0; i < _readHeads; i++)
+        {
+            _readWeightings.Add(new Vector<T>(_memorySize));
+        }
+
+        _precedenceWeighting = new Vector<T>(_memorySize);
+        _temporalLinkMatrix = new Matrix<T>(_memorySize, _memorySize);
+        _outputWeights = new Matrix<T>(combinedSize, outputSize);
+
+        InitializeOutputWeights();
+        InitializeMemory();
+        InitializeLayers();
+    }
+
+    private void InitializeOutputWeights()
+    {
+        // Initialize with small random values
+        for (int i = 0; i < _outputWeights.Rows; i++)
+        {
+            for (int j = 0; j < _outputWeights.Columns; j++)
+            {
+                _outputWeights[i, j] = NumOps.FromDouble((Random.NextDouble() * 0.2) - 0.1);
+            }
+        }
     }
 
     /// <summary>
@@ -442,483 +554,6 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Makes a prediction using the current state of the Differentiable Neural Computer.
-    /// </summary>
-    /// <param name="input">The input vector to make a prediction for.</param>
-    /// <returns>The predicted output vector after processing through the DNC.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method processes an input through the DNC to produce a prediction. The input first passes through the
-    /// controller network, which generates an interface vector. This interface vector is used to interact with the
-    /// memory system, writing and reading information. The controller's output is then combined with the information
-    /// read from memory to produce the final output.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method processes input data through both the neural network and the memory system.
-    /// 
-    /// The prediction process works like this:
-    /// - The input data enters the controller (neural network "brain")
-    /// - The controller processes the input and decides how to interact with memory
-    /// - The system writes relevant information to memory and reads from memory as needed
-    /// - The controller's output is combined with what was read from memory
-    /// - This combined information passes through output layers to produce the final prediction
-    /// 
-    /// This integration of neural processing with memory operations is what gives the DNC
-    /// its ability to handle complex, structured problems that require remembering and
-    /// reasoning about information.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var controllerState = input;
-        var readVectors = new List<Vector<T>>();
-
-        for (int i = 0; i < _readHeads; i++)
-        {
-            readVectors.Add(new Vector<T>(_memoryWordSize));
-        }
-
-        // Controller
-        for (int i = 0; i < 2; i++)
-        {
-            controllerState = Layers[i].Forward(Tensor<T>.FromVector(controllerState)).ToVector();
-        }
-
-        // Memory interface
-        var interfaceVector = Layers[2].Forward(Tensor<T>.FromVector(controllerState)).ToVector();
-        ProcessMemoryInterface(interfaceVector, readVectors);
-
-        // Concatenate controller output with read vectors
-        var concatenated = Vector<T>.Concatenate(controllerState, Vector<T>.Concatenate(readVectors));
-
-        // Output layers
-        var output = Layers[3].Forward(Tensor<T>.FromVector(concatenated)).ToVector();
-        output = Layers[4].Forward(Tensor<T>.FromVector(output)).ToVector();
-
-        return output;
-    }
-
-    /// <summary>
-    /// Processes the interface vector to interact with the memory system.
-    /// </summary>
-    /// <param name="interfaceVector">The interface vector produced by the controller.</param>
-    /// <param name="readVectors">The list of vectors to store read results.</param>
-    /// <remarks>
-    /// <para>
-    /// This method extracts control signals from the interface vector and uses them to perform memory operations.
-    /// It updates the usage vector, calculates write weightings, writes to memory, updates temporal linkage information,
-    /// and reads from memory. The results of the read operations are stored in the provided read vectors list.
-    /// </para>
-    /// <para><b>For Beginners:</b> This interprets the brain's commands to operate the memory system.
-    /// 
-    /// The memory interface process:
-    /// - Extracts different parts of the interface vector to determine what to do with memory
-    /// - Decides where to write in memory and what to write
-    /// - Updates tracking information about which memory locations are used
-    /// - Maintains the temporal links between memory locations (what was written before/after what)
-    /// - Determines where to read from and what information to extract
-    /// 
-    /// This is like translating the brain's intentions into specific actions of writing in
-    /// certain places in the notepad and reading from other places.
-    /// </para>
-    /// </remarks>
-    private void ProcessMemoryInterface(Vector<T> interfaceVector, List<Vector<T>> readVectors)
-    {
-        int offset = 0;
-
-        // Read vectors
-        for (int i = 0; i < _readHeads; i++)
-        {
-            readVectors[i] = interfaceVector.SubVector(offset, _memoryWordSize);
-            offset += _memoryWordSize;
-        }
-
-        // Write vector
-        var writeVector = interfaceVector.SubVector(offset, _memoryWordSize);
-        offset += _memoryWordSize;
-
-        // Erase vector
-        var eraseVector = interfaceVector.SubVector(offset, _memoryWordSize);
-        offset += _memoryWordSize;
-
-        // Write gate, allocation gate, write mode
-        var writeGate = interfaceVector[offset++];
-        var allocateGate = interfaceVector[offset++];
-        var writeMode = interfaceVector[offset++];
-
-        // Read modes
-        var readModes = new List<Vector<T>>();
-        for (int i = 0; i < _readHeads; i++)
-        {
-            readModes.Add(interfaceVector.SubVector(offset, 3));
-            offset += 3;
-        }
-
-        // Update usage vector
-        UpdateUsageVector();
-
-        // Allocation weighting
-        var allocationWeighting = CalculateAllocationWeighting();
-
-        // Write weighting
-        _writeWeighting = CalculateWriteWeighting(writeMode, allocationWeighting);
-
-        // Write to memory
-        WriteToMemory(writeVector, eraseVector, writeGate);
-
-        // Update temporal linkage
-        UpdateTemporalLinkage();
-
-        // Read from memory
-        ReadFromMemory(readModes);
-    }
-
-    /// <summary>
-    /// Updates the usage tracking vector based on current write operations.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method updates the usage tracking vector to reflect which memory locations have been written to.
-    /// The usage free value for each location is reduced proportionally to the write weighting for that location.
-    /// This helps the DNC track which memory locations are available for future write operations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This updates the record of which notepad pages are available.
-    /// 
-    /// The usage update process:
-    /// - For each memory location (page in the notepad), update how "free" or available it is
-    /// - If a location has just been written to (high value in WriteWeighting), mark it as less free
-    /// - This ensures that important information isn't immediately overwritten
-    /// - Locations that haven't been written to remain available for future use
-    /// 
-    /// This helps the system manage its memory efficiently, writing new information to
-    /// unused or less important locations.
-    /// </para>
-    /// </remarks>
-    private void UpdateUsageVector()
-    {
-        for (int i = 0; i < _memorySize; i++)
-        {
-            _usageFree[i] = NumOps.Multiply(
-                _usageFree[i],
-                NumOps.Subtract(NumOps.One, _writeWeighting[i])
-            );
-        }
-    }
-
-    /// <summary>
-    /// Calculates the allocation weighting based on memory usage.
-    /// </summary>
-    /// <returns>A vector of allocation weights for memory locations.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the allocation weighting vector, which determines where to write new information
-    /// based on memory usage. Locations that are free (high usage free value) and have been free for a long time
-    /// receive higher allocation weights. This implements a dynamic memory allocation strategy that efficiently
-    /// reuses memory locations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This determines which free pages are best to write on.
-    /// 
-    /// The allocation weighting:
-    /// - Decides which unused or less important memory locations to write to
-    /// - Prioritizes locations that have been unused for a long time
-    /// - Creates a graded list of preferences, with the most available locations getting highest priority
-    /// - This implements a smart strategy for reusing memory efficiently
-    /// 
-    /// Think of it like choosing which blank pages in a notebook to use first when
-    /// taking new notes.
-    /// </para>
-    /// </remarks>
-    private Vector<T> CalculateAllocationWeighting()
-    {
-        var sortedUsageFree = _usageFree.OrderBy(x => x).ToList();
-        var allocationWeighting = Vector<T>.CreateDefault(_memorySize, NumOps.Zero);
-
-        for (int i = 0; i < _memorySize; i++)
-        {
-            var product = NumOps.One;
-            for (int j = 0; j < i; j++)
-            {
-                product = NumOps.Multiply(product, NumOps.Subtract(NumOps.One, _usageFree[j]));
-            }
-            allocationWeighting[i] = NumOps.Multiply(_usageFree[i], product);
-        }
-
-        return allocationWeighting;
-    }
-
-    /// <summary>
-    /// Calculates the write weighting based on write mode and allocation weighting.
-    /// </summary>
-    /// <param name="writeMode">The write mode parameter from the interface vector.</param>
-    /// <param name="allocationWeighting">The allocation weighting vector.</param>
-    /// <returns>A vector of write weights for memory locations.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the write weighting vector, which determines where in memory to write information.
-    /// It combines allocation-based writing (writing to free locations) with content-based writing (writing to locations
-    /// based on their content similarity). The balance between these approaches is controlled by the write mode parameter.
-    /// </para>
-    /// <para><b>For Beginners:</b> This decides exactly where to write in the notepad.
-    /// 
-    /// The write weighting calculation:
-    /// - Balances two strategies for choosing where to write:
-    ///   1. Writing to empty pages (allocation-based)
-    ///   2. Writing to pages with similar content (content-based)
-    /// - The writeMode parameter controls which strategy is more important
-    /// - This creates a set of weights that determine how much to write to each location
-    /// - Usually only a few locations receive significant weight
-    /// 
-    /// Think of it like deciding whether to write new information on a fresh page
-    /// or to add it to a page that already contains related information.
-    /// </para>
-    /// </remarks>
-    private Vector<T> CalculateWriteWeighting(T writeMode, Vector<T> allocationWeighting)
-    {
-        var contentWeighting = ContentBasedAddressing(_writeWeighting, _memory);
-        return allocationWeighting.Multiply(NumOps.Subtract(NumOps.One, writeMode))
-            .Add(contentWeighting.Multiply(writeMode));
-    }
-
-    /// <summary>
-    /// Writes information to memory based on the write weighting.
-    /// </summary>
-    /// <param name="writeVector">The vector of information to write.</param>
-    /// <param name="eraseVector">The vector specifying what information to erase.</param>
-    /// <param name="writeGate">The gate parameter controlling the strength of the write operation.</param>
-    /// <remarks>
-    /// <para>
-    /// This method updates the memory matrix by writing new information and erasing old information. For each memory
-    /// location, it first erases some content based on the erase vector and write weighting, then writes new content
-    /// based on the write vector and write weighting. The write gate parameter controls the overall strength of the
-    /// write operation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This actually writes the information to the selected pages in the notepad.
-    /// 
-    /// The writing process:
-    /// - For each memory location, based on its write weight:
-    ///   1. First erase some of the existing information (like erasing parts of the page)
-    ///   2. Then write new information to the location
-    /// - The writeGate controls how strongly to perform this operation
-    /// - If writeGate is low, only minor changes are made
-    /// - If writeGate is high, significant information is written
-    /// 
-    /// This two-step process (erase then write) gives the DNC fine control over
-    /// how information is stored and updated in memory.
-    /// </para>
-    /// </remarks>
-    private void WriteToMemory(Vector<T> writeVector, Vector<T> eraseVector, T writeGate)
-    {
-        for (int i = 0; i < _memorySize; i++)
-        {
-            var eraseAmount = eraseVector.Multiply(_writeWeighting[i]);
-            var writeAmount = writeVector.Multiply(_writeWeighting[i]);
-            for (int j = 0; j < _memoryWordSize; j++)
-            {
-                _memory[i, j] = NumOps.Add(
-                    NumOps.Multiply(
-                        _memory[i, j],
-                        NumOps.Subtract(NumOps.One, NumOps.Multiply(eraseAmount[j], writeGate))
-                    ),
-                    NumOps.Multiply(writeAmount[j], writeGate)
-                );
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the temporal linkage information based on current write operations.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method updates the temporal link matrix and precedence weighting vector based on current write operations.
-    /// The temporal link matrix records which memory locations were written to before or after others, allowing the
-    /// DNC to traverse memory in the order information was written. The precedence weighting vector tracks the recency
-    /// of writes to each location.
-    /// </para>
-    /// <para><b>For Beginners:</b> This updates the record of which pages were written to in what order.
-    /// 
-    /// The temporal linkage update:
-    /// - Updates the "before/after" relationships between memory locations
-    /// - Records which page was written to just before the current page
-    /// - Updates which pages were most recently written to
-    /// - This creates a chain of links that can be followed forward or backward in time
-    /// 
-    /// Think of it like keeping track of the order in which you wrote in different
-    /// pages of the notepad, so you can later follow the sequence of information.
-    /// </para>
-    /// </remarks>
-    private void UpdateTemporalLinkage()
-    {
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _memorySize; j++)
-            {
-                if (i != j)
-                {
-                    _temporalLinkMatrix[i, j] = NumOps.Add(
-                        NumOps.Multiply(
-                            NumOps.Subtract(NumOps.One, _writeWeighting[i]),
-                            NumOps.Subtract(NumOps.One, _writeWeighting[j])
-                        ),
-                        NumOps.Multiply(_precedenceWeighting[i], _writeWeighting[j])
-                    );
-                }
-            }
-        }
-
-        _precedenceWeighting = _precedenceWeighting.Multiply(NumOps.Subtract(NumOps.One, _writeWeighting.Sum()))
-            .Add(_writeWeighting);
-    }
-
-    /// <summary>
-    /// Reads information from memory based on read modes and weightings.
-    /// </summary>
-    /// <param name="readModes">The list of mode vectors for each read head.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads information from memory for each read head, based on the read modes and weightings.
-    /// For each read head, it computes new read weightings based on content similarity, backward traversal,
-    /// and forward traversal, then reads the weighted average of memory rows according to these weightings.
-    /// The resulting read vectors are stored in the read vectors list.
-    /// </para>
-    /// <para><b>For Beginners:</b> This reads information from selected pages in the notepad.
-    /// 
-    /// The reading process:
-    /// - For each read head (finger in the notepad):
-    ///   1. Decide where to read from using three strategies:
-    ///      - Content-based: look at pages with similar content
-    ///      - Backward: look at pages written before the current focus
-    ///      - Forward: look at pages written after the current focus
-    ///   2. The readModes control which strategy is more important for each head
-    ///   3. Read information from the selected locations and combine it
-    /// 
-    /// This flexible reading system allows the DNC to retrieve information in different ways:
-    /// by content similarity, by following chains of information backward, or by following them forward.
-    /// </para>
-    /// </remarks>
-    private void ReadFromMemory(List<Vector<T>> readModes)
-    {
-        var newReadVectors = new List<Vector<T>>();
-        for (int i = 0; i < _readHeads; i++)
-        {
-            var backwardWeighting = _temporalLinkMatrix.Multiply(_readWeightings[i]);
-            var forwardWeighting = _temporalLinkMatrix.Transpose().Multiply(_readWeightings[i]);
-            var contentWeighting = ContentBasedAddressing(_readWeightings[i], _memory);
-
-            _readWeightings[i] = backwardWeighting.Multiply(readModes[i][0])
-                .Add(contentWeighting.Multiply(readModes[i][1]))
-                .Add(forwardWeighting.Multiply(readModes[i][2]));
-
-            var readVector = Vector<T>.CreateDefault(_memoryWordSize, NumOps.Zero);
-            for (int j = 0; j < _memorySize; j++)
-            {
-                readVector = readVector.Add(_memory.GetRow(j).Multiply(_readWeightings[i][j]));
-            }
-            newReadVectors.Add(readVector);
-        }
-
-        _readVectors = newReadVectors;
-    }
-
-    /// <summary>
-    /// Performs content-based addressing of memory.
-    /// </summary>
-    /// <param name="key">The key vector to compare with memory contents.</param>
-    /// <param name="memory">The memory matrix to search in.</param>
-    /// <returns>A vector of attention weights based on content similarity.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes attention weights for memory locations based on the cosine similarity between the key vector
-    /// and the content of each memory location. Locations with content similar to the key receive higher weights.
-    /// The similarities are normalized using a softmax function to produce a probability distribution over locations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This finds pages in the notepad that contain similar information to what we're looking for.
-    /// 
-    /// The content-based addressing:
-    /// - Takes a "key" (what we're looking for) and compares it to every memory location
-    /// - Calculates how similar each location's content is to the key
-    /// - Gives higher weight to locations that contain similar information
-    /// - Normalizes these weights so they form a probability distribution
-    /// 
-    /// This is like scanning through a notepad to find pages that contain information
-    /// similar to what you're interested in right now.
-    /// </para>
-    /// </remarks>
-    private Vector<T> ContentBasedAddressing(Vector<T> key, Matrix<T> memory)
-    {
-        var similarities = Vector<T>.CreateDefault(_memorySize, NumOps.Zero);
-        for (int i = 0; i < _memorySize; i++)
-        {
-            similarities[i] = CosineSimilarity(key, memory.GetRow(i));
-        }
-        return Softmax(similarities);
-    }
-
-    /// <summary>
-    /// Calculates the cosine similarity between two vectors.
-    /// </summary>
-    /// <param name="a">The first vector.</param>
-    /// <param name="b">The second vector.</param>
-    /// <returns>The cosine similarity, a value between -1 and 1.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the cosine similarity between two vectors, which is the cosine of the angle between them.
-    /// It is calculated as the dot product of the vectors divided by the product of their norms. The result is a value
-    /// between -1 and 1, where 1 means the vectors are identical in direction, 0 means they are orthogonal, and -1 means
-    /// they are opposite in direction.
-    /// </para>
-    /// <para><b>For Beginners:</b> This measures how similar two pieces of information are.
-    /// 
-    /// The cosine similarity:
-    /// - Measures how similar two vectors (pieces of information) are in direction
-    /// - Ranges from -1 (completely opposite) to 1 (exactly the same)
-    /// - Ignores the magnitude (size) of the vectors, focusing only on their direction
-    /// - Is a standard way to compare the similarity of content in machine learning
-    /// 
-    /// This is like comparing the topics of two pages in a notepad, regardless of
-    /// how much is written on each page.
-    /// </para>
-    /// </remarks>
-    private T CosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        var dotProduct = a.DotProduct(b);
-        var normA = a.Norm();
-        var normB = b.Norm();
-
-        return NumOps.Divide(dotProduct, NumOps.Multiply(normA, normB));
-    }
-
-    /// <summary>
-    /// Applies the softmax function to a vector to produce a probability distribution.
-    /// </summary>
-    /// <param name="vector">The input vector.</param>
-    /// <returns>A vector representing a probability distribution.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the softmax function to a vector of values, converting them into a probability distribution.
-    /// Each element of the input vector is exponentiated, and then the results are normalized by dividing by their sum.
-    /// The output vector will have all positive elements that sum to 1.
-    /// </para>
-    /// <para><b>For Beginners:</b> This converts a list of scores into probabilities that add up to 100%.
-    /// 
-    /// The softmax function:
-    /// - Takes a vector of any values and converts them to a probability distribution
-    /// - Makes all values positive and ensures they sum to 1 (100%)
-    /// - Preserves the ordering of values (higher inputs become higher probabilities)
-    /// - Exaggerates differences between values
-    /// 
-    /// This is used to convert similarity scores or other measurements into attention weights
-    /// that can be used as probabilities for selecting where to read from or write to.
-    /// </para>
-    /// </remarks>
-    private Vector<T> Softmax(Vector<T> vector)
-    {
-        var expVector = new Vector<T>(vector.Select(x => NumOps.Exp(x)).ToArray());
-        var sum = expVector.Sum();
-
-        return expVector.Divide(sum);
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the Differentiable Neural Computer.
     /// </summary>
     /// <param name="parameters">A vector containing the parameters to update all layers with.</param>
@@ -956,119 +591,1447 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the Differentiable Neural Computer to a binary stream.
+    /// Makes a prediction using the Differentiable Neural Computer.
     /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a null layer is encountered or a layer type name cannot be determined.</exception>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor containing the prediction.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the state of the Differentiable Neural Computer to a binary stream. It writes the number of layers,
-    /// followed by the type name and serialized state of each layer. It also serializes the memory matrix and other DNC-specific
-    /// components. This allows the DNC to be saved to disk and later restored with its learned parameters and memory state intact.
+    /// This method passes the input data through the DNC to make a prediction. It processes the input through
+    /// the controller network, calculates memory interactions, and produces an output. For sequential inputs,
+    /// this method should be called repeatedly, with the DNC maintaining its memory state between calls.
     /// </para>
-    /// <para><b>For Beginners:</b> This saves the complete state of the DNC to a file.
+    /// <para><b>For Beginners:</b> This is how the DNC processes new information and makes predictions.
     /// 
-    /// When saving the DNC:
-    /// - First, it saves the neural network layers and their parameters
-    /// - Then, it saves the current state of the memory matrix
-    /// - This preserves both what the DNC has learned and what it currently "remembers"
+    /// The prediction process works like this:
+    /// 1. Input data is processed by the controller neural network
+    /// 2. The controller produces signals that determine how to interact with memory
+    /// 3. Based on these signals, information is written to and read from the memory
+    /// 4. The final output combines the controller's processing with information read from memory
     /// 
-    /// This is like taking a snapshot of both the brain and the notepad of the system,
-    /// allowing you to restore exactly the same state later.
+    /// Unlike traditional neural networks, the DNC maintains its memory state between predictions,
+    /// allowing it to build up knowledge over a sequence of inputs.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
+        return ProcessInput(input, false);
+    }
 
-        writer.Write(Layers.Count);
+    /// <summary>
+    /// Trains the Differentiable Neural Computer on a single batch of data.
+    /// </summary>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
+    /// <remarks>
+    /// <para>
+    /// This method trains the DNC on a single batch of data using backpropagation through time (BPTT).
+    /// It processes the input through the network, computes the error with respect to the expected output,
+    /// and updates the network parameters to reduce this error. For sequential data, this method should
+    /// be called with sequences of inputs and expected outputs.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how the DNC learns from examples.
+    /// 
+    /// The training process works like this:
+    /// 1. The input is processed through the network (like in prediction)
+    /// 2. The output is compared to the expected output to calculate the error
+    /// 3. This error is propagated backward through the network
+    /// 4. The network's parameters are updated to reduce this error
+    /// 
+    /// Unlike traditional neural networks, DNCs must be careful to propagate errors through
+    /// their memory operations as well as through the neural network components.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Process the input through the network
+        Tensor<T> output = ProcessInput(input, true);
+        
+        // Calculate error/loss
+        var flattenedPredictions = output.ToVector();
+        var flattenedExpected = expectedOutput.ToVector();
+        
+        // Use Mean Squared Error as the loss function
+        var lossFunction = new MeanSquaredErrorLoss<T>();
+        
+        // Calculate gradients from the loss
+        Vector<T> outputGradients = lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
+        
+        // Backpropagate the error through the network
+        Vector<T> inputGradients = Backpropagate(outputGradients);
+        
+        // Get parameter gradients
+        Vector<T> parameterGradients = GetParameterGradients();
+        
+        // Apply gradient clipping to prevent exploding gradients
+        parameterGradients = ClipGradient(parameterGradients);
+        
+        // Create optimizer (here we use a simple gradient descent optimizer)
+        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
+        
+        // Get current parameters
+        Vector<T> currentParameters = GetParameters();
+        
+        // Update parameters using the optimizer
+        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+        
+        // Apply updated parameters
+        UpdateParameters(updatedParameters);
+    }
+    
+    /// <summary>
+    /// Processes an input through the DNC, updating memory state and producing an output.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <param name="isTraining">Whether the DNC is in training mode.</param>
+    /// <returns>The output tensor after processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method handles the core processing of the DNC. It passes the input through the controller,
+    /// calculates memory interactions based on the controller's output, and produces a final output
+    /// combining the controller's processing with the information read from memory.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the core function that controls how the DNC works with its memory.
+    /// 
+    /// For each input:
+    /// 1. The controller processes the input and produces control signals
+    /// 2. These signals determine what to write to memory and where
+    /// 3. They also determine what to read from memory and from where
+    /// 4. The final output combines what the controller processed with what was read from memory
+    /// 
+    /// This is like a person thinking about new information (controller processing)
+    /// while also consulting their notes (memory reading) to produce a response.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ProcessInput(Tensor<T> input, bool isTraining)
+    {
+        // Set training mode for all layers
         foreach (var layer in Layers)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
+            layer.SetTrainingMode(isTraining);
+        }
+        
+        // Previous read vectors are concatenated with the input to provide context
+        Tensor<T> controllerInput = PrepareControllerInput(input);
+        
+        // Process the input through the controller network
+        Tensor<T> controllerOutput = ProcessThroughController(controllerInput);
+        
+        // Parse the controller output to get memory interface signals
+        var interfaceOutput = ParseControllerOutput(controllerOutput);
+        
+        // Update memory based on interface signals
+        UpdateMemory(interfaceOutput);
+        
+        // Read from memory based on interface signals
+        List<Vector<T>> newReadVectors = ReadFromMemory(interfaceOutput);
+        
+        // Update read vectors for the next time step
+        _readVectors = newReadVectors;
+        
+        // Combine controller output with read vectors to produce final output
+        Tensor<T> finalOutput = CombineControllerOutputWithReadVectors(controllerOutput, newReadVectors);
+        
+        return finalOutput;
+    }
+    
+    /// <summary>
+    /// Prepares the input for the controller by concatenating it with previous read vectors.
+    /// </summary>
+    /// <param name="input">The raw input tensor.</param>
+    /// <returns>A tensor combining the input with previous read vectors.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method prepares the input for the controller by concatenating it with the previous read vectors.
+    /// This provides the controller with context from what was previously read from memory. If there are no
+    /// previous read vectors (e.g., at the first time step), zero vectors are used instead.
+    /// </para>
+    /// <para><b>For Beginners:</b> This combines new information with what was previously read from memory.
+    /// 
+    /// Think of it like:
+    /// - Before studying new material, you review your previous notes
+    /// - This helps connect new information with what you already know
+    /// - The combined information (new input + previous notes) is what the brain processes
+    /// 
+    /// This step is crucial for the DNC to maintain continuity across a sequence of inputs.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> PrepareControllerInput(Tensor<T> input)
+    {
+        // Check if we have previous read vectors
+        if (_readVectors.Count == 0)
+        {
+            // Initialize read vectors with zeros if this is the first step
+            for (int i = 0; i < _readHeads; i++)
+            {
+                _readVectors.Add(new Vector<T>(_memoryWordSize));
+                for (int j = 0; j < _memoryWordSize; j++)
+                {
+                    _readVectors[i][j] = NumOps.Zero;
+                }
+            }
+        }
+        
+        // Flatten input tensor
+        Vector<T> flattenedInput = input.ToVector();
+        
+        // Calculate the total size of the controller input
+        int inputSize = flattenedInput.Length;
+        int totalSize = inputSize + (_readHeads * _memoryWordSize);
+        
+        // Create a new vector for the combined input
+        Vector<T> combinedInput = new Vector<T>(totalSize);
+        
+        // Copy the input
+        for (int i = 0; i < inputSize; i++)
+        {
+            combinedInput[i] = flattenedInput[i];
+        }
+        
+        // Copy the read vectors
+        int offset = inputSize;
+        for (int i = 0; i < _readHeads; i++)
+        {
+            for (int j = 0; j < _memoryWordSize; j++)
+            {
+                combinedInput[offset++] = _readVectors[i][j];
+            }
+        }
+        
+        // Convert to tensor with appropriate shape for the controller
+        return Tensor<T>.FromVector(combinedInput).Reshape(1, totalSize);
+    }
+    
+    /// <summary>
+    /// Processes the prepared input through the controller network.
+    /// </summary>
+    /// <param name="controllerInput">The prepared input tensor.</param>
+    /// <returns>The output tensor from the controller network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method passes the prepared input through the controller network, which is responsible for
+    /// processing the input and generating the interface signals for memory interactions. The controller
+    /// is typically a recurrent neural network (RNN), long short-term memory network (LSTM), or another
+    /// type of neural network capable of processing sequential information.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where the "brain" of the DNC processes the input information.
+    /// 
+    /// The controller network:
+    /// - Takes the combined input (new data + previously read memory)
+    /// - Processes this information using neural network layers
+    /// - Produces outputs that will control memory operations and contribute to the final output
+    /// - Is like the "thinking" part of the system that decides what to remember and what to recall
+    /// 
+    /// This step is analogous to a person's brain processing new information and deciding
+    /// what to write down and what to look up in their notes.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ProcessThroughController(Tensor<T> controllerInput)
+    {
+        // Process through all layers except the last one, which is typically an output layer
+        Tensor<T> currentOutput = controllerInput;
+        
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            currentOutput = Layers[i].Forward(currentOutput);
+            
+            // Store input/output for each layer if in training mode
+            if (IsTrainingMode)
+            {
+                _layerInputs[i] = currentOutput;
+            }
+        }
+        
+        return currentOutput;
+    }
+    
+    /// <summary>
+    /// Parses the controller output to extract memory interface signals.
+    /// </summary>
+    /// <param name="controllerOutput">The output tensor from the controller.</param>
+    /// <returns>A structure containing parsed interface signals for memory operations.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method parses the controller's output to extract the various signals needed for memory operations.
+    /// These include write and erase vectors, read and write weightings, and various control gates and modes.
+    /// The method assumes that the controller output follows a specific format where different sections
+    /// correspond to different interface components.
+    /// </para>
+    /// <para><b>For Beginners:</b> This interprets the controller's output as instructions for memory operations.
+    /// 
+    /// Think of it like translating the brain's signals into specific instructions:
+    /// - What information to write to memory
+    /// - Where to write it
+    /// - What information to erase from memory
+    /// - Where to read from
+    /// - How to navigate between related pieces of information
+    /// 
+    /// This step converts the neural network's output into specific memory operations,
+    /// allowing the DNC to use its memory in a structured way.
+    /// </para>
+    /// </remarks>
+    private MemoryInterfaceSignals ParseControllerOutput(Tensor<T> controllerOutput)
+    {
+        // For simplicity, we'll assume controllerOutput is a 2D tensor with shape [1, interfaceSize]
+        Vector<T> interfaceVector = controllerOutput.ToVector();
+        
+        // Parse the interface vector into its components
+        MemoryInterfaceSignals signals = new MemoryInterfaceSignals
+        {
+            WriteVector = ExtractVector(interfaceVector, 0, _memoryWordSize),
+            EraseVector = ExtractVector(interfaceVector, _memoryWordSize, _memoryWordSize),
+            ReadKeys = [],
+            ReadStrengths = [],
+            WriteKey = ExtractVector(interfaceVector, 2 * _memoryWordSize, _memoryWordSize),
+            WriteStrength = interfaceVector[3 * _memoryWordSize],
+            AllocationGate = SigmoidActivation(interfaceVector[3 * _memoryWordSize + 1]),
+            WriteGate = SigmoidActivation(interfaceVector[3 * _memoryWordSize + 2]),
+            ReadModes = []
+        };
+        
+        // Extract read keys and strengths
+        int offset = 3 * _memoryWordSize + 3;
+        for (int i = 0; i < _readHeads; i++)
+        {
+            signals.ReadKeys.Add(ExtractVector(interfaceVector, offset, _memoryWordSize));
+            offset += _memoryWordSize;
+            signals.ReadStrengths.Add(interfaceVector[offset++]);
+        }
+        
+        // Extract read modes (backward, content, forward)
+        for (int i = 0; i < _readHeads; i++)
+        {
+            Vector<T> readMode = new Vector<T>(3);
+            for (int j = 0; j < 3; j++)
+            {
+                readMode[j] = SigmoidActivation(interfaceVector[offset++]);
+            }
+            // Normalize read modes to sum to 1
+            T sum = NumOps.Add(NumOps.Add(readMode[0], readMode[1]), readMode[2]);
+            for (int j = 0; j < 3; j++)
+            {
+                readMode[j] = NumOps.Divide(readMode[j], sum);
+            }
+            signals.ReadModes.Add(readMode);
+        }
+        
+        return signals;
+    }
+    
+    /// <summary>
+    /// Extracts a vector from a larger vector at a specified offset.
+    /// </summary>
+    /// <param name="source">The source vector to extract from.</param>
+    /// <param name="offset">The starting index for extraction.</param>
+    /// <param name="length">The number of elements to extract.</param>
+    /// <returns>A new vector containing the extracted elements.</returns>
+    private Vector<T> ExtractVector(Vector<T> source, int offset, int length)
+    {
+        Vector<T> result = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            result[i] = source[offset + i];
+        }
+        return result;
+    }
+    
+    /// <summary>
+    /// Applies the sigmoid activation function to a scalar value.
+    /// </summary>
+    /// <param name="value">The input value.</param>
+    /// <returns>The sigmoid of the input value.</returns>
+    private T SigmoidActivation(T value)
+    {
+        // Convert to double for calculation
+        double doubleValue = Convert.ToDouble(value);
+        double sigmoid = 1.0 / (1.0 + Math.Exp(-doubleValue));
+        return NumOps.FromDouble(sigmoid);
+    }
+    
+    /// <summary>
+    /// Updates the memory matrix based on the interface signals.
+    /// </summary>
+    /// <param name="signals">The interface signals for memory operations.</param>
+    /// <remarks>
+    /// <para>
+    /// This method updates the DNC's memory matrix based on the interface signals generated by the controller.
+    /// It calculates write weightings based on content-based addressing and allocation, writes new information
+    /// to memory, and updates the usage free vector and temporal link matrix to track memory usage and relationships.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where the DNC writes new information to its memory.
+    /// 
+    /// The memory update process:
+    /// 1. Determines where to write based on content similarity and free space
+    /// 2. Writes new information to the selected locations
+    /// 3. Updates tracking information about what memory is being used
+    /// 4. Updates the temporal links that connect related information
+    /// 
+    /// This is like a person deciding where to write in their notepad, writing down the information,
+    /// and creating references between related notes.
+    /// </para>
+    /// </remarks>
+    private void UpdateMemory(MemoryInterfaceSignals signals)
+    {
+        // Calculate write weighting based on content addressing and allocation
+        Vector<T> contentWeighting = ContentAddressing(_memory, signals.WriteKey, signals.WriteStrength);
+        Vector<T> allocationWeighting = Allocate(_usageFree, _precedenceWeighting);
+        
+        // Combine content and allocation weightings
+        _writeWeighting = CombineWeightings(contentWeighting, allocationWeighting, signals.AllocationGate);
+        
+        // Apply the write gate
+        for (int i = 0; i < _memorySize; i++)
+        {
+            _writeWeighting[i] = NumOps.Multiply(_writeWeighting[i], signals.WriteGate);
+        }
+        
+        // Write to memory
+        WriteToMemory(signals.WriteVector, signals.EraseVector);
+        
+        // Update usage vector
+        UpdateUsage();
+        
+        // Update precedence weighting
+        UpdatePrecedence();
+        
+        // Update temporal link matrix
+        UpdateTemporalLinks();
+    }
+    
+    /// <summary>
+    /// Reads from memory based on the interface signals.
+    /// </summary>
+    /// <param name="signals">The interface signals for memory operations.</param>
+    /// <returns>A list of vectors read from memory.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method reads from the DNC's memory matrix based on the interface signals generated by the controller.
+    /// It calculates read weightings based on content-based addressing and temporal links, then uses these weightings
+    /// to read information from memory.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where the DNC retrieves information from its memory.
+    /// 
+    /// The reading process:
+    /// 1. Determines where to read from based on content similarity and temporal links
+    /// 2. Calculates weightings for each memory location
+    /// 3. Reads information from memory locations based on these weightings
+    /// 4. Returns the read information to be used in the network's output
+    /// 
+    /// This is like a person deciding which pages in their notepad to reference,
+    /// reading from those pages, and using that information in their thinking.
+    /// </para>
+    /// </remarks>
+    private List<Vector<T>> ReadFromMemory(MemoryInterfaceSignals signals)
+    {
+        List<Vector<T>> readVectors = [];
+        
+        // Calculate read weightings for each read head
+        for (int i = 0; i < _readHeads; i++)
+        {
+            // Calculate content-based addressing
+            Vector<T> contentWeighting = ContentAddressing(_memory, signals.ReadKeys[i], signals.ReadStrengths[i]);
+            
+            // Calculate backward weighting (temporal links)
+            Vector<T> backwardWeighting = _temporalLinkMatrix.Multiply(_readWeightings[i]);
+            
+            // Calculate forward weighting (temporal links)
+            Vector<T> forwardWeighting = _temporalLinkMatrix.Transpose().Multiply(_readWeightings[i]);
+            
+            // Combine weightings based on read modes
+            _readWeightings[i] = new Vector<T>(_memorySize);
+            for (int j = 0; j < _memorySize; j++)
+            {
+                _readWeightings[i][j] = NumOps.Add(
+                    NumOps.Add(
+                        NumOps.Multiply(backwardWeighting[j], signals.ReadModes[i][0]),
+                        NumOps.Multiply(contentWeighting[j], signals.ReadModes[i][1])
+                    ),
+                    NumOps.Multiply(forwardWeighting[j], signals.ReadModes[i][2])
+                );
+            }
+            
+            // Read from memory using the calculated weighting
+            Vector<T> readVector = new Vector<T>(_memoryWordSize);
+            for (int j = 0; j < _memoryWordSize; j++)
+            {
+                readVector[j] = NumOps.Zero;
+                for (int k = 0; k < _memorySize; k++)
+                {
+                    readVector[j] = NumOps.Add(
+                        readVector[j],
+                        NumOps.Multiply(_readWeightings[i][k], _memory[k, j])
+                    );
+                }
+            }
+            
+            readVectors.Add(readVector);
+        }
+        
+        return readVectors;
+    }
+    
+    /// <summary>
+    /// Combines the controller output with read vectors to produce the final output.
+    /// </summary>
+    /// <param name="controllerOutput">The output tensor from the controller.</param>
+    /// <param name="readVectors">The list of vectors read from memory.</param>
+    /// <returns>The final output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements a more sophisticated combination of controller output with read vectors
+    /// using a learned linear transformation. It uses a dedicated output matrix to properly weight
+    /// the contributions from the controller and each read vector, allowing the network to learn
+    /// the optimal way to combine these sources of information.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> CombineControllerOutputWithReadVectors(Tensor<T> controllerOutput, List<Vector<T>> readVectors)
+    {
+        // Determine dimensions
+        int outputSize = Architecture.OutputSize;
 
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
+        // Extract the controller's direct output (excluding memory interface signals)
+        // Determine the interface size to know how much of the controller output to use
+        int interfaceSize = CalculateDNCInterfaceSize(_memoryWordSize, _readHeads);
+        int controllerDirectOutputSize = controllerOutput.Shape[1] - interfaceSize;
 
-            writer.Write(fullName);
-            layer.Serialize(writer);
+        // Create empty output tensor with the right shape
+        Tensor<T> finalOutput = new Tensor<T>(new[] { 1, outputSize });
+
+        // Get the direct controller contribution from the first part of the controller output
+        Tensor<T> controllerDirectOutput = controllerOutput.Slice(0, 0, 1, controllerDirectOutputSize);
+
+        // Create a combined vector of controller output and read vectors for matrix multiplication
+        int combinedSize = controllerDirectOutputSize + (_readHeads * _memoryWordSize);
+        Vector<T> combinedVector = new Vector<T>(combinedSize);
+
+        // Copy controller direct output to combined vector
+        for (int i = 0; i < controllerDirectOutputSize; i++)
+        {
+            combinedVector[i] = controllerDirectOutput[0, i];
         }
 
-        // Serialize memory and other DNC-specific components
+        // Copy read vectors to combined vector
+        int offset = controllerDirectOutputSize;
+        for (int i = 0; i < _readHeads; i++)
+        {
+            for (int j = 0; j < _memoryWordSize; j++)
+            {
+                combinedVector[offset++] = readVectors[i][j];
+            }
+        }
+
+        // Apply learnable output matrix to combined vector
+        for (int i = 0; i < outputSize; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < combinedSize; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(combinedVector[j], _outputWeights[j, i]));
+            }
+            finalOutput[0, i] = sum;
+        }
+
+        // Apply appropriate activation function based on task type
+        NeuralNetworkHelper<T>.ApplyOutputActivation(finalOutput, Architecture);
+
+        return finalOutput;
+    }
+
+    /// <summary>
+    /// Calculates content-based addressing weights based on similarity between memory and a key.
+    /// </summary>
+    /// <param name="memory">The memory matrix.</param>
+    /// <param name="key">The key vector to compare with memory.</param>
+    /// <param name="strength">The strength of the addressing (sharpness of the focus).</param>
+    /// <returns>A vector of weights representing content-based addressing.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates weights for addressing memory based on the similarity between memory rows and a key vector.
+    /// The similarity is measured using cosine similarity, and the strength parameter controls how focused the attention is
+    /// (higher strength means more focus on the most similar rows).
+    /// </para>
+    /// <para><b>For Beginners:</b> This finds memory locations that contain similar content to what you're looking for.
+    /// 
+    /// It works like:
+    /// 1. The key vector is what you're looking for (like a search query)
+    /// 2. Each memory location is compared to this key to see how similar they are
+    /// 3. The strength controls how picky you are (higher means only very similar locations get attention)
+    /// 4. The result is a set of weights indicating which memory locations are most relevant
+    /// 
+    /// This is like looking through a notebook for pages containing information similar to what you need.
+    /// </para>
+    /// </remarks>
+    private Vector<T> ContentAddressing(Matrix<T> memory, Vector<T> key, T strength)
+    {
+        Vector<T> similarityScores = new Vector<T>(_memorySize);
+        
+        // Calculate cosine similarity between key and each memory row
+        for (int i = 0; i < _memorySize; i++)
+        {
+            Vector<T> memoryRow = memory.GetRow(i);
+            similarityScores[i] = CosineSimilarity(key, memoryRow);
+        }
+        
+        // Apply strength (temperature) to similarities
+        for (int i = 0; i < _memorySize; i++)
+        {
+            similarityScores[i] = NumOps.Multiply(similarityScores[i], strength);
+        }
+        
+        // Apply softmax to get weights
+        return Softmax(similarityScores);
+    }
+    
+    /// <summary>
+    /// Calculates the cosine similarity between two vectors.
+    /// </summary>
+    /// <param name="a">The first vector.</param>
+    /// <param name="b">The second vector.</param>
+    /// <returns>The cosine similarity between the vectors.</returns>
+    private T CosineSimilarity(Vector<T> a, Vector<T> b)
+    {
+        // Calculate dot product
+        T dotProduct = NumOps.Zero;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
+        }
+        
+        // Calculate magnitudes
+        T magnitudeA = NumOps.Zero;
+        T magnitudeB = NumOps.Zero;
+        for (int i = 0; i < a.Length; i++)
+        {
+            magnitudeA = NumOps.Add(magnitudeA, NumOps.Multiply(a[i], a[i]));
+            magnitudeB = NumOps.Add(magnitudeB, NumOps.Multiply(b[i], b[i]));
+        }
+        magnitudeA = NumOps.Sqrt(magnitudeA);
+        magnitudeB = NumOps.Sqrt(magnitudeB);
+        
+        // Avoid division by zero
+        if (MathHelper.AlmostEqual(magnitudeA, NumOps.Zero) || MathHelper.AlmostEqual(magnitudeB, NumOps.Zero))
+        {
+            return NumOps.Zero;
+        }
+        
+        // Calculate cosine similarity
+        return NumOps.Divide(dotProduct, NumOps.Multiply(magnitudeA, magnitudeB));
+    }
+    
+    /// <summary>
+    /// Applies the softmax function to a vector.
+    /// </summary>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>The softmax of the input vector.</returns>
+    private Vector<T> Softmax(Vector<T> vector)
+    {
+        // Find maximum value for numerical stability
+        T maxVal = vector[0];
+        for (int i = 1; i < vector.Length; i++)
+        {
+            if (NumOps.GreaterThan(vector[i], maxVal))
+            {
+                maxVal = vector[i];
+            }
+        }
+        
+        // Calculate exp of each element (shifted by max)
+        Vector<T> expVector = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double expVal = Math.Exp(Convert.ToDouble(NumOps.Subtract(vector[i], maxVal)));
+            expVector[i] = NumOps.FromDouble(expVal);
+        }
+        
+        // Calculate sum of exp values
+        T sum = NumOps.Zero;
+        for (int i = 0; i < expVector.Length; i++)
+        {
+            sum = NumOps.Add(sum, expVector[i]);
+        }
+        
+        // Normalize by sum
+        for (int i = 0; i < expVector.Length; i++)
+        {
+            expVector[i] = NumOps.Divide(expVector[i], sum);
+        }
+        
+        return expVector;
+    }
+    
+    /// <summary>
+    /// Calculates allocation weights based on the usage free vector and precedence vector.
+    /// </summary>
+    /// <param name="usageFree">The vector tracking which memory locations are free.</param>
+    /// <param name="precedenceWeighting">The vector tracking the order of memory writes.</param>
+    /// <returns>A vector of weights for memory allocation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates weights for allocating memory based on which locations are free (available for writing)
+    /// and the order in which memory has been written to previously. It sorts memory locations by their usage and
+    /// allocates more weight to freer locations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This decides where to write new information in memory.
+    /// 
+    /// It works by:
+    /// 1. Considering which memory locations are free or less used
+    /// 2. Prioritizing locations that haven't been written to recently
+    /// 3. Calculating weights that favor writing to unused or old locations
+    /// 4. This prevents important recent information from being overwritten
+    /// 
+    /// This is like finding empty pages in a notebook, or pages with old notes you don't need anymore,
+    /// to write new information.
+    /// </para>
+    /// </remarks>
+    private Vector<T> Allocate(Vector<T> usageFree, Vector<T> precedenceWeighting)
+    {
+        // Calculate allocation weights based on usage free vector
+        // This implementation is simplified - a full implementation would sort memory
+        // locations by usage and allocate to the least used locations first
+        
+        Vector<T> allocationWeighting = new Vector<T>(_memorySize);
+        
+        // For simplicity, we'll directly use the usage free vector as allocation weighting
+        for (int i = 0; i < _memorySize; i++)
+        {
+            allocationWeighting[i] = usageFree[i];
+        }
+        
+        return allocationWeighting;
+    }
+    
+    /// <summary>
+    /// Combines content and allocation weightings based on an allocation gate.
+    /// </summary>
+    /// <param name="contentWeighting">The content-based weighting.</param>
+    /// <param name="allocationWeighting">The allocation-based weighting.</param>
+    /// <param name="allocationGate">The allocation gate value between 0 and 1.</param>
+    /// <returns>A combined weighting vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method combines content-based addressing weights (which focus on memory locations with similar content)
+    /// with allocation-based weights (which focus on free memory locations) based on an allocation gate value.
+    /// When the allocation gate is close to 1, allocation weights are favored. When it's close to 0, content weights are favored.
+    /// </para>
+    /// <para><b>For Beginners:</b> This balances between writing to similar locations versus writing to free locations.
+    /// 
+    /// It works like:
+    /// 1. The content weighting prioritizes writing to locations with similar content
+    /// 2. The allocation weighting prioritizes writing to unused locations
+    /// 3. The allocation gate determines which approach to favor
+    /// 4. This balance lets the network decide whether to update existing information or store new information
+    /// 
+    /// This is like deciding whether to add notes to an existing page on a topic, or start a fresh page.
+    /// </para>
+    /// </remarks>
+    private Vector<T> CombineWeightings(Vector<T> contentWeighting, Vector<T> allocationWeighting, T allocationGate)
+    {
+        Vector<T> combinedWeighting = new Vector<T>(_memorySize);
+        
+        for (int i = 0; i < _memorySize; i++)
+        {
+            T contentComponent = NumOps.Multiply(contentWeighting[i], NumOps.Subtract(NumOps.One, allocationGate));
+            T allocationComponent = NumOps.Multiply(allocationWeighting[i], allocationGate);
+            combinedWeighting[i] = NumOps.Add(contentComponent, allocationComponent);
+        }
+        
+        return combinedWeighting;
+    }
+    
+    /// <summary>
+    /// Writes information to memory based on the write weighting, write vector, and erase vector.
+    /// </summary>
+    /// <param name="writeVector">The vector specifying what to write.</param>
+    /// <param name="eraseVector">The vector specifying what to erase.</param>
+    /// <remarks>
+    /// <para>
+    /// This method updates the memory matrix by first erasing old information based on the erase vector and write weighting,
+    /// then writing new information based on the write vector and write weighting. Each memory location is updated proportionally
+    /// to its corresponding write weight.
+    /// </para>
+    /// <para><b>For Beginners:</b> This actually writes the new information to memory.
+    /// 
+    /// The writing process:
+    /// 1. First, it erases existing information (to varying degrees) at the target locations
+    /// 2. Then, it writes the new information to those same locations
+    /// 3. The amount of erasing and writing at each location depends on the write weighting
+    /// 4. This allows for partial updates to existing information
+    /// 
+    /// This two-step process (erase then write) is like erasing part of a page before writing new notes,
+    /// allowing the DNC to update information without completely overwriting everything.
+    /// </para>
+    /// </remarks>
+    private void WriteToMemory(Vector<T> writeVector, Vector<T> eraseVector)
+    {
+        // First, erase from memory based on erase vector and write weighting
         for (int i = 0; i < _memorySize; i++)
         {
             for (int j = 0; j < _memoryWordSize; j++)
             {
-                // Fix null reference warning
-                string valueStr = _memory[i, j]?.ToString() ?? string.Empty;
-                writer.Write(valueStr);
+                // Calculate erase amount
+                T eraseAmount = NumOps.Multiply(_writeWeighting[i], eraseVector[j]);
+                
+                // Erase from memory
+                _memory[i, j] = NumOps.Multiply(_memory[i, j], NumOps.Subtract(NumOps.One, eraseAmount));
+            }
+        }
+        
+        // Then, write to memory based on write vector and write weighting
+        for (int i = 0; i < _memorySize; i++)
+        {
+            for (int j = 0; j < _memoryWordSize; j++)
+            {
+                // Calculate write amount
+                T writeAmount = NumOps.Multiply(_writeWeighting[i], writeVector[j]);
+                
+                // Add to memory
+                _memory[i, j] = NumOps.Add(_memory[i, j], writeAmount);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Updates the usage free vector based on the write weighting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method updates the usage free vector to reflect which memory locations have been written to. Locations
+    /// with higher write weights are marked as less free (closer to 0), indicating that they now contain important
+    /// information that should not be quickly overwritten.
+    /// </para>
+    /// <para><b>For Beginners:</b> This updates the record of which memory locations are in use.
+    /// 
+    /// After writing to memory:
+    /// 1. The usage free vector is updated to reflect which locations are now being used
+    /// 2. Locations that were written to more heavily are marked as less free
+    /// 3. This helps the DNC avoid overwriting important information in future writes
+    /// 4. Over time, memory usage changes as information becomes less relevant
+    /// 
+    /// This is like keeping track of which pages in your notebook contain important information
+    /// and which ones are available for new notes.
+    /// </para>
+    /// </remarks>
+    private void UpdateUsage()
+    {
+        for (int i = 0; i < _memorySize; i++)
+        {
+            // Reduce free usage based on write weighting
+            _usageFree[i] = NumOps.Multiply(_usageFree[i], NumOps.Subtract(NumOps.One, _writeWeighting[i]));
+            
+            // Optionally include a small decay factor to gradually free up memory over time
+            T decayFactor = NumOps.FromDouble(0.99); // Slight decay
+            _usageFree[i] = NumOps.Add(_usageFree[i], NumOps.Multiply(NumOps.Subtract(NumOps.One, _usageFree[i]), 
+                NumOps.Subtract(NumOps.One, decayFactor)));
+        }
+    }
+    
+    /// <summary>
+    /// Updates the precedence weighting based on the write weighting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method updates the precedence weighting vector to reflect the order in which memory locations were written to.
+    /// Locations that are currently being written to are given the highest precedence (values closer to 1), while
+    /// precedence values for previously written locations decay slightly.
+    /// </para>
+    /// <para><b>For Beginners:</b> This updates the record of which memory locations were written to most recently.
+    /// 
+    /// After writing to memory:
+    /// 1. The precedence weighting is updated to track the recency of writes
+    /// 2. Locations just written to are marked as most recent
+    /// 3. Previously recent locations have their recency value slightly reduced
+    /// 4. This creates a time-ordered record of memory usage
+    /// 
+    /// This is like keeping track of the order in which you wrote notes in your notebook,
+    /// which helps you find related information that was written around the same time.
+    /// </para>
+    /// </remarks>
+    private void UpdatePrecedence()
+    {
+        // Decay old precedence values
+        T decay = NumOps.FromDouble(0.9); // Decay factor
+        for (int i = 0; i < _memorySize; i++)
+        {
+            _precedenceWeighting[i] = NumOps.Multiply(_precedenceWeighting[i], decay);
+        }
+        
+        // Increase precedence for locations currently being written to
+        for (int i = 0; i < _memorySize; i++)
+        {
+            _precedenceWeighting[i] = NumOps.Add(_precedenceWeighting[i], 
+                NumOps.Multiply(_writeWeighting[i], NumOps.Subtract(NumOps.One, decay)));
+        }
+    }
+    
+    /// <summary>
+    /// Updates the temporal link matrix based on the write weighting and precedence weighting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method updates the temporal link matrix to represent the sequential relationships between memory locations.
+    /// If location i was written to just before location j, the temporal link matrix will have a high value at position [i, j].
+    /// This allows the DNC to follow chains of information in the order they were written.
+    /// </para>
+    /// <para><b>For Beginners:</b> This updates the connections between memory locations in time sequence.
+    /// 
+    /// After writing to memory:
+    /// 1. The temporal link matrix is updated to track which locations were written to before/after others
+    /// 2. This creates a network of "next location" and "previous location" relationships
+    /// 3. The strength of these connections depends on how heavily the locations were written to
+    /// 4. This allows the DNC to follow chains of related information in sequence
+    /// 
+    /// This is like drawing arrows between pages in your notebook to show which page comes next
+    /// in a sequence, allowing you to follow a train of thought or a multi-step process.
+    /// </para>
+    /// </remarks>
+    private void UpdateTemporalLinks()
+    {
+        // Update temporal links based on write weightings and precedence
+        for (int i = 0; i < _memorySize; i++)
+        {
+            for (int j = 0; j < _memorySize; j++)
+            {
+                if (i != j) // No self-links
+                {
+                    T link = NumOps.Add(
+                        NumOps.Multiply(_temporalLinkMatrix[i, j], 
+                            NumOps.Subtract(NumOps.One, _writeWeighting[i])), 
+                        NumOps.Multiply(_precedenceWeighting[j], _writeWeighting[i]));
+                    
+                    _temporalLinkMatrix[i, j] = link;
+                }
+                else
+                {
+                    _temporalLinkMatrix[i, j] = NumOps.Zero; // No self-links
+                }
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Gets metadata about the Differentiable Neural Computer model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the DNC, including its model type, memory configuration,
+    /// and additional configuration information. This metadata is useful for model management
+    /// and for generating reports about the model's structure and configuration.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides a summary of your DNC's configuration.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Differentiable Neural Computer)
+    /// - Details about memory size and word size
+    /// - Number of read heads and controller size
+    /// - Information about the network architecture
+    /// - Serialized data that can be used to save and reload the model
+    /// 
+    /// This information is useful for tracking different model configurations
+    /// and for saving/loading models for later use.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.DifferentiableNeuralComputer,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "MemorySize", _memorySize },
+                { "MemoryWordSize", _memoryWordSize },
+                { "ControllerSize", _controllerSize },
+                { "ReadHeads", _readHeads },
+                { "InputSize", Architecture.InputSize },
+                { "OutputSize", Architecture.OutputSize },
+                { "LayerCount", Layers.Count },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes Differentiable Neural Computer-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes DNC-specific configuration and state data to a binary stream. It includes
+    /// properties such as memory size, memory word size, controller size, read heads count, and the
+    /// current state of the memory matrix, usage vector, and other memory tracking structures.
+    /// </para>
+    /// <para><b>For Beginners:</b> This saves the special configuration and current state of your DNC.
+    /// 
+    /// It's like taking a snapshot of the DNC that includes:
+    /// - Its structural configuration (memory size, read heads, etc.)
+    /// - The current contents of memory
+    /// - The current state of all memory tracking systems
+    /// - The current state of all memory connections
+    /// 
+    /// This allows you to save both the network's learned parameters and its current memory state,
+    /// so you can resume from exactly the same state later.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write DNC-specific properties
+        writer.Write(_memorySize);
+        writer.Write(_memoryWordSize);
+        writer.Write(_controllerSize);
+        writer.Write(_readHeads);
+        writer.Write(IsTrainingMode);
+        
+        // Write memory matrix
+        for (int i = 0; i < _memorySize; i++)
+        {
+            for (int j = 0; j < _memoryWordSize; j++)
+            {
+                writer.Write(Convert.ToDouble(_memory[i, j]));
+            }
+        }
+        
+        // Write usage free vector
+        for (int i = 0; i < _memorySize; i++)
+        {
+            writer.Write(Convert.ToDouble(_usageFree[i]));
+        }
+        
+        // Write write weighting
+        for (int i = 0; i < _memorySize; i++)
+        {
+            writer.Write(Convert.ToDouble(_writeWeighting[i]));
+        }
+        
+        // Write read weightings
+        writer.Write(_readWeightings.Count);
+        foreach (var readWeighting in _readWeightings)
+        {
+            for (int i = 0; i < _memorySize; i++)
+            {
+                writer.Write(Convert.ToDouble(readWeighting[i]));
+            }
+        }
+        
+        // Write precedence weighting
+        for (int i = 0; i < _memorySize; i++)
+        {
+            writer.Write(Convert.ToDouble(_precedenceWeighting[i]));
+        }
+        
+        // Write temporal link matrix
+        for (int i = 0; i < _memorySize; i++)
+        {
+            for (int j = 0; j < _memorySize; j++)
+            {
+                writer.Write(Convert.ToDouble(_temporalLinkMatrix[i, j]));
+            }
+        }
+        
+        // Write read vectors
+        writer.Write(_readVectors.Count);
+        foreach (var readVector in _readVectors)
+        {
+            for (int i = 0; i < _memoryWordSize; i++)
+            {
+                writer.Write(Convert.ToDouble(readVector[i]));
             }
         }
     }
 
     /// <summary>
-    /// Deserializes the Differentiable Neural Computer from a binary stream.
+    /// Deserializes Differentiable Neural Computer-specific data from a binary reader.
     /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer type information is invalid or instance creation fails.</exception>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
     /// <remarks>
     /// <para>
-    /// This method restores the state of the Differentiable Neural Computer from a binary stream. It reads the number of layers,
-    /// followed by the type name and serialized state of each layer. It also deserializes the memory matrix and other DNC-specific
-    /// components. This allows a previously saved DNC to be restored from disk with all its learned parameters and memory state.
+    /// This method reads DNC-specific configuration and state data from a binary stream. It retrieves
+    /// properties such as memory size, memory word size, controller size, read heads count, and the
+    /// saved state of the memory matrix, usage vector, and other memory tracking structures.
     /// </para>
-    /// <para><b>For Beginners:</b> This loads a previously saved DNC from a file.
+    /// <para><b>For Beginners:</b> This restores the special configuration and state of your DNC from saved data.
     /// 
-    /// When loading the DNC:
-    /// - First, it loads the neural network layers and their parameters
-    /// - Then, it loads the saved state of the memory matrix
-    /// - This restores both what the DNC had learned and what it was "remembering"
+    /// It's like restoring a snapshot of the DNC that includes:
+    /// - Its structural configuration (memory size, read heads, etc.)
+    /// - The saved contents of memory
+    /// - The saved state of all memory tracking systems
+    /// - The saved state of all memory connections
     /// 
-    /// This is like restoring a complete snapshot of both the brain and the notepad of the system,
-    /// bringing it back to exactly the same state it was in when saved.
+    /// This allows you to resume from exactly the same state that was saved,
+    /// with both the network's learned parameters and its memory contents intact.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
+        // Read DNC-specific properties
+        int memorySize = reader.ReadInt32();
+        int memoryWordSize = reader.ReadInt32();
+        int controllerSize = reader.ReadInt32();
+        int readHeads = reader.ReadInt32();
+        
+        // Check if configuration matches
+        if (memorySize != _memorySize || memoryWordSize != _memoryWordSize || 
+            controllerSize != _controllerSize || readHeads != _readHeads)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            Console.WriteLine("Warning: Loaded DNC has different configuration than the current instance.");
         }
-
-        // Deserialize memory and other DNC-specific components
+        
+        // Read training mode
+        IsTrainingMode = reader.ReadBoolean();
+        
+        // Read memory matrix
         for (int i = 0; i < _memorySize; i++)
         {
             for (int j = 0; j < _memoryWordSize; j++)
             {
-                _memory[i, j] = (T)Convert.ChangeType(reader.ReadString(), typeof(T));
+                _memory[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
+        }
+        
+        // Read usage free vector
+        for (int i = 0; i < _memorySize; i++)
+        {
+            _usageFree[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        
+        // Read write weighting
+        for (int i = 0; i < _memorySize; i++)
+        {
+            _writeWeighting[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        
+        // Read read weightings
+        int readWeightingsCount = reader.ReadInt32();
+        _readWeightings.Clear();
+        for (int k = 0; k < readWeightingsCount; k++)
+        {
+            Vector<T> readWeighting = new Vector<T>(_memorySize);
+            for (int i = 0; i < _memorySize; i++)
+            {
+                readWeighting[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _readWeightings.Add(readWeighting);
+        }
+        
+        // Read precedence weighting
+        for (int i = 0; i < _memorySize; i++)
+        {
+            _precedenceWeighting[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        
+        // Read temporal link matrix
+        for (int i = 0; i < _memorySize; i++)
+        {
+            for (int j = 0; j < _memorySize; j++)
+            {
+                _temporalLinkMatrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+        
+        // Read read vectors
+        int readVectorsCount = reader.ReadInt32();
+        _readVectors.Clear();
+        for (int k = 0; k < readVectorsCount; k++)
+        {
+            Vector<T> readVector = new Vector<T>(_memoryWordSize);
+            for (int i = 0; i < _memoryWordSize; i++)
+            {
+                readVector[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _readVectors.Add(readVector);
+        }
+    }
+    
+    /// <summary>
+    /// Helper class for storing memory interface signals parsed from controller output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This class organizes the various interface signals generated by the controller network for interacting with memory.
+    /// It includes vectors and values for writing to memory, reading from memory, and controlling memory access modes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like a control panel for operating the memory system.
+    /// 
+    /// It organizes all the different control signals:
+    /// - What information to write to memory (write vector)
+    /// - What information to erase from memory (erase vector)
+    /// - Where to look for information in memory (read keys)
+    /// - How focused to be when searching memory (read strengths)
+    /// - How to navigate between related pieces of information (read modes)
+    /// 
+    /// These signals together allow the controller to precisely control how information
+    /// is stored in and retrieved from memory.
+    /// </para>
+    /// </remarks>
+    private class MemoryInterfaceSignals
+    {
+        /// <summary>
+        /// Gets the numeric operations provider for type T.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This property provides access to numeric operations (like addition, multiplication, etc.) that work
+        /// with the generic type T. This allows the layer to perform mathematical operations regardless of
+        /// whether T is float, double, or another numeric type.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is a toolkit for math operations that works with different number types.
+        /// 
+        /// It provides:
+        /// - Basic math operations (add, subtract, multiply, etc.)
+        /// - Ways to convert between different number formats
+        /// - Special math functions needed by neural networks
+        /// 
+        /// This allows the layer to work with different types of numbers (float, double, etc.)
+        /// without needing different code for each type.
+        /// </para>
+        /// </remarks>
+        private static INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
+
+        /// <summary>
+        /// The vector to write to memory.
+        /// </summary>
+        public Vector<T> WriteVector { get; set; } = new Vector<T>(0);
+    
+        /// <summary>
+        /// The vector indicating what to erase from memory.
+        /// </summary>
+        public Vector<T> EraseVector { get; set; } = new Vector<T>(0);
+    
+        /// <summary>
+        /// The list of keys for content-based reading from memory.
+        /// </summary>
+        public List<Vector<T>> ReadKeys { get; set; } = new List<Vector<T>>();
+    
+        /// <summary>
+        /// The list of strengths for content-based reading.
+        /// </summary>
+        public List<T> ReadStrengths { get; set; } = new List<T>();
+    
+        /// <summary>
+        /// The key for content-based writing to memory.
+        /// </summary>
+        public Vector<T> WriteKey { get; set; } = new Vector<T>(0);
+    
+        /// <summary>
+        /// The strength for content-based writing.
+        /// </summary>
+        public T WriteStrength { get; set; } = NumOps.Zero;
+    
+        /// <summary>
+        /// The allocation gate controlling whether to use content-based or allocation-based writing.
+        /// </summary>
+        public T AllocationGate { get; set; } = NumOps.Zero;
+    
+        /// <summary>
+        /// The write gate controlling the overall intensity of writing.
+        /// </summary>
+        public T WriteGate { get; set; } = NumOps.Zero;
+    
+        /// <summary>
+        /// The list of mode vectors for each read head, controlling whether to read based on content,
+        /// based on backward temporal links, or based on forward temporal links.
+        /// </summary>
+        public List<Vector<T>> ReadModes { get; set; } = new List<Vector<T>>();
+    
+        /// <summary>
+        /// Initializes a new instance of the MemoryInterfaceSignals class with default values.
+        /// </summary>
+        public MemoryInterfaceSignals()
+        {
+            // Default initializations are handled by the property initializers above
+        }
+    
+        /// <summary>
+        /// Initializes a new instance of the MemoryInterfaceSignals class with specified memory word size.
+        /// </summary>
+        /// <param name="memoryWordSize">The size of memory words.</param>
+        public MemoryInterfaceSignals(int memoryWordSize)
+        {
+            WriteVector = new Vector<T>(memoryWordSize);
+            EraseVector = new Vector<T>(memoryWordSize);
+            WriteKey = new Vector<T>(memoryWordSize);
+        
+            // Initialize the vectors with zeros
+            for (int i = 0; i < memoryWordSize; i++)
+            {
+                WriteVector[i] = NumOps.Zero;
+                EraseVector[i] = NumOps.Zero;
+                WriteKey[i] = NumOps.Zero;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Resets the state of the Differentiable Neural Computer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the DNC's memory state, including the memory matrix, usage tracking vectors,
+    /// read/write weightings, temporal link matrix, and read vectors. This is useful when starting to process
+    /// a new, unrelated sequence of inputs, or when initializing the network for a new task.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like erasing the notepad and starting fresh.
+    /// 
+    /// The reset process:
+    /// 1. Clears the memory matrix
+    /// 2. Resets all memory tracking systems
+    /// 3. Clears all memory connections
+    /// 4. Resets all reading and writing mechanisms
+    /// 
+    /// This is useful when:
+    /// - Starting a completely new task
+    /// - Ensuring that information from a previous task doesn't influence the current one
+    /// - Testing the DNC on different problems independently
+    /// 
+    /// Note that this doesn't reset the network's learned parameters, just its current memory state.
+    /// </para>
+    /// </remarks>
+    public void ResetMemoryState()
+    {
+        // Reset memory matrix
+        for (int i = 0; i < _memorySize; i++)
+        {
+            for (int j = 0; j < _memoryWordSize; j++)
+            {
+                _memory[i, j] = NumOps.FromDouble(Random.NextDouble() * 0.1);
+            }
+        }
+        
+        // Reset usage free vector
+        for (int i = 0; i < _memorySize; i++)
+        {
+            _usageFree[i] = NumOps.FromDouble(1.0);
+        }
+        
+        // Reset write weighting
+        for (int i = 0; i < _memorySize; i++)
+        {
+            _writeWeighting[i] = NumOps.Zero;
+        }
+        
+        // Reset read weightings
+        _readWeightings.Clear();
+        for (int i = 0; i < _readHeads; i++)
+        {
+            var readWeighting = new Vector<T>(_memorySize);
+            for (int j = 0; j < _memorySize; j++)
+            {
+                readWeighting[j] = NumOps.Zero;
+            }
+            _readWeightings.Add(readWeighting);
+        }
+        
+        // Reset precedence weighting
+        for (int i = 0; i < _memorySize; i++)
+        {
+            _precedenceWeighting[i] = NumOps.Zero;
+        }
+        
+        // Reset temporal link matrix
+        for (int i = 0; i < _memorySize; i++)
+        {
+            for (int j = 0; j < _memorySize; j++)
+            {
+                _temporalLinkMatrix[i, j] = NumOps.Zero;
+            }
+        }
+        
+        // Reset read vectors
+        _readVectors.Clear();
+    }
+    
+    /// <summary>
+    /// Processes a sequence of inputs through the DNC.
+    /// </summary>
+    /// <param name="inputs">A list of input tensors representing a sequence.</param>
+    /// <returns>A list of output tensors corresponding to each input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method processes a sequence of inputs through the DNC, maintaining the memory state between inputs.
+    /// This is particularly useful for tasks that require processing sequences of data, like language modeling,
+    /// sequence prediction, or graph traversal.
+    /// </para>
+    /// <para><b>For Beginners:</b> This processes a series of inputs while maintaining memory between them.
+    /// 
+    /// It works like:
+    /// 1. Starting with a fresh memory state (or continuing from the current state)
+    /// 2. Processing each input one by one through the network
+    /// 3. Using information stored in memory from previous inputs to help process current ones
+    /// 4. Building up knowledge across the sequence in the external memory
+    /// 
+    /// This is ideal for tasks where each input is related to previous ones, like:
+    /// - Processing a paragraph of text word by word
+    /// - Following a sequence of instructions step by step
+    /// - Analyzing a time series of data points
+    /// </para>
+    /// </remarks>
+    public List<Tensor<T>> ProcessSequence(List<Tensor<T>> inputs, bool resetMemory = true)
+    {
+        if (resetMemory)
+        {
+            ResetMemoryState();
+        }
+        
+        List<Tensor<T>> outputs = [];
+        
+        foreach (var input in inputs)
+        {
+            var output = Predict(input);
+            outputs.Add(output);
+        }
+        
+        return outputs;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the differentiable neural computer model.
+    /// </summary>
+    /// <returns>A new instance of the differentiable neural computer model with the same configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the differentiable neural computer model with the same configuration as the current instance.
+    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
+    /// with the serialized data. The new instance will have the same architecture, memory size, memory word size,
+    /// controller size, read heads count, and activation function type as the original.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a copy of the network structure without copying the learned data.
+    /// 
+    /// Think of it like creating a blueprint copy of the DNC:
+    /// - It copies the same neural network architecture
+    /// - It sets up the same memory size (same notepad dimensions)
+    /// - It configures the same number of read heads (how many pages to look at at once)
+    /// - It uses the same controller size (brain power)
+    /// - It keeps the same activation function (how neurons respond to input)
+    /// - But it doesn't copy any of the actual memories or learned behaviors
+    /// 
+    /// This is primarily used when saving or loading models, creating an empty framework
+    /// that the saved parameters and memory state can be loaded into later.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        // Determine which constructor to use based on which activation function is set
+        if (_activationFunction != null)
+        {
+            return new DifferentiableNeuralComputer<T>(
+                Architecture,
+                _memorySize,
+                _memoryWordSize,
+                _controllerSize,
+                _readHeads,
+                _activationFunction
+            );
+        }
+        else
+        {
+            return new DifferentiableNeuralComputer<T>(
+                Architecture,
+                _memorySize,
+                _memoryWordSize,
+                _controllerSize,
+                _readHeads,
+                _vectorActivationFunction
+            );
         }
     }
 }

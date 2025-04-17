@@ -38,6 +38,44 @@ public static class MatrixExtensions
     }
 
     /// <summary>
+    /// Converts a matrix to a vector by flattening its elements in row-major order.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
+    /// <param name="matrix">The matrix to convert to a vector.</param>
+    /// <returns>A vector containing all elements of the matrix in row-major order.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method flattens a matrix into a vector by concatenating all rows in order.
+    /// The resulting vector has a length equal to rows * columns of the original matrix.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like taking a grid of numbers and writing them out in a single line,
+    /// going from left to right, top to bottom. For example, a 2x3 matrix:
+    /// [1, 2, 3]
+    /// [4, 5, 6]
+    /// becomes the vector: [1, 2, 3, 4, 5, 6]
+    /// </para>
+    /// </remarks>
+    public static Vector<T> ToVector<T>(this Matrix<T> matrix)
+    {
+        if (matrix == null)
+            throw new ArgumentNullException(nameof(matrix));
+
+        int size = matrix.Rows * matrix.Columns;
+        var result = new Vector<T>(size);
+            
+        int index = 0;
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[index++] = matrix[i, j];
+            }
+        }
+            
+        return result;
+    }
+
+    /// <summary>
     /// Adds a vector to each row of a matrix.
     /// </summary>
     /// <typeparam name="T">The numeric data type of the matrix and vector elements.</typeparam>
@@ -1914,6 +1952,85 @@ public static class MatrixExtensions
     }
 
     /// <summary>
+    /// Determines whether a matrix is invertible.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for matrix elements.</typeparam>
+    /// <param name="matrix">The matrix to check.</param>
+    /// <returns>True if the matrix is invertible; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method checks if a matrix is invertible by verifying that it is square and
+    /// calculating its determinant. If the determinant is zero (or very close to zero for floating-point types),
+    /// the matrix is not invertible. A matrix is invertible if and only if its determinant is non-zero.
+    /// </para>
+    /// <para><b>For Beginners:</b> This checks if you can find the inverse of a matrix.
+    /// 
+    /// A matrix is invertible when:
+    /// - It is square (same number of rows and columns)
+    /// - Its determinant is not zero
+    /// 
+    /// The inverse of a matrix is like the reciprocal of a number (1/x).
+    /// Not all matrices have inverses, just like division by zero is not allowed.
+    /// 
+    /// This method is important for solving systems of linear equations
+    /// and is used in many machine learning algorithms.
+    /// </para>
+    /// </remarks>
+    public static bool IsInvertible<T>(this Matrix<T> matrix)
+    {
+        // Get numeric operations for the type T
+        var numOps = MathHelper.GetNumericOperations<T>();
+        
+        // Check if the matrix is square
+        if (matrix.Rows != matrix.Columns)
+        {
+            return false;
+        }
+        
+        try
+        {
+            // For small matrices (2x2 or 3x3), calculating the determinant directly is efficient
+            if (matrix.Rows <= 3)
+            {
+                T determinant = matrix.Determinant();
+                
+                // Check if determinant is zero or very close to zero
+                if (numOps.Equals(determinant, numOps.Zero) || 
+                    MathHelper.AlmostEqual(determinant, numOps.Zero))
+                {
+                    return false;
+                }
+                
+                return true;
+            }
+            
+            // For larger matrices, another approach is to try an LU decomposition
+            // If successful, the matrix is invertible
+            var decomposition = new LuDecomposition<T>(matrix);
+            var (l, u, p) = (decomposition.L, decomposition.U, decomposition.P);
+
+            // Check the diagonal elements of U matrix
+            // If any diagonal element is zero, the matrix is not invertible
+            for (int i = 0; i < u.Rows; i++)
+            {
+                if (numOps.Equals(u[i, i], numOps.Zero) || 
+                    MathHelper.AlmostEqual(u[i, i], numOps.Zero))
+                {
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+        catch (Exception)
+        {
+            // If any calculation fails (e.g., due to numerical instability),
+            // be conservative and assume the matrix is not invertible
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Determines if a matrix is a Hankel matrix.
     /// </summary>
     /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
@@ -2771,7 +2888,7 @@ public static class MatrixExtensions
                 ops.Multiply(weightsVector[0], _epsilon)
             );
         var nullspaceMatrix = Matrix<T>.CreateMatrix<T>(columns, matrix.GetNullity(_threshold));
-        var _vMatrix = matrix.Copy();
+        var _vMatrix = matrix.Clone();
 
         for (int i = 0; i < columns; i++)
         {
@@ -2808,7 +2925,7 @@ public static class MatrixExtensions
         int rows = matrix.Rows, columns = matrix.Columns, rank = 0;
         var weightsVector = new Vector<T>(columns);
         var rangeMatrix = new Matrix<T>(rows, matrix.GetRank(threshold));
-        var _uMatrix = matrix.Copy();
+        var _uMatrix = matrix.Clone();
 
         for (int i = 0; i < columns; i++)
         {
@@ -3614,39 +3731,48 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> GetColumns<T>(this Matrix<T> matrix, IEnumerable<int> columnIndices)
     {
-        return new Matrix<T>(GetColumnVectors(matrix, columnIndices));
+        return new Matrix<T>(GetColumnVectors(matrix, [..columnIndices]));
     }
 
     /// <summary>
-    /// Extracts multiple columns from a matrix as a list of vectors.
+    /// Gets specific column vectors from a matrix based on the specified indices.
     /// </summary>
-    /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
-    /// <param name="matrix">The source matrix to extract columns from.</param>
-    /// <param name="columnIndices">A collection of zero-based indices of columns to extract.</param>
-    /// <returns>A list of vectors, each representing a column from the original matrix.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown when any of the specified column indices is outside the bounds of the matrix.
-    /// </exception>
+    /// <param name="matrix">The matrix from which to extract columns.</param>
+    /// <param name="indices">The indices of the columns to extract.</param>
+    /// <returns>An array of vectors representing the selected columns.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method is similar to GetColumns, but instead of returning a matrix,
-    /// it returns a list of vectors. Each vector represents one column from your original matrix.
-    /// This can be useful when you need to process each selected column separately.
+    /// This extension method allows for efficient extraction of specific columns from a matrix.
+    /// It creates a new array of vectors where each vector represents one of the requested columns.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you pull out specific columns from your data matrix.
+    /// 
+    /// Imagine your data as a grid of numbers:
+    /// - Each column might represent a feature like age, height, or temperature
+    /// - This method lets you select only the columns you're interested in
+    /// - The result is a collection of vectors, where each vector is one column
+    /// 
+    /// For example, if you only want columns 0, 3, and 5 from a matrix with 10 columns,
+    /// you would pass [0, 3, 5] as the indices.
     /// </para>
     /// </remarks>
-    public static List<Vector<T>> GetColumnVectors<T>(this Matrix<T> matrix, IEnumerable<int> columnIndices)
+    public static Vector<T>[] GetColumnVectors<T>(this Matrix<T> matrix, int[] indices)
     {
-        var selectedColumns = new List<Vector<T>>();
-        foreach (int index in columnIndices)
+        if (indices == null)
+            throw new ArgumentNullException(nameof(indices));
+    
+        Vector<T>[] columns = new Vector<T>[indices.Length];
+        for (int i = 0; i < indices.Length; i++)
         {
-            if (index < 0 || index >= matrix.Columns)
+            if (indices[i] < 0 || indices[i] >= matrix.Columns)
             {
-                throw new ArgumentOutOfRangeException(nameof(columnIndices), $"Column index {index} is out of range.");
+                throw new ArgumentOutOfRangeException(nameof(indices), 
+                    $"Column index {indices[i]} is out of range for matrix with {matrix.Columns} columns");
             }
-            selectedColumns.Add(matrix.GetColumn(index));
+            columns[i] = matrix.GetColumn(indices[i]);
         }
 
-        return selectedColumns;
+        return columns;
     }
 
     /// <summary>
@@ -3900,5 +4026,26 @@ public static class MatrixExtensions
         }
 
         return reshaped;
+    }
+
+    /// <summary>
+    /// Creates a submatrix from the given matrix using the specified indices.
+    /// </summary>
+    /// <typeparam name="T">The type of elements in the matrix.</typeparam>
+    /// <param name="matrix">The source matrix.</param>
+    /// <param name="indices">The indices of rows to include in the submatrix.</param>
+    /// <returns>A new matrix containing only the specified rows.</returns>
+    public static Matrix<T> Submatrix<T>(this Matrix<T> matrix, int[] indices)
+    {
+        var result = new Matrix<T>(indices.Length, matrix.Columns);
+        for (int i = 0; i < indices.Length; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = matrix[indices[i], j];
+            }
+        }
+
+        return result;
     }
 }

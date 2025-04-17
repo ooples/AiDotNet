@@ -171,6 +171,8 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     {
         _epsilon = NumOps.FromDouble(epsilon);
         _targetNetwork = new DeepQNetwork<T>(architecture, epsilon);
+
+        InitializeLayers();
     }
 
     /// <summary>
@@ -211,44 +213,10 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Makes a prediction using the current state of the Deep Q-Network.
-    /// </summary>
-    /// <param name="input">The input vector representing the current state.</param>
-    /// <returns>The predicted Q-values for each possible action in the given state.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method generates a prediction by passing the input state vector through each layer of the Deep Q-Network
-    /// in sequence. The result is a vector where each element represents the estimated Q-value (expected future reward)
-    /// for taking a specific action in the given state.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method estimates how good each possible action is in the current situation.
-    /// 
-    /// The prediction process works like this:
-    /// - The input is a description of the current state (what the agent can observe)
-    /// - This information flows through all the layers of the neural network
-    /// - The output is a score for each possible action the agent could take
-    /// - Higher scores mean the network thinks that action will lead to better rewards
-    /// 
-    /// For example, if the agent is playing a game, the prediction might say:
-    /// "Moving left has a value of 5, moving right has a value of 10, so moving right is probably better."
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Gets the Q-values for all possible actions in the given state.
     /// </summary>
-    /// <param name="state">The input vector representing the current state.</param>
-    /// <returns>A vector of Q-values, one for each possible action.</returns>
+    /// <param name="state">The input tensor representing the current state.</param>
+    /// <returns>A tensor of Q-values, one for each possible action.</returns>
     /// <remarks>
     /// <para>
     /// This method is a wrapper around the Predict method that makes it more semantically clear that
@@ -265,7 +233,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// that moving right now will eventually lead to a total reward of about 100 points.
     /// </para>
     /// </remarks>
-    public Vector<T> GetQValues(Vector<T> state)
+    public Tensor<T> GetQValues(Tensor<T> state)
     {
         return Predict(state);
     }
@@ -292,50 +260,10 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// the agent will choose to move right because it has the higher expected reward.
     /// </para>
     /// </remarks>
-    public int GetBestAction(Vector<T> state)
+    public int GetBestAction(Tensor<T> state)
     {
         var qValues = GetQValues(state);
-        return ArgMax(qValues);
-    }
-
-    /// <summary>
-    /// Finds the index of the maximum value in a vector.
-    /// </summary>
-    /// <param name="vector">The input vector to search.</param>
-    /// <returns>The index of the maximum value in the vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method iterates through the elements of the input vector and returns the index of the element
-    /// with the highest value. It is used to determine which action has the highest Q-value.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method finds the position of the highest number in a list.
-    /// 
-    /// For example, given a list of scores [3, 7, 2, 5]:
-    /// - The highest value is 7
-    /// - The position (index) of 7 in the list is 1 (counting from 0)
-    /// - So the method returns 1
-    /// 
-    /// In the context of Q-learning, if each position represents an action:
-    /// - Position 0 might be "move up" with a score of 3
-    /// - Position 1 might be "move right" with a score of 7
-    /// - Position 2 might be "move down" with a score of 2
-    /// - Position 3 might be "move left" with a score of 5
-    /// - The method would return 1, indicating "move right" is the best action
-    /// </para>
-    /// </remarks>
-    private int ArgMax(Vector<T> vector)
-    {
-        T max = vector[0];
-        int maxIndex = 0;
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], max))
-            {
-                max = vector[i];
-                maxIndex = i;
-            }
-        }
-        return maxIndex;
+        return qValues.Max().maxIndex;
     }
 
     /// <summary>
@@ -366,7 +294,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// - 90% of the time, it will choose the action with the highest Q-value
     /// </para>
     /// </remarks>
-    public int GetAction(Vector<T> state)
+    public int GetAction(Tensor<T> state)
     {
         if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _epsilon))
         {
@@ -404,193 +332,12 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// the most recent entries.
     /// </para>
     /// </remarks>
-    public void AddExperience(Vector<T> state, int action, T reward, Vector<T> nextState, bool done)
+    public void AddExperience(Tensor<T> state, int action, T reward, Tensor<T> nextState, bool done)
     {
         _replayBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
         if (_replayBuffer.Count > 10000) // Limit buffer size
         {
             _replayBuffer.RemoveAt(0);
-        }
-    }
-
-    /// <summary>
-    /// Trains the Deep Q-Network using experience replay and a target network.
-    /// </summary>
-    /// <param name="gamma">The discount factor for future rewards.</param>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method implements the core learning algorithm for the Deep Q-Network. It samples a batch of experiences
-    /// from the replay buffer, computes target Q-values using the Bellman equation and the target network,
-    /// calculates the loss between current and target Q-values, and performs backpropagation to update the network
-    /// parameters. The target network is periodically updated to match the main network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is how the agent learns from its past experiences.
-    /// 
-    /// The training process works like this:
-    /// - If the agent doesn't have enough experiences yet, it waits until it does
-    /// - It randomly selects a batch of past experiences to learn from
-    /// - For each experience, it computes how much reward it actually got
-    /// - It compares this with how much reward it expected to get (its prediction)
-    /// - It adjusts its neural network to make better predictions in the future
-    /// - Occasionally, it updates its target network to stabilize learning
-    /// 
-    /// The gamma parameter determines how much the agent values future rewards:
-    /// - A low gamma (like 0.5) means the agent mostly cares about immediate rewards
-    /// - A high gamma (like 0.99) means the agent values long-term rewards almost as much as immediate ones
-    /// 
-    /// This process is similar to how humans learn from experience - by comparing
-    /// what we expected to happen with what actually happened, and updating our
-    /// understanding accordingly.
-    /// </para>
-    /// </remarks>
-    public void Train(T gamma, T learningRate)
-    {
-        if (_replayBuffer.Count < _batchSize) return;
-
-        var batch = _replayBuffer.OrderBy(x => Random.Next()).Take(_batchSize).ToList();
-
-        var states = new Matrix<T>(batch.Select(e => e.State).ToArray());
-        var actions = batch.Select(e => e.Action).ToArray();
-        var rewards = new Vector<T>(batch.Select(e => e.Reward).ToArray());
-        var nextStates = new Matrix<T>(batch.Select(e => e.NextState).ToArray());
-        var dones = batch.Select(e => e.Done).ToArray();
-
-        // Predict Q-values for current states
-        var currentQValues = PredictBatch(states);
-
-        // Predict Q-values for next states
-        var nextQValues = _targetNetwork.PredictBatch(nextStates);
-
-        // Compute target Q-values
-        var targetQValues = new Matrix<T>(currentQValues.Rows, currentQValues.Columns);
-        for (int i = 0; i < _batchSize; i++)
-        {
-            for (int j = 0; j < _actionSpace; j++)
-            {
-                if (j == actions[i])
-                {
-                    T maxNextQ = nextQValues.GetRow(i).Max();
-                    T target = dones[i] ? rewards[i] : NumOps.Add(rewards[i], NumOps.Multiply(gamma, maxNextQ));
-                    targetQValues[i, j] = target;
-                }
-                else
-                {
-                    targetQValues[i, j] = currentQValues[i, j];
-                }
-            }
-        }
-
-        // Compute loss
-        Matrix<T> loss = ComputeLoss(currentQValues, targetQValues);
-
-        // Perform backpropagation
-        BackPropagate(loss, learningRate);
-
-        // Update target network periodically
-        if (Random.Next(100) == 0) // Update every 100 steps on average
-        {
-            UpdateTargetNetwork();
-        }
-    }
-
-    /// <summary>
-    /// Predicts Q-values for a batch of states.
-    /// </summary>
-    /// <param name="inputs">A matrix where each row represents a state.</param>
-    /// <returns>A matrix where each row contains Q-values for all actions in the corresponding state.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is similar to the Predict method but operates on a batch of states rather than a single state.
-    /// It passes the batch through each layer of the network and returns the resulting Q-values for all states
-    /// and actions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method processes multiple states at once to get their Q-values.
-    /// 
-    /// Instead of evaluating one state at a time:
-    /// - This method takes a whole batch of different states
-    /// - It runs them all through the neural network together
-    /// - It returns a set of Q-values for each state in the batch
-    /// 
-    /// This batch processing is much more efficient than processing each state individually,
-    /// especially when training the neural network.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> PredictBatch(Matrix<T> inputs)
-    {
-        var current = inputs;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromMatrix(current)).ToMatrix();
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Computes the loss between predicted and target Q-values.
-    /// </summary>
-    /// <param name="predicted">The predicted Q-values from the main network.</param>
-    /// <param name="target">The target Q-values computed using the Bellman equation.</param>
-    /// <returns>A matrix representing the loss for each Q-value.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the mean squared error (MSE) loss between the predicted Q-values from the main network
-    /// and the target Q-values computed using the Bellman equation and the target network. This loss is used
-    /// to update the network parameters through backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method measures how wrong the agent's predictions were.
-    /// 
-    /// The loss calculation works like this:
-    /// - For each action the agent took, we have:
-    ///   - What the agent predicted would happen (predicted Q-values)
-    ///   - What actually happened (target Q-values)
-    /// - The method calculates the squared difference between these values
-    /// - Larger differences result in higher loss, meaning the predictions were very wrong
-    /// - Smaller differences result in lower loss, meaning the predictions were more accurate
-    /// 
-    /// This loss value is what the neural network tries to minimize during training,
-    /// gradually improving its ability to predict the outcomes of different actions.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ComputeLoss(Matrix<T> predicted, Matrix<T> target)
-    {
-        // Mean Squared Error loss
-        return predicted.Subtract(target).PointwiseMultiply(predicted.Subtract(target));
-    }
-
-    /// <summary>
-    /// Performs backpropagation to update the network parameters based on the computed loss.
-    /// </summary>
-    /// <param name="loss">The loss matrix representing the error for each Q-value.</param>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method propagates the computed loss backward through the network, calculating gradients
-    /// for each layer's parameters. These gradients are then used to update the parameters in each layer
-    /// to minimize the loss and improve the network's predictions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts the neural network to make better predictions next time.
-    /// 
-    /// The backpropagation process works like this:
-    /// - Starting from the output (the predictions), we calculate how wrong they were
-    /// - We then work backwards through each layer of the neural network
-    /// - At each layer, we adjust the network's parameters (weights and biases)
-    /// - The adjustments are proportional to how much each parameter contributed to the error
-    /// - The learning rate controls how big these adjustments are
-    /// 
-    /// This is similar to learning from mistakes:
-    /// - If a prediction was very wrong, the network makes bigger adjustments
-    /// - If a prediction was mostly correct, the network makes smaller adjustments
-    /// - Over time, this process leads to increasingly accurate predictions
-    /// </para>
-    /// </remarks>
-    private void BackPropagate(Matrix<T> loss, T learningRate)
-    {
-        var gradient = Tensor<T>.FromMatrix(loss);
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
         }
     }
 
@@ -663,112 +410,402 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the Deep Q-Network to a binary stream.
+    /// Performs a forward pass with a tensor input.
     /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a null layer is encountered or a layer type name cannot be determined.</exception>
+    /// <param name="input">The input tensor representing the current state.</param>
+    /// <returns>A tensor of Q-values for each possible action.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the state of the Deep Q-Network to a binary stream. It writes the number of layers,
-    /// followed by the type name and serialized state of each layer. This allows the Deep Q-Network
-    /// to be saved to disk and later restored with its trained parameters intact.
+    /// This overload of the Predict method handles tensor inputs directly. It processes the input
+    /// through all layers of the network and returns a tensor of Q-values.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the trained network to a file.
-    /// 
-    /// When saving the Deep Q-Network:
-    /// - First, it saves how many layers the network has
-    /// - Then, for each layer, it saves:
-    ///   - What type of layer it is
-    ///   - All the weights and settings for that layer
-    /// 
-    /// This is like taking a complete snapshot of the neural network so you can:
-    /// - Save your progress after training
-    /// - Reload the trained network later without having to train it again
-    /// - Share the trained network with others
-    /// 
-    /// For example, if you've trained an agent to play a game really well,
-    /// you could save it and then load it later to see it play or continue training.
+    /// <para><b>For Beginners:</b> This method does the same thing as the vector-based Predict,
+    /// but works with tensors (multi-dimensional arrays) directly, which can be more efficient
+    /// for certain types of inputs like images.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(Layers.Count);
+        var current = input;
+    
+        // Forward pass through all layers
         foreach (var layer in Layers)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
+            current = layer.Forward(current);
+        }
+    
+        return current;
+    }
 
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
+    /// <summary>
+    /// Trains the network using experience replay.
+    /// </summary>
+    /// <param name="input">Not used in DQN; experiences are sampled from the replay buffer.</param>
+    /// <param name="expectedOutput">Not used in DQN; target Q-values are computed internally.</param>
+    /// <remarks>
+    /// <para>
+    /// This method implements the core DQN training algorithm using experience replay. It samples a batch
+    /// of experiences from the replay buffer, computes target Q-values using the target network, and
+    /// updates the main network to minimize the difference between predicted and target Q-values.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method is how the agent learns from its past experiences.
+    /// 
+    /// The training process works like this:
+    /// 1. Randomly select a batch of experiences from memory
+    /// 2. For each experience, calculate what the Q-values should have been:
+    ///    - For terminal states (game over), the target is just the immediate reward
+    ///    - For non-terminal states, the target is the immediate reward plus the discounted maximum future Q-value
+    /// 3. Update the network to better predict these target values
+    /// 4. Periodically update the target network to match the main network
+    /// 
+    /// This helps the agent gradually improve its ability to predict which actions will lead to higher rewards.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Skip if not enough experiences in the buffer
+        if (_replayBuffer.Count < _batchSize)
+        {
+            return;
+        }
+    
+        // Sample random batch of experiences
+        var batch = SampleBatch(_batchSize);
+    
+        // Prepare input batch (states) and output batch (Q-values)
+        var states = new Tensor<T>[_batchSize];
+        var targetQValues = new Tensor<T>[_batchSize];
+    
+        for (int i = 0; i < _batchSize; i++)
+        {
+            var experience = batch[i];
+            states[i] = experience.State;
+        
+            // Get current Q-values for the state
+            var currentQValues = GetQValues(experience.State);
+        
+            // Create copy for updating
+            var updatedQValues = currentQValues.Clone();
 
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            // Calculate target Q-value for the action taken
+            T targetQ;
+        
+            if (experience.Done)
+            {
+                // For terminal states, target Q-value is just the reward
+                targetQ = experience.Reward;
+            }
+            else
+            {
+                // For non-terminal states, target Q-value is reward + gamma * max(Q(s', a'))
+                // where gamma is the discount factor (typically 0.99)
+                var nextStateQValues = _targetNetwork.GetQValues(experience.NextState);
+                int bestNextAction = nextStateQValues.Max().maxIndex;
+                T maxNextQ = nextStateQValues[bestNextAction];
+                T gamma = NumOps.FromDouble(0.99); // Discount factor
+                targetQ = NumOps.Add(experience.Reward, NumOps.Multiply(gamma, maxNextQ));
+            }
+        
+            // Update only the Q-value for the action that was taken
+            updatedQValues[experience.Action] = targetQ;
+        
+            targetQValues[i] = updatedQValues;
+        }
+    
+        // Combine all states and target Q-values into batches
+        var statesBatch = Tensor<T>.Stack(states);
+        var targetsBatch = Tensor<T>.Stack(targetQValues);
+    
+        // Set network to training mode
+        SetTrainingMode(true);
+    
+        // Forward pass with memory
+        var predictions = ForwardWithMemoryBatch(statesBatch);
+    
+        // Compute gradients and update network
+        var outputGradients = predictions.Subtract(targetsBatch);
+        BackpropagateBatch(outputGradients);
+        UpdateParameters(NumOps.FromDouble(0.001)); // Learning rate
+    
+        // Set network back to inference mode
+        SetTrainingMode(false);
+    
+        // Periodically update target network (e.g., every 100 training steps)
+        if (Random.Next(100) == 0)
+        {
+            UpdateTargetNetwork();
         }
     }
 
     /// <summary>
-    /// Deserializes the Deep Q-Network from a binary stream.
+    /// Samples a batch of experiences from the replay buffer.
     /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer type information is invalid or instance creation fails.</exception>
+    /// <param name="batchSize">The number of experiences to sample.</param>
+    /// <returns>A list of randomly sampled experiences.</returns>
     /// <remarks>
     /// <para>
-    /// This method restores the state of the Deep Q-Network from a binary stream. It reads the number of layers,
-    /// followed by the type name and serialized state of each layer. This allows a previously saved
-    /// Deep Q-Network to be restored from disk with all its trained parameters.
+    /// This method randomly samples experiences from the replay buffer for use in training.
+    /// Random sampling helps break correlations between consecutive experiences, which improves
+    /// the stability of the learning process.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved network from a file.
+    /// <para><b>For Beginners:</b> This method picks random memories from the agent's experience.
     /// 
-    /// When loading the Deep Q-Network:
-    /// - First, it reads how many layers the network had
-    /// - Then, for each layer, it:
-    ///   - Reads what type of layer it was
-    ///   - Creates a new layer of that type
-    ///   - Loads all the weights and settings for that layer
-    ///   - Adds the layer to the network
-    /// 
-    /// This is like restoring a complete snapshot of your neural network,
-    /// bringing back all the knowledge and patterns it had learned before.
-    /// 
-    /// For example, you could train an agent on your powerful computer,
-    /// save it, and then load it on a different device to use its abilities
-    /// without having to train it again.
+    /// Instead of learning from its most recent experiences (which might be related),
+    /// the agent randomly selects different experiences from its memory. This is like
+    /// studying different topics rather than focusing on just one thing, which helps
+    /// the agent develop a more balanced understanding.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    private List<Experience<T>> SampleBatch(int batchSize)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
+        var batch = new List<Experience<T>>(batchSize);
+    
+        for (int i = 0; i < batchSize; i++)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            int randomIndex = Random.Next(_replayBuffer.Count);
+            batch.Add(_replayBuffer[randomIndex]);
         }
+    
+        return batch;
+    }
+
+    /// <summary>
+    /// Performs a forward pass for a batch of inputs while storing intermediate values for backpropagation.
+    /// </summary>
+    /// <param name="inputs">A tensor containing a batch of input states.</param>
+    /// <returns>A tensor containing a batch of predicted Q-values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method processes a batch of inputs through the network, storing intermediate values
+    /// needed for backpropagation during training. It's similar to ForwardWithMemory but handles
+    /// batched inputs for more efficient training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method processes multiple inputs at once and remembers
+    /// intermediate values to help with learning.
+    /// 
+    /// Processing inputs in batches:
+    /// - Is more efficient than processing one at a time
+    /// - Helps the network learn more stable patterns
+    /// - Requires keeping track of intermediate values for learning
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ForwardWithMemoryBatch(Tensor<T> inputs)
+    {
+        var current = inputs;
+    
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            // Store input to each layer for backpropagation
+            _layerInputs[i] = current;
+        
+            // Forward pass through layer
+            current = Layers[i].Forward(current);
+        
+            // Store output from each layer for backpropagation
+            _layerOutputs[i] = current;
+        }
+    
+        return current;
+    }
+
+    /// <summary>
+    /// Performs backpropagation for a batch of outputs.
+    /// </summary>
+    /// <param name="outputGradients">The gradients of the loss with respect to the network outputs.</param>
+    /// <remarks>
+    /// <para>
+    /// This method propagates error gradients backwards through the network for a batch of outputs.
+    /// It updates the parameter gradients based on how much each parameter contributed to the error.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates how to adjust the network's internal values
+    /// to make better predictions.
+    /// 
+    /// During backpropagation:
+    /// - The network calculates how wrong its predictions were
+    /// - It figures out how each of its internal values contributed to these errors
+    /// - It determines how to adjust each value to reduce future errors
+    /// - These adjustments are stored as gradients, which are applied during the update step
+    /// </para>
+    /// </remarks>
+    private void BackpropagateBatch(Tensor<T> outputGradients)
+    {
+        var gradientTensor = outputGradients;
+    
+        // Backpropagate through layers in reverse order
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            gradientTensor = Layers[i].Backward(gradientTensor);
+        }
+    }
+
+    /// <summary>
+    /// Updates the parameters of all layers in the network using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to control the size of parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method applies the calculated gradients to update the parameters of each layer in the network.
+    /// The learning rate controls how large the parameter updates are, with smaller values leading to more
+    /// stable but slower learning.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts the network's internal values to improve its predictions.
+    /// 
+    /// After calculating how to adjust each value (in backpropagation):
+    /// - This method applies those adjustments
+    /// - The learning rate controls how big the adjustments are
+    /// - Small learning rates mean small, cautious adjustments
+    /// - Large learning rates mean bigger, faster adjustments
+    /// 
+    /// Finding the right learning rate is important - too small and learning is too slow,
+    /// too large and learning can become unstable.
+    /// </para>
+    /// </remarks>
+    private void UpdateParameters(T learningRate)
+    {
+        foreach (var layer in Layers)
+        {
+            if (layer.SupportsTraining)
+            {
+                layer.UpdateParameters(learningRate);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets metadata about this Deep Q-Network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the model, including its name, description, architecture,
+    /// and other relevant information that might be useful for users or tools working with the model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information about this neural network model.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Deep Q-Network)
+    /// - The network architecture (how many layers, neurons, etc.)
+    /// - The action space (how many different actions the agent can take)
+    /// - Other settings like the exploration rate
+    /// 
+    /// This information is useful for documentation, debugging, and when saving/loading models.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.DeepQNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ActionSpace", _actionSpace },
+                { "ExplorationRate", Convert.ToDouble(_epsilon) },
+                { "ReplayBufferSize", _replayBuffer.Count }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Saves Deep Q-Network specific data to a binary stream.
+    /// </summary>
+    /// <param name="writer">The binary writer to save to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes DQN-specific data that isn't part of the base neural network.
+    /// This includes the exploration rate (epsilon), action space size, and target network state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves special DQN settings to a file.
+    /// 
+    /// When saving the model:
+    /// - The base neural network parts are saved by other methods
+    /// - This method saves the DQN-specific settings
+    /// - This includes values like how often the agent explores
+    /// - It also saves the target network that helps stabilize learning
+    /// 
+    /// This allows you to load the exact same DQN later, with all its settings intact.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Save exploration rate (epsilon)
+        writer.Write(Convert.ToDouble(_epsilon));
+    
+        // Save action space size
+        writer.Write(_actionSpace);
+    
+        // Save replay buffer size (but not the actual experiences)
+        writer.Write(_replayBuffer.Count);
+    
+        // Serialize target network
+        for (int i = 0; i < _targetNetwork.Layers.Count; i++)
+        {
+            _targetNetwork.Layers[i].Serialize(writer);
+        }
+    }
+
+    /// <summary>
+    /// Loads Deep Q-Network specific data from a binary stream.
+    /// </summary>
+    /// <param name="reader">The binary reader to load from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes DQN-specific data that was previously saved using SerializeNetworkSpecificData.
+    /// It restores the exploration rate, action space size, and target network state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads special DQN settings from a file.
+    /// 
+    /// When loading a saved model:
+    /// - The base neural network parts are loaded by other methods
+    /// - This method loads the DQN-specific settings
+    /// - It restores values like the exploration rate
+    /// - It also loads the target network that helps stabilize learning
+    /// 
+    /// This allows you to continue using a previously trained DQN with all its settings intact.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Load exploration rate (epsilon)
+        T epsilon = NumOps.FromDouble(reader.ReadDouble());
+    
+        // Load action space size
+        int actionSpace = reader.ReadInt32();
+        _actionSpace = actionSpace;
+    
+        // Load replay buffer size (but can't restore actual experiences)
+        int replayBufferSize = reader.ReadInt32();
+    
+        // Deserialize target network
+        for (int i = 0; i < _targetNetwork.Layers.Count; i++)
+        {
+            _targetNetwork.Layers[i].Deserialize(reader);
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Deep Q-Network with the same architecture and configuration.
+    /// </summary>
+    /// <returns>A new Deep Q-Network instance with the same architecture and configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the Deep Q-Network with the same architecture and
+    /// exploration rate (epsilon) as the current instance. It's used in scenarios where a fresh
+    /// copy of the model is needed while maintaining the same configuration.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a brand new copy of the agent with the same setup.
+    /// 
+    /// Think of it like creating a clone of the agent:
+    /// - The new agent has the same neural network architecture
+    /// - The new agent has the same exploration rate (epsilon)
+    /// - But it's a completely separate instance with its own memory and learning state
+    /// 
+    /// This is useful when you need multiple instances of the same DQN model,
+    /// such as for parallel training or comparing different learning strategies.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new DeepQNetwork<T>(this.Architecture, Convert.ToDouble(this._epsilon));
     }
 }

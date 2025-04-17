@@ -126,6 +126,34 @@ public static class TimeSeriesHelper<T>
     }
 
     /// <summary>
+    /// Calculates the autocorrelation function (ACF) of a time series for lags 0 through maxLag.
+    /// </summary>
+    /// <param name="y">The time series data.</param>
+    /// <param name="maxLag">The maximum lag to calculate autocorrelation for.</param>
+    /// <returns>A vector of autocorrelation values for lags 0 through maxLag.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> The autocorrelation function shows how similar a time series is to 
+    /// time-shifted versions of itself. This helps identify patterns like trends or seasonality.
+    /// For example, daily temperature data might show high autocorrelation at lag=24 hours,
+    /// indicating a daily cycle in temperatures.
+    /// </remarks>
+    public static Vector<T> CalculateMultipleAutoCorrelation(Vector<T> y, int maxLag)
+    {
+        var acf = new Vector<T>(maxLag + 1);
+    
+        // Lag 0 is always 1.0 (perfect correlation with itself)
+        acf[0] = _numOps.One;
+    
+        // Calculate autocorrelation for each lag using the existing method
+        for (int lag = 1; lag <= maxLag; lag++)
+        {
+            acf[lag] = CalculateAutoCorrelation(y, lag);
+        }
+    
+        return acf;
+    }
+
+    /// <summary>
     /// Calculates the autocorrelation of a time series at a specific lag.
     /// </summary>
     /// <param name="y">The time series data.</param>

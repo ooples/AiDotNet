@@ -64,7 +64,7 @@ public class RobustRegression<T> : RegressionBase<T>
     ///   instead of learning patterns (similar to adding parental controls)
     /// </para>
     /// </remarks>
-    public RobustRegression(RobustRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public RobustRegression(RobustRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new RobustRegressionOptions<T>();
@@ -99,11 +99,11 @@ public class RobustRegression<T> : RegressionBase<T>
         int n = x.Rows;
         int p = x.Columns;
         // Apply regularization to the input matrix
-        x = Regularization.RegularizeMatrix(x);
+        x = Regularization.Regularize(x);
         // Initial regression estimate
         IRegression<T> initialRegression = _options.InitialRegression ?? new MultipleRegression<T>();
         initialRegression.Train(x, y);
-        Coefficients = initialRegression.Coefficients;
+        Coefficients = initialRegression.Coefficients; 
         Intercept = initialRegression.Intercept;
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
@@ -124,8 +124,9 @@ public class RobustRegression<T> : RegressionBase<T>
             Coefficients = newCoefficients;
             Intercept = newIntercept;
         }
+
         // Apply regularization to the coefficients
-        Coefficients = Regularization.RegularizeCoefficients(Coefficients);
+        Coefficients = Regularization.Regularize(Coefficients);
     }
 
     /// <summary>
@@ -264,5 +265,112 @@ public class RobustRegression<T> : RegressionBase<T>
         _options.MaxIterations = reader.ReadInt32();
         _options.Tolerance = reader.ReadDouble();
         _options.WeightFunction = (WeightFunction)reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// Gets the model parameters (coefficients and intercept) as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all model parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method packages all the model's parameters into a single vector.
+    /// 
+    /// The returned vector combines:
+    /// - All the coefficients (the weights for each feature)
+    /// - The intercept (baseline value when all features are zero)
+    /// 
+    /// This is useful for optimization algorithms that need to work with all parameters at once.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Create a new vector with enough space for coefficients + intercept
+        Vector<T> parameters = new Vector<T>(Coefficients.Length + 1);
+    
+        // Copy coefficients to the parameters vector
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            parameters[i] = Coefficients[i];
+        }
+    
+        // Add the intercept as the last element
+        parameters[Coefficients.Length] = Intercept;
+    
+        return parameters;
+    }
+
+    /// <summary>
+    /// Creates a new model instance with the specified parameters.
+    /// </summary>
+    /// <param name="parameters">A vector containing all model parameters (coefficients and intercept).</param>
+    /// <returns>A new model instance with the specified parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a new model using a provided set of parameters.
+    /// 
+    /// It takes a parameter vector (which combines coefficients and intercept) and:
+    /// - Extracts the coefficients (all values except the last)
+    /// - Extracts the intercept (the last value)
+    /// - Creates a new model with these values
+    /// 
+    /// This allows you to try different parameter sets without changing the original model.
+    /// </para>
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != Coefficients.Length + 1)
+        {
+            throw new ArgumentException($"Expected {Coefficients.Length + 1} parameters, but got {parameters.Length}");
+        }
+    
+        // Create a new instance of the model
+        var newModel = (RobustRegression<T>)this.Clone();
+    
+        // Extract coefficients (all elements except the last)
+        Vector<T> newCoefficients = new Vector<T>(parameters.Length - 1);
+        for (int i = 0; i < parameters.Length - 1; i++)
+        {
+            newCoefficients[i] = parameters[i];
+        }
+    
+        // Extract intercept (last element)
+        T newIntercept = parameters[parameters.Length - 1];
+    
+        // Set the parameters in the new model
+        newModel.Coefficients = newCoefficients;
+        newModel.Intercept = newIntercept;
+    
+        return newModel;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the robust regression model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the robust regression model with the same configuration but no trained parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the robust regression model with the same configuration
+    /// options and regularization method as the current instance, but without copying the trained
+    /// coefficients or intercept.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
+    /// any learned parameters.
+    /// 
+    /// Think of it like getting a blank template with the same settings, 
+    /// but without any of the values that were learned from training data. The new model has the same:
+    /// - Weight function (how outliers are handled)
+    /// - Tuning constant (how sensitive the model is to outliers)
+    /// - Maximum iterations (how many times it will try to improve)
+    /// - Tolerance (when it decides it's "good enough")
+    /// - Regularization settings (how it prevents overfitting)
+    /// 
+    /// But it doesn't have any of the coefficients or intercept values that were learned from data.
+    /// 
+    /// This is mainly used internally when doing things like cross-validation or 
+    /// creating multiple similar models with different training data.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create a new instance with the same options and regularization
+        return new RobustRegression<T>(_options, Regularization);
     }
 }

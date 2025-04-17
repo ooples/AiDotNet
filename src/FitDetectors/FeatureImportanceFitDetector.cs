@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// using the available features).
 /// </para>
 /// </remarks>
-public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
+public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the feature importance fit detector.
@@ -80,7 +80,7 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -122,12 +122,12 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var featureImportances = CalculateFeatureImportances(evaluationData);
         var averageImportance =featureImportances.Average();
         var importanceStdDev = StatisticsHelper<T>.CalculateStandardDeviation(featureImportances);
-        var featureCorrelations = CalculateFeatureCorrelations(evaluationData.ModelStats.FeatureMatrix);
+        var featureCorrelations = CalculateFeatureCorrelations(evaluationData.ModelStats.Features);
 
         if (_numOps.GreaterThan(averageImportance, _numOps.FromDouble(_options.HighImportanceThreshold)) &&
             _numOps.LessThan(importanceStdDev, _numOps.FromDouble(_options.LowVarianceThreshold)))
@@ -173,12 +173,12 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
     /// values indicating greater confidence in the fit assessment.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var featureImportances = CalculateFeatureImportances(evaluationData);
         var averageImportance = featureImportances.Average();
         var importanceStdDev = StatisticsHelper<T>.CalculateStandardDeviation(featureImportances);
-        var featureCorrelations = CalculateFeatureCorrelations(evaluationData.ModelStats.FeatureMatrix);
+        var featureCorrelations = CalculateFeatureCorrelations(evaluationData.ModelStats.Features);
 
         var importanceFactor = _numOps.Divide(averageImportance, _numOps.FromDouble(_options.HighImportanceThreshold));
         var varianceFactor = _numOps.Divide(_numOps.FromDouble(_options.LowVarianceThreshold), _numOps.Add(_numOps.One, importanceStdDev));
@@ -212,7 +212,7 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
     /// understand which variables are driving your model's predictions.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
         var featureImportances = CalculateFeatureImportances(evaluationData);
@@ -286,15 +286,15 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
     /// this indicates the model relies heavily on that feature for accurate predictions.
     /// </para>
     /// </remarks>
-    private Vector<T> CalculateFeatureImportances(ModelEvaluationData<T> evaluationData)
+    private Vector<T> CalculateFeatureImportances(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var baselineError = CalculateError(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
-        var featureImportances = new Vector<T>(evaluationData.ModelStats.FeatureMatrix.Columns);
+        var featureImportances = new Vector<T>(evaluationData.ModelStats.Features.Columns);
 
-        for (int i = 0; i < evaluationData.ModelStats.FeatureMatrix.Columns; i++)
+        for (int i = 0; i < evaluationData.ModelStats.Features.Columns; i++)
         {
-            var permutedFeature = PermuteFeature(evaluationData.ModelStats.FeatureMatrix.GetColumn(i));
-            var permutedMatrix = evaluationData.ModelStats.FeatureMatrix.Copy();
+            var permutedFeature = PermuteFeature(evaluationData.ModelStats.Features.GetColumn(i));
+            var permutedMatrix = evaluationData.ModelStats.Features.Clone();
             permutedMatrix.SetColumn(i, permutedFeature);
 
             var permutedPredictions = evaluationData.ModelStats.Model?.Predict(permutedMatrix) ?? Vector<T>.Empty();
@@ -358,7 +358,7 @@ public class FeatureImportanceFitDetector<T> : FitDetectorBase<T>
     /// </remarks>
     private Vector<T> PermuteFeature(Vector<T> feature)
     {
-        var permutedFeature = feature.Copy();
+        var permutedFeature = feature.Clone();
         int n = permutedFeature.Length;
 
         for (int i = n - 1; i > 0; i--)

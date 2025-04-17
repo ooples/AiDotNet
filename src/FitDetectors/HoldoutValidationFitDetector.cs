@@ -18,7 +18,7 @@ namespace AiDotNet.FitDetectors;
 /// - High variance: When your model's performance varies significantly between different data sets
 /// </para>
 /// </remarks>
-public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
+public class HoldoutValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the holdout validation fit detector.
@@ -56,7 +56,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// The result gives you actionable insights about your model's performance.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -98,7 +98,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// The method uses thresholds (set in the options) to make these determinations.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingMSE = evaluationData.TrainingSet.ErrorStats.MSE;
         var validationMSE = evaluationData.ValidationSet.ErrorStats.MSE;
@@ -153,7 +153,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// the actual values. It ranges from 0 to 1, where 1 means perfect predictions.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var validationR2 = evaluationData.ValidationSet.PredictionStats.R2;
         var testR2 = evaluationData.TestSet.PredictionStats.R2;
@@ -209,7 +209,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// better performance.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

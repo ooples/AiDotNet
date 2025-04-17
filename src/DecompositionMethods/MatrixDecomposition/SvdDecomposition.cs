@@ -139,7 +139,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         int n = matrix.Columns;
         int l = Math.Min(m, n);
 
-        Matrix<T> A = matrix.Copy();
+        Matrix<T> A = matrix.Clone();
         Matrix<T> U = new(m, m);
         Vector<T> S = new(l);
         Matrix<T> VT = new(n, n);
@@ -188,7 +188,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
             if (_numOps.LessThan(A[k, k], _numOps.Zero))
                 alpha = _numOps.Negate(alpha);
 
-            Vector<T> u = x.Copy();
+            Vector<T> u = x.Clone();
             u[0] = _numOps.Add(u[0], alpha);
             T beta = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Divide(_numOps.One, u.DotProduct(u)));
 
@@ -225,7 +225,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
                 if (_numOps.LessThan(A[k, k + 1], _numOps.Zero))
                     alpha = _numOps.Negate(alpha);
 
-                Vector<T> v = x.Copy();
+                Vector<T> v = x.Clone();
                 v[0] = _numOps.Add(v[0], alpha);
                 beta = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Divide(_numOps.One, v.DotProduct(v)));
 
@@ -414,7 +414,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         int n = matrix.Columns;
         int l = Math.Min(m, n);
 
-        Matrix<T> A = matrix.Copy();
+        Matrix<T> A = matrix.Clone();
         Matrix<T> U = Matrix<T>.CreateIdentityMatrix<T>(m);
         Vector<T> S = new(l);
         Matrix<T> VT = Matrix<T>.CreateIdentityMatrix<T>(n);
@@ -607,7 +607,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         int n = matrix.Columns;
         int l = Math.Min(m, n);
 
-        Matrix<T> A = matrix.Copy();
+        Matrix<T> A = matrix.Clone();
         Matrix<T> U = new(m, m);
         Vector<T> S = new(l);
         Matrix<T> VT = new(n, n);

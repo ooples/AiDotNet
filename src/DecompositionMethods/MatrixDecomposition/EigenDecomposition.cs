@@ -139,7 +139,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     private (Vector<T> eigenValues, Matrix<T> eigenVectors) ComputeEigenQR(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        Matrix<T> A = matrix.Copy();
+        Matrix<T> A = matrix.Clone();
         Matrix<T> Q = Matrix<T>.CreateIdentity(n);
 
         for (int iter = 0; iter < 100; iter++)
@@ -174,7 +174,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     private (Vector<T> eigenValues, Matrix<T> eigenVectors) ComputeEigenJacobi(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        Matrix<T> A = matrix.Copy();
+        Matrix<T> A = matrix.Clone();
         Matrix<T> V = Matrix<T>.CreateIdentity(n);
 
         for (int iter = 0; iter < 100; iter++)

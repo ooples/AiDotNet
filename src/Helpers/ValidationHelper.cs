@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-
-namespace AiDotNet.Helpers;
+﻿namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides validation methods for AI model inputs and parameters.
@@ -8,6 +6,7 @@ namespace AiDotNet.Helpers;
 /// <typeparam name="T">The numeric type used in calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <b>For Beginners:</b> This helper class ensures that the data you provide to AI models is valid and properly formatted.
+/// It can handle both traditional matrix/vector inputs (for regression-like models) and tensor inputs (for neural networks).
 /// Think of it as a quality control checkpoint that prevents errors before they happen by checking that your
 /// data meets all the requirements needed for successful model training and prediction.
 /// </remarks>
@@ -16,19 +15,20 @@ public static class ValidationHelper<T>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
-    /// Validates that input data matrices and vectors are properly formatted for model training.
+    /// Validates that input data is properly formatted for model training.
     /// </summary>
-    /// <param name="x">The feature matrix containing input variables.</param>
-    /// <param name="y">The target vector containing output values to predict.</param>
+    /// <typeparam name="TInput">The type of the input data (e.g., Matrix&lt;T&gt; or Tensor&lt;T&gt;).</typeparam>
+    /// <typeparam name="TOutput">The type of the output data (e.g., Vector&lt;T&gt; or Tensor&lt;T&gt;).</typeparam>
+    /// <param name="x">The input data.</param>
+    /// <param name="y">The target data.</param>
     /// <remarks>
     /// <b>For Beginners:</b> This method checks that your input data (x) and output data (y) are compatible.
-    /// The input data (x) is a matrix where each row represents one data point and each column represents
-    /// one feature or characteristic. The output data (y) is a vector where each element is the target value
-    /// you want to predict for the corresponding row in x. This method ensures they have matching dimensions.
+    /// It can handle both traditional matrix/vector pairs (for regression-like models) and tensor pairs (for neural networks).
+    /// The method ensures they have matching dimensions and are not null or empty.
     /// </remarks>
-    public static void ValidateInputData(Matrix<T> x, Vector<T> y)
+    public static void ValidateInputData<TInput, TOutput>(TInput x, TOutput y)
     {
-        ValidateMatrixVectorPair(x, y, "Input");
+        ValidateDataPair(x, y, "Input");
     }
 
     /// <summary>
@@ -103,6 +103,8 @@ public static class ValidationHelper<T>
     /// <summary>
     /// Validates that optimization input data is properly formatted for model training and evaluation.
     /// </summary>
+    /// <typeparam name="TInput">The type of the input data (e.g., Matrix&lt;T&gt; or Tensor&lt;T&gt;).</typeparam>
+    /// <typeparam name="TOutput">The type of the output data (e.g., Vector&lt;T&gt; or Tensor&lt;T&gt;).</typeparam>
     /// <param name="inputData">The optimization input data containing training, validation, and test datasets.</param>
     /// <remarks>
     /// <b>For Beginners:</b> When training AI models, we typically split our data into three sets:
@@ -111,20 +113,19 @@ public static class ValidationHelper<T>
     /// 3. Test data - used to evaluate the final model (like the final exam)
     /// 
     /// This method checks that all three datasets are properly formatted and compatible with each other.
-    /// It ensures they have the same number of features (columns) and appropriate dimensions.
+    /// It can handle both matrix/vector pairs and tensor pairs.
     /// </remarks>
-    public static void ValidateInputData(OptimizationInputData<T> inputData)
+    public static void ValidateInputData<TInput, TOutput>(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         if (inputData == null)
             throw new ArgumentNullException(nameof(inputData), "Optimization input data cannot be null.");
 
-        ValidateMatrixVectorPair(inputData.XTrain, inputData.YTrain, "Training");
-        ValidateMatrixVectorPair(inputData.XVal, inputData.YVal, "Validation");
-        ValidateMatrixVectorPair(inputData.XTest, inputData.YTest, "Test");
+        ValidateDataPair(inputData.XTrain, inputData.YTrain, "Training");
+        ValidateDataPair(inputData.XValidation, inputData.YValidation, "Validation");
+        ValidateDataPair(inputData.XTest, inputData.YTest, "Test");
 
-        // Ensure all matrices have the same number of columns
-        if (inputData.XTrain.Columns != inputData.XVal.Columns || inputData.XTrain.Columns != inputData.XTest.Columns)
-            throw new ArgumentException("All input matrices must have the same number of columns.");
+        // Ensure all inputs have the same shape
+        EnsureConsistentInputShape<TInput, TOutput>(inputData.XTrain, inputData.XValidation, inputData.XTest);
     }
 
     /// <summary>
@@ -150,21 +151,22 @@ public static class ValidationHelper<T>
         }
     }
 
-    /// <summary>
-    /// Validates that a matrix and vector pair have compatible dimensions and are not null or empty.
-    /// </summary>
-    /// <param name="x">The feature matrix containing input variables.</param>
-    /// <param name="y">The target vector containing output values to predict.</param>
-    /// <param name="datasetName">The name of the dataset being validated (e.g., "Training", "Test").</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method ensures that your input data (x) and output data (y) are compatible.
-    /// It checks that:
-    /// 1. Neither is null (missing entirely)
-    /// 2. The number of rows in x matches the length of y (each input row has a corresponding output value)
-    /// 3. The data isn't empty (has at least one row and column)
-    /// 
-    /// This is like making sure you have the same number of questions and answers on a test.
-    /// </remarks>
+    private static void ValidateDataPair<TInput, TOutput>(TInput x, TOutput y, string datasetName)
+    {
+        if (x is Matrix<T> xMatrix && y is Vector<T> yVector)
+        {
+            ValidateMatrixVectorPair(xMatrix, yVector, datasetName);
+        }
+        else if (x is Tensor<T> xTensor && y is Tensor<T> yTensor)
+        {
+            ValidateTensorPair(xTensor, yTensor, datasetName);
+        }
+        else
+        {
+            throw new ArgumentException($"Invalid input types for {datasetName} dataset. Expected Matrix<T> and Vector<T>, or Tensor<T> and Tensor<T>.");
+        }
+    }
+
     private static void ValidateMatrixVectorPair(Matrix<T> x, Vector<T> y, string datasetName)
     {
         if (x == null)
@@ -178,5 +180,39 @@ public static class ValidationHelper<T>
 
         if (x.Rows == 0 || x.Columns == 0)
             throw new ArgumentException($"{datasetName} matrix cannot be empty.");
+    }
+
+    private static void ValidateTensorPair(Tensor<T> x, Tensor<T> y, string datasetName)
+    {
+        if (x == null)
+            throw new ArgumentNullException(nameof(x), $"{datasetName} input tensor cannot be null.");
+
+        if (y == null)
+            throw new ArgumentNullException(nameof(y), $"{datasetName} target tensor cannot be null.");
+
+        if (x.Shape[0] != y.Shape[0])
+            throw new ArgumentException($"First dimension of {datasetName.ToLower()} input tensor must match the first dimension of the {datasetName.ToLower()} target tensor.");
+
+        if (x.Shape.Any(dim => dim == 0) || y.Shape.Any(dim => dim == 0))
+            throw new ArgumentException($"{datasetName} tensors cannot have zero-sized dimensions.");
+    }
+
+    private static void EnsureConsistentInputShape<TInput, TOutput>(TInput xTrain, TInput xValidation, TInput xTest)
+    {
+        if (xTrain is Matrix<T> xTrainMatrix && xValidation is Matrix<T> xValMatrix && xTest is Matrix<T> xTestMatrix)
+        {
+            if (xTrainMatrix.Columns != xValMatrix.Columns || xTrainMatrix.Columns != xTestMatrix.Columns)
+                throw new ArgumentException("All input matrices must have the same number of columns.");
+        }
+        else if (xTrain is Tensor<T> xTrainTensor && xValidation is Tensor<T> xValTensor && xTest is Tensor<T> xTestTensor)
+        {
+            if (!Enumerable.SequenceEqual(xTrainTensor.Shape.Skip(1), xValTensor.Shape.Skip(1)) ||
+                !Enumerable.SequenceEqual(xTrainTensor.Shape.Skip(1), xTestTensor.Shape.Skip(1)))
+                throw new ArgumentException("All input tensors must have the same shape (except for the first dimension).");
+        }
+        else
+        {
+            throw new ArgumentException("Inconsistent input types across datasets.");
+        }
     }
 }

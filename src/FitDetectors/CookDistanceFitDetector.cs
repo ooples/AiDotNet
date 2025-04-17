@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// patterns in the data).
 /// </para>
 /// </remarks>
-public class CookDistanceFitDetector<T> : FitDetectorBase<T>
+public class CookDistanceFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Cook's distance fit detector.
@@ -70,7 +70,7 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var cookDistances = CalculateCookDistances(evaluationData);
         var fitType = DetermineFitType(cookDistances);
@@ -104,7 +104,7 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// data to the specific Cook's distance analysis approach.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var cookDistances = CalculateCookDistances(evaluationData);
         return DetermineFitType(cookDistances);
@@ -165,7 +165,7 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// between 0 and 1, where higher values indicate greater confidence.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var cookDistances = CalculateCookDistances(evaluationData);
         var influentialPointsCount = cookDistances.Count(d => _numOps.GreaterThan(d, _numOps.FromDouble(_options.InfluentialThreshold)));
@@ -200,9 +200,9 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// certain threshold (often 4/n where n is the sample size) are considered highly influential.
     /// </para>
     /// </remarks>
-    private Vector<T> CalculateCookDistances(ModelEvaluationData<T> evaluationData)
+    private Vector<T> CalculateCookDistances(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var X = evaluationData.ModelStats.FeatureMatrix;
+        var X = evaluationData.ModelStats.Features;
         var y = evaluationData.ModelStats.Actual;
         var yPredicted = evaluationData.ModelStats.Model?.Predict(X) ?? Vector<T>.Empty();
         var residuals = y.Subtract(yPredicted);
@@ -249,7 +249,7 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// Cook's distance) to help you identify specific data points that might be affecting your model.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var cookDistances = CalculateCookDistances(evaluationData);
         var recommendations = new List<string>();

@@ -16,12 +16,12 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class NelderMeadOptimizer<T> : OptimizerBase<T>
+public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Nelder-Mead optimizer.
     /// </summary>
-    private NelderMeadOptimizerOptions _options;
+    private NelderMeadOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The current iteration count.
@@ -69,20 +69,15 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// <param name="fitnessCalculator">The fitness calculator to use.</param>
     /// <param name="modelCache">The model cache to use.</param>
     public NelderMeadOptimizer(
-        NelderMeadOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
+        NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new NelderMeadOptimizerOptions();
+        _options = options ?? new NelderMeadOptimizerOptions<T, TInput, TOutput>();
         _alpha = NumOps.Zero;
         _beta = NumOps.Zero;
         _gamma = NumOps.Zero;
         _delta = NumOps.Zero;
+
         InitializeAdaptiveParameters();
     }
 
@@ -126,14 +121,13 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
-
-        int n = inputData.XTrain.Columns;
-        var simplex = InitializeSimplex(n);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var n = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        var simplex = InitializeSimplex(inputData.XTrain, n);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
 
@@ -211,12 +205,12 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="n">The number of dimensions (variables) in the optimization problem.</param>
     /// <returns>A list of initial solutions forming the simplex.</returns>
-    private List<ISymbolicModel<T>> InitializeSimplex(int n)
+    private List<IFullModel<T, TInput, TOutput>> InitializeSimplex(TInput input, int n)
     {
-        var simplex = new List<ISymbolicModel<T>>();
+        var simplex = new List<IFullModel<T, TInput, TOutput>>();
         for (int i = 0; i <= n; i++)
         {
-            simplex.Add(InitializeRandomSolution(n));
+            simplex.Add(InitializeRandomSolution(input));
         }
 
         return simplex;
@@ -238,22 +232,29 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// <param name="simplex">The current simplex (list of solution points).</param>
     /// <param name="n">The number of dimensions (variables) in the optimization problem.</param>
     /// <returns>A symbolic model representing the centroid of the simplex.</returns>
-    private ISymbolicModel<T> CalculateCentroid(List<ISymbolicModel<T>> simplex, int n)
+    private IFullModel<T, TInput, TOutput> CalculateCentroid(List<IFullModel<T, TInput, TOutput>> simplex, int n)
     {
+        // Use the first model as a template for creating the new model
+        var templateModel = simplex[0];
         var centroidCoefficients = new Vector<T>(n);
+    
+        // Calculate the sum of all parameters
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                centroidCoefficients[j] = NumOps.Add(centroidCoefficients[j], simplex[i].Coefficients[j]);
+                centroidCoefficients[j] = NumOps.Add(centroidCoefficients[j], simplex[i].GetParameters()[j]);
             }
         }
+    
+        // Divide by n to get the average
         for (int j = 0; j < n; j++)
         {
             centroidCoefficients[j] = NumOps.Divide(centroidCoefficients[j], NumOps.FromDouble(n));
         }
-
-        return new VectorModel<T>(centroidCoefficients);
+    
+        // Create a new model with the centroid parameters using WithParameters
+        return templateModel.WithParameters(centroidCoefficients);
     }
 
     /// <summary>
@@ -272,7 +273,7 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// <param name="worst">The worst point in the simplex.</param>
     /// <param name="centroid">The centroid of the simplex (excluding the worst point).</param>
     /// <returns>A new point that is the reflection of the worst point through the centroid.</returns>
-    private ISymbolicModel<T> Reflect(ISymbolicModel<T> worst, ISymbolicModel<T> centroid)
+    private IFullModel<T, TInput, TOutput> Reflect(IFullModel<T, TInput, TOutput> worst, IFullModel<T, TInput, TOutput> centroid)
     {
         return PerformVectorOperation(centroid, worst, _alpha, (a, b, c) => NumOps.Add(a, NumOps.Multiply(c, NumOps.Subtract(a, b))));
     }
@@ -292,7 +293,7 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// <param name="centroid">The centroid of the simplex.</param>
     /// <param name="reflected">The reflected point.</param>
     /// <returns>A new point that is an expansion of the reflected point away from the centroid.</returns>
-    private ISymbolicModel<T> Expand(ISymbolicModel<T> centroid, ISymbolicModel<T> reflected)
+    private IFullModel<T, TInput, TOutput> Expand(IFullModel<T, TInput, TOutput> centroid, IFullModel<T, TInput, TOutput> reflected)
     {
         return PerformVectorOperation(centroid, reflected, _gamma, (a, b, c) => NumOps.Add(a, NumOps.Multiply(c, NumOps.Subtract(b, a))));
     }
@@ -312,7 +313,7 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// <param name="worst">The worst point in the simplex.</param>
     /// <param name="centroid">The centroid of the simplex.</param>
     /// <returns>A new point that is a contraction of the worst point towards the centroid.</returns>
-    private ISymbolicModel<T> Contract(ISymbolicModel<T> worst, ISymbolicModel<T> centroid)
+    private IFullModel<T, TInput, TOutput> Contract(IFullModel<T, TInput, TOutput> worst, IFullModel<T, TInput, TOutput> centroid)
     {
         return PerformVectorOperation(centroid, worst, _beta, (a, b, c) => NumOps.Add(a, NumOps.Multiply(c, NumOps.Subtract(b, a))));
     }
@@ -330,7 +331,7 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <param name="simplex">The current simplex (list of solution points).</param>
-    private void Shrink(List<ISymbolicModel<T>> simplex)
+    private void Shrink(List<IFullModel<T, TInput, TOutput>> simplex)
     {
         var best = simplex[0];
         for (int i = 1; i < simplex.Count; i++)
@@ -356,14 +357,19 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// <param name="factor">A factor used in the operation.</param>
     /// <param name="operation">The operation to perform on each pair of coefficients.</param>
     /// <returns>A new symbolic model resulting from the vector operation.</returns>
-    private ISymbolicModel<T> PerformVectorOperation(ISymbolicModel<T> a, ISymbolicModel<T> b, T factor, Func<T, T, T, T> operation)
+    private IFullModel<T, TInput, TOutput> PerformVectorOperation(IFullModel<T, TInput, TOutput> a, IFullModel<T, TInput, TOutput> b, T factor, Func<T, T, T, T> operation)
     {
-        var newCoefficients = new Vector<T>(a.Coefficients.Length);
-        for (int i = 0; i < a.Coefficients.Length; i++)
+        var parameters = a.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
+    
+        // Apply the operation to each parameter
+        for (int i = 0; i < parameters.Length; i++)
         {
-            newCoefficients[i] = operation(a.Coefficients[i], b.Coefficients[i], factor);
+            newCoefficients[i] = operation(parameters[i], b.GetParameters()[i], factor);
         }
-        return new VectorModel<T>(newCoefficients);
+    
+        // Create a new model with the calculated parameters using WithParameters
+        return a.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -380,7 +386,7 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">The current optimization step data.</param>
     /// <param name="previousStepData">The previous optimization step data.</param>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -415,9 +421,9 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is NelderMeadOptimizerOptions nmOptions)
+        if (options is NelderMeadOptimizerOptions<T, TInput, TOutput> nmOptions)
         {
             _options = nmOptions;
         }
@@ -439,7 +445,7 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <returns>The current optimization algorithm options.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -503,7 +509,7 @@ public class NelderMeadOptimizer<T> : OptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<NelderMeadOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<NelderMeadOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();

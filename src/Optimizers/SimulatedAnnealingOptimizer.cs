@@ -21,7 +21,7 @@
 /// helps the algorithm find better solutions in complex landscapes with many local optima.
 /// </para>
 /// </remarks>
-public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
+public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Random number generator for stochastic decision-making.
@@ -64,7 +64,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private SimulatedAnnealingOptions _saOptions;
+    private SimulatedAnnealingOptions<T, TInput, TOutput> _saOptions;
 
     /// <summary>
     /// The current temperature controlling the acceptance probability of worse solutions.
@@ -116,17 +116,11 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
     /// </para>
     /// </remarks>
     public SimulatedAnnealingOptimizer(
-        SimulatedAnnealingOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
+        SimulatedAnnealingOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
         _random = new Random();
-        _saOptions = options ?? new SimulatedAnnealingOptions();
+        _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
         _currentTemperature = NumOps.FromDouble(_saOptions.InitialTemperature);
     }
 
@@ -160,14 +154,14 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
     /// This approach helps find good solutions even in complex landscapes with many local optima.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
         InitializeAdaptiveParameters();
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         for (int iteration = 0; iteration < _saOptions.MaxIterations; iteration++)
         {
@@ -215,7 +209,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
     /// This adaptive behavior helps balance exploration and exploitation dynamically.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -390,9 +384,9 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
     /// This ensures that only appropriate settings are used with this specific optimizer.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is SimulatedAnnealingOptions saOptions)
+        if (options is SimulatedAnnealingOptions<T, TInput, TOutput> saOptions)
         {
             _saOptions = saOptions;
         }
@@ -421,7 +415,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
     /// or for making a copy of the settings to modify and apply later.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _saOptions;
     }
@@ -471,16 +465,17 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
     /// This helps the algorithm explore nearby solutions that might be better than the current one.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> GenerateNeighborSolution(ISymbolicModel<T> currentSolution)
+    private IFullModel<T, TInput, TOutput> GenerateNeighborSolution(IFullModel<T, TInput, TOutput> currentSolution)
     {
-        var newCoefficients = new T[currentSolution.Coefficients.Length];
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
         for (int i = 0; i < newCoefficients.Length; i++)
         {
             var perturbation = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * _saOptions.NeighborGenerationRange);
-            newCoefficients[i] = NumOps.Add(currentSolution.Coefficients[i], perturbation);
+            newCoefficients[i] = NumOps.Add(parameters[i], perturbation);
         }
 
-        return new VectorModel<T>(new Vector<T>(newCoefficients));
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -558,7 +553,7 @@ public class SimulatedAnnealingOptimizer<T> : OptimizerBase<T>
 
             // Deserialize SimulatedAnnealingOptions
             string optionsJson = reader.ReadString();
-            _saOptions = JsonConvert.DeserializeObject<SimulatedAnnealingOptions>(optionsJson)
+            _saOptions = JsonConvert.DeserializeObject<SimulatedAnnealingOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             // Deserialize current temperature

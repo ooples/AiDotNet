@@ -89,7 +89,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeHouseholder()
     {
         int n = A.Rows;
-        TMatrix = A.Copy();
+        TMatrix = A.Clone();
         QMatrix = Matrix<T>.CreateIdentity(n);
 
         for (int k = 0; k < n - 2; k++)
@@ -127,7 +127,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     {
         int n = A.Rows;
         QMatrix = Matrix<T>.CreateIdentity(n);
-        TMatrix = A.Copy();
+        TMatrix = A.Clone();
 
         for (int i = 0; i < n - 1; i++)
         {

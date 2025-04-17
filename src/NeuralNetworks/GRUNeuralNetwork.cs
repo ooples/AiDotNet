@@ -92,44 +92,6 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a forward pass through the network to generate a prediction from an input vector.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector containing the prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method processes an input vector through all layers of the network sequentially, transforming
-    /// it at each step according to the layer's function, and returns the final output vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method takes your input data and passes it through 
-    /// the network to get a prediction.
-    /// 
-    /// The process works like an assembly line:
-    /// - Data enters the first layer
-    /// - Each layer transforms the data in some way
-    /// - Each GRU layer maintains an internal memory state as it processes the sequence
-    /// - The transformed data is passed to the next layer
-    /// - The final layer produces the prediction
-    /// 
-    /// For example, if you're predicting the next word in a sentence, this method would:
-    /// 1. Take the words you already have as input
-    /// 2. Process them through the GRU layers, which remember important context
-    /// 3. Output the most likely next word
-    /// 
-    /// This is how you use the network after it's been trained to make predictions.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-        return current;
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network using the provided parameter vector.
     /// </summary>
     /// <param name="parameters">A vector containing updated parameters for all layers.</param>
@@ -172,99 +134,224 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the neural network to a binary writer.
+    /// Performs a forward pass through the network and generates predictions.
     /// </summary>
-    /// <param name="writer">The binary writer to write the serialized network to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a null layer is encountered or when a layer type name cannot be determined.</exception>
+    /// <param name="input">The input tensor to the network, typically a sequence.</param>
+    /// <returns>The output tensor produced by the network.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the neural network's structure and parameters to a binary format that can be stored
-    /// and later loaded. It writes the number of layers and then serializes each layer individually.
+    /// This method processes the input tensor through all layers of the GRU network in sequence,
+    /// applying the appropriate transformations at each step. For sequential data, the input is typically
+    /// a 3D tensor with dimensions [batch_size, sequence_length, feature_size].
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained neural network to a file.
+    /// <para><b>For Beginners:</b> This method takes your input data and runs it through the neural network to get a prediction.
     /// 
-    /// After spending time training a GRU network (which can take hours or days for complex tasks),
-    /// you'll want to save it so you can use it later without training again. This method:
+    /// For example, if your input is a sequence of words:
+    /// 1. Each word is passed through the network one at a time
+    /// 2. The GRU remembers information from previous words
+    /// 3. After processing the entire sequence, the network produces its prediction
     /// 
-    /// 1. Counts how many layers your network has
-    /// 2. Writes this count to the file
-    /// 3. For each layer:
-    ///    - Writes the type of layer (what it does)
-    ///    - Saves all the learned values (parameters) for that layer
-    /// 
-    /// This is like saving a document so you can open it again later without redoing all your work.
-    /// You can then load this saved network whenever you need to make predictions on new data.
+    /// This is similar to how you might read a sentence and understand its meaning
+    /// by considering each word in context with the ones before it.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-        writer.Write(Layers.Count);
+        var current = input;
+    
+        // Forward pass through all layers
         foreach (var layer in Layers)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            current = layer.Forward(current);
         }
+    
+        return current;
     }
 
     /// <summary>
-    /// Deserializes the neural network from a binary reader.
+    /// Trains the GRU network using the provided input and expected output.
     /// </summary>
-    /// <param name="reader">The binary reader to read the serialized network from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when an empty layer type name is encountered, when a layer type cannot be found, when a type does not implement the required interface, or when a layer instance cannot be created.</exception>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for calculating error.</param>
     /// <remarks>
     /// <para>
-    /// This method loads a previously serialized neural network from a binary format. It reads the number of layers
-    /// and then deserializes each layer individually, recreating the network's structure and parameters.
+    /// This method implements the training process for GRU networks using backpropagation through time (BPTT).
+    /// It forward propagates the input, calculates the error by comparing with the expected output,
+    /// and then backpropagates the error to update the network parameters.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved neural network from a file.
+    /// <para><b>For Beginners:</b> This method is how the network learns from examples.
     /// 
-    /// When you want to use a GRU network that was trained earlier, this method:
+    /// The training process works like this:
+    /// 1. The network makes a prediction based on the input sequence
+    /// 2. The prediction is compared to the expected output to calculate the error
+    /// 3. The error is used to adjust the network's internal values (parameters)
+    /// 4. Over time, these adjustments help the network make better predictions
     /// 
-    /// 1. Reads how many layers the network should have
-    /// 2. Creates a new, empty network
-    /// 3. For each layer:
-    ///    - Reads what type of layer it should be
-    ///    - Creates that type of layer
-    ///    - Loads all the learned values (parameters) for that layer
-    /// 
-    /// This is like opening a saved document to continue working where you left off.
-    /// 
-    /// For example, if you trained a GRU network to predict stock prices,
-    /// you could save it after training and then load it weeks later to make
-    /// new predictions without having to retrain the model.
+    /// In GRU networks, training is more complex because the error needs to flow backwards
+    /// through time (across the sequence), but this complexity is handled internally.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-        for (int i = 0; i < layerCount; i++)
+        // Set network to training mode
+        SetTrainingMode(true);
+    
+        // Forward pass with memory
+        var predictions = ForwardWithMemory(input);
+    
+        // Calculate error/loss
+        var outputGradients = predictions.Subtract(expectedOutput);
+    
+        // Backpropagate error
+        Backpropagate(outputGradients);
+    
+        // Calculate learning rate - could be more sophisticated in production
+        T learningRate = NumOps.FromDouble(0.001);
+    
+        // Update parameters based on gradients
+        foreach (var layer in Layers)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            if (layer.SupportsTraining)
+            {
+                layer.UpdateParameters(learningRate);
+            }
         }
+    
+        // Set network back to inference mode
+        SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Performs a forward pass while storing intermediate values for backpropagation.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>The output tensor from the forward pass.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method processes the input through the network while
+    /// remembering intermediate values needed for learning.
+    /// 
+    /// Think of it like solving a math problem and showing your work - the network
+    /// needs to keep track of intermediate steps to understand how to improve.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ForwardWithMemory(Tensor<T> input)
+    {
+        var current = input;
+    
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            // Store input to each layer for backpropagation
+            _layerInputs[i] = current;
+        
+            // Forward pass through layer
+            current = Layers[i].Forward(current);
+        
+            // Store output from each layer for backpropagation
+            _layerOutputs[i] = current;
+        }
+    
+        return current;
+    }
+
+    /// <summary>
+    /// Gets metadata about this GRU Neural Network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the model, including its name, description, architecture,
+    /// and other relevant information that might be useful for model management and serialization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information about this neural network model.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (GRU Neural Network)
+    /// - The network architecture (how many layers, neurons, etc.)
+    /// - Configuration details specific to GRU networks
+    /// 
+    /// This information is useful for documentation, debugging, and when saving/loading models.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.GRUNeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputSize", Architecture.InputSize },
+                { "OutputSize", Architecture.OutputSize },
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Saves GRU-specific data to a binary stream.
+    /// </summary>
+    /// <param name="writer">The binary writer to save to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes any GRU-specific data that isn't part of the base neural network.
+    /// In the case of a GRU network, this might include sequence-specific settings or state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves special GRU settings to a file.
+    /// 
+    /// When saving the model:
+    /// - The base neural network parts are saved by other methods
+    /// - This method saves any GRU-specific settings or state
+    /// 
+    /// This ensures that when you reload the model, it will have all the same settings
+    /// and capabilities as the original.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+    }
+
+    /// <summary>
+    /// Loads GRU-specific data from a binary stream.
+    /// </summary>
+    /// <param name="reader">The binary reader to load from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes GRU-specific data that was previously saved using SerializeNetworkSpecificData.
+    /// It restores any special configuration or state that is unique to GRU networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads special GRU settings from a file.
+    /// 
+    /// When loading a saved model:
+    /// - The base neural network parts are loaded by other methods
+    /// - This method loads any GRU-specific settings or state
+    /// 
+    /// This ensures that the loaded model functions exactly like the original one that was saved.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new instance of the GRU Neural Network with the same architecture and configuration.
+    /// </summary>
+    /// <returns>A new GRU Neural Network instance with the same architecture and configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the GRU Neural Network with the same architecture as the current instance.
+    /// It's used in scenarios where a fresh copy of the model is needed while maintaining the same configuration.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a brand new copy of the neural network with the same setup.
+    /// 
+    /// Think of it like creating a clone of the network:
+    /// - The new network has the same architecture (structure)
+    /// - But it's a completely separate instance with its own parameters and learning state
+    /// 
+    /// This is useful when you need multiple instances of the same GRU model,
+    /// such as for ensemble learning or comparing different training approaches.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new GRUNeuralNetwork<T>(this.Architecture);
     }
 }

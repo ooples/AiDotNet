@@ -46,7 +46,7 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// <summary>
     /// The regularization strategy applied to the model to prevent overfitting.
     /// </summary>
-    private readonly IRegularization<T> _regularization;
+    private readonly IRegularization<T, Matrix<T>, Vector<T>> _regularization;
 
     /// <summary>
     /// Gets the number of trees in this model, which is always 1 for a single decision tree.
@@ -100,11 +100,11 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public DecisionTreeRegression(DecisionTreeOptions? options = null, IRegularization<T>? regularization = null)
+    public DecisionTreeRegression(DecisionTreeOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new DecisionTreeOptions();
-        _regularization = regularization ?? new NoRegularization<T>();
+        _regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
         _featureImportances = Vector<T>.Empty();
         _random = new Random(_options.Seed ?? Environment.TickCount);
     }
@@ -148,8 +148,8 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         // Apply regularization to the input data
-        var regularizedX = _regularization.RegularizeMatrix(x);
-        var regularizedY = _regularization.RegularizeCoefficients(y);
+        var regularizedX = _regularization.Regularize(x);
+        var regularizedY = _regularization.Regularize(y);
 
         Root = BuildTree(regularizedX, regularizedY, 0);
         CalculateFeatureImportances(regularizedX);
@@ -193,7 +193,7 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         // Apply regularization to the input data
-        var regularizedInput = _regularization.RegularizeMatrix(input);
+        var regularizedInput = _regularization.Regularize(input);
 
         var predictions = new T[regularizedInput.Rows];
         for (int i = 0; i < regularizedInput.Rows; i++)
@@ -202,7 +202,7 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         }
 
         // Apply regularization to the predictions
-        return _regularization.RegularizeCoefficients(new Vector<T>(predictions));
+        return _regularization.Regularize(new Vector<T>(predictions));
     }
 
     /// <summary>
@@ -235,9 +235,9 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        return new ModelMetadata<T>
+        return new ModelMetaData<T>
         {
             ModelType = ModelType.DecisionTree,
             AdditionalInfo = new Dictionary<string, object>
@@ -978,5 +978,37 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
 
             return NumOps.Divide(variance, NumOps.FromDouble(sampleCount));
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the decision tree regression model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the model with the same configuration but no trained parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the decision tree regression model with the same configuration
+    /// options and regularization method as the current instance, but without copying the trained parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
+    /// any learned parameters.
+    /// 
+    /// Think of it like getting a blank notepad with the same paper quality and size, 
+    /// but without any writing on it yet. The new model has the same:
+    /// - Maximum depth setting
+    /// - Minimum samples split setting
+    /// - Split criterion (how nodes decide which feature to split on)
+    /// - Random seed (if specified)
+    /// - Regularization method
+    /// 
+    /// But it doesn't have any of the actual tree structure that was learned from data.
+    /// 
+    /// This is mainly used internally when doing things like cross-validation or 
+    /// creating ensembles of similar models with different training data.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create a new instance with the same options and regularization
+        return new DecisionTreeRegression<T>(_options, _regularization);
     }
 }
