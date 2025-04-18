@@ -190,12 +190,13 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
     /// to create a complete package that can be saved and used for making predictions.
     /// </para>
     /// </remarks>
-    public PredictionModelResult(IFullModel<T, TInput, TOutput> model, OptimizationResult<T, TInput, TOutput> optimizationResult, NormalizationInfo<T, TInput, TOutput> normalizationInfo)
+    public PredictionModelResult(IFullModel<T, TInput, TOutput>? model, OptimizationResult<T, TInput, TOutput> optimizationResult, 
+        NormalizationInfo<T, TInput, TOutput> normalizationInfo)
     {
         Model = model;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
-        ModelMetadata = model.GetModelMetaData();
+        ModelMetadata = model?.GetModelMetaData() ?? new();
     }
 
     /// <summary>

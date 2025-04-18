@@ -214,7 +214,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             var prediction = solution.Predict(input);
         
             // Calculate the error
-            var error = LossFunction.CalculateLoss(prediction, target);
+            var error = LossFunction.CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(prediction), ConversionsHelper.ConvertToVector<T, TOutput>(target));
         
             // Update gradient based on the error
             for (int j = 0; j < parameters.Length; j++)
@@ -357,6 +357,30 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         var learningRate = NumOps.FromDouble(_currentLearningRate);
         return parameters.Subtract(gradient.Multiply(learningRate));
+    }
+
+    /// <summary>
+    /// Updates a tensor of parameters based on the calculated gradient.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts the model's parameters stored in tensor format to improve its performance.
+    /// It's like taking a step in the direction you've determined will lead you downhill, but for more complex
+    /// multi-dimensional data structures. Tensors are useful for representing parameters in deep neural networks
+    /// where data has multiple dimensions (like images with width, height, and channels).
+    /// </para>
+    /// </remarks>
+    /// <param name="parameters">The current tensor parameters.</param>
+    /// <param name="gradient">The calculated gradient tensor.</param>
+    /// <returns>The updated tensor parameters.</returns>
+    public virtual Tensor<T> UpdateParameters(Tensor<T> parameters, Tensor<T> gradient)
+    {
+        var learningRate = NumOps.FromDouble(_currentLearningRate);
+
+        // Scale the gradient by the learning rate
+        var scaledGradient = gradient.Multiply(learningRate);
+
+        // Subtract the scaled gradient from the parameters
+        return parameters.Subtract(scaledGradient);
     }
 
     /// <summary>

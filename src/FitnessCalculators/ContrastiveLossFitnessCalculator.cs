@@ -92,14 +92,14 @@ public class ContrastiveLossFitnessCalculator<T, TInput, TOutput> : FitnessCalcu
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        var (output1, output2) = SplitOutputs(dataSet.Predicted);
-        var (actual1, actual2) = SplitOutputs(dataSet.Actual);
+        var (output1, output2) = SplitOutputs(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted));
+        var (actual1, actual2) = SplitOutputs(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
         T totalLoss = _numOps.Zero;
 
         for (int i = 0; i < output1.Length; i++)
         {
             T similarityLabel = CalculateSimilarityLabel(actual1[i], actual2[i]);
-            T pairLoss = NeuralNetworkHelper<T>.ContrastiveLoss(output1, output2, similarityLabel, _margin);
+            T pairLoss = new ContrastiveLoss<T>(Convert.ToDouble(_margin)).CalculateLoss(output1, output2, similarityLabel);
             totalLoss = _numOps.Add(totalLoss, pairLoss);
         }
 

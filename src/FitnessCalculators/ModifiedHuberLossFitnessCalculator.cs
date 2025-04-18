@@ -106,6 +106,7 @@ public class ModifiedHuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCal
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.ModifiedHuberLoss(dataSet.Predicted, dataSet.Actual);
+        return new ModifiedHuberLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

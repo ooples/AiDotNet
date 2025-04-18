@@ -151,7 +151,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <param name="currentSolution">The current model solution.</param>
     /// <param name="gradient">The calculated gradient.</param>
     /// <returns>An updated symbolic model with improved coefficients.</returns>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
         var newCoefficients = new Vector<T>(parameters.Length);

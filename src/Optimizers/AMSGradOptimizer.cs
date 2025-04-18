@@ -123,7 +123,7 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
-    }rftttttttttttttttttttttttt-=000000000000ds,
+    }
 
     /// <summary>
     /// Updates the current solution using the AMSGrad update rule.
@@ -193,9 +193,9 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate, 
-                NumOps.FromDouble(_options.MinLearningRate), 
-                NumOps.FromDouble(_options.MaxL
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
+                NumOps.FromDouble(_options.MaxLearningRate));
         }
     }
 
@@ -307,4 +307,6 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
-        return $"{baseKey}_AMSGrad_{_options.Bet
+        return $"{baseKey}_AMSGrad_{_options.Beta1}_{_options.Beta2}_{_t}";
+    }
+}

@@ -120,6 +120,7 @@ public class HuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.HuberLoss(dataSet.Predicted, dataSet.Actual, _delta);
+        return new HuberLoss<T>(Convert.ToDouble(_delta)).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

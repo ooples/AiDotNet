@@ -4407,7 +4407,7 @@ public static class StatisticsHelper<T>
     /// estimate of out-of-sample prediction accuracy.
     /// </para>
     /// </remarks>
-    public static List<T> CalculateLeaveOneOutPredictiveDensities(Matrix<T> features, Vector<T> actualValues, Func<Vector<T>, Matrix<T>, Vector<T>> modelFitFunction)
+    public static List<T> CalculateLeaveOneOutPredictiveDensities(Matrix<T> features, Vector<T> actualValues, Func<Matrix<T>, Vector<T>, Vector<T>> modelFitFunction)
     {
         var looPredictiveDensities = new List<T>();
 
@@ -5001,8 +5001,8 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static (T, T) CalculateAucF1Score<TInput, TOutput>(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var actual = evaluationData.ModelStats.Actual;
-        var predicted = evaluationData.ModelStats.Predicted;
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
+        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
         var auc = StatisticsHelper<T>.CalculatePrecisionRecallAUC(actual, predicted);
         var (_, _, f1Score) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, PredictionType.Regression);
 

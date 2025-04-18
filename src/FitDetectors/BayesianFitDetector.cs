@@ -110,21 +110,21 @@ public class BayesianFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
         var waic = StatisticsHelper<T>.CalculateWAIC(evaluationData.ModelStats);
         var loo = StatisticsHelper<T>.CalculateLOO(evaluationData.ModelStats);
 
-        if (_numOps.LessThan(dic, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-            _numOps.LessThan(waic, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-            _numOps.LessThan(loo, _numOps.FromDouble(_options.GoodFitThreshold)))
+        if (NumOps.LessThan(dic, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+            NumOps.LessThan(waic, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+            NumOps.LessThan(loo, NumOps.FromDouble(_options.GoodFitThreshold)))
         {
             return FitType.GoodFit;
         }
-        else if (_numOps.GreaterThan(dic, _numOps.FromDouble(_options.OverfitThreshold)) ||
-                 _numOps.GreaterThan(waic, _numOps.FromDouble(_options.OverfitThreshold)) ||
-                 _numOps.GreaterThan(loo, _numOps.FromDouble(_options.OverfitThreshold)))
+        else if (NumOps.GreaterThan(dic, NumOps.FromDouble(_options.OverfitThreshold)) ||
+                 NumOps.GreaterThan(waic, NumOps.FromDouble(_options.OverfitThreshold)) ||
+                 NumOps.GreaterThan(loo, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(dic, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.LessThan(waic, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.LessThan(loo, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(dic, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.LessThan(waic, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.LessThan(loo, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
@@ -160,8 +160,8 @@ public class BayesianFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
         var posteriorPredictiveCheck = StatisticsHelper<T>.CalculatePosteriorPredictiveCheck(evaluationData.ModelStats);
         var bayes_factor = StatisticsHelper<T>.CalculateBayesFactor(evaluationData.ModelStats);
 
-        var confidenceScore = _numOps.Multiply(posteriorPredictiveCheck, bayes_factor);
-        return _numOps.GreaterThan(confidenceScore, _numOps.One) ? _numOps.One : confidenceScore;
+        var confidenceScore = NumOps.Multiply(posteriorPredictiveCheck, bayes_factor);
+        return NumOps.GreaterThan(confidenceScore, NumOps.One) ? NumOps.One : confidenceScore;
     }
 
     /// <summary>

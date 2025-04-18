@@ -132,26 +132,26 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
         var meanValidationR2 = new Vector<T>(bootstrapResults.Select(r => r.ValidationR2)).Average();
         var meanTestR2 = new Vector<T>(bootstrapResults.Select(r => r.TestR2)).Average();
 
-        var r2Difference = _numOps.Abs(_numOps.Subtract(meanTrainingR2, meanValidationR2));
+        var r2Difference = NumOps.Abs(NumOps.Subtract(meanTrainingR2, meanValidationR2));
 
-        if (_numOps.GreaterThan(meanTrainingR2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-            _numOps.GreaterThan(meanValidationR2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-            _numOps.GreaterThan(meanTestR2, _numOps.FromDouble(_options.GoodFitThreshold)))
+        if (NumOps.GreaterThan(meanTrainingR2, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+            NumOps.GreaterThan(meanValidationR2, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+            NumOps.GreaterThan(meanTestR2, NumOps.FromDouble(_options.GoodFitThreshold)))
         {
             return FitType.GoodFit;
         }
-        else if (_numOps.GreaterThan(r2Difference, _numOps.FromDouble(_options.OverfitThreshold)) &&
-                 _numOps.GreaterThan(meanTrainingR2, meanValidationR2))
+        else if (NumOps.GreaterThan(r2Difference, NumOps.FromDouble(_options.OverfitThreshold)) &&
+                 NumOps.GreaterThan(meanTrainingR2, meanValidationR2))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(meanTrainingR2, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.LessThan(meanValidationR2, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.LessThan(meanTestR2, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(meanTrainingR2, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.LessThan(meanValidationR2, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.LessThan(meanTestR2, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
-        else if (_numOps.GreaterThan(r2Difference, _numOps.FromDouble(_options.OverfitThreshold)))
+        else if (NumOps.GreaterThan(r2Difference, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.HighVariance;
         }
@@ -182,17 +182,17 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     {
         var bootstrapResults = PerformBootstrap(evaluationData);
 
-        var r2Differences = bootstrapResults.Select(r => _numOps.Abs(_numOps.Subtract(r.TrainingR2, r.ValidationR2))).ToList();
+        var r2Differences = bootstrapResults.Select(r => NumOps.Abs(NumOps.Subtract(r.TrainingR2, r.ValidationR2))).ToList();
         r2Differences.Sort();
 
         int lowerIndex = (int)Math.Floor((1 - _options.ConfidenceInterval) / 2 * _options.NumberOfBootstraps);
         int upperIndex = (int)Math.Ceiling((1 + _options.ConfidenceInterval) / 2 * _options.NumberOfBootstraps) - 1;
 
-        var confidenceInterval = _numOps.Subtract(r2Differences[upperIndex], r2Differences[lowerIndex]);
-        var confidenceLevel = _numOps.Subtract(_numOps.One, confidenceInterval);
-        var lessThan = _numOps.LessThan(_numOps.One, confidenceLevel) ? _numOps.One : confidenceLevel;
+        var confidenceInterval = NumOps.Subtract(r2Differences[upperIndex], r2Differences[lowerIndex]);
+        var confidenceLevel = NumOps.Subtract(NumOps.One, confidenceInterval);
+        var lessThan = NumOps.LessThan(NumOps.One, confidenceLevel) ? NumOps.One : confidenceLevel;
 
-        return _numOps.GreaterThan(_numOps.Zero, lessThan) ? _numOps.Zero : lessThan;
+        return NumOps.GreaterThan(NumOps.Zero, lessThan) ? NumOps.Zero : lessThan;
     }
 
     /// <summary>
@@ -322,6 +322,6 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
         var noise = _random.NextDouble() * 0.1 - 0.05; // Random noise between -0.05 and 0.05
         var resampledR2 = Math.Max(0, Math.Min(1, Convert.ToDouble(originalR2) + noise));
 
-        return _numOps.FromDouble(resampledR2);
+        return NumOps.FromDouble(resampledR2);
     }
 }

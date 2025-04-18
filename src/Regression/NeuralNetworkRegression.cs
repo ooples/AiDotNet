@@ -491,7 +491,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 
             if (_optimizer is IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> gradientOptimizer)
             {
-                _weights[i] = gradientOptimizer.UpdateParameters(_weights[i].ToVector(), avgWeightGradient.ToVector());
+                _weights[i] = gradientOptimizer.UpdateParameters(_weights[i], avgWeightGradient);
                 _biases[i] = gradientOptimizer.UpdateParameters(_biases[i], avgBiasGradient);
             }
             else
@@ -559,8 +559,28 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Vector<T> ApplyActivation(Vector<T> input, bool isOutputLayer)
     {
-        var activationFunc = isOutputLayer ? _options.OutputActivationFunction : _options.HiddenActivationFunction;
-        return input.Transform(x => activationFunc(x));
+        // First check if vector activation is available
+        var vectorActivation = isOutputLayer
+            ? _options.OutputVectorActivation
+            : _options.HiddenVectorActivation;
+
+        if (vectorActivation != null)
+        {
+            return vectorActivation.Activate(input);
+        }
+
+        // Fall back to scalar activation
+        var scalarActivation = isOutputLayer
+            ? _options.OutputActivationFunction
+            : _options.HiddenActivationFunction;
+
+        if (scalarActivation != null)
+        {
+            return input.Transform(x => scalarActivation.Activate(x));
+        }
+
+        // If no activation function is specified, return the input unchanged (identity function)
+        return input;
     }
 
     /// <summary>
@@ -584,8 +604,28 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Vector<T> ApplyActivationDerivative(Vector<T> input, bool isOutputLayer)
     {
-        var activationFuncDerivative = isOutputLayer ? _options.OutputActivationFunctionDerivative : _options.HiddenActivationFunctionDerivative;
-        return input.Transform(x => activationFuncDerivative(x));
+        // First check if vector activation is available
+        var vectorActivation = isOutputLayer
+            ? _options.OutputVectorActivation
+            : _options.HiddenVectorActivation;
+
+        if (vectorActivation != null)
+        {
+            return vectorActivation.Derivative(input).ToVector();
+        }
+
+        // Fall back to scalar activation
+        var scalarActivation = isOutputLayer
+            ? _options.OutputActivationFunction
+            : _options.HiddenActivationFunction;
+
+        if (scalarActivation != null)
+        {
+            return input.Transform(x => scalarActivation.Derivative(x));
+        }
+
+        // If no activation function is specified, return ones (derivative of identity function)
+        return input.Transform(_ => NumOps.One);
     }
 
     /// <summary>

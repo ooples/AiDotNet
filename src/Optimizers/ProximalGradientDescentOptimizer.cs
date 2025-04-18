@@ -240,7 +240,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// This combination of steps helps find solutions that both minimize the error and have good properties.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var stepSize = CurrentLearningRate;
         var parameters = currentSolution.GetParameters();

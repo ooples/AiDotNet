@@ -80,9 +80,9 @@ public class CategoricalCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : 
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.CategoricalCrossEntropyLoss(
-            Matrix<T>.FromVector(dataSet.Predicted),
-            Matrix<T>.FromVector(dataSet.Actual)
+        return new CategoricalCrossEntropyLoss<T>().CalculateLoss(
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual)
         );
     }
 }

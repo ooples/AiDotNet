@@ -59,7 +59,7 @@ public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     public ROCCurveFitDetector(ROCCurveFitDetectorOptions? options = null)
     {
         _options = options ?? new ROCCurveFitDetectorOptions();
-        Auc = _numOps.Zero;
+        Auc = NumOps.Zero;
     }
 
     /// <summary>
@@ -87,7 +87,8 @@ public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
 
-        var (fpr, tpr) = StatisticsHelper<T>.CalculateROCCurve(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
+        var (fpr, tpr) = StatisticsHelper<T>.CalculateROCCurve(ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted));
         Auc = StatisticsHelper<T>.CalculateAUC(fpr, tpr);
 
         var fitType = DetermineFitType(evaluationData);
@@ -128,11 +129,11 @@ public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// </remarks>
     protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        if (_numOps.GreaterThanOrEquals(Auc, _numOps.FromDouble(_options.GoodFitThreshold)))
+        if (NumOps.GreaterThanOrEquals(Auc, NumOps.FromDouble(_options.GoodFitThreshold)))
             return FitType.GoodFit;
-        else if (_numOps.GreaterThanOrEquals(Auc, _numOps.FromDouble(_options.ModerateFitThreshold)))
+        else if (NumOps.GreaterThanOrEquals(Auc, NumOps.FromDouble(_options.ModerateFitThreshold)))
             return FitType.Moderate;
-        else if (_numOps.GreaterThanOrEquals(Auc, _numOps.FromDouble(_options.PoorFitThreshold)))
+        else if (NumOps.GreaterThanOrEquals(Auc, NumOps.FromDouble(_options.PoorFitThreshold)))
             return FitType.PoorFit;
         else
             return FitType.VeryPoorFit;
@@ -158,7 +159,7 @@ public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// </remarks>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        return _numOps.Multiply(Auc, _numOps.FromDouble(_options.ConfidenceScalingFactor));
+        return NumOps.Multiply(Auc, NumOps.FromDouble(_options.ConfidenceScalingFactor));
     }
 
     /// <summary>
@@ -203,7 +204,7 @@ public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
                 break;
         }
 
-        if (_numOps.LessThan(Auc, _numOps.FromDouble(_options.BalancedDatasetThreshold)))
+        if (NumOps.LessThan(Auc, NumOps.FromDouble(_options.BalancedDatasetThreshold)))
         {
             recommendations.Add("The dataset might be imbalanced. Consider using balanced accuracy, F1 score, or other metrics suitable for imbalanced data.");
         }

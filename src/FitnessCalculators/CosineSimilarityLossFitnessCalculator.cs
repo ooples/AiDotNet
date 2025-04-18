@@ -77,6 +77,7 @@ public class CosineSimilarityLossFitnessCalculator<T, TInput, TOutput> : Fitness
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.CosineSimilarityLoss(dataSet.Predicted, dataSet.Actual);
+        return new CosineSimilarityLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

@@ -115,6 +115,7 @@ public class ElasticNetLossFitnessCalculator<T, TInput, TOutput> : FitnessCalcul
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.ElasticNetLoss(dataSet.Predicted, dataSet.Actual, _l1Ratio, _alpha);
+        return new ElasticNetLoss<T>(Convert.ToDouble(_l1Ratio), Convert.ToDouble(_alpha)).CalculateLoss(
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

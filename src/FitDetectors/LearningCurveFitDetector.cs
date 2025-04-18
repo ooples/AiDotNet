@@ -100,20 +100,20 @@ public class LearningCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
 
         var trainingSlope = CalculateSlope(evaluationData.TrainingSet.PredictionStats.LearningCurve);
         var validationSlope = CalculateSlope(evaluationData.ValidationSet.PredictionStats.LearningCurve);
-        var convergenceThreshold = _numOps.FromDouble(_options.ConvergenceThreshold);
+        var convergenceThreshold = NumOps.FromDouble(_options.ConvergenceThreshold);
 
-        if (_numOps.LessThan(_numOps.Abs(trainingSlope), convergenceThreshold) &&
-            _numOps.LessThan(_numOps.Abs(validationSlope), convergenceThreshold))
+        if (NumOps.LessThan(NumOps.Abs(trainingSlope), convergenceThreshold) &&
+            NumOps.LessThan(NumOps.Abs(validationSlope), convergenceThreshold))
         {
             return FitType.GoodFit;
         }
 
-        if (_numOps.LessThan(trainingSlope, _numOps.Zero) && _numOps.GreaterThan(validationSlope, _numOps.Zero))
+        if (NumOps.LessThan(trainingSlope, NumOps.Zero) && NumOps.GreaterThan(validationSlope, NumOps.Zero))
         {
             return FitType.Overfit;
         }
 
-        if (_numOps.GreaterThan(trainingSlope, _numOps.Zero) && _numOps.GreaterThan(validationSlope, _numOps.Zero))
+        if (NumOps.GreaterThan(trainingSlope, NumOps.Zero) && NumOps.GreaterThan(validationSlope, NumOps.Zero))
         {
             return FitType.Underfit;
         }
@@ -147,8 +147,8 @@ public class LearningCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
         var trainingVariance = CalculateVariance(evaluationData.TrainingSet.PredictionStats.LearningCurve);
         var validationVariance = CalculateVariance(evaluationData.ValidationSet.PredictionStats.LearningCurve);
 
-        var totalVariance = _numOps.Add(trainingVariance, validationVariance);
-        return _numOps.Subtract(_numOps.One, _numOps.Divide(totalVariance, _numOps.FromDouble(2)));
+        var totalVariance = NumOps.Add(trainingVariance, validationVariance);
+        return NumOps.Subtract(NumOps.One, NumOps.Divide(totalVariance, NumOps.FromDouble(2)));
     }
 
     /// <summary>
@@ -173,20 +173,20 @@ public class LearningCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
     private T CalculateSlope(List<T> curve)
     {
         if (curve.Count < 2)
-            return _numOps.Zero;
+            return NumOps.Zero;
 
-        var x = Enumerable.Range(0, curve.Count).Select(i => _numOps.FromDouble(i)).ToList();
-        var n = _numOps.FromDouble(curve.Count);
+        var x = Enumerable.Range(0, curve.Count).Select(i => NumOps.FromDouble(i)).ToList();
+        var n = NumOps.FromDouble(curve.Count);
 
-        var sumX = x.Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
-        var sumY = curve.Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
-        var sumXY = x.Zip(curve, (xi, yi) => _numOps.Multiply(xi, yi)).Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
-        var sumX2 = x.Select(xi => _numOps.Multiply(xi, xi)).Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
+        var sumX = x.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
+        var sumY = curve.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
+        var sumXY = x.Zip(curve, (xi, yi) => NumOps.Multiply(xi, yi)).Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
+        var sumX2 = x.Select(xi => NumOps.Multiply(xi, xi)).Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
 
-        var numerator = _numOps.Subtract(_numOps.Multiply(n, sumXY), _numOps.Multiply(sumX, sumY));
-        var denominator = _numOps.Subtract(_numOps.Multiply(n, sumX2), _numOps.Multiply(sumX, sumX));
+        var numerator = NumOps.Subtract(NumOps.Multiply(n, sumXY), NumOps.Multiply(sumX, sumY));
+        var denominator = NumOps.Subtract(NumOps.Multiply(n, sumX2), NumOps.Multiply(sumX, sumX));
 
-        return _numOps.Divide(numerator, denominator);
+        return NumOps.Divide(numerator, denominator);
     }
 
     /// <summary>
@@ -213,12 +213,12 @@ public class LearningCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
     /// </remarks>
     private T CalculateVariance(List<T> curve)
     {
-        var mean = curve.Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
-        mean = _numOps.Divide(mean, _numOps.FromDouble(curve.Count));
+        var mean = curve.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
+        mean = NumOps.Divide(mean, NumOps.FromDouble(curve.Count));
 
-        var variance = curve.Select(x => _numOps.Multiply(_numOps.Subtract(x, mean), _numOps.Subtract(x, mean)))
-                            .Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
+        var variance = curve.Select(x => NumOps.Multiply(NumOps.Subtract(x, mean), NumOps.Subtract(x, mean)))
+                            .Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
 
-        return _numOps.Divide(variance, _numOps.FromDouble(curve.Count - 1));
+        return NumOps.Divide(variance, NumOps.FromDouble(curve.Count - 1));
     }
 }

@@ -108,20 +108,20 @@ public class VIFFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOu
     protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var vifValues = StatisticsHelper<T>.CalculateVIF(evaluationData.ModelStats.CorrelationMatrix, _modelStatsOptions);
-        var maxVIF = vifValues.Max() ?? _numOps.Zero;
+        var maxVIF = vifValues.Max() ?? NumOps.Zero;
 
-        if (_numOps.GreaterThan(maxVIF, _numOps.FromDouble(_options.SevereMulticollinearityThreshold)))
+        if (NumOps.GreaterThan(maxVIF, NumOps.FromDouble(_options.SevereMulticollinearityThreshold)))
         {
             return FitType.SevereMulticollinearity;
         }
-        else if (_numOps.GreaterThan(maxVIF, _numOps.FromDouble(_options.ModerateMulticollinearityThreshold)))
+        else if (NumOps.GreaterThan(maxVIF, NumOps.FromDouble(_options.ModerateMulticollinearityThreshold)))
         {
             return FitType.ModerateMulticollinearity;
         }
         else
         {
             var primaryMetric = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
-            if (_numOps.GreaterThan(primaryMetric, _numOps.FromDouble(_options.GoodFitThreshold)))
+            if (NumOps.GreaterThan(primaryMetric, NumOps.FromDouble(_options.GoodFitThreshold)))
             {
                 return FitType.GoodFit;
             }
@@ -153,13 +153,13 @@ public class VIFFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOu
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var vifValues = StatisticsHelper<T>.CalculateVIF(evaluationData.ModelStats.CorrelationMatrix, _modelStatsOptions);
-        var maxVIF = vifValues.Max() ?? _numOps.Zero;
-        var avgVIF = _numOps.Divide(vifValues.Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(vifValues.Count));
+        var maxVIF = vifValues.Max() ?? NumOps.Zero;
+        var avgVIF = NumOps.Divide(vifValues.Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(vifValues.Count));
 
-        var vifConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(avgVIF, maxVIF));
+        var vifConfidence = NumOps.Subtract(NumOps.One, NumOps.Divide(avgVIF, maxVIF));
         var metricConfidence = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
 
-        return _numOps.Multiply(vifConfidence, metricConfidence);
+        return NumOps.Multiply(vifConfidence, metricConfidence);
     }
 
     /// <summary>

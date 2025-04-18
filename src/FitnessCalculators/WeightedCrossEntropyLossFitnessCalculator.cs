@@ -109,11 +109,13 @@ public class WeightedCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : Fit
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        if (_weights == null || _weights.Length != dataSet.Actual.Length)
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual);
+        if (_weights == null || _weights.Length != actual.Length)
         {
-            _weights = new Vector<T>(dataSet.Actual.Length);
+            _weights = new Vector<T>(actual.Length);
         }
 
-        return NeuralNetworkHelper<T>.WeightedCrossEntropyLoss(dataSet.Predicted, dataSet.Actual, _weights);
+        return new WeightedCrossEntropyLoss<T>(_weights).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

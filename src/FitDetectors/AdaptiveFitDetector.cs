@@ -193,7 +193,7 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
             result = _hybridDetector.DetectFit(evaluationData);
         }
 
-        return result.ConfidenceLevel ?? _numOps.Zero;
+        return result.ConfidenceLevel ?? NumOps.Zero;
     }
 
     /// <summary>
@@ -245,13 +245,13 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// </remarks>
     private DataComplexity AssessDataComplexity(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var overallVariance = _numOps.Add(_numOps.Add(evaluationData.TrainingSet.ActualBasicStats.Variance, evaluationData.ValidationSet.ActualBasicStats.Variance), 
+        var overallVariance = NumOps.Add(NumOps.Add(evaluationData.TrainingSet.ActualBasicStats.Variance, evaluationData.ValidationSet.ActualBasicStats.Variance), 
             evaluationData.TestSet.ActualBasicStats.Variance);
-        var threshold = _numOps.FromDouble(_options.ComplexityThreshold);
+        var threshold = NumOps.FromDouble(_options.ComplexityThreshold);
 
-        if (_numOps.LessThan(overallVariance, threshold))
+        if (NumOps.LessThan(overallVariance, threshold))
             return DataComplexity.Simple;
-        else if (_numOps.LessThan(overallVariance, _numOps.Multiply(threshold, _numOps.FromDouble(2))))
+        else if (NumOps.LessThan(overallVariance, NumOps.Multiply(threshold, NumOps.FromDouble(2))))
             return DataComplexity.Moderate;
         else
             return DataComplexity.Complex;
@@ -280,16 +280,16 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// </remarks>
     private ModelPerformance AssessModelPerformance(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var averageR2 = _numOps.Divide(
-            _numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), evaluationData.TestSet.PredictionStats.R2),
-            _numOps.FromDouble(3)
+        var averageR2 = NumOps.Divide(
+            NumOps.Add(NumOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), evaluationData.TestSet.PredictionStats.R2),
+            NumOps.FromDouble(3)
         );
 
-        var threshold = _numOps.FromDouble(_options.PerformanceThreshold);
+        var threshold = NumOps.FromDouble(_options.PerformanceThreshold);
 
-        if (_numOps.GreaterThan(averageR2, threshold))
+        if (NumOps.GreaterThan(averageR2, threshold))
             return ModelPerformance.Good;
-        else if (_numOps.GreaterThan(averageR2, _numOps.Multiply(threshold, _numOps.FromDouble(0.5))))
+        else if (NumOps.GreaterThan(averageR2, NumOps.Multiply(threshold, NumOps.FromDouble(0.5))))
             return ModelPerformance.Moderate;
         else
             return ModelPerformance.Poor;

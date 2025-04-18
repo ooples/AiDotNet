@@ -189,7 +189,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <param name="currentSolution">The current model solution.</param>
     /// <param name="velocity">The current velocity vector.</param>
     /// <returns>An updated symbolic model with improved coefficients.</returns>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
     {
         var parameters = currentSolution.GetParameters();
         var newCoefficients = new Vector<T>(parameters.Length);

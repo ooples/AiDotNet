@@ -108,7 +108,7 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <param name="currentSolution">The current solution.</param>
     /// <param name="gradient">The calculated gradient.</param>
     /// <returns>The updated solution.</returns>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(
         IFullModel<T, TInput, TOutput> currentSolution, 
         Vector<T> gradient)
     {

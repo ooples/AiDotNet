@@ -49,7 +49,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     /// <param name="output2">The second output vector.</param>
     /// <param name="similarityLabel">A value of 1 indicates similar pairs, 0 indicates dissimilar pairs.</param>
     /// <returns>The contrastive loss value.</returns>
-    public T Calculate(Vector<T> output1, Vector<T> output2, T similarityLabel)
+    public T CalculateLoss(Vector<T> output1, Vector<T> output2, T similarityLabel)
     {
         // Calculate the Euclidean distance between the vectors
         T distance = EuclideanDistance(output1, output2);

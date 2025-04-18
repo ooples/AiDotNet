@@ -140,7 +140,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// It's like finding the best compromise between fitting the data and satisfying the constraints.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> UpdateX(IFullModel<T, TInput, TOutput> currentSolution, Matrix<T> X, Vector<T> y)
+    private IFullModel<T, TInput, TOutput> UpdateX(IFullModel<T, TInput, TOutput> currentSolution, TInput X, TOutput y)
     {
         // Solve (X^T X + rho I)x = X^T y + rho(z - u)
         var XTranspose = X.Transpose();

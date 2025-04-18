@@ -78,6 +78,7 @@ public class CrossEntropyLossFitnessCalculator<T, TInput, TOutput> : FitnessCalc
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.CrossEntropyLoss(dataSet.Predicted, dataSet.Actual);
+        return new CrossEntropyLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

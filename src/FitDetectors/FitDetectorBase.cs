@@ -26,7 +26,16 @@ public abstract class FitDetectorBase<T, TInput, TOutput> : IFitDetector<T, TInp
     /// (like addition, multiplication, etc.) on the generic type T, which could be float, double, or 
     /// another numeric type.
     /// </remarks>
-    protected readonly INumericOperations<T> _numOps;
+    protected readonly INumericOperations<T> NumOps;
+
+    /// <summary>
+    /// Random number generator used for feature permutation.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is used to randomly shuffle feature values when calculating 
+    /// permutation importance. Using a fixed seed ensures reproducible results.
+    /// </remarks>
+    protected readonly Random Random;
 
     /// <summary>
     /// Initializes a new instance of the FitDetectorBase class.
@@ -42,7 +51,8 @@ public abstract class FitDetectorBase<T, TInput, TOutput> : IFitDetector<T, TInp
     /// </remarks>
     protected FitDetectorBase()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
+        Random = new();
     }
 
     /// <summary>

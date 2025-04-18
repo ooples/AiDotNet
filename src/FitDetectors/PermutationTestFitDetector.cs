@@ -157,7 +157,7 @@ public class PermutationTestFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
         var averagePValue = (trainingPValue + validationPValue + testPValue) / 3;
         var confidenceLevel = 1 - averagePValue;
 
-        return _numOps.FromDouble(confidenceLevel);
+        return NumOps.FromDouble(confidenceLevel);
     }
 
     /// <summary>

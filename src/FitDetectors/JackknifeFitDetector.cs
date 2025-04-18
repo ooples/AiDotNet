@@ -89,13 +89,13 @@ public class JackknifeFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
         var jackknifeMSE = PerformJackknifeResampling(evaluationData);
         var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
 
-        var relativeDifference = _numOps.Divide(_numOps.Subtract(jackknifeMSE, originalMSE), originalMSE);
+        var relativeDifference = NumOps.Divide(NumOps.Subtract(jackknifeMSE, originalMSE), originalMSE);
 
-        if (_numOps.GreaterThan(relativeDifference, _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.GreaterThan(relativeDifference, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(relativeDifference, _numOps.Negate(_numOps.FromDouble(_options.UnderfitThreshold))))
+        else if (NumOps.LessThan(relativeDifference, NumOps.Negate(NumOps.FromDouble(_options.UnderfitThreshold))))
         {
             return FitType.Underfit;
         }
@@ -128,9 +128,9 @@ public class JackknifeFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
         var jackknifeMSE = PerformJackknifeResampling(evaluationData);
         var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
 
-        var relativeDifference = _numOps.Abs(_numOps.Divide(_numOps.Subtract(jackknifeMSE, originalMSE), originalMSE));
+        var relativeDifference = NumOps.Abs(NumOps.Divide(NumOps.Subtract(jackknifeMSE, originalMSE), originalMSE));
         
-        return _numOps.Subtract(_numOps.One, _numOps.LessThan(relativeDifference, _numOps.One) ? relativeDifference : _numOps.One);
+        return NumOps.Subtract(NumOps.One, NumOps.LessThan(relativeDifference, NumOps.One) ? relativeDifference : NumOps.One);
     }
 
     /// <summary>
@@ -210,8 +210,8 @@ public class JackknifeFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     /// </remarks>
     private T PerformJackknifeResampling(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var actual = evaluationData.ModelStats.Actual;
-        var predicted = evaluationData.ModelStats.Predicted;
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
+        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
         var sampleSize = actual.Length;
 
         if (sampleSize < _options.MinSampleSize)

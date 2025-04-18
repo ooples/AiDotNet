@@ -105,14 +105,14 @@ public class PartialDependencePlotFitDetector<T, TInput, TOutput> : FitDetectorB
     private FitType DetermineFitType(Dictionary<string, Vector<T>> pdpResults)
     {
         var nonlinearityScores = CalculateNonlinearityScores(pdpResults);
-        var sumNonlinearity = nonlinearityScores.Aggregate(_numOps.Zero, (acc, score) => _numOps.Add(acc, score));
-        var averageNonlinearity = _numOps.Divide(sumNonlinearity, _numOps.FromDouble(nonlinearityScores.Count));
+        var sumNonlinearity = nonlinearityScores.Aggregate(NumOps.Zero, (acc, score) => NumOps.Add(acc, score));
+        var averageNonlinearity = NumOps.Divide(sumNonlinearity, NumOps.FromDouble(nonlinearityScores.Count));
 
-        if (_numOps.GreaterThan(averageNonlinearity, _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.GreaterThan(averageNonlinearity, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(averageNonlinearity, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(averageNonlinearity, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
@@ -139,14 +139,14 @@ public class PartialDependencePlotFitDetector<T, TInput, TOutput> : FitDetectorB
     {
         var pdpResults = CalculatePartialDependencePlots(evaluationData);
         var nonlinearityScores = CalculateNonlinearityScores(pdpResults);
-        var sumNonlinearity = nonlinearityScores.Aggregate(_numOps.Zero, (acc, score) => _numOps.Add(acc, score));
-        var averageNonlinearity = _numOps.Divide(sumNonlinearity, _numOps.FromDouble(nonlinearityScores.Count));
+        var sumNonlinearity = nonlinearityScores.Aggregate(NumOps.Zero, (acc, score) => NumOps.Add(acc, score));
+        var averageNonlinearity = NumOps.Divide(sumNonlinearity, NumOps.FromDouble(nonlinearityScores.Count));
 
         // Normalize confidence level to be between 0 and 1
-        return _numOps.Subtract(_numOps.One, 
-            _numOps.Divide(
+        return NumOps.Subtract(NumOps.One, 
+            NumOps.Divide(
                 averageNonlinearity, 
-                _numOps.FromDouble(_options.OverfitThreshold)
+                NumOps.FromDouble(_options.OverfitThreshold)
             )
         );
     }
@@ -173,7 +173,7 @@ public class PartialDependencePlotFitDetector<T, TInput, TOutput> : FitDetectorB
 
         foreach (var feature in features)
         {
-            var featureValues = evaluationData.ModelStats.FeatureValues[feature];
+            var featureValues = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.FeatureValues[feature]);
             var pdp = CalculatePartialDependencePlot(evaluationData, feature, featureValues);
             pdpResults[feature] = pdp;
         }
@@ -211,8 +211,20 @@ public class PartialDependencePlotFitDetector<T, TInput, TOutput> : FitDetectorB
         for (int i = 0; i < uniqueValues.Count; i++)
         {
             var value = uniqueValues[i];
-            var modifiedData = CreateModifiedDataset(evaluationData, feature, value);
-            var predictions = evaluationData.ModelStats.Model?.Predict(modifiedData) ?? Vector<T>.Empty();
+            var modifiedMatrix = CreateModifiedDataset(evaluationData, feature, value);
+
+            Vector<T> predictions;
+            if (evaluationData.ModelStats.Model == null)
+            {
+                predictions = Vector<T>.Empty();
+            }
+            else
+            {
+                // Convert the matrix to the appropriate input type
+                var modelPredictions = evaluationData.ModelStats.Model.Predict((TInput)(object)modifiedMatrix);
+                predictions = ConversionsHelper.ConvertToVector<T, TOutput>(modelPredictions);
+            }
+
             pdp[i] = predictions.Average();
         }
 
@@ -238,7 +250,7 @@ public class PartialDependencePlotFitDetector<T, TInput, TOutput> : FitDetectorB
     /// </remarks>
     private Matrix<T> CreateModifiedDataset(ModelEvaluationData<T, TInput, TOutput> evaluationData, string feature, T value)
     {
-        var modifiedData = evaluationData.ModelStats.Features.Clone();
+        var modifiedData = ConversionsHelper.ConvertToMatrix<T, TInput>(evaluationData.ModelStats.Features).Clone();
         var featureIndex = evaluationData.ModelStats.FeatureNames.IndexOf(feature);
 
         for (int i = 0; i < modifiedData.Rows; i++)
@@ -300,7 +312,7 @@ public class PartialDependencePlotFitDetector<T, TInput, TOutput> : FitDetectorB
         var differences = new Vector<T>(pdp.Length - 1);
         for (int i = 0; i < pdp.Length - 1; i++)
         {
-            differences[i] = _numOps.Abs(_numOps.Subtract(pdp[i + 1], pdp[i]));
+            differences[i] = NumOps.Abs(NumOps.Subtract(pdp[i + 1], pdp[i]));
         }
 
         return StatisticsHelper<T>.CalculateStandardDeviation(differences);

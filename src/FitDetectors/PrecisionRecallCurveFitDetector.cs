@@ -174,7 +174,7 @@ public class PrecisionRecallCurveFitDetector<T, TInput, TOutput> : FitDetectorBa
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         // Calculate confidence level as a weighted average of AUC and F1 Score
-        return _numOps.Add(_numOps.Multiply(_numOps.FromDouble(Auc), _numOps.FromDouble(_options.AucWeight)), _numOps.Multiply(_numOps.FromDouble(F1Score), _numOps.FromDouble(_options.F1ScoreWeight)));
+        return NumOps.Add(NumOps.Multiply(NumOps.FromDouble(Auc), NumOps.FromDouble(_options.AucWeight)), NumOps.Multiply(NumOps.FromDouble(F1Score), NumOps.FromDouble(_options.F1ScoreWeight)));
     }
 
     /// <summary>

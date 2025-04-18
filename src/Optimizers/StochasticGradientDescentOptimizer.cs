@@ -137,7 +137,7 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// This small step helps the hiker gradually move towards the lowest point.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         Vector<T> updatedCoefficients = currentSolution.GetParameters().Subtract(gradient.Multiply(CurrentLearningRate));
         return currentSolution.WithParameters(updatedCoefficients);

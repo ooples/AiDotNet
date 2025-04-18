@@ -53,39 +53,15 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// </remarks>
     public ModelEvaluationData<T, TInput, TOutput> EvaluateModel(ModelEvaluationInput<T, TInput, TOutput> input)
     {
-        var model = input.Model ?? new VectorModel<T, TInput, TOutput>(Vector<T>.Empty());
-
         var evaluationData = new ModelEvaluationData<T, TInput, TOutput>
         {
-            TrainingSet = CalculateDataSetStats(input.InputData.XTrain, input.InputData.YTrain, model),
-            ValidationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, model),
-            TestSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, model),
-            ModelStats = CalculateModelStats(model, input.InputData.XTrain, input.NormInfo)
+            TrainingSet = CalculateDataSetStats(input.InputData.XTrain, input.InputData.YTrain, input.Model),
+            ValidationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, input.Model),
+            TestSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, input.Model),
+            ModelStats = CalculateModelStats(input.Model, input.InputData.XTrain, input.NormInfo)
         };
 
         return evaluationData;
-    }
-
-    /// <summary>
-    /// Uses a symbolic model to make predictions on a set of input features.
-    /// </summary>
-    /// <param name="model">The model used to make predictions.</param>
-    /// <param name="X">The input feature matrix where each row represents a data point and each column represents a feature.</param>
-    /// <returns>A vector of predictions, one for each row in the input matrix.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method takes your AI model and a set of input data,
-    /// then generates predictions for each data point. It processes each row of your data
-    /// one by one and returns all the predictions as a collection.
-    /// </remarks>
-    private static Vector<T> PredictWithSymbolicModel(IFullModel<T, TInput, TOutput> model, Matrix<T> X)
-    {
-        var predictions = new Vector<T>(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
-        {
-            predictions[i] = model.Evaluate(X.GetRow(i));
-        }
-
-        return predictions;
     }
 
     /// <summary>
@@ -105,16 +81,24 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// This gives you a complete picture of your model's performance on this dataset.
     /// </remarks>
-    private DataSetStats<T, TInput, TOutput> CalculateDataSetStats(Matrix<T> X, Vector<T> y, IFullModel<T, TInput, TOutput> model)
+    private DataSetStats<T, TInput, TOutput> CalculateDataSetStats(TInput X, TOutput y, IFullModel<T, TInput, TOutput>? model)
     {
-        var predictions = PredictWithSymbolicModel(model, X);
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model), "Cannot evaluate a null model.");
+        }
+
+        var predictions = model.Predict(X);
+        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
+        var inputSize = InputHelper<T, TInput>.GetInputSize(X);
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(y);
 
         return new DataSetStats<T, TInput, TOutput>
         {
-            ErrorStats = CalculateErrorStats(y, predictions, X.Columns),
-            ActualBasicStats = CalculateBasicStats(y),
-            PredictedBasicStats = CalculateBasicStats(predictions),
-            PredictionStats = CalculatePredictionStats(y, predictions, X.Columns),
+            ErrorStats = CalculateErrorStats(actual, predicted, inputSize),
+            ActualBasicStats = CalculateBasicStats(actual),
+            PredictedBasicStats = CalculateBasicStats(predicted),
+            PredictionStats = CalculatePredictionStats(y, predicted, inputSize),
             Predicted = predictions,
             Features = X,
             Actual = y
@@ -205,15 +189,15 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// This helps you understand what makes your model tick and which inputs matter most.
     /// </remarks>
-    private static ModelStats<T, TInput, TOutput> CalculateModelStats(IFullModel<T, TInput, TOutput> model, Matrix<T> xTrain, NormalizationInfo<T, TInput, TOutput> normInfo)
+    private static ModelStats<T, TInput, TOutput> CalculateModelStats(IFullModel<T, TInput, TOutput>? model, TInput xTrain, NormalizationInfo<T, TInput, TOutput> normInfo)
     {
         var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(model, new OptimizationResult<T, TInput, TOutput>(), normInfo);
 
-        return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T>
+        return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T, TInput, TOutput>
         {
             XMatrix = xTrain,
-            FeatureCount = xTrain.Columns,
-            Model = predictionModelResult
+            FeatureCount = InputHelper<T, TInput>.GetInputSize(xTrain),
+            Model = predictionModelResult?.Model
         });
     }
 

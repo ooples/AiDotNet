@@ -138,6 +138,7 @@ public class FocalLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.FocalLoss(dataSet.Predicted, dataSet.Actual, _gamma, _alpha);
+        return new FocalLoss<T>(Convert.ToDouble(_gamma), Convert.ToDouble(_alpha)).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

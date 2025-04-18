@@ -106,16 +106,16 @@ public class AutocorrelationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     {
         var durbinWatsonStat = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestSet.ErrorStats.ErrorList);
 
-        if (_numOps.LessThan(durbinWatsonStat, _numOps.FromDouble(_options.StrongPositiveAutocorrelationThreshold)))
+        if (NumOps.LessThan(durbinWatsonStat, NumOps.FromDouble(_options.StrongPositiveAutocorrelationThreshold)))
         {
             return FitType.StrongPositiveAutocorrelation;
         }
-        else if (_numOps.GreaterThan(durbinWatsonStat, _numOps.FromDouble(_options.StrongNegativeAutocorrelationThreshold)))
+        else if (NumOps.GreaterThan(durbinWatsonStat, NumOps.FromDouble(_options.StrongNegativeAutocorrelationThreshold)))
         {
             return FitType.StrongNegativeAutocorrelation;
         }
-        else if (_numOps.GreaterThanOrEquals(durbinWatsonStat, _numOps.FromDouble(_options.NoAutocorrelationLowerBound)) &&
-                 _numOps.LessThanOrEquals(durbinWatsonStat, _numOps.FromDouble(_options.NoAutocorrelationUpperBound)))
+        else if (NumOps.GreaterThanOrEquals(durbinWatsonStat, NumOps.FromDouble(_options.NoAutocorrelationLowerBound)) &&
+                 NumOps.LessThanOrEquals(durbinWatsonStat, NumOps.FromDouble(_options.NoAutocorrelationUpperBound)))
         {
             return FitType.NoAutocorrelation;
         }
@@ -143,11 +143,11 @@ public class AutocorrelationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var durbinWatsonStat = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(evaluationData.TestSet.ErrorStats.ErrorList);
-        var idealDW = _numOps.FromDouble(2.0);
-        var maxDeviation = _numOps.FromDouble(2.0); // Maximum possible deviation from ideal (0 or 4)
+        var idealDW = NumOps.FromDouble(2.0);
+        var maxDeviation = NumOps.FromDouble(2.0); // Maximum possible deviation from ideal (0 or 4)
 
-        var confidenceLevel = _numOps.Subtract(_numOps.One, 
-            _numOps.Divide(_numOps.Abs(_numOps.Subtract(durbinWatsonStat, idealDW)), maxDeviation));
+        var confidenceLevel = NumOps.Subtract(NumOps.One, 
+            NumOps.Divide(NumOps.Abs(NumOps.Subtract(durbinWatsonStat, idealDW)), maxDeviation));
 
         return confidenceLevel;
     }

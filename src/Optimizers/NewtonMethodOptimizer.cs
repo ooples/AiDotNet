@@ -258,7 +258,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <param name="currentSolution">The current solution (model parameters).</param>
     /// <param name="direction">The direction to move in the parameter space.</param>
     /// <returns>A new ISymbolicModel with updated coefficients.</returns>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction)
     {
         var parameters = currentSolution.GetParameters();
         var newCoefficients = new Vector<T>(parameters.Length);

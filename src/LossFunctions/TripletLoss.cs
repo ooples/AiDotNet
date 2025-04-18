@@ -51,7 +51,7 @@ public class TripletLoss<T> : LossFunctionBase<T>
     /// <param name="negative">The negative samples (dissimilar to anchors).</param>
     /// <returns>A scalar value representing the triplet loss.</returns>
     /// <exception cref="ArgumentException">Thrown when input matrices have inconsistent dimensions.</exception>
-    public T Calculate(Matrix<T> anchor, Matrix<T> positive, Matrix<T> negative)
+    public T CalculateLoss(Matrix<T> anchor, Matrix<T> positive, Matrix<T> negative)
     {
         // Validate input dimensions
         if (anchor.Rows != positive.Rows || anchor.Rows != negative.Rows ||

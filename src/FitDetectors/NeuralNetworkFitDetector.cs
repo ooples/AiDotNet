@@ -190,7 +190,7 @@ public class NeuralNetworkFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
         var overfittingConfidence = Math.Max(0, 1 - (_overfittingScore / (_options.OverfittingThreshold * 2)));
 
         var overallConfidence = (lossConfidence + overfittingConfidence) / 2;
-        return _numOps.FromDouble(overallConfidence);
+        return NumOps.FromDouble(overallConfidence);
     }
 
     /// <summary>

@@ -97,6 +97,7 @@ public class LogCoshLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.LogCoshLoss(dataSet.Predicted, dataSet.Actual);
+        return new LogCoshLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

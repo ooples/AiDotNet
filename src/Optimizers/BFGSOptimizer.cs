@@ -147,7 +147,8 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// It uses the inverse Hessian approximation to determine the direction and magnitude of the update.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient, OptimizationInputData<T, TInput, TOutput> inputData)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient, 
+        OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var parameters = currentSolution.GetParameters();
         if (_previousGradient != null && _previousParameters != null)
@@ -162,7 +163,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var scaledDirection = direction.Transform(x => NumOps.Multiply(x, step));
         var newCoefficients = parameters.Add(scaledDirection);
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>

@@ -26,15 +26,8 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// and correlations, including thresholds for determining different types of model fit.
     /// </remarks>
     private readonly FeatureImportanceFitDetectorOptions _options;
-    
-    /// <summary>
-    /// Random number generator used for feature permutation.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is used to randomly shuffle feature values when calculating 
-    /// permutation importance. Using a fixed seed ensures reproducible results.
-    /// </remarks>
-    private readonly Random _random;
+
+    private Matrix<T> _featureCorrelations;
 
     /// <summary>
     /// Initializes a new instance of the FeatureImportanceFitDetector class.
@@ -58,7 +51,7 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     public FeatureImportanceFitDetector(FeatureImportanceFitDetectorOptions? options = null)
     {
         _options = options ?? new FeatureImportanceFitDetectorOptions();
-        _random = new Random(_options.RandomSeed);
+        _featureCorrelations = Matrix<T>.Empty();
     }
 
     /// <summary>
@@ -127,20 +120,20 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
         var featureImportances = CalculateFeatureImportances(evaluationData);
         var averageImportance =featureImportances.Average();
         var importanceStdDev = StatisticsHelper<T>.CalculateStandardDeviation(featureImportances);
-        var featureCorrelations = CalculateFeatureCorrelations(evaluationData.ModelStats.Features);
+        _featureCorrelations = CalculateFeatureCorrelations(ConversionsHelper.ConvertToMatrix<T, TInput>(evaluationData.ModelStats.Features));
 
-        if (_numOps.GreaterThan(averageImportance, _numOps.FromDouble(_options.HighImportanceThreshold)) &&
-            _numOps.LessThan(importanceStdDev, _numOps.FromDouble(_options.LowVarianceThreshold)))
+        if (NumOps.GreaterThan(averageImportance, NumOps.FromDouble(_options.HighImportanceThreshold)) &&
+            NumOps.LessThan(importanceStdDev, NumOps.FromDouble(_options.LowVarianceThreshold)))
         {
             return FitType.GoodFit;
         }
-        else if (_numOps.GreaterThan(averageImportance, _numOps.FromDouble(_options.HighImportanceThreshold)) &&
-                 _numOps.GreaterThan(importanceStdDev, _numOps.FromDouble(_options.HighVarianceThreshold)))
+        else if (NumOps.GreaterThan(averageImportance, NumOps.FromDouble(_options.HighImportanceThreshold)) &&
+                 NumOps.GreaterThan(importanceStdDev, NumOps.FromDouble(_options.HighVarianceThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(averageImportance, _numOps.FromDouble(_options.LowImportanceThreshold)) ||
-                 AreFeaturesMostlyUncorrelated(featureCorrelations))
+        else if (NumOps.LessThan(averageImportance, NumOps.FromDouble(_options.LowImportanceThreshold)) ||
+                 AreFeaturesMostlyUncorrelated(_featureCorrelations))
         {
             return FitType.Underfit;
         }
@@ -178,13 +171,11 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
         var featureImportances = CalculateFeatureImportances(evaluationData);
         var averageImportance = featureImportances.Average();
         var importanceStdDev = StatisticsHelper<T>.CalculateStandardDeviation(featureImportances);
-        var featureCorrelations = CalculateFeatureCorrelations(evaluationData.ModelStats.Features);
+        var importanceFactor = NumOps.Divide(averageImportance, NumOps.FromDouble(_options.HighImportanceThreshold));
+        var varianceFactor = NumOps.Divide(NumOps.FromDouble(_options.LowVarianceThreshold), NumOps.Add(NumOps.One, importanceStdDev));
+        var correlationFactor = NumOps.Subtract(NumOps.FromDouble(1), AverageAbsoluteCorrelation(_featureCorrelations));
 
-        var importanceFactor = _numOps.Divide(averageImportance, _numOps.FromDouble(_options.HighImportanceThreshold));
-        var varianceFactor = _numOps.Divide(_numOps.FromDouble(_options.LowVarianceThreshold), _numOps.Add(_numOps.One, importanceStdDev));
-        var correlationFactor = _numOps.Subtract(_numOps.FromDouble(1), AverageAbsoluteCorrelation(featureCorrelations));
-
-        return _numOps.Multiply(_numOps.Multiply(importanceFactor, varianceFactor), correlationFactor);
+        return NumOps.Multiply(NumOps.Multiply(importanceFactor, varianceFactor), correlationFactor);
     }
 
     /// <summary>
@@ -257,7 +248,7 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
         return recommendations;
     }
 
-        /// <summary>
+    /// <summary>
     /// Calculates feature importances using permutation importance.
     /// </summary>
     /// <param name="evaluationData">Data containing model predictions and actual values.</param>
@@ -288,19 +279,33 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// </remarks>
     private Vector<T> CalculateFeatureImportances(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var baselineError = CalculateError(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
-        var featureImportances = new Vector<T>(evaluationData.ModelStats.Features.Columns);
+        // Convert generic types to Vector<T> and Matrix<T> for calculations
+        var actualVector = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
+        var predictedVector = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
+        var featuresMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(evaluationData.ModelStats.Features);
 
-        for (int i = 0; i < evaluationData.ModelStats.Features.Columns; i++)
+        // Check if model is null
+        if (evaluationData.ModelStats.Model == null)
         {
-            var permutedFeature = PermuteFeature(evaluationData.ModelStats.Features.GetColumn(i));
-            var permutedMatrix = evaluationData.ModelStats.Features.Clone();
+            throw new AiDotNetException("Model is null. Cannot calculate feature importances without a valid model.");
+        }
+
+        var baselineError = CalculateError(actualVector, predictedVector);
+        var featureImportances = new Vector<T>(featuresMatrix.Columns);
+
+        for (int i = 0; i < featuresMatrix.Columns; i++)
+        {
+            var permutedFeature = PermuteFeature(featuresMatrix.GetColumn(i));
+            var permutedMatrix = featuresMatrix.Clone();
             permutedMatrix.SetColumn(i, permutedFeature);
 
-            var permutedPredictions = evaluationData.ModelStats.Model?.Predict(permutedMatrix) ?? Vector<T>.Empty();
-            var permutedError = CalculateError(evaluationData.ModelStats.Actual, permutedPredictions);
+            // Convert back to TInput for prediction
+            var permutedOutputs = evaluationData.ModelStats.Model.Predict((TInput)(object)permutedMatrix);
+            var permutedPredictedVector = ConversionsHelper.ConvertToVector<T, TOutput>(permutedOutputs);
 
-            featureImportances[i] = _numOps.Subtract(permutedError, baselineError);
+            var permutedError = CalculateError(actualVector, permutedPredictedVector);
+
+            featureImportances[i] = NumOps.Subtract(permutedError, baselineError);
         }
 
         return featureImportances;
@@ -363,7 +368,7 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
 
         for (int i = n - 1; i > 0; i--)
         {
-            int j = _random.Next(i + 1);
+            int j = Random.Next(i + 1);
             T temp = permutedFeature[i];
             permutedFeature[i] = permutedFeature[j];
             permutedFeature[j] = temp;
@@ -440,7 +445,7 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
         {
             for (int j = i + 1; j < numFeatures; j++)
             {
-                if (_numOps.LessThan(_numOps.Abs(correlations[i, j]), _numOps.FromDouble(_options.CorrelationThreshold)))
+                if (NumOps.LessThan(NumOps.Abs(correlations[i, j]), NumOps.FromDouble(_options.CorrelationThreshold)))
                 {
                     uncorrelatedCount++;
                 }
@@ -477,18 +482,18 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     private T AverageAbsoluteCorrelation(Matrix<T> correlations)
     {
         int numFeatures = correlations.Rows;
-        T sum = _numOps.Zero;
+        T sum = NumOps.Zero;
         int count = 0;
 
         for (int i = 0; i < numFeatures; i++)
         {
             for (int j = i + 1; j < numFeatures; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Abs(correlations[i, j]));
+                sum = NumOps.Add(sum, NumOps.Abs(correlations[i, j]));
                 count++;
             }
         }
 
-        return _numOps.Divide(sum, _numOps.FromDouble(count));
+        return NumOps.Divide(sum, NumOps.FromDouble(count));
     }
 }

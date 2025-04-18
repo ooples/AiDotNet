@@ -79,6 +79,7 @@ public class ExponentialLossFitnessCalculator<T, TInput, TOutput> : FitnessCalcu
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.ExponentialLoss(dataSet.Predicted, dataSet.Actual);
+        return new ExponentialLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

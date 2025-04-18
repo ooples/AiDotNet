@@ -195,13 +195,13 @@ public class EnsembleFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
         {
             var result = d.DetectFit(evaluationData);
             var weight = i < _options.DetectorWeights.Count ? _options.DetectorWeights[i] : 1.0;
-            return _numOps.Multiply(result.ConfidenceLevel ?? _numOps.Zero, _numOps.FromDouble(weight));
+            return NumOps.Multiply(result.ConfidenceLevel ?? NumOps.Zero, NumOps.FromDouble(weight));
         }).ToList();
 
-        var totalWeight = _numOps.FromDouble(_options.DetectorWeights.Sum());
-        var sumConfidence = weightedConfidences.Aggregate(_numOps.Zero, _numOps.Add);
+        var totalWeight = NumOps.FromDouble(_options.DetectorWeights.Sum());
+        var sumConfidence = weightedConfidences.Aggregate(NumOps.Zero, NumOps.Add);
 
-        return _numOps.Divide(sumConfidence, totalWeight);
+        return NumOps.Divide(sumConfidence, totalWeight);
     }
 
     /// <summary>

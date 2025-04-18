@@ -97,6 +97,7 @@ public class KullbackLeiblerDivergenceFitnessCalculator<T, TInput, TOutput> : Fi
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.KullbackLeiblerDivergence(dataSet.Predicted, dataSet.Actual);
+        return new KullbackLeiblerDivergence<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

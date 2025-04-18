@@ -118,7 +118,8 @@ public class OrdinalRegressionLossFitnessCalculator<T, TInput, TOutput> : Fitnes
     {
         if (_numClasses.HasValue)
         {
-            return NeuralNetworkHelper<T>.OrdinalRegressionLoss(dataSet.Predicted, dataSet.Actual, _numClasses.Value);
+            return new OrdinalRegressionLoss<T>(_numClasses.Value).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+                ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
         }
         else
         {
@@ -153,13 +154,15 @@ public class OrdinalRegressionLossFitnessCalculator<T, TInput, TOutput> : Fitnes
         if (IsClassificationProblem(dataSet))
         {
             // For classification, use the number of unique values in Actual as numClasses
-            int numClasses = dataSet.Actual.Distinct().Count();
-            return NeuralNetworkHelper<T>.OrdinalRegressionLoss(dataSet.Predicted, dataSet.Actual, numClasses);
+            int numClasses = ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual).Distinct().Count();
+            return new OrdinalRegressionLoss<T>(numClasses).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+                ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
         }
         else
         {
             // For regression or other problems, use a different loss calculation
-            return NeuralNetworkHelper<T>.MeanSquaredError(dataSet.Predicted, dataSet.Actual);
+            return new MeanSquaredErrorLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+                ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
         }
     }
 
@@ -198,9 +201,10 @@ public class OrdinalRegressionLossFitnessCalculator<T, TInput, TOutput> : Fitnes
     private bool IsClassificationProblem(DataSetStats<T, TInput, TOutput> dataSet)
     {
         // Get unique values
-        var uniqueValues = dataSet.Actual.Distinct().ToList();
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual);
+        var uniqueValues = actual.Distinct().ToList();
         int uniqueCount = uniqueValues.Count;
-        int totalCount = dataSet.Actual.Length;
+        int totalCount = actual.Length;
 
         // Check if all values are integers (or can be parsed as integers)
         bool allIntegers = uniqueValues.All(v => int.TryParse(v?.ToString(), out _));

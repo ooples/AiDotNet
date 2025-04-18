@@ -353,12 +353,11 @@ public class Transformer<T> : NeuralNetworkBase<T>
         var flattenedPredictions = prediction.ToVector();
         var flattenedOutput = expectedOutput.ToVector();
 
-        // Calculate loss
-        T loss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedOutput);
-
         // Backward pass
         var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedOutput);
-        Vector<T> inputGradients = Backpropagate(outputGradients);
+
+        // Backpropagate to get gradients for all layers
+        Backpropagate(outputGradients);
 
         // Get parameter gradients
         Vector<T> parameterGradients = GetParameterGradients();
@@ -368,8 +367,9 @@ public class Transformer<T> : NeuralNetworkBase<T>
 
         // Update parameters
         Vector<T> currentParameters = GetParameters();
-        var updatedParameters = _optimizer.UpdateParameters(Tensor<T>.FromVector(currentParameters), Tensor<T>.FromVector(parameterGradients));
-        UpdateParameters(updatedParameters.ToVector());
+        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
+
+        UpdateParameters(updatedParameters);
     }
 
     /// <summary>

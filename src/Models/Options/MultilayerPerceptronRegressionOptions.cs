@@ -268,12 +268,37 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// For most problems, ReLU works well and is a good default choice.
     /// </para>
     /// </remarks>
-    public IActivationFunction<T> HiddenActivation { get; set; } = new ReLUActivation<T>();
+    public IActivationFunction<T>? HiddenActivation { get; set; } = new ReLUActivation<T>();
+
+    /// <summary>
+    /// Gets or sets the vector-based activation function used in the hidden layers of the network.
+    /// </summary>
+    /// <value>The hidden layer vector activation function, defaulting to ReLU.</value>
+    /// <remarks>
+    /// <para>
+    /// This property provides a vector-optimized implementation of the activation function for hidden layers.
+    /// When set, it will be used instead of the scalar <see cref="HiddenActivation"/> property for more
+    /// efficient computation on entire vectors of data. The default implementation uses ReLU activation,
+    /// which is well-suited for most neural network hidden layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a more efficient version of the hidden layer activation
+    /// function that works on entire groups of neurons at once.
+    /// 
+    /// It serves the same purpose as the regular hidden activation function, but:
+    /// - It can process multiple neurons simultaneously
+    /// - It's optimized for performance on modern hardware
+    /// - It's particularly helpful for large networks
+    /// 
+    /// You typically don't need to change this unless you're implementing custom activation
+    /// functions or optimizing for specific hardware.
+    /// </para>
+    /// </remarks>
+    public IVectorActivationFunction<T>? HiddenVectorActivation { get; set; } = new ReLUActivation<T>();
 
     /// <summary>
     /// Gets or sets the activation function used in the output layer of the network.
     /// </summary>
-    /// <value>The output layer activation function, defaulting to Linear.</value>
+    /// <value>The output layer activation function, defaulting to Linear (Identity).</value>
     /// <remarks>
     /// <para>
     /// The output activation function determines the range and type of values that the neural network
@@ -303,7 +328,32 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// problem you're solving and the loss function you're using.
     /// </para>
     /// </remarks>
-    public IActivationFunction<T> OutputActivation { get; set; } = new IdentityActivation<T>();
+    public IActivationFunction<T>? OutputActivation { get; set; } = new IdentityActivation<T>();
+
+    /// <summary>
+    /// Gets or sets the vector-based activation function used in the output layer of the network.
+    /// </summary>
+    /// <value>The output layer vector activation function, defaulting to Linear (Identity).</value>
+    /// <remarks>
+    /// <para>
+    /// This property provides a vector-optimized implementation of the activation function for the output layer.
+    /// When set, it will be used instead of the scalar <see cref="OutputActivation"/> property for more
+    /// efficient computation on entire vectors of data. The default implementation uses the identity (linear)
+    /// activation, which is appropriate for regression problems.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a more efficient version of the output layer activation
+    /// function that works on entire groups of neurons at once.
+    /// 
+    /// It serves the same purpose as the regular output activation function, but:
+    /// - It can process multiple output neurons simultaneously
+    /// - It's optimized for performance on modern hardware
+    /// - It's particularly helpful for networks with multiple outputs
+    /// 
+    /// For regression problems, the default linear activation is usually appropriate.
+    /// For classification, you might want to use sigmoid or softmax vector activations.
+    /// </para>
+    /// </remarks>
+    public IVectorActivationFunction<T>? OutputVectorActivation { get; set; } = new IdentityActivation<T>();
 
     /// <summary>
     /// Gets or sets the loss function used to calculate the error between predictions and targets.
@@ -341,7 +391,7 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// - Multi-class classification → Categorical Cross-Entropy + Softmax output activation
     /// </para>
     /// </remarks>
-    public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
+    public ILossFunction<T>? LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
 
     /// <summary>
     /// Gets or sets the optimization algorithm used to update the network weights during training.
@@ -380,7 +430,7 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// models behave during training.
     /// </para>
     /// </remarks>
-    public IOptimizer<T, TInput, TOutput> Optimizer { get; set; } = new AdamOptimizer<T, TInput, TOutput>(new AdamOptimizerOptions
+    public IOptimizer<T, TInput, TOutput> Optimizer { get; set; } = new AdamOptimizer<T, TInput, TOutput>(new AdamOptimizerOptions<T, TInput, TOutput>
     {
         LearningRate = 0.001,
         Beta1 = 0.9,

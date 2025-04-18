@@ -127,6 +127,7 @@ public class QuantileLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculat
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.QuantileLoss(dataSet.Predicted, dataSet.Actual, _quantile);
+        return new OrdinalRegressionLoss<T>(Convert.ToInt32(_quantile)).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

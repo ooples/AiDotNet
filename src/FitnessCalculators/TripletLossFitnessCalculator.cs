@@ -105,8 +105,9 @@ public class TripletLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        var (anchor, positive, negative) = PrepareTripletData(dataSet.Features, dataSet.Actual);
-        return NeuralNetworkHelper<T>.TripletLoss(anchor, positive, negative, _margin);
+        var (anchor, positive, negative) = PrepareTripletData(ConversionsHelper.ConvertToMatrix<T, TInput>(dataSet.Features), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
+        return new TripletLoss<T>(Convert.ToDouble(_margin)).CalculateLoss(anchor, positive, negative);
     }
 
     /// <summary>

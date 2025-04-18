@@ -287,8 +287,8 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     private (T loss, List<Matrix<T>> weightGradients, List<Vector<T>> biasGradients) ComputeGradients(Matrix<T> X, Vector<T> y)
     {
         int numLayers = _weights.Count;
-        List<Vector<T>> activations = new List<Vector<T>>(numLayers + 1);
-        List<Vector<T>> zs = new List<Vector<T>>(numLayers);
+        var activations = new List<Vector<T>>(numLayers + 1);
+        var zs = new List<Vector<T>>(numLayers);
 
         // Forward pass
         activations.Add(X.Transpose().GetColumn(0));  // Input layer
@@ -449,28 +449,23 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// <param name="input">The input vector before activation.</param>
     /// <param name="isOutputLayer">Whether the input is for the output layer.</param>
     /// <returns>The vector after applying the activation function.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies either the output layer activation function or the hidden layer activation function to each element
-    /// of the input vector, depending on whether the layer is the output layer or a hidden layer. Activation functions introduce
-    /// non-linearity into the network, enabling it to learn complex patterns.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms the raw calculations using a special function.
-    /// 
-    /// Activation functions:
-    /// - Add non-linearity to the network, allowing it to learn complex patterns
-    /// - Different functions are often used for hidden layers vs. the output layer
-    /// - Common functions include ReLU, sigmoid, and tanh for hidden layers
-    /// - For regression, the output layer often uses a linear function
-    /// 
-    /// It's like applying a filter to the raw calculations, which helps the network
-    /// model relationships that aren't simply straight lines.
-    /// </para>
-    /// </remarks>
     private Vector<T> ApplyActivation(Vector<T> input, bool isOutputLayer)
     {
-        var activationFunc = isOutputLayer ? _options.OutputActivationFunction : _options.HiddenActivationFunction;
-        return input.Transform(x => activationFunc(x));
+        // First check if vector activation is available
+        var vectorActivation = isOutputLayer ? _options.OutputVectorActivation : _options.HiddenVectorActivation;
+        if (vectorActivation != null)
+        {
+            return vectorActivation.Activate(input);
+        }
+
+        // Fall back to scalar activation
+        var activation = isOutputLayer ? _options.OutputActivation : _options.HiddenActivation;
+
+        // Use the existing IdentityActivation if no activation is specified
+        activation ??= new IdentityActivation<T>();
+
+        // Apply scalar activation element-wise to the vector
+        return input.Transform(x => activation.Activate(x));
     }
 
     /// <summary>
@@ -479,27 +474,24 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// <param name="input">The input vector before activation.</param>
     /// <param name="isOutputLayer">Whether the input is for the output layer.</param>
     /// <returns>The vector containing the derivatives of the activation function.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the derivative of either the output layer activation function or the hidden layer activation
-    /// function to each element of the input vector. These derivatives are used during backpropagation to compute how
-    /// changes in the pre-activation values affect the final output.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how sensitive the activation function is to changes.
-    /// 
-    /// The activation derivative:
-    /// - Measures how much the output changes when the input changes slightly
-    /// - Is used during backpropagation to determine how to adjust weights
-    /// - Different activation functions have different derivative patterns
-    /// 
-    /// It's like measuring the slope of the activation function at each point,
-    /// which helps determine how changes to weights will affect the output.
-    /// </para>
-    /// </remarks>
     private Vector<T> ApplyActivationDerivative(Vector<T> input, bool isOutputLayer)
     {
-        var activationFuncDerivative = isOutputLayer ? _options.OutputActivationFunctionDerivative : _options.HiddenActivationFunctionDerivative;
-        return input.Transform(x => activationFuncDerivative(x));
+        // First check if vector activation is available
+        var vectorActivation = isOutputLayer ? _options.OutputVectorActivation : _options.HiddenVectorActivation;
+        if (vectorActivation != null)
+        {
+            // Vector activation derivative returns a vector for the input vector
+            return vectorActivation.Derivative(input).ToVector();
+        }
+
+        // Fall back to scalar activation
+        var activation = isOutputLayer ? _options.OutputActivation : _options.HiddenActivation;
+
+        // Use the existing IdentityActivation if no activation is specified
+        activation ??= new IdentityActivation<T>();
+
+        // Apply scalar activation derivative element-wise to the vector
+        return input.Transform(x => activation.Derivative(x));
     }
 
     /// <summary>
@@ -528,6 +520,12 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private T ComputeLoss(Vector<T> predictions, Vector<T> targets)
     {
+        if (_options.LossFunction != null)
+        {
+            return _options.LossFunction.CalculateLoss(predictions, targets);
+        }
+
+        // Default to MSE if no loss function is specified
         T sumSquaredErrors = predictions.Subtract(targets).Transform(x => NumOps.Multiply(x, x)).Sum();
         return NumOps.Divide(sumSquaredErrors, NumOps.FromDouble(predictions.Length));
     }
@@ -558,7 +556,18 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Vector<T> ComputeOutputLayerDelta(Vector<T> predictions, Vector<T> targets, Vector<T> outputLayerZ)
     {
-        Vector<T> error = predictions.Subtract(targets);
+        Vector<T> error;
+
+        if (_options.LossFunction != null)
+        {
+            error = _options.LossFunction.CalculateDerivative(predictions, targets);
+        }
+        else
+        {
+            // Default to MSE derivative if no loss function is specified
+            error = predictions.Subtract(targets);
+        }
+
         Vector<T> activationDerivative = ApplyActivationDerivative(outputLayerZ, true);
 
         return error.Transform((e, i) => NumOps.Multiply(e, activationDerivative[i]));
@@ -756,7 +765,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
         // Deserialize optimizer options
         string optionsJson = reader.ReadString();
-        var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions<T, Matrix<T>, Vector<T>>(optionsJson);
+        var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions<T, Matrix<T>, Vector<T>>>(optionsJson);
 
         if (options == null)
         {
