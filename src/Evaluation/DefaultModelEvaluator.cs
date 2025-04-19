@@ -98,7 +98,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             ErrorStats = CalculateErrorStats(actual, predicted, inputSize),
             ActualBasicStats = CalculateBasicStats(actual),
             PredictedBasicStats = CalculateBasicStats(predicted),
-            PredictionStats = CalculatePredictionStats(y, predicted, inputSize),
+            PredictionStats = CalculatePredictionStats(actual, predicted, inputSize),
             Predicted = predictions,
             Features = X,
             Actual = y

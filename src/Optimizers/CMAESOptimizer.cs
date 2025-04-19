@@ -120,19 +120,44 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
-        InitializeCMAESParameters(inputData.XTrain.Columns);
+        int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        var initialSolution = InitializeRandomSolution(inputData.XTrain);
+        _mean = initialSolution.GetParameters();
+        _C = Matrix<T>.CreateIdentity(dimensions);
+        _pc = new Vector<T>(dimensions);
+        _ps = new Vector<T>(dimensions);
+
+        // Keep track of our current best model to use as a template
+        var currentBestModel = initialSolution;
 
         for (int generation = 0; generation < _options.MaxGenerations; generation++)
         {
             var population = GeneratePopulation();
-            var fitnessValues = EvaluatePopulation(population, inputData);
+
+            // Use the current best model as a template for evaluating the population
+            var populationResults = EvaluatePopulationWithModels(population, inputData, currentBestModel);
+            var fitnessValues = populationResults.Item1;
+
+            // Store the best model from this population for the next iteration
+            if (populationResults.Item2 != null)
+            {
+                currentBestModel = populationResults.Item2;
+            }
 
             UpdateDistribution(population, fitnessValues);
 
-            var currentSolution = new VectorModel<T>(_mean);
+            // Create a new solution with the updated mean parameters
+            var currentSolution = currentBestModel.WithParameters(_mean);
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);
+
+            // Update our current best model if this solution is better
+            if (NumOps.GreaterThan(currentStepData.FitnessScore, bestStepData.FitnessScore))
+            {
+                currentBestModel = currentSolution;
+            }
+
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(generation, bestStepData))
@@ -149,23 +174,6 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
-    }
-
-    /// <summary>
-    /// Initializes the CMA-ES specific parameters.
-    /// </summary>
-    /// <param name="dimensions">The number of dimensions in the problem space.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method sets up the initial values for the mean, covariance matrix,
-    /// and evolution paths based on the number of dimensions in your problem.
-    /// </para>
-    /// </remarks>
-    private void InitializeCMAESParameters(int dimensions)
-    {
-        _mean = InitializeRandomSolution(dimensions).Coefficients;
-        _C = Matrix<T>.CreateIdentity(dimensions);
-        _pc = new Vector<T>(dimensions);
-        _ps = new Vector<T>(dimensions);
     }
 
     /// <summary>
@@ -250,27 +258,37 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     }
 
     /// <summary>
-    /// Evaluates the fitness of each individual in the population.
+    /// Evaluates the fitness of each individual in the population and returns the best model.
     /// </summary>
     /// <param name="population">The population to evaluate.</param>
     /// <param name="inputData">The input data for evaluation.</param>
-    /// <returns>A vector of fitness scores for the population.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method calculates how good each potential solution in the population is,
-    /// based on the problem you're trying to solve.
-    /// </para>
-    /// </remarks>
-    private Vector<T> EvaluatePopulation(Matrix<T> population, OptimizationInputData<T, TInput, TOutput> inputData)
+    /// <param name="templateModel">A template model to use for creating new models with updated parameters.</param>
+    /// <returns>A tuple containing: 1) A vector of fitness scores for the population, 2) The best model from this population.</returns>
+    private (Vector<T>, IFullModel<T, TInput, TOutput>?) EvaluatePopulationWithModels(
+        Matrix<T> population,
+        OptimizationInputData<T, TInput, TOutput> inputData,
+        IFullModel<T, TInput, TOutput> templateModel)
     {
         var fitnessValues = new Vector<T>(population.Rows);
+        IFullModel<T, TInput, TOutput>? bestModel = null;
+        T bestFitness = NumOps.MinValue;
+
         for (int i = 0; i < population.Rows; i++)
         {
-            var solution = new VectorModel<T>(population.GetRow(i));
+            // Create a new solution with the population member's parameters
+            var solution = templateModel.WithParameters(population.GetRow(i));
             var stepData = EvaluateSolution(solution, inputData);
             fitnessValues[i] = stepData.FitnessScore;
+
+            // Keep track of the best model in this population
+            if (bestModel == null || NumOps.GreaterThan(stepData.FitnessScore, bestFitness))
+            {
+                bestModel = solution;
+                bestFitness = stepData.FitnessScore;
+            }
         }
 
-        return fitnessValues;
+        return (fitnessValues, bestModel);
     }
 
     /// <summary>

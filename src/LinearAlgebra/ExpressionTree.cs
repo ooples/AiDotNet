@@ -14,7 +14,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <summary>
     /// Gets the type of this node (constant, variable, or operation).
     /// </summary>
-    public NodeType Type { get; private set; }
+    public ExpressionNodeType Type { get; private set; }
     
     /// <summary>
     /// Gets the value stored in this node. For constants, this is the actual value.
@@ -56,7 +56,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// Sets the type of this node.
     /// </summary>
     /// <param name="type">The node type to set.</param>
-    public void SetType(NodeType type)
+    public void SetType(ExpressionNodeType type)
     {
         Type = type;
     }
@@ -108,12 +108,12 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     {
         return Type switch
         {
-            NodeType.Constant => Value?.ToString(),
-            NodeType.Variable => $"x[{Value}]",
-            NodeType.Add => $"({Left} + {Right})",
-            NodeType.Subtract => $"({Left} - {Right})",
-            NodeType.Multiply => $"({Left} * {Right})",
-            NodeType.Divide => $"({Left} / {Right})",
+            ExpressionNodeType.Constant => Value?.ToString(),
+            ExpressionNodeType.Variable => $"x[{Value}]",
+            ExpressionNodeType.Add => $"({Left} + {Right})",
+            ExpressionNodeType.Subtract => $"({Left} - {Right})",
+            ExpressionNodeType.Multiply => $"({Left} * {Right})",
+            ExpressionNodeType.Divide => $"({Left} / {Right})",
             _ => throw new ArgumentException("Invalid node type"),
         } ?? string.Empty;
     }
@@ -135,7 +135,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// You can create simple nodes (like numbers or variables) or operation nodes
     /// (like addition or multiplication) that connect to other nodes.
     /// </remarks>
-    public ExpressionTree(NodeType type, T? value = default, ExpressionTree<T, TInput, TOutput>? left = null, ExpressionTree<T, TInput, TOutput>? right = null)
+    public ExpressionTree(ExpressionNodeType type, T? value = default, ExpressionTree<T, TInput, TOutput>? left = null, ExpressionTree<T, TInput, TOutput>? right = null)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         Type = type;
@@ -200,7 +200,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <returns>The number of features used.</returns>
     private int CalculateFeatureCountRecursive(ExpressionTree<T, TInput, TOutput> node)
     {
-        if (node.Type == NodeType.Variable)
+        if (node.Type == ExpressionNodeType.Variable)
         {
             return _numOps.ToInt32(node.Value) + 1; // Add 1 because feature indices are 0-based
         }
@@ -219,7 +219,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <returns>True if the feature is used, false otherwise.</returns>
     private bool IsFeatureUsedRecursive(ExpressionTree<T, TInput, TOutput> node, int featureIndex)
     {
-        if (node.Type == NodeType.Variable && _numOps.ToInt32(node.Value) == featureIndex)
+        if (node.Type == ExpressionNodeType.Variable && _numOps.ToInt32(node.Value) == featureIndex)
         {
             return true;
         }
@@ -243,12 +243,12 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     {
         return Type switch
         {
-            NodeType.Constant => Value,
-            NodeType.Variable => input[_numOps.ToInt32(Value)],
-            NodeType.Add => _numOps.Add(Left!.Evaluate(input), Right!.Evaluate(input)),
-            NodeType.Subtract => _numOps.Subtract(Left!.Evaluate(input), Right!.Evaluate(input)),
-            NodeType.Multiply => _numOps.Multiply(Left!.Evaluate(input), Right!.Evaluate(input)),
-            NodeType.Divide => _numOps.Divide(Left!.Evaluate(input), Right!.Evaluate(input)),
+            ExpressionNodeType.Constant => Value,
+            ExpressionNodeType.Variable => input[_numOps.ToInt32(Value)],
+            ExpressionNodeType.Add => _numOps.Add(Left!.Evaluate(input), Right!.Evaluate(input)),
+            ExpressionNodeType.Subtract => _numOps.Subtract(Left!.Evaluate(input), Right!.Evaluate(input)),
+            ExpressionNodeType.Multiply => _numOps.Multiply(Left!.Evaluate(input), Right!.Evaluate(input)),
+            ExpressionNodeType.Divide => _numOps.Divide(Left!.Evaluate(input), Right!.Evaluate(input)),
             _ => throw new ArgumentException("Invalid node type"),
         };
     }
@@ -281,7 +281,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public ExpressionTree<T, TInput, TOutput> Deserialize(BinaryReader reader)
     {
-        NodeType type = (NodeType)reader.ReadInt32();
+        ExpressionNodeType type = (ExpressionNodeType)reader.ReadInt32();
         T value = _numOps.FromDouble(reader.ReadDouble());
         bool hasLeft = reader.ReadBoolean();
         ExpressionTree<T, TInput, TOutput>? left = hasLeft ? Deserialize(reader) : null;
@@ -311,14 +311,14 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             switch (random.Next(3))
             {
                 case 0: // Change node type
-                    mutatedTree.Type = (NodeType)random.Next(Enum.GetValues(typeof(NodeType)).Length);
+                    mutatedTree.Type = (ExpressionNodeType)random.Next(Enum.GetValues(typeof(ExpressionNodeType)).Length);
                     break;
                 case 1: // Change value (for Constant or Variable nodes)
-                    if (mutatedTree.Type == NodeType.Constant)
+                    if (mutatedTree.Type == ExpressionNodeType.Constant)
                     {
                         mutatedTree.Value = _numOps.FromDouble(random.NextDouble() * 10 - 5); // Random value between -5 and 5
                     }
-                    else if (mutatedTree.Type == NodeType.Variable)
+                    else if (mutatedTree.Type == ExpressionNodeType.Variable)
                     {
                         mutatedTree.Value = _numOps.FromDouble(random.Next(10)); // Assume max 10 variables
                     }
@@ -411,16 +411,16 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             if (random.NextDouble() < 0.5)
             {
-                return new ExpressionTree<T, TInput, TOutput>(NodeType.Constant, _numOps.FromDouble(random.NextDouble() * 10 - 5));
+                return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Constant, _numOps.FromDouble(random.NextDouble() * 10 - 5));
             }
             else
             {
-                return new ExpressionTree<T, TInput, TOutput>(NodeType.Variable, _numOps.FromDouble(random.Next(10)));
+                return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Variable, _numOps.FromDouble(random.Next(10)));
             }
         }
         else
         {
-            NodeType operationType = (NodeType)random.Next(2, 6); // Add, Subtract, Multiply, or Divide
+            ExpressionNodeType operationType = (ExpressionNodeType)random.Next(2, 6); // Add, Subtract, Multiply, or Divide
             return new ExpressionTree<T, TInput, TOutput>(
                 operationType,
                 default,
@@ -703,7 +703,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         void UpdateConstantNodes(ExpressionTree<T, TInput, TOutput> node)
         {
-            if (node.Type == NodeType.Constant)
+            if (node.Type == ExpressionNodeType.Constant)
             {
                 node.Value = newCoefficients[coefficientIndex++];
             }
@@ -799,7 +799,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     
         void CollectFeatureIndices(ExpressionTree<T, TInput, TOutput> node)
         {
-            if (node.Type == NodeType.Variable)
+            if (node.Type == ExpressionNodeType.Variable)
             {
                 activeIndices.Add(_numOps.ToInt32(node.Value));
             }
@@ -1002,7 +1002,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
             void CollectCoefficients(ExpressionTree<T, TInput, TOutput> node)
             {
-                if (node.Type == NodeType.Constant)
+                if (node.Type == ExpressionNodeType.Constant)
                 {
                     coefficients.Add(node.Value);
                 }

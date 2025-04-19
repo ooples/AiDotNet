@@ -45,8 +45,7 @@
 /// - Evolving game-playing strategies or agent behaviors
 /// </para>
 /// </remarks>
-public interface IGeneticModel<T, TInput, TOutput, TIndividual, TGene> : 
-    IFullModel<T, TInput, TOutput>
+public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene> : 
     where TIndividual : class, IEvolvable<TGene, T>
     where TGene : class
 {
@@ -207,116 +206,8 @@ public interface IGeneticModel<T, TInput, TOutput, TIndividual, TGene> :
     ICollection<TIndividual> LoadPopulation(string filePath);
 }
 
-/// <summary>
-/// Represents an individual that can evolve through genetic operations.
-/// </summary>
-/// <typeparam name="TGene">The type representing a gene in the genetic model.</typeparam>
-/// <typeparam name="T">The numeric type used for fitness calculations.</typeparam>
-public interface IEvolvable<TGene, T> where TGene : class
-{
-    /// <summary>
-    /// Gets the genes of this individual.
-    /// </summary>
-    /// <returns>The collection of genes.</returns>
-    ICollection<TGene> GetGenes();
-    
-    /// <summary>
-    /// Sets the genes of this individual.
-    /// </summary>
-    /// <param name="genes">The genes to set.</param>
-    void SetGenes(ICollection<TGene> genes);
-    
-    /// <summary>
-    /// Gets the fitness of this individual.
-    /// </summary>
-    /// <returns>The fitness score.</returns>
-    T GetFitness();
-    
-    /// <summary>
-    /// Sets the fitness of this individual.
-    /// </summary>
-    /// <param name="fitness">The fitness score to set.</param>
-    void SetFitness(T fitness);
-    
-    /// <summary>
-    /// Creates a deep clone of this individual.
-    /// </summary>
-    /// <returns>A clone of this individual.</returns>
-    IEvolvable<TGene, T> Clone();
-}
 
-/// <summary>
-/// Represents statistics about the evolutionary process.
-/// </summary>
-public class EvolutionStats<T, TInput, TOutput>
-{
-    /// <summary>
-    /// Gets or sets the current generation number.
-    /// </summary>
-    public int Generation { get; set; }
-    
-    /// <summary>
-    /// Gets or sets the best fitness found so far.
-    /// </summary>
-    public T BestFitness { get; set; }
-    
-    /// <summary>
-    /// Gets or sets the average fitness of the current population.
-    /// </summary>
-    public T AverageFitness { get; set; }
-    
-    /// <summary>
-    /// Gets or sets the worst fitness in the current population.
-    /// </summary>
-    public T WorstFitness { get; set; }
-    
-    /// <summary>
-    /// Gets or sets a measure of the population's genetic diversity.
-    /// </summary>
-    public T Diversity { get; set; }
-    
-    /// <summary>
-    /// Gets or sets the standard deviation of fitness in the population.
-    /// </summary>
-    public T FitnessStandardDeviation { get; set; }
-    
-    /// <summary>
-    /// Gets or sets the time elapsed since the evolution started.
-    /// </summary>
-    public TimeSpan TimeElapsed { get; set; }
-    
-    /// <summary>
-    /// Gets or sets a reference to the best individual found so far.
-    /// </summary>
-    public object BestIndividual { get; set; }
-    
-    /// <summary>
-    /// Gets or sets the fitness history across generations.
-    /// </summary>
-    public List<T> FitnessHistory { get; set; }
-    
-    /// <summary>
-    /// Gets or sets whether a fitness improvement occurred in the last generation.
-    /// </summary>
-    public bool ImprovedInLastGeneration { get; set; }
-    
-    /// <summary>
-    /// Gets or sets the number of generations since the last improvement.
-    /// </summary>
-    public int GenerationsSinceImprovement { get; set; }
 
-    public EvolutionStats(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        BestFitness = fitnessCalculator.IsHigherScoreBetter ? numOps.MinValue : numOps.MaxValue;
-        WorstFitness = fitnessCalculator.IsHigherScoreBetter ? numOps.MaxValue : numOps.MinValue;
-        AverageFitness = numOps.Zero;
-        BestIndividual = new();
-        FitnessHistory = [];
-        Diversity = numOps.Zero;
-        FitnessStandardDeviation = numOps.Zero;
-    }
-}
 
 /// <summary>
 /// Parameters for configuring a genetic algorithm.

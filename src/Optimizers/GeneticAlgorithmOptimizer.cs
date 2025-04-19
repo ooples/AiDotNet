@@ -110,7 +110,7 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        int dimensions = inputData.XTrain.Columns;
+        int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         var population = InitializePopulation(dimensions, _geneticOptions.PopulationSize);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var prevStepData = new OptimizationStepData<T, TInput, TOutput>();

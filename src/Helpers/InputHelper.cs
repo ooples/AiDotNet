@@ -299,6 +299,125 @@ public static class InputHelper<T, TInput>
     }
 
     /// <summary>
+    /// Creates a batch containing a single item.
+    /// </summary>
+    /// <param name="item">The single item to include in the batch.</param>
+    /// <returns>A batch containing only the provided item.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the item is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the item type is not supported.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a batch (a data structure that can hold multiple items) containing only the provided item.
+    /// It's useful when you have a single data point but need to use methods that expect batched input.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method takes a single example and packages it as if it were a batch.
+    /// It's like putting a single item into a container designed for multiple items.
+    /// </para>
+    /// </remarks>
+    public static TInput CreateSingleItemBatch(TInput item)
+    {
+        if (item == null)
+            throw new ArgumentNullException(nameof(item), "Item cannot be null.");
+
+        // Handle Vector<T> input
+        if (item is Vector<T> vector)
+        {
+            // Create a matrix with a single row containing the vector data
+            var newMatrix = new Matrix<T>(1, vector.Length);
+            for (int i = 0; i < vector.Length; i++)
+            {
+                newMatrix[0, i] = vector[i];
+            }
+
+            return (TInput)(object)newMatrix;
+        }
+
+        // Handle Matrix<T> input - if it's already a matrix, ensure it has only one row
+        if (item is Matrix<T> matrix)
+        {
+            if (matrix.Rows == 1)
+            {
+                // Already a single-row matrix, return as is
+                return item;
+            }
+            else if (matrix.Columns == 1)
+            {
+                // It's a single-column matrix, transpose it to make it a single-row matrix
+                var transposed = new Matrix<T>(1, matrix.Rows);
+                for (int i = 0; i < matrix.Rows; i++)
+                {
+                    transposed[0, i] = matrix[i, 0];
+                }
+                return (TInput)(object)transposed;
+            }
+            else
+            {
+                // Multi-dimensional matrix - create a new matrix with just the first row
+                var singleRow = new Matrix<T>(1, matrix.Columns);
+                for (int i = 0; i < matrix.Columns; i++)
+                {
+                    singleRow[0, i] = matrix[0, i];
+                }
+                return (TInput)(object)singleRow;
+            }
+        }
+
+        // Handle Tensor<T> input
+        if (item is Tensor<T> tensor)
+        {
+            // Create a new tensor with first dimension of size 1
+            int[] newShape = new int[tensor.Shape.Length];
+            newShape[0] = 1;
+            for (int i = 1; i < tensor.Shape.Length; i++)
+            {
+                newShape[i] = tensor.Shape[i];
+            }
+
+            var batchTensor = new Tensor<T>(newShape);
+
+            // Copy the data from the original tensor to the first slice of the batch tensor
+            if (tensor.Shape.Length == 1)
+            {
+                // Handle 1D tensor
+                for (int i = 0; i < tensor.Shape[0]; i++)
+                {
+                    batchTensor[0, i] = tensor[i];
+                }
+            }
+            else
+            {
+                // For higher dimensions, we need to copy the entire tensor to the first slice
+                // This is a simplified approach - for complex tensors, more specialized handling may be needed
+                var batchVector = batchTensor.ToVector();
+                var inputVector = tensor.ToVector();
+
+                int sliceSize = inputVector.Length;
+                for (int i = 0; i < sliceSize; i++)
+                {
+                    batchVector[i] = inputVector[i];
+                }
+
+                batchTensor = Tensor<T>.FromVector(batchVector, newShape);
+            }
+
+            return (TInput)(object)batchTensor;
+        }
+
+        // For scalar values (when TInput is T), wrap in a Vector
+        if (item is T scalarValue)
+        {
+            var newVector = new Vector<T>(1);
+            newVector[0] = scalarValue;
+
+            return (TInput)(object)newVector;
+        }
+
+        // If the item is already in a batch format or we don't know how to convert it,
+        // return it as is and let the caller handle any potential issues
+        return item;
+    }
+
+    /// <summary>
     /// Retrieves a single item from a batch of input data.
     /// </summary>
     /// <param name="input">The batch of input data.</param>

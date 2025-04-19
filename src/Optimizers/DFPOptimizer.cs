@@ -160,9 +160,10 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// It uses line search to determine how big of a step to take, then updates the solution accordingly.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T, TInput, TOutput> inputData)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, 
+        OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var stepSize = OptimizerHelper<T, TInput, TOutput>.LineSearch(currentSolution, direction, gradient, inputData, _adaptiveLearningRate);
+        var stepSize = LineSearch(currentSolution, direction, gradient, inputData);
         var newCoefficients = currentSolution.GetParameters().Add(direction.Multiply(stepSize));
 
         return currentSolution.WithParameters(newCoefficients);

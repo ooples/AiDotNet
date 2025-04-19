@@ -215,60 +215,6 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     }
 
     /// <summary>
-    /// Performs a line search to determine the optimal step size in the given direction.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method implements a backtracking line search using the Armijo condition to find a suitable step size.
-    /// </para>
-    /// <para><b>For Beginners:</b> 
-    /// This is like carefully deciding how big a step to take in the chosen direction, ensuring we don't overshoot 
-    /// the minimum we're looking for.
-    /// </para>
-    /// </remarks>
-    /// <param name="currentSolution">The current solution.</param>
-    /// <param name="direction">The search direction.</param>
-    /// <param name="gradient">The current gradient.</param>
-    /// <param name="inputData">The input data for the optimization process.</param>
-    /// <returns>The optimal step size.</returns>
-    private T LineSearch(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T, TInput, TOutput> inputData)
-    {
-        var alpha = CurrentLearningRate;
-        var c1 = NumOps.FromDouble(1e-4);
-        var c2 = NumOps.FromDouble(0.9);
-        var xTrain = inputData.XTrain;
-        var yTrain = inputData.YTrain;
-
-        var initialValue = CalculateLoss(currentSolution, inputData);
-        var initialSlope = gradient.DotProduct(direction);
-
-        while (true)
-        {
-            var newCoefficients = currentSolution.GetParameters().Add(direction.Multiply(alpha));
-            var newSolution = new VectorModel<T>(newCoefficients);
-            var newValue = CalculateLoss(newSolution, inputData);
-
-            if (NumOps.LessThanOrEquals(newValue, NumOps.Add(initialValue, NumOps.Multiply(NumOps.Multiply(c1, alpha), initialSlope))))
-            {
-                var newGradient = CalculateGradient(newSolution, xTrain, yTrain);
-                var newSlope = newGradient.DotProduct(direction);
-
-                if (NumOps.GreaterThanOrEquals(NumOps.Abs(newSlope), NumOps.Multiply(c2, NumOps.Abs(initialSlope))))
-                {
-                    return alpha;
-                }
-            }
-
-            alpha = NumOps.Multiply(alpha, NumOps.FromDouble(0.5));
-
-            if (NumOps.LessThan(alpha, NumOps.FromDouble(1e-10)))
-            {
-                return NumOps.FromDouble(1e-10);
-            }
-        }
-    }
-
-    /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
     /// </summary>
     /// <remarks>

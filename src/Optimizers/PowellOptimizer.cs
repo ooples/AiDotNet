@@ -176,9 +176,9 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        ValidationHelper<T, TInput, TOutput>.ValidateInputData(inputData);
+        ValidationHelper<T>.ValidateInputData(inputData);
 
-        int n = inputData.XTrain.Columns;
+        int n = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
@@ -381,17 +381,21 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </remarks>
     private IFullModel<T, TInput, TOutput> ExtrapolatePoint(IFullModel<T, TInput, TOutput> oldPoint, IFullModel<T, TInput, TOutput> newPoint)
     {
-        var parameters = oldPoint.GetParameters();
+        var parameters = newPoint.GetParameters();
+        var oldParameters = oldPoint.GetParameters();
         var extrapolatedCoefficients = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
+            // Calculate the vector from old to new, and double it
+            var direction = NumOps.Subtract(parameters[i], oldParameters[i]);
             extrapolatedCoefficients[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(2.0), parameters[i]),
-                NumOps.Negate(parameters[i])
+                parameters[i],
+                direction // Add the direction again to double the movement
             );
         }
 
-        return new VectorModel<T>(extrapolatedCoefficients);
+        // Use the newPoint as a template to create a new model with the extrapolated coefficients
+        return newPoint.WithParameters(extrapolatedCoefficients);
     }
 
     /// <summary>

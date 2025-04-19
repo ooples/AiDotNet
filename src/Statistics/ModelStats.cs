@@ -510,9 +510,12 @@ public class ModelStats<T, TInput, TOutput>
         {
             // Convert the fit function to work with Matrix<T> and Vector<T>
             var convertedFitFunction = ConversionsHelper.ConvertFitFunction<T, TInput, TOutput>(inputs.FitFunction);
-            LeaveOneOutPredictiveDensities = StatisticsHelper<T>.CalculateLeaveOneOutPredictiveDensities(matrix, actual, convertedFitFunction);
+
+            // Create a wrapper function that matches the expected signature
+            Vector<T> wrappedFitFunction(Matrix<T> m, Vector<T> v) => convertedFitFunction(m);
+            LeaveOneOutPredictiveDensities = StatisticsHelper<T>.CalculateLeaveOneOutPredictiveDensities(matrix, actual, wrappedFitFunction);
         }
-    
+
         ObservedTestStatistic = StatisticsHelper<T>.CalculateObservedTestStatistic(actual, predicted);
         PosteriorPredictiveSamples = StatisticsHelper<T>.CalculatePosteriorPredictiveSamples(actual, predicted, featureCount);
         MarginalLikelihood = StatisticsHelper<T>.CalculateMarginalLikelihood(actual, predicted, featureCount);

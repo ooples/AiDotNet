@@ -33,5 +33,7 @@ public enum SelectionMethod
     /// <summary>
     /// Stochastic universal sampling - similar to roulette wheel but with multiple equally spaced pointers.
     /// </summary>
-    StochasticUniversalSampling
+    StochasticUniversalSampling,
+
+    Elitism
 }

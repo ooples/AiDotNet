@@ -182,63 +182,14 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// It uses line search to determine how big of a step to take.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T, TInput, TOutput> inputData)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, 
+        OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var step = LineSearch(currentSolution, direction, gradient, inputData);
         var scaledDirection = direction.Transform(x => NumOps.Multiply(x, step));
         var newCoefficients = currentSolution.GetParameters().Add(scaledDirection);
 
-        return new VectorModel<T>(newCoefficients);
-    }
-
-    /// <summary>
-    /// Performs a line search to find the optimal step size in the given direction.
-    /// </summary>
-    /// <param name="currentSolution">The current solution.</param>
-    /// <param name="direction">The search direction.</param>
-    /// <param name="gradient">The current gradient.</param>
-    /// <param name="inputData">The input data for the optimization process.</param>
-    /// <returns>The optimal step size.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method is like looking ahead along the chosen direction to find out
-    /// how far to step to get the best improvement in the solution.
-    /// </para>
-    /// </remarks>
-    private T LineSearch(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T, TInput, TOutput> inputData)
-    {
-        var alpha = CurrentLearningRate;
-        var c1 = NumOps.FromDouble(1e-4);
-        var c2 = NumOps.FromDouble(0.9);
-        var xTrain = inputData.XTrain;
-        var yTrain = inputData.YTrain;
-
-        var initialValue = CalculateLoss(currentSolution, inputData);
-        var initialSlope = gradient.DotProduct(direction);
-
-        while (true)
-        {
-            var newCoefficients = currentSolution.GetParameters().Add(direction.Multiply(alpha));
-            var newSolution = new VectorModel<T>(newCoefficients);
-            var newValue = CalculateLoss(newSolution, inputData);
-
-            if (NumOps.LessThanOrEquals(newValue, NumOps.Add(initialValue, NumOps.Multiply(NumOps.Multiply(c1, alpha), initialSlope))))
-            {
-                var newGradient = CalculateGradient(newSolution, xTrain, yTrain);
-                var newSlope = newGradient.DotProduct(direction);
-
-                if (NumOps.GreaterThanOrEquals(NumOps.Abs(newSlope), NumOps.Multiply(c2, NumOps.Abs(initialSlope))))
-                {
-                    return alpha;
-                }
-            }
-
-            alpha = NumOps.Multiply(alpha, NumOps.FromDouble(0.5));
-
-            if (NumOps.LessThan(alpha, NumOps.FromDouble(1e-10)))
-            {
-                return NumOps.FromDouble(1e-10);
-            }
-        }
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>

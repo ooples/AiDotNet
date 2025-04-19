@@ -83,6 +83,55 @@ public static class ConversionsHelper
     }
 
     /// <summary>
+    /// Converts an output value to a scalar value of type T.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to convert to (e.g., float, double).</typeparam>
+    /// <typeparam name="TOutput">The type of the output value.</typeparam>
+    /// <param name="output">The output value to convert.</param>
+    /// <returns>A scalar value of type T extracted from the output.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the output cannot be converted to a scalar value of type T.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method extracts a single number from more complex data structures.
+    /// It's like finding the first item in a list or the first cell in a table.</para>
+    /// 
+    /// <para>If your data is already a single value, it simply returns it. If it's a vector, it returns
+    /// the first element. If it's a tensor or matrix, it returns the first element.</para>
+    /// </remarks>
+    public static T ConvertToScalar<T, TOutput>(TOutput output)
+    {
+        if (output is T scalar)
+        {
+            return scalar;
+        }
+        else if (output is Vector<T> vector)
+        {
+            if (vector.Length == 0)
+            {
+                throw new InvalidOperationException("Cannot extract scalar from empty vector.");
+            }
+            return vector[0];
+        }
+        else if (output is Matrix<T> matrix)
+        {
+            if (matrix.Rows == 0 || matrix.Columns == 0)
+            {
+                throw new InvalidOperationException("Cannot extract scalar from empty matrix.");
+            }
+            return matrix[0, 0];
+        }
+        else if (output is Tensor<T> tensor)
+        {
+            if (tensor.Length == 0)
+            {
+                throw new InvalidOperationException("Cannot extract scalar from empty tensor.");
+            }
+            return tensor[0];
+        }
+
+        throw new InvalidOperationException($"Cannot convert {typeof(TOutput).Name} to scalar of type {typeof(T).Name}. Expected T, Vector<T>, Matrix<T>, or Tensor<T>.");
+    }
+
+    /// <summary>
     /// Converts a generic object to a Vector.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>

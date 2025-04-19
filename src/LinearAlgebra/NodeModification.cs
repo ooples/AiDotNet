@@ -53,5 +53,5 @@ public class NodeModification
     /// For other modifications like adding or removing nodes, this property would be null (not used).
     /// </para>
     /// </remarks>
-    public NodeType? NewNodeType { get; set; }
+    public ExpressionNodeType? NewNodeType { get; set; }
 }

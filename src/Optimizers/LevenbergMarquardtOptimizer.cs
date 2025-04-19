@@ -204,14 +204,26 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
         var parameters = model.GetParameters();
         var originalParam = parameters[paramIndex];
 
+        // Create a batch with just one example
+        TInput singleItemBatch = InputHelper<T, TInput>.CreateSingleItemBatch(x);
+
+        // Modify the parameter and get prediction with increased value
         parameters[paramIndex] = NumOps.Add(originalParam, epsilon);
-        var yPlus = model.Predict(new Matrix<T>(new[] { x }))[0];
+        var modifiedModel = model.WithParameters(parameters);
+        TOutput yPlusBatch = modifiedModel.Predict(singleItemBatch);
+        T yPlus = ConversionsHelper.ConvertToScalar<T, TOutput>(yPlusBatch);
 
+        // Modify the parameter and get prediction with decreased value
         parameters[paramIndex] = NumOps.Subtract(originalParam, epsilon);
-        var yMinus = model.Predict(new Matrix<T>(new[] { x }))[0];
+        modifiedModel = model.WithParameters(parameters);
+        TOutput yMinusBatch = modifiedModel.Predict(singleItemBatch);
+        T yMinus = ConversionsHelper.ConvertToScalar<T, TOutput>(yMinusBatch);
 
+        // Restore the original parameter
         parameters[paramIndex] = originalParam;
+        model.WithParameters(parameters);
 
+        // Calculate the central difference approximation of the derivative
         return NumOps.Divide(NumOps.Subtract(yPlus, yMinus), NumOps.FromDouble(2 * 1e-8));
     }
 

@@ -11,7 +11,7 @@
 /// Each node in the graph performs a specific operation on its inputs and passes the result to the next node.
 /// </para>
 /// </remarks>
-public enum NodeType
+public enum ExpressionNodeType
 {
     /// <summary>
     /// A node that represents a fixed numerical value that doesn't change during computation.

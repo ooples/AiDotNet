@@ -143,12 +143,13 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private IFullModel<T, TInput, TOutput> UpdateX(IFullModel<T, TInput, TOutput> currentSolution, TInput X, TOutput y)
     {
         // Solve (X^T X + rho I)x = X^T y + rho(z - u)
-        var XTranspose = X.Transpose();
-        var XTX = XTranspose.Multiply(X);
+        var matrix = ConversionsHelper.ConvertToMatrix<T, TInput>(X);
+        var XTranspose = matrix.Transpose();
+        var XTX = XTranspose.Multiply(matrix);
         var rhoI = Matrix<T>.CreateIdentity(XTX.Rows).Multiply(NumOps.FromDouble(_options.Rho));
         var leftSide = XTX.Add(rhoI);
 
-        var XTy = XTranspose.Multiply(y);
+        var XTy = XTranspose.Multiply(ConversionsHelper.ConvertToVector<T, TOutput>(y));
         var zMinusU = _z.Subtract(_u);
         var rhoZMinusU = zMinusU.Multiply(NumOps.FromDouble(_options.Rho));
         var rightSide = XTy.Add(rhoZMinusU);

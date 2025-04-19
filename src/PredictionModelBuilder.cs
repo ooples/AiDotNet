@@ -219,13 +219,16 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public IPredictiveModel<T, TInput, TOutput> Build(TInput x, TOutput y)
     {
+        var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
+        var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+
         // Validate inputs
         if (x == null)
             throw new ArgumentNullException(nameof(x), "Input features matrix can't be null");
         if (y == null)
             throw new ArgumentNullException(nameof(y), "Output vector can't be null");
-        if (x.Rows != y.Length)
-            throw new ArgumentException("Number of rows in features matrix must match length of actual values vector", nameof(x));
+        if (convertedX.Rows != convertedY.Length)
+            throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
         if (_regression == null)
             throw new InvalidOperationException("Regression method must be specified");
 

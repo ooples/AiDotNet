@@ -77,7 +77,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
 
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
-            var currentSolution = CreateRandomSolution(inputData.XTrain);
+            var currentSolution = InitializeRandomSolution(inputData.XTrain);
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);
@@ -273,27 +273,6 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         }
 
         _normalOptions.CrossoverRate = MathHelper.Clamp(_normalOptions.CrossoverRate, _normalOptions.MinCrossoverRate, _normalOptions.MaxCrossoverRate);
-    }
-
-    /// <summary>
-    /// Creates a random solution for the optimization problem.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method generates a random symbolic model by first selecting a random subset of features
-    /// and then creating a model using those features.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like choosing a random starting point for your hike. You're deciding which aspects of the landscape
-    /// (features) you'll pay attention to for this particular climb.
-    /// </para>
-    /// </remarks>
-    /// <param name="totalFeatures">The total number of available features.</param>
-    /// <returns>A randomly created symbolic model.</returns>
-    private IFullModel<T, TInput, TOutput> CreateRandomSolution(int totalFeatures)
-    {
-        var selectedFeatures = RandomlySelectFeatures(totalFeatures);
-        return SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, selectedFeatures.Count);
     }
 
     /// <summary>

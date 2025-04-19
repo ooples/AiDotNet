@@ -297,7 +297,7 @@ public static class ModelHelper<T, TInput, TOutput>
                 {
                     // Create a constant with random value
                     return new ExpressionTree<T, TInput, TOutput>(
-                        NodeType.Constant, 
+                        ExpressionNodeType.Constant, 
                         _numOps.FromDouble(_random.NextDouble() * 2 - 1)); // Value between -1 and 1
                 }
                 else if (activeFeatures.Length > 0)
@@ -305,20 +305,20 @@ public static class ModelHelper<T, TInput, TOutput>
                     // Create a variable (feature) node, but only use active features
                     int featureIndex = activeFeatures[_random.Next(activeFeatures.Length)];
                     return new ExpressionTree<T, TInput, TOutput>(
-                        NodeType.Variable,
+                        ExpressionNodeType.Variable,
                         _numOps.FromDouble(featureIndex));
                 }
                 else
                 {
                     // If no active features, just create a constant
                     return new ExpressionTree<T, TInput, TOutput>(
-                        NodeType.Constant, 
+                        ExpressionNodeType.Constant, 
                         _numOps.FromDouble(_random.NextDouble() * 2 - 1));
                 }
             }
         
             // Create an operation node
-            NodeType nodeType = (NodeType)_random.Next(2, 6); // Add, Subtract, Multiply, or Divide
+            ExpressionNodeType nodeType = (ExpressionNodeType)_random.Next(2, 6); // Add, Subtract, Multiply, or Divide
         
             var left = BuildTree(depth + 1);
             var right = BuildTree(depth + 1);
@@ -379,10 +379,10 @@ public static class ModelHelper<T, TInput, TOutput>
     {
         if (maxDepth == 0 || _random.NextDouble() < 0.3) // 30% chance of generating a leaf node
         {
-            return new ExpressionTree<T, TInput, TOutput>(NodeType.Constant, _numOps.FromDouble(_random.NextDouble()));
+            return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Constant, _numOps.FromDouble(_random.NextDouble()));
         }
 
-        NodeType nodeType = (NodeType)_random.Next(0, 4); // Randomly choose between Add, Subtract, Multiply, Divide
+        ExpressionNodeType nodeType = (ExpressionNodeType)_random.Next(0, 4); // Randomly choose between Add, Subtract, Multiply, Divide
         var left = CreateRandomExpressionTree(maxDepth - 1);
         var right = CreateRandomExpressionTree(maxDepth - 1);
 

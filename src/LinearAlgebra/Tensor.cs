@@ -1322,6 +1322,33 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Calculates the arithmetic mean (average) of all values in the tensor.
+    /// </summary>
+    /// <returns>The mean value of all elements in the tensor.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method calculates the average of all values in your tensor.</para>
+    /// 
+    /// <para>It works by:
+    /// 1. Adding up all the values in the tensor
+    /// 2. Dividing the sum by the total number of values</para>
+    /// 
+    /// <para>The mean is a common statistical measure that represents the "center" or "typical value" of your data.</para>
+    /// 
+    /// <para>For example, if your tensor contains temperature readings over time, the mean would give you
+    /// the average temperature for the entire period.</para>
+    /// </remarks>
+    public T Mean()
+    {
+        T sum = _numOps.Zero;
+        for (int i = 0; i < _data.Length; i++)
+        {
+            sum = _numOps.Add(sum, _data[i]);
+        }
+
+        return _numOps.Divide(sum, _numOps.FromDouble(_data.Length));
+    }
+
+    /// <summary>
     /// Extracts a 2D slice from a 2D tensor.
     /// </summary>
     /// <param name="startRow">The starting row index (inclusive).</param>
@@ -1782,6 +1809,29 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     public static Tensor<T> FromMatrix(Matrix<T> matrix)
     {
         return new Tensor<T>([matrix.Rows, matrix.Columns], matrix.ToColumnVector());
+    }
+
+    /// <summary>
+    /// Creates a new tensor with a single scalar value.
+    /// </summary>
+    /// <param name="value">The scalar value to store in the tensor.</param>
+    /// <returns>A new tensor containing only the specified scalar value.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a tensor with just one number in it.
+    /// It's useful when you need to convert a single value into a tensor format.</para>
+    /// 
+    /// <para>The resulting tensor has a shape of [1], meaning it's a one-dimensional
+    /// tensor with a single element. This is the simplest possible tensor.</para>
+    /// </remarks>
+    public static Tensor<T> FromScalar(T value)
+    {
+        // Create a new tensor with shape [1] (a single-element tensor)
+        var tensor = new Tensor<T>([1]);
+
+        // Set the first (and only) element to the provided value
+        tensor[0] = value;
+
+        return tensor;
     }
 
     /// <summary>
