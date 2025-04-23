@@ -611,15 +611,55 @@ public class PredictionStats<T>
             MetricType.ExplainedVarianceScore => ExplainedVarianceScore,
             MetricType.MeanPredictionError => MeanPredictionError,
             MetricType.MedianPredictionError => MedianPredictionError,
+            MetricType.PredictionIntervalCoverage => PredictionIntervalCoverage,
             MetricType.Accuracy => Accuracy,
             MetricType.Precision => Precision,
             MetricType.Recall => Recall,
             MetricType.F1Score => F1Score,
-            MetricType.PredictionIntervalCoverage => PredictionIntervalCoverage,
             MetricType.PearsonCorrelation => PearsonCorrelation,
             MetricType.SpearmanCorrelation => SpearmanCorrelation,
-            MetricType.KendallTau => KendallTau,
-            _ => throw new ArgumentException($"Unknown metric type: {metricType}")
+            _ => throw new ArgumentException($"Metric {metricType} is not available in PredictionStats.", nameof(metricType)),
+        };
+    }
+
+    /// <summary>
+    /// Checks if a specific metric is available in this PredictionStats instance.
+    /// </summary>
+    /// <param name="metricType">The type of metric to check for.</param>
+    /// <returns>True if the metric is available, false otherwise.</returns>
+    /// <remarks>
+    /// For Beginners:
+    /// This method allows you to check if a particular metric is available before trying to get its value.
+    /// It's useful when you're not sure if a specific metric was calculated for this set of predictions.
+    /// 
+    /// For example:
+    /// <code>
+    /// if (stats.HasMetric(MetricType.R2))
+    /// {
+    ///     var r2Value = stats.GetMetric(MetricType.R2);
+    ///     // Use r2Value...
+    /// }
+    /// </code>
+    /// 
+    /// This prevents errors that might occur if you try to access a metric that wasn't calculated.
+    /// </remarks>
+    public bool HasMetric(MetricType metricType)
+    {
+        return metricType switch
+        {
+            MetricType.R2 => true,
+            MetricType.AdjustedR2 => true,
+            MetricType.ExplainedVarianceScore => true,
+            MetricType.MeanPredictionError => true,
+            MetricType.MedianPredictionError => true,
+            MetricType.PredictionIntervalCoverage => true,
+            MetricType.Accuracy => true,
+            MetricType.Precision => true,
+            MetricType.Recall => true,
+            MetricType.F1Score => true,
+            MetricType.PearsonCorrelation => true,
+            MetricType.SpearmanCorrelation => true,
+            _ => false,
         };
     }
 }

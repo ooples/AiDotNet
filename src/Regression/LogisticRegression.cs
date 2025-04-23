@@ -68,7 +68,7 @@ public class LogisticRegression<T> : RegressionBase<T>
     /// which would make it perform poorly on new, unseen data.
     /// </para>
     /// </remarks>
-    public LogisticRegression(LogisticRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public LogisticRegression(LogisticRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new LogisticRegressionOptions<T>();
@@ -108,7 +108,7 @@ public class LogisticRegression<T> : RegressionBase<T>
         Coefficients = new Vector<T>(p);
         Intercept = NumOps.Zero;
         // Apply regularization to the input matrix
-        Matrix<T> regularizedX = Regularization != null ? Regularization.RegularizeMatrix(x) : x;
+        Matrix<T> regularizedX = Regularization != null ? Regularization.Regularize(x) : x;
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             Vector<T> predictions = Predict(regularizedX);
@@ -127,7 +127,7 @@ public class LogisticRegression<T> : RegressionBase<T>
         // Apply final regularization to coefficients
         if (Regularization != null)
         {
-            Coefficients = Regularization.RegularizeCoefficients(Coefficients);
+            Coefficients = Regularization.Regularize(Coefficients);
         }
     }
 
@@ -156,8 +156,9 @@ public class LogisticRegression<T> : RegressionBase<T>
     {
         if (Regularization != null)
         {
-            return Regularization.RegularizeGradient(gradient, Coefficients);
+            return Regularization.Regularize(gradient, Coefficients);
         }
+
         return gradient;
     }
 
@@ -341,5 +342,26 @@ public class LogisticRegression<T> : RegressionBase<T>
         // Deserialize MultipleRegression specific data
         _options.MaxIterations = reader.ReadInt32();
         _options.Tolerance = reader.ReadDouble();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the logistic regression model.
+    /// </summary>
+    /// <returns>A new instance of the logistic regression model with the same configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the logistic regression model with the same configuration as the current instance.
+    /// It is used internally during serialization/deserialization to create a new instance of the model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a copy of the model structure without copying the learned data.
+    /// 
+    /// It's like creating a new, empty notebook with the same number of pages and section dividers as your current notebook,
+    /// but without copying any of the notes you've written. This is useful when you want to create a similar model
+    /// or when loading a saved model from a file.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        return new LogisticRegression<T>(_options, Regularization);
     }
 }

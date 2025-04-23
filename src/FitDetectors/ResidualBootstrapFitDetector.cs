@@ -12,7 +12,7 @@ namespace AiDotNet.FitDetectors;
 /// model is too complex (overfit), too simple (underfit), or just right (good fit).
 /// </para>
 /// </remarks>
-public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
+public class ResidualBootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the residual bootstrap fit detector.
@@ -53,7 +53,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// 3. What steps you might take to improve your model
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -84,7 +84,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// it suggests there might be a problem with how well your model fits the data.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var bootstrapMSEs = PerformResidualBootstrap(evaluationData);
         var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
@@ -92,13 +92,13 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
         var meanBootstrapMSE = StatisticsHelper<T>.CalculateMean(bootstrapMSEs);
         var stdDevBootstrapMSE = StatisticsHelper<T>.CalculateStandardDeviation(bootstrapMSEs);
 
-        var zScore = _numOps.Divide(_numOps.Subtract(originalMSE, meanBootstrapMSE), stdDevBootstrapMSE);
+        var zScore = NumOps.Divide(NumOps.Subtract(originalMSE, meanBootstrapMSE), stdDevBootstrapMSE);
 
-        if (_numOps.GreaterThan(zScore, _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.GreaterThan(zScore, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(zScore, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(zScore, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
@@ -126,7 +126,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// The final score is between 0 and 1, where 1 means completely confident and 0 means not confident at all.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var bootstrapMSEs = PerformResidualBootstrap(evaluationData);
         var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
@@ -134,9 +134,9 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
         var meanBootstrapMSE = StatisticsHelper<T>.CalculateMean(bootstrapMSEs);
         var stdDevBootstrapMSE = StatisticsHelper<T>.CalculateStandardDeviation(bootstrapMSEs);
 
-        var zScore = _numOps.Abs(_numOps.Divide(_numOps.Subtract(originalMSE, meanBootstrapMSE), stdDevBootstrapMSE));
+        var zScore = NumOps.Abs(NumOps.Divide(NumOps.Subtract(originalMSE, meanBootstrapMSE), stdDevBootstrapMSE));
         
-        return _numOps.Subtract(_numOps.One, _numOps.Divide(zScore, _numOps.FromDouble(3.0))); // Normalize to [0, 1]
+        return NumOps.Subtract(NumOps.One, NumOps.Divide(zScore, NumOps.FromDouble(3.0))); // Normalize to [0, 1]
     }
 
     /// <summary>
@@ -157,7 +157,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// These recommendations are starting points that you can try to improve your model's performance.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -209,11 +209,11 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
     /// - The resulting MSE distribution helps assess model stability and fit quality
     /// </para>
     /// </remarks>
-    private Vector<T> PerformResidualBootstrap(ModelEvaluationData<T> evaluationData)
+    private Vector<T> PerformResidualBootstrap(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         // Extract actual values and model predictions from the evaluation data
-        var actual = evaluationData.ModelStats.Actual;
-        var predicted = evaluationData.ModelStats.Predicted;
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
+        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
         var sampleSize = actual.Length;
 
         // Check if we have enough data for reliable bootstrap analysis
@@ -226,7 +226,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
         var residuals = new Vector<T>(sampleSize);
         for (int i = 0; i < sampleSize; i++)
         {
-            residuals[i] = _numOps.Subtract(actual[i], predicted[i]);
+            residuals[i] = NumOps.Subtract(actual[i], predicted[i]);
         }
 
         // Create a vector to store MSE values from each bootstrap sample
@@ -242,7 +242,7 @@ public class ResidualBootstrapFitDetector<T> : FitDetectorBase<T>
             for (int j = 0; j < sampleSize; j++)
             {
                 int randomIndex = _random.Next(sampleSize);
-                bootstrapSample[j] = _numOps.Add(predicted[j], residuals[randomIndex]);
+                bootstrapSample[j] = NumOps.Add(predicted[j], residuals[randomIndex]);
                 bootstrapPredicted[j] = predicted[j];
             }
 

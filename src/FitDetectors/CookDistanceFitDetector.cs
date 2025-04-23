@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// patterns in the data).
 /// </para>
 /// </remarks>
-public class CookDistanceFitDetector<T> : FitDetectorBase<T>
+public class CookDistanceFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Cook's distance fit detector.
@@ -70,7 +70,7 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var cookDistances = CalculateCookDistances(evaluationData);
         var fitType = DetermineFitType(cookDistances);
@@ -104,7 +104,7 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// data to the specific Cook's distance analysis approach.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var cookDistances = CalculateCookDistances(evaluationData);
         return DetermineFitType(cookDistances);
@@ -132,14 +132,14 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// </remarks>
     private FitType DetermineFitType(Vector<T> cookDistances)
     {
-        var influentialPointsCount = cookDistances.Count(d => _numOps.GreaterThan(d, _numOps.FromDouble(_options.InfluentialThreshold)));
-        var influentialRatio = _numOps.Divide(_numOps.FromDouble(influentialPointsCount), _numOps.FromDouble(cookDistances.Length));
+        var influentialPointsCount = cookDistances.Count(d => NumOps.GreaterThan(d, NumOps.FromDouble(_options.InfluentialThreshold)));
+        var influentialRatio = NumOps.Divide(NumOps.FromDouble(influentialPointsCount), NumOps.FromDouble(cookDistances.Length));
 
-        if (_numOps.GreaterThan(influentialRatio, _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.GreaterThan(influentialRatio, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(influentialRatio, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(influentialRatio, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
@@ -165,14 +165,14 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// between 0 and 1, where higher values indicate greater confidence.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var cookDistances = CalculateCookDistances(evaluationData);
-        var influentialPointsCount = cookDistances.Count(d => _numOps.GreaterThan(d, _numOps.FromDouble(_options.InfluentialThreshold)));
-        var influentialRatio = _numOps.Divide(_numOps.FromDouble(influentialPointsCount), _numOps.FromDouble(cookDistances.Length));
+        var influentialPointsCount = cookDistances.Count(d => NumOps.GreaterThan(d, NumOps.FromDouble(_options.InfluentialThreshold)));
+        var influentialRatio = NumOps.Divide(NumOps.FromDouble(influentialPointsCount), NumOps.FromDouble(cookDistances.Length));
 
         // Normalize confidence level to be between 0 and 1
-        return _numOps.Subtract(_numOps.One, influentialRatio);
+        return NumOps.Subtract(NumOps.One, influentialRatio);
     }
 
     /// <summary>
@@ -200,25 +200,33 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// certain threshold (often 4/n where n is the sample size) are considered highly influential.
     /// </para>
     /// </remarks>
-    private Vector<T> CalculateCookDistances(ModelEvaluationData<T> evaluationData)
+    private Vector<T> CalculateCookDistances(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var X = evaluationData.ModelStats.FeatureMatrix;
-        var y = evaluationData.ModelStats.Actual;
-        var yPredicted = evaluationData.ModelStats.Model?.Predict(X) ?? Vector<T>.Empty();
+        var X = ConversionsHelper.ConvertToMatrix<T, TInput>(evaluationData.ModelStats.Features);
+        var y = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
+
+        if (evaluationData.ModelStats.Model == null)
+        {
+            throw new AiDotNetException("Model is null. Cannot calculate Cook's distances without a valid model.");
+        }
+
+        var yPredicted = ConversionsHelper.ConvertToVector<T, TOutput>(
+            evaluationData.ModelStats.Model.Predict(evaluationData.ModelStats.Features));
+
         var residuals = y.Subtract(yPredicted);
 
         var n = X.Rows;
         var p = X.Columns;
         var hatMatrix = X.Multiply(X.Transpose().Multiply(X).Inverse()).Multiply(X.Transpose());
-        var mse = _numOps.Divide(residuals.DotProduct(residuals), _numOps.FromDouble(n - p));
+        var mse = NumOps.Divide(residuals.DotProduct(residuals), NumOps.FromDouble(n - p));
 
         var cookDistances = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             var hii = hatMatrix[i, i];
             var ri = residuals[i];
-            var di = _numOps.Divide(_numOps.Multiply(ri, ri), _numOps.Multiply(_numOps.FromDouble(p), mse));
-            di = _numOps.Multiply(di, _numOps.Divide(_numOps.Multiply(hii, hii), _numOps.Multiply(_numOps.Subtract(_numOps.One, hii), _numOps.Subtract(_numOps.One, hii))));
+            var di = NumOps.Divide(NumOps.Multiply(ri, ri), NumOps.Multiply(NumOps.FromDouble(p), mse));
+            di = NumOps.Multiply(di, NumOps.Divide(NumOps.Multiply(hii, hii), NumOps.Multiply(NumOps.Subtract(NumOps.One, hii), NumOps.Subtract(NumOps.One, hii))));
             cookDistances[i] = di;
         }
 
@@ -249,7 +257,7 @@ public class CookDistanceFitDetector<T> : FitDetectorBase<T>
     /// Cook's distance) to help you identify specific data points that might be affecting your model.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var cookDistances = CalculateCookDistances(evaluationData);
         var recommendations = new List<string>();

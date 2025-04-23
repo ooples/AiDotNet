@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks;
+﻿namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents an Extreme Learning Machine (ELM), a type of feedforward neural network with a unique training approach.
@@ -119,85 +119,6 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Makes a prediction using the current state of the Extreme Learning Machine.
-    /// </summary>
-    /// <param name="input">The input vector to make a prediction for.</param>
-    /// <returns>The predicted output vector after passing through the network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method generates a prediction by passing the input vector through each layer of the Extreme Learning Machine
-    /// in sequence. Each layer processes the output of the previous layer, transforming the data until it reaches
-    /// the final output layer. The result is a vector representing the network's prediction.
-    /// </para>
-    /// <para><b>For Beginners:</b> This uses the network to make a prediction based on input data.
-    /// 
-    /// The prediction process works like this:
-    /// - The input data enters the first layer (with random, fixed weights)
-    /// - It's transformed into a new representation by the hidden layer
-    /// - The activation function adds non-linearity to this representation
-    /// - The output layer (the only trained part) converts this into the final prediction
-    /// 
-    /// This process is very fast because there's no complex computation involved -
-    /// just a few simple matrix multiplications and activation functions.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Trains the Extreme Learning Machine using the provided input and target output data.
-    /// </summary>
-    /// <param name="X">The matrix of input vectors, with each row representing one input sample.</param>
-    /// <param name="Y">The matrix of target output vectors, with each row representing one target sample.</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the Extreme Learning Machine using the provided input and target output data. Unlike
-    /// traditional neural networks that use iterative optimization, ELMs use a direct, analytical solution.
-    /// The method first passes the input data through the randomly initialized hidden layer to get the hidden layer
-    /// output (H). Then it calculates the optimal output weights using the Moore-Penrose pseudo-inverse:
-    /// Output Weights = (H^T * H)^(-1) * H^T * Y. This single-step approach allows ELMs to train extremely quickly.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the network to make accurate predictions in a single step.
-    /// 
-    /// The training process works like this:
-    /// - First, pass all input data through the random hidden layer
-    /// - This transforms the data into a new representation
-    /// - Then, use math (pseudo-inverse) to find the best output weights
-    /// - These weights connect the hidden layer to the correct outputs
-    /// 
-    /// This is why ELMs are so fast - instead of thousands of iterations adjusting weights
-    /// little by little (like in traditional networks), ELMs solve for the optimal weights
-    /// in a single mathematical operation.
-    /// </para>
-    /// </remarks>
-    public void Train(Matrix<T> X, Matrix<T> Y)
-    {
-        // Forward pass through random hidden layer
-        var H = X;
-        for (int i = 0; i < 2; i++)  // First two layers: Dense and Activation
-        {
-            H = Layers[i].Forward(Tensor<T>.FromMatrix(H)).ToMatrix();
-        }
-
-        // Calculate output weights using pseudo-inverse
-        var HTranspose = H.Transpose();
-        var HHTranspose = HTranspose.Multiply(H);
-        var HHTransposeInverse = HHTranspose.Inverse();
-        var outputWeights = HHTransposeInverse.Multiply(HTranspose).Multiply(Y);
-
-        // Set the calculated weights to the output layer
-        ((DenseLayer<T>)Layers[2]).SetWeights(outputWeights);
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the Extreme Learning Machine.
     /// </summary>
     /// <param name="parameters">A vector containing the parameters to update all layers with.</param>
@@ -224,111 +145,393 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     public override void UpdateParameters(Vector<T> parameters)
     {
         // ELM doesn't update parameters in the traditional sense
-        throw new NotImplementedException("ELM does not support traditional parameter updates.");
     }
 
     /// <summary>
-    /// Serializes the Extreme Learning Machine to a binary stream.
+    /// Makes a prediction using the Extreme Learning Machine.
     /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a null layer is encountered or a layer type name cannot be determined.</exception>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor containing the prediction.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the state of the Extreme Learning Machine to a binary stream. It writes the number of layers,
-    /// followed by the type name and serialized state of each layer. This allows the ELM to be saved to disk
-    /// and later restored with all its parameters intact, including both the random input-to-hidden weights
-    /// and the analytically calculated hidden-to-output weights.
+    /// This method passes the input data through the Extreme Learning Machine network to make a prediction.
+    /// It sequentially processes the input through all layers of the network, which typically includes a fixed
+    /// random projection from the input layer to the hidden layer, followed by a nonlinear activation function,
+    /// and finally the analytically trained weights from the hidden layer to the output layer.
     /// </para>
-    /// <para><b>For Beginners:</b> This saves the network to a file so you can use it later.
+    /// <para><b>For Beginners:</b> This is how the ELM processes new data to make predictions.
     /// 
-    /// When saving the Extreme Learning Machine:
-    /// - It records how many layers the network has
-    /// - For each layer, it saves:
-    ///   - What type of layer it is
-    ///   - All the weights and settings for that layer
+    /// The prediction process works in three stages:
+    /// 1. Input data is projected through random weights to the hidden layer
+    /// 2. A nonlinear activation function (like sigmoid) is applied to these projections
+    /// 3. The resulting hidden layer activations are multiplied by the trained output weights
     /// 
-    /// This is like taking a snapshot of the entire network - including both the random
-    /// hidden layer weights and the calculated output weights. You can later load this
-    /// snapshot to use the trained network without having to train it again.
+    /// Unlike traditional neural networks, the first step uses fixed random weights that were never trained,
+    /// which is part of what makes ELMs so unique and fast.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
+        // Process the input through each layer sequentially
+        Tensor<T> current = input;
+        
+        for (int i = 0; i < Layers.Count; i++)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            current = Layers[i].Forward(current);
         }
+        
+        return current;
     }
 
     /// <summary>
-    /// Deserializes the Extreme Learning Machine from a binary stream.
+    /// Trains the Extreme Learning Machine on a single batch of data.
     /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer type information is invalid or instance creation fails.</exception>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
     /// <remarks>
     /// <para>
-    /// This method restores the state of the Extreme Learning Machine from a binary stream. It reads the number of layers,
-    /// followed by the type name and serialized state of each layer. This allows a previously saved ELM to be
-    /// restored from disk with all its parameters intact, including both the random input-to-hidden weights
-    /// and the analytically calculated hidden-to-output weights.
+    /// This method implements the ELM training algorithm, which is fundamentally different from traditional
+    /// neural network training. Instead of using iterative optimization with backpropagation, ELM fixes the
+    /// weights from input to hidden layer with random values and analytically calculates the optimal weights
+    /// from hidden to output layer using a Moore-Penrose pseudo-inverse operation. This allows for extremely
+    /// fast training compared to traditional neural networks.
     /// </para>
-    /// <para><b>For Beginners:</b> This loads a previously saved network from a file.
+    /// <para><b>For Beginners:</b> This trains the ELM in one single step, which is much faster than traditional neural networks.
     /// 
-    /// When loading the Extreme Learning Machine:
-    /// - First, it reads how many layers the network had
-    /// - Then, for each layer, it:
-    ///   - Reads what type of layer it was
-    ///   - Creates a new layer of that type
-    ///   - Loads all the weights and settings for that layer
-    ///   - Adds the layer to the network
+    /// The ELM training process is unique:
+    /// 1. The weights from input to hidden layer stay fixed at their random initial values
+    /// 2. The input data is projected through these fixed random weights to get hidden layer activations
+    /// 3. The optimal output weights are calculated using linear algebra (pseudo-inverse) in one step
     /// 
-    /// This lets you use a previously trained network without having to train it again.
-    /// It's like restoring the complete snapshot of your network, bringing back both
-    /// the random hidden layer and the trained output weights.
+    /// This is like solving a system of equations directly rather than making many small adjustments,
+    /// which is why ELMs can train thousands of times faster than traditional neural networks.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
+        // Check if the network structure matches the ELM requirements
+        if (Layers.Count < 3)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            throw new InvalidOperationException("ELM requires at least 3 layers: input projection, activation, and output.");
         }
+        
+        // STEP 1: Get the hidden layer activations by projecting the input through the fixed random weights
+        Tensor<T> hiddenActivations = input;
+        
+        // Process through all layers except the last one (which is the output layer)
+        for (int i = 0; i < Layers.Count - 1; i++)
+        {
+            hiddenActivations = Layers[i].Forward(hiddenActivations);
+        }
+        
+        // STEP 2: Calculate the optimal output weights using pseudo-inverse
+        // We'll use the Moore-Penrose pseudoinverse: OutputWeights = (H⁺ × T)
+        // where H⁺ is the pseudoinverse of H (hidden activations) and T is the target output
+        
+        // Convert hidden activations and expected output to matrices for the calculation
+        Matrix<T> H = hiddenActivations.ConvertToMatrix();
+        Matrix<T> T = expectedOutput.ConvertToMatrix();
+        
+        // Calculate pseudoinverse of H 
+        Matrix<T> HPseudoInverse = CalculatePseudoInverse(H);
+        
+        // Calculate output weights
+        Matrix<T> outputWeights = HPseudoInverse.Multiply(T);
+        
+        // STEP 3: Update only the last layer (output layer) with the calculated weights
+        // In an ELM, only the output layer is trained
+        UpdateOutputLayerWeights(outputWeights);
+    }
+    
+    /// <summary>
+    /// Calculates the Moore-Penrose pseudoinverse of a matrix.
+    /// </summary>
+    /// <param name="matrix">The matrix to calculate the pseudoinverse for.</param>
+    /// <returns>The pseudoinverse of the input matrix.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the Moore-Penrose pseudoinverse of a matrix, which is a generalization of the matrix inverse
+    /// for non-square matrices. The pseudoinverse is used in the ELM training algorithm to analytically solve
+    /// for the optimal output layer weights. For computational efficiency, this implementation uses the formula:
+    /// A⁺ = (A^T × A)^(-1) × A^T for full column rank matrices.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates a special type of matrix inverse used in ELM training.
+    /// 
+    /// The pseudoinverse is a way to "divide" by a matrix even when traditional division isn't possible.
+    /// It's a key part of what makes ELM training so fast, allowing us to directly solve for the optimal
+    /// output weights in one step, rather than iteratively adjusting them as in traditional neural networks.
+    /// </para>
+    /// </remarks>
+    private Matrix<T> CalculatePseudoInverse(Matrix<T> matrix)
+    {
+        // Calculate the pseudoinverse using the formula: A⁺ = (A^T × A)^(-1) × A^T
+        // This works well for matrices with full column rank, which is common in ELMs with
+        // more data samples than hidden neurons
+
+        // Step 1: Calculate A^T (transpose)
+        Matrix<T> transposeA = matrix.Transpose();
+        
+        // Step 2: Calculate A^T × A
+        Matrix<T> aTa = transposeA.Multiply(matrix);
+        
+        // Step 3: Calculate (A^T × A)^(-1)
+        Matrix<T> aTaInverse = aTa.Inverse();
+        
+        // Step 4: Calculate (A^T × A)^(-1) × A^T
+        Matrix<T> pseudoInverse = aTaInverse.Multiply(transposeA);
+        
+        return pseudoInverse;
+
+        // Note: In a production implementation, you might want to use singular value decomposition (SVD)
+        // for better numerical stability, or use a regularized version like:
+        // A⁺ = (A^T × A + λI)^(-1) × A^T where λ is a small regularization parameter
+    }
+
+    /// <summary>
+    /// Updates the weights of the output layer with the calculated weights.
+    /// </summary>
+    /// <param name="outputWeights">The matrix of new weights for the output layer.</param>
+    /// <remarks>
+    /// <para>
+    /// This method updates only the output layer of the ELM with the weights calculated during training.
+    /// In an ELM, this is the only layer that gets trained - the earlier layers maintain their random weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This applies the calculated weights to the output layer of the network.
+    /// 
+    /// In an ELM, only the final layer (connecting the hidden layer to the output) gets its weights updated.
+    /// All other layers keep their randomly initialized weights. This method handles the process of
+    /// taking the mathematically optimal weights we calculated and applying them to the output layer.
+    /// </para>
+    /// </remarks>
+    private void UpdateOutputLayerWeights(Matrix<T> outputWeights)
+    {
+        // Get the last layer (output layer)
+        var outputLayer = Layers[Layers.Count - 1];
+        
+        // Convert the output weights to the format expected by the layer
+        Vector<T> flattenedWeights = new Vector<T>(outputWeights.Rows * outputWeights.Columns);
+        int index = 0;
+        for (int i = 0; i < outputWeights.Rows; i++)
+        {
+            for (int j = 0; j < outputWeights.Columns; j++)
+            {
+                flattenedWeights[index++] = outputWeights[i, j];
+            }
+        }
+        
+        // Update the output layer weights
+        outputLayer.UpdateParameters(flattenedWeights);
+    }
+
+    /// <summary>
+    /// Gets metadata about the Extreme Learning Machine model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the ELM, including its model type, hidden layer size,
+    /// and additional configuration information. This metadata is useful for model management
+    /// and for generating reports about the model's structure and configuration.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides a summary of your ELM's configuration.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Extreme Learning Machine)
+    /// - The size of the hidden layer
+    /// - Information about the layers and their configurations
+    /// - Serialized data that can be used to save and reload the model
+    /// 
+    /// Think of it like a label that describes the specific type and characteristics
+    /// of your neural network. This is useful for organizing and managing multiple models.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.ExtremeLearningMachine,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "HiddenLayerSize", _hiddenLayerSize },
+                { "InputSize", Architecture.InputSize },
+                { "OutputSize", Architecture.OutputSize },
+                { "LayerCount", Layers.Count },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes Extreme Learning Machine-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes ELM-specific configuration data to a binary stream. It includes
+    /// properties such as the hidden layer size and the weights of all layers. This data is needed
+    /// to reconstruct the ELM when deserializing.
+    /// </para>
+    /// <para><b>For Beginners:</b> This saves the special configuration of your ELM.
+    /// 
+    /// It's like writing down the recipe for how your specific ELM was built:
+    /// - How many hidden neurons it has
+    /// - The random weights used in the input-to-hidden connections
+    /// - The trained weights used in the hidden-to-output connections
+    /// 
+    /// This allows you to save the model and reload it later, without having to retrain it.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write hidden layer size
+        writer.Write(_hiddenLayerSize);
+        
+        // Write whether we're in training mode
+        writer.Write(IsTrainingMode);
+    }
+
+    /// <summary>
+    /// Deserializes Extreme Learning Machine-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads ELM-specific configuration data from a binary stream. It retrieves
+    /// properties such as the hidden layer size and the weights of all layers. After reading this data,
+    /// the ELM's state is fully restored to what it was when saved.
+    /// </para>
+    /// <para><b>For Beginners:</b> This restores the special configuration of your ELM from saved data.
+    /// 
+    /// It's like following the recipe to rebuild your ELM exactly as it was:
+    /// - Setting the hidden layer to the right size
+    /// - Restoring the random weights for the input-to-hidden connections
+    /// - Restoring the trained weights for the hidden-to-output connections
+    /// 
+    /// By reading these details, the ELM can be reconstructed exactly as it was
+    /// when it was saved, preserving all its behavior and learned patterns.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Read hidden layer size
+        int hiddenLayerSize = reader.ReadInt32();
+        
+        // Check if the hiddenLayerSize matches the current instance
+        if (hiddenLayerSize != _hiddenLayerSize)
+        {
+            Console.WriteLine($"Warning: Loaded ELM has hidden layer size {hiddenLayerSize}, " +
+                             $"but current instance has size {_hiddenLayerSize}");
+        }
+        
+        // Read training mode
+        IsTrainingMode = reader.ReadBoolean();
+    }
+    
+    /// <summary>
+    /// Trains the ELM using regularized least squares for improved generalization.
+    /// </summary>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
+    /// <param name="regularizationFactor">The regularization factor (lambda) to use. Default is 0.01.</param>
+    /// <remarks>
+    /// <para>
+    /// This method implements a regularized version of the ELM training algorithm. It adds a regularization term
+    /// to the pseudoinverse calculation, which helps prevent overfitting. The formula becomes:
+    /// OutputWeights = (H^T * H + λI)^(-1) * H^T * T, where λ is the regularization factor, I is the identity matrix,
+    /// H is the hidden layer activations, and T is the target output.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a more robust training method that helps prevent overfitting.
+    /// 
+    /// Regularization is like adding a penalty for overly complex solutions:
+    /// - It keeps the weights from becoming too large or specialized to the training data
+    /// - It helps the model generalize better to new, unseen data
+    /// - The regularization factor controls how strong this penalty is
+    /// 
+    /// This method still trains in one fast step (unlike traditional neural networks),
+    /// but produces weights that typically work better on new data.
+    /// </para>
+    /// </remarks>
+    public void TrainWithRegularization(Tensor<T> input, Tensor<T> expectedOutput, double regularizationFactor = 0.01)
+    {
+        // Check if the network structure matches the ELM requirements
+        if (Layers.Count < 3)
+        {
+            throw new InvalidOperationException("ELM requires at least 3 layers: input projection, activation, and output.");
+        }
+        
+        // STEP 1: Get the hidden layer activations by projecting the input through the fixed random weights
+        Tensor<T> hiddenActivations = input;
+        
+        // Process through all layers except the last one (which is the output layer)
+        for (int i = 0; i < Layers.Count - 1; i++)
+        {
+            hiddenActivations = Layers[i].Forward(hiddenActivations);
+        }
+        
+        // STEP 2: Calculate the optimal output weights using regularized pseudoinverse
+        
+        // Convert hidden activations and expected output to matrices for the calculation
+        Matrix<T> H = hiddenActivations.ConvertToMatrix();
+        Matrix<T> T = expectedOutput.ConvertToMatrix();
+        
+        // Calculate regularized pseudoinverse: (H^T * H + λI)^(-1) * H^T
+        Matrix<T> transposeH = H.Transpose();
+        Matrix<T> hTh = transposeH.Multiply(H);
+        
+        // Create identity matrix for regularization
+        Matrix<T> identity = Matrix<T>.CreateIdentity(hTh.Rows);
+        
+        // Apply regularization: hTh + λI
+        T regFactor = NumOps.FromDouble(regularizationFactor);
+        for (int i = 0; i < identity.Rows; i++)
+        {
+            for (int j = 0; j < identity.Columns; j++)
+            {
+                if (i == j)
+                {
+                    hTh[i, j] = NumOps.Add(hTh[i, j], NumOps.Multiply(identity[i, j], regFactor));
+                }
+            }
+        }
+        
+        // Calculate inverse of regularized matrix
+        Matrix<T> regularizedInverse = hTh.Inverse();
+        
+        // Calculate final pseudoinverse
+        Matrix<T> regularizedPseudoInverse = regularizedInverse.Multiply(transposeH);
+        
+        // Calculate output weights
+        Matrix<T> outputWeights = regularizedPseudoInverse.Multiply(T);
+        
+        // STEP 3: Update only the last layer (output layer) with the calculated weights
+        UpdateOutputLayerWeights(outputWeights);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the ExtremeLearningMachine with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new ExtremeLearningMachine instance with the same architecture and hidden layer size as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the ExtremeLearningMachine with the same architecture and hidden layer size
+    /// as the current instance. This is useful for model cloning, ensemble methods, or cross-validation scenarios where
+    /// multiple instances of the same model with identical configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the ELM's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of ELM with identical settings:
+    /// - This method creates a new, empty ELM with the same configuration
+    /// - It's like making a copy of a recipe before you start cooking
+    /// - The new ELM has the same structure but no trained data
+    /// - This is useful for techniques that need multiple models, like ensemble methods
+    /// 
+    /// For example, when training multiple ELMs on different subsets of data,
+    /// you'd want each one to have the same architecture and hidden layer size.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new ExtremeLearningMachine<T>(Architecture, _hiddenLayerSize);
     }
 }

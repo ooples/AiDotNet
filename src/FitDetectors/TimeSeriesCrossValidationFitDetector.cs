@@ -25,7 +25,7 @@ namespace AiDotNet.FitDetectors;
 /// It also provides specific recommendations to improve your model based on these findings.
 /// </para>
 /// </remarks>
-public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
+public class TimeSeriesCrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the time series cross-validation fit detector.
@@ -65,7 +65,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// your model's performance and what steps to take next.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -107,32 +107,32 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// - Unstable: When your model doesn't fit into the other categories
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingRMSE = evaluationData.TrainingSet.ErrorStats.RMSE;
         var validationRMSE = evaluationData.ValidationSet.ErrorStats.RMSE;
         var testRMSE = evaluationData.TestSet.ErrorStats.RMSE;
 
-        var rmseRatio = _numOps.Divide(validationRMSE, trainingRMSE);
-        var testTrainingRatio = _numOps.Divide(testRMSE, trainingRMSE);
+        var rmseRatio = NumOps.Divide(validationRMSE, trainingRMSE);
+        var testTrainingRatio = NumOps.Divide(testRMSE, trainingRMSE);
 
-        if (_numOps.GreaterThan(rmseRatio, _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.GreaterThan(rmseRatio, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(trainingRMSE, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.LessThan(validationRMSE, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.LessThan(testRMSE, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(trainingRMSE, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.LessThan(validationRMSE, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.LessThan(testRMSE, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
-        else if (_numOps.GreaterThan(testTrainingRatio, _numOps.FromDouble(_options.HighVarianceThreshold)))
+        else if (NumOps.GreaterThan(testTrainingRatio, NumOps.FromDouble(_options.HighVarianceThreshold)))
         {
             return FitType.HighVariance;
         }
-        else if (_numOps.GreaterThan(evaluationData.TrainingSet.PredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-                 _numOps.GreaterThan(evaluationData.ValidationSet.PredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-                 _numOps.GreaterThan(evaluationData.TestSet.PredictionStats.R2, _numOps.FromDouble(_options.GoodFitThreshold)))
+        else if (NumOps.GreaterThan(evaluationData.TrainingSet.PredictionStats.R2, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+                 NumOps.GreaterThan(evaluationData.ValidationSet.PredictionStats.R2, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+                 NumOps.GreaterThan(evaluationData.TestSet.PredictionStats.R2, NumOps.FromDouble(_options.GoodFitThreshold)))
         {
             return FitType.GoodFit;
         }
@@ -164,21 +164,21 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// sensitive to small changes in the data.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var rmseStability = _numOps.Divide(
-            _numOps.Abs(_numOps.Subtract(evaluationData.TestSet.ErrorStats.RMSE, evaluationData.ValidationSet.ErrorStats.RMSE)),
+        var rmseStability = NumOps.Divide(
+            NumOps.Abs(NumOps.Subtract(evaluationData.TestSet.ErrorStats.RMSE, evaluationData.ValidationSet.ErrorStats.RMSE)),
             evaluationData.ValidationSet.ErrorStats.RMSE
         );
 
-        var r2Stability = _numOps.Divide(
-            _numOps.Abs(_numOps.Subtract(evaluationData.TestSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2)),
+        var r2Stability = NumOps.Divide(
+            NumOps.Abs(NumOps.Subtract(evaluationData.TestSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2)),
             evaluationData.ValidationSet.PredictionStats.R2
         );
 
-        var stabilityScore = _numOps.Subtract(_numOps.One, _numOps.Add(rmseStability, r2Stability));
-        var lessThan = _numOps.LessThan(_numOps.One, stabilityScore) ? _numOps.One : stabilityScore;
-        return _numOps.GreaterThan(_numOps.Zero, lessThan) ? _numOps.Zero : lessThan;
+        var stabilityScore = NumOps.Subtract(NumOps.One, NumOps.Add(rmseStability, r2Stability));
+        var lessThan = NumOps.LessThan(NumOps.One, stabilityScore) ? NumOps.One : stabilityScore;
+        return NumOps.GreaterThan(NumOps.Zero, lessThan) ? NumOps.Zero : lessThan;
     }
 
     /// <summary>
@@ -218,7 +218,7 @@ public class TimeSeriesCrossValidationFitDetector<T> : FitDetectorBase<T>
     ///   Values closer to 1 are better. Think of it as a percentage of how much your model "understands" the data.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

@@ -94,44 +94,6 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the ARIMA model on the provided data.
-    /// </summary>
-    /// <param name="x">Feature matrix (typically just time indices for ARIMA models).</param>
-    /// <param name="y">Target vector (the time series values to be modeled).</param>
-    /// <remarks>
-    /// For Beginners:
-    /// This method "teaches" the ARIMA model using your historical data. The training process:
-    /// 1. Differences the data (if needed) to remove trends
-    /// 2. Estimates how past values influence future values (AR coefficients)
-    /// 3. Estimates how past prediction errors influence future values (MA coefficients)
-    /// 4. Calculates a constant term for the model
-    /// 
-    /// After training, the model can be used to make predictions.
-    /// 
-    /// Note: For ARIMA models, the x parameter is often just a placeholder as the model primarily
-    /// uses the time series values themselves (y) for prediction.
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        int p = _arimaOptions.P; // AR order
-        int d = _arimaOptions.D;
-        int q = _arimaOptions.Q;
-
-        // Step 1: Difference the series
-        Vector<T> diffY = TimeSeriesHelper<T>.DifferenceSeries(y, d);
-
-        // Step 2: Estimate AR coefficients
-        _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(diffY, p, MatrixDecompositionType.Qr);
-
-        // Step 3: Estimate MA coefficients
-        Vector<T> arResiduals = TimeSeriesHelper<T>.CalculateARResiduals(diffY, _arCoefficients);
-        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(arResiduals, q);
-
-        // Step 4: Estimate constant term
-        _constant = EstimateConstant(diffY, _arCoefficients, _maCoefficients);
-    }
-
-    /// <summary>
     /// Estimates the constant term for the ARIMA model.
     /// </summary>
     /// <param name="y">The differenced time series.</param>
@@ -179,7 +141,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         Vector<T> predictions = new(input.Rows);
-        Vector<T> lastObservedValues = new(_options.LagOrder);
+        Vector<T> lastObservedValues = new(_arimaOptions.LagOrder);
         Vector<T> lastErrors = new(_maCoefficients.Length);
 
         for (int i = 0; i < predictions.Length; i++)
@@ -343,5 +305,158 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         {
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <summary>
+    /// Core implementation of the training logic for the ARIMA model.
+    /// </summary>
+    /// <param name="x">Feature matrix (typically just time indices for ARIMA models).</param>
+    /// <param name="y">Target vector (the time series values to be modeled).</param>
+    /// <remarks>
+    /// For Beginners:
+    /// This method contains the core implementation of the training process. It:
+    /// 
+    /// 1. Differences the data to remove trends (the "I" in ARIMA)
+    /// 2. Estimates the AR coefficients that capture how past values affect future values
+    /// 3. Calculates residuals and uses them to estimate the MA coefficients
+    /// 4. Estimates the constant term that serves as the baseline prediction
+    /// 
+    /// This implementation follows the same process as the public Train method but
+    /// provides the actual mechanism that fits the model to your data.
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        int p = _arimaOptions.P; // AR order
+        int d = _arimaOptions.D; // Differencing order
+        int q = _arimaOptions.Q; // MA order
+
+        // Step 1: Difference the series to make it stationary
+        Vector<T> diffY = TimeSeriesHelper<T>.DifferenceSeries(y, d);
+
+        // Step 2: Estimate AR coefficients using least squares or Yule-Walker equations
+        _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(diffY, p, MatrixDecompositionType.Qr);
+
+        // Step 3: Calculate AR residuals and use them to estimate MA coefficients
+        Vector<T> arResiduals = TimeSeriesHelper<T>.CalculateARResiduals(diffY, _arCoefficients);
+        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(arResiduals, q);
+
+        // Step 4: Estimate constant term for the model
+        _constant = EstimateConstant(diffY, _arCoefficients, _maCoefficients);
+    }
+
+    /// <summary>
+    /// Predicts a single value based on the input vector.
+    /// </summary>
+    /// <param name="input">Input vector containing features for prediction.</param>
+    /// <returns>The predicted value.</returns>
+    /// <remarks>
+    /// For Beginners:
+    /// This method generates a single prediction based on your input data.
+    /// 
+    /// The prediction process:
+    /// 1. Starts with the constant term as the baseline value
+    /// 2. Adds the influence of past observations (AR component)
+    /// 3. Adds the influence of past prediction errors (MA component)
+    /// 
+    /// This is useful when you need just one prediction rather than a whole series.
+    /// For example, if you want to predict tomorrow's temperature specifically,
+    /// rather than temperatures for the next week.
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Start with the constant term as the baseline prediction
+        T prediction = _constant;
+    
+        // Check if model has been trained
+        if (_arCoefficients.Length == 0 && _maCoefficients.Length == 0)
+        {
+            throw new InvalidOperationException("Model must be trained before making predictions.");
+        }
+    
+        // For ARIMA models, we typically use recent observations from the time series
+        // rather than arbitrary input features.
+        // This implementation assumes input contains recent observations in reverse order
+        // (most recent first)
+    
+        // Add AR component - influence of past observations
+        for (int j = 0; j < _arCoefficients.Length && j < input.Length; j++)
+        {
+            prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[j], input[j]));
+        }
+    
+        // Since we can't know the actual errors for future predictions,
+        // the MA component is often excluded when predicting a single value
+        // or we assume errors of zero for simplicity
+    
+        return prediction;
+    }
+
+    /// <summary>
+    /// Gets metadata about the model, including its type, parameters, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// For Beginners:
+    /// This method provides a summary of your model's settings and what it has learned.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (ARIMA)
+    /// - The p, d, and q parameters that define the model structure
+    /// - The AR and MA coefficients that were learned during training
+    /// - The constant term that serves as the baseline prediction
+    /// 
+    /// This information is useful for:
+    /// - Documenting your model for future reference
+    /// - Comparing different models to see which performs best
+    /// - Understanding what patterns the model has identified in your data
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.ARIMAModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // ARIMA-specific parameters
+                { "P", _arimaOptions.P },
+                { "D", _arimaOptions.D },
+                { "Q", _arimaOptions.Q },
+            
+                // Model coefficients
+                { "ARCoefficientsCount", _arCoefficients.Length },
+                { "MACoefficientsCount", _maCoefficients.Length },
+                { "Constant", Convert.ToDouble(_constant) },
+            
+                // Additional settings from options
+                { "LagOrder", _arimaOptions.LagOrder }
+            },
+            ModelData = this.Serialize()
+        };
+    
+        return metadata;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the ARIMA model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the ARIMA model.</returns>
+    /// <remarks>
+    /// For Beginners:
+    /// This method creates a fresh copy of the model with the same settings.
+    /// 
+    /// The new copy:
+    /// - Has the same p, d, and q parameters as the original model
+    /// - Has the same configuration options
+    /// - Is untrained (doesn't have coefficients yet)
+    /// 
+    /// This is useful when you want to:
+    /// - Train multiple versions of the same model on different data
+    /// - Create ensemble models that combine predictions from multiple similar models
+    /// - Reset a model to start fresh while keeping the same structure
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a new instance with the same options
+        return new ARIMAModel<T>(_arimaOptions);
     }
 }

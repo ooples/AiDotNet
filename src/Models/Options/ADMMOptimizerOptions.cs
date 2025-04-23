@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// (avoiding unnecessary complexity). Think of it as a team of specialists working together rather than one person
 /// trying to do everything.</para>
 /// </remarks>
-public class ADMMOptimizerOptions : GradientBasedOptimizerOptions
+public class ADMMOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the penalty parameter that controls the balance between the original objective and the constraint satisfaction.

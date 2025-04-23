@@ -177,72 +177,6 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the BSTS model on the provided data.
-    /// </summary>
-    /// <param name="x">Feature matrix (external variables for the regression component).</param>
-    /// <param name="y">Target vector (the time series values to be modeled).</param>
-    /// <remarks>
-    /// For Beginners:
-    /// This method "teaches" the BSTS model using your historical data. The training process:
-    /// 
-    /// 1. Initializes regression coefficients (if using external variables)
-    /// 2. Uses a technique called "Kalman filtering" to:
-    ///    - Make a prediction for each time point
-    ///    - Compare it to the actual value
-    ///    - Update the model's understanding
-    /// 3. Optionally performs "backward smoothing" to further refine estimates
-    /// 4. Estimates optimal parameters for the model
-    /// 
-    /// Think of it like the model repeatedly looking at your data, making predictions,
-    /// checking how good those predictions are, and adjusting itself to do better next time.
-    /// 
-    /// After training, the model can be used to make predictions for future time periods.
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        int n = y.Length;
-        Matrix<T> states = new Matrix<T>(n, GetStateSize());
-
-        // Initialize or update regression component if included
-        if (_bayesianOptions.IncludeRegression)
-        {
-            if (_regression == null || _regression.Length != x.Columns)
-            {
-                _regression = new Vector<T>(x.Columns);
-            }
-    
-            // Initialize regression coefficients using Ordinary Least Squares (OLS)
-            InitializeRegressionCoefficients(x, y);
-        }
-        
-        // Kalman filter
-        for (int t = 0; t < n; t++)
-        {
-            // Prediction step
-            Vector<T> predictedState = PredictState(x.GetRow(t));
-            Matrix<T> predictedCovariance = PredictCovariance();
-
-            // Update step
-            T innovation = CalculateInnovation(y[t], predictedState);
-            var kalmanGain = CalculateKalmanGain(predictedCovariance);
-            UpdateState(predictedState, kalmanGain, innovation);
-            UpdateCovariance(predictedCovariance, kalmanGain);
-
-            // Store state
-            states.SetRow(t, GetCurrentState());
-        }
-
-        // Backward smoothing (optional)
-        if (_bayesianOptions.PerformBackwardSmoothing)
-        {
-            PerformBackwardSmoothing(states);
-        }
-
-        // Parameter estimation (e.g., EM algorithm or variational inference)
-        EstimateParameters(x, y, states);
-    }
-
-    /// <summary>
     /// Initializes the regression coefficients using Ordinary Least Squares or Ridge Regression.
     /// </summary>
     /// <param name="x">Feature matrix of external variables.</param>
@@ -1331,5 +1265,418 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         // Deserialize options
         _bayesianOptions.IncludeTrend = reader.ReadBoolean();
         _bayesianOptions.IncludeRegression = reader.ReadBoolean();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the BSTS model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the BSTS model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new, uninitialized instance of the BSTS model with the same configuration options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model with the same settings.
+    /// 
+    /// Think of this like creating a new blank notebook with the same paper quality, size, and number of pages
+    /// as another notebook, but without copying any of the written content.
+    /// 
+    /// This is used internally by the framework to create new model instances when needed,
+    /// such as when cloning a model or creating ensemble models.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new BayesianStructuralTimeSeriesModel<T>((BayesianStructuralTimeSeriesOptions<T>)Options);
+    }
+
+    /// <summary>
+    /// Gets metadata about the trained model, including its type, components, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides comprehensive information about the model, including its type, parameters, components,
+    /// and serialized state. This metadata can be used for model inspection, selection, or persistence.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns a complete description of your trained model.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (BSTS in this case)
+    /// - The current values for level, trend, and seasonal components
+    /// - The configuration options you specified when creating the model
+    /// - A serialized version of the entire model that can be saved
+    /// 
+    /// This is useful for:
+    /// - Comparing different models to choose the best one
+    /// - Documenting what model was used for a particular analysis
+    /// - Saving model details for future reference
+    /// - Understanding which components are most important in your forecasts
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var bstsOptions = (BayesianStructuralTimeSeriesOptions<T>)Options;
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.BayesianStructuralTimeSeriesModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include the actual model state variables
+                { "Level", Convert.ToDouble(_level) },
+                { "Trend", _bayesianOptions.IncludeTrend ? Convert.ToDouble(_trend) : 0.0 },
+                { "SeasonalComponents", _seasonalComponents.Select(c => c.ToArray()).ToArray() },
+                { "ObservationVariance", Convert.ToDouble(_observationVariance) },
+                { "StateCovariance", _stateCovariance.ToArray() },
+                { "RegressionCoefficients", _regression?.ToArray() ?? [] },
+            
+                // Include model configuration as well
+                { "IncludeTrend", bstsOptions.IncludeTrend },
+                { "IncludeRegression", bstsOptions.IncludeRegression },
+                { "SeasonalPeriods", bstsOptions.SeasonalPeriods },
+                { "LevelSmoothingPrior", bstsOptions.LevelSmoothingPrior },
+                { "TrendSmoothingPrior", bstsOptions.TrendSmoothingPrior },
+                { "SeasonalSmoothingPrior", bstsOptions.SeasonalSmoothingPrior },
+                { "PerformBackwardSmoothing", bstsOptions.PerformBackwardSmoothing },
+                { "MaxIterations", bstsOptions.MaxIterations },
+                { "ConvergenceTolerance", bstsOptions.ConvergenceTolerance },
+                { "RidgeParameter", bstsOptions.RidgeParameter },
+                { "RegressionDecompositionType", bstsOptions.RegressionDecompositionType.ToString() }
+            },
+            ModelData = this.Serialize()
+        };
+        return metadata;
+    }
+
+    /// <summary>
+    /// Forecasts future values based on a history of time series data and optional exogenous variables.
+    /// </summary>
+    /// <param name="history">The historical time series data.</param>
+    /// <param name="horizon">The number of future periods to predict.</param>
+    /// <param name="exogenousVariables">Optional matrix of external variables for future periods.</param>
+    /// <returns>A vector of predicted values for future periods.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates forecasts for future time periods based on the trained model, historical data,
+    /// and optional external variables.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method forecasts future values based on past data.
+    /// 
+    /// Given:
+    /// - A series of past observations (the "history")
+    /// - The number of future periods to predict (the "horizon")
+    /// - Optional external factors that might affect predictions
+    /// 
+    /// This method projects each component of the model forward:
+    /// - The level continues at its current value with possible trend adjustments
+    /// - Seasonal patterns repeat as expected
+    /// - External variables influence the forecast according to learned relationships
+    /// 
+    /// For example, if forecasting retail sales, this method might predict:
+    /// - Continuing the overall upward trend
+    /// - Adding holiday peaks in appropriate months
+    /// - Adjusting for planned promotions or price changes (if included as external variables)
+    /// </para>
+    /// </remarks>
+    public Vector<T> Forecast(Vector<T> history, int horizon, Matrix<T>? exogenousVariables = null)
+    {
+        if (horizon <= 0)
+        {
+            throw new ArgumentException("Forecast horizon must be greater than zero.", nameof(horizon));
+        }
+
+        // Create the forecast vector
+        Vector<T> forecast = new Vector<T>(horizon);
+    
+        // Create default exogenous variables if not provided and needed
+        Matrix<T>? futureExog = exogenousVariables;
+        if (_bayesianOptions.IncludeRegression && _regression != null)
+        {
+            if (futureExog == null || futureExog.Rows != horizon || futureExog.Columns != _regression.Length)
+            {
+                // Create a zero matrix as fallback
+                futureExog = new Matrix<T>(horizon, _regression.Length);
+            }
+        }
+    
+        // Track the seasonal position
+        List<int> seasonalPositions = new List<int>();
+        foreach (var seasonComponent in _seasonalComponents)
+        {
+            seasonalPositions.Add(0); // Start at position 0 for each seasonal component
+        }
+    
+        // Make predictions
+        T currentLevel = _level;
+        T currentTrend = _bayesianOptions.IncludeTrend ? _trend : NumOps.Zero;
+    
+        for (int t = 0; t < horizon; t++)
+        {
+            // Start with the level
+            T prediction = currentLevel;
+        
+            // Add trend if included
+            if (_bayesianOptions.IncludeTrend)
+            {
+                prediction = NumOps.Add(prediction, currentTrend);
+                // Update level for next period
+                currentLevel = NumOps.Add(currentLevel, currentTrend);
+            }
+        
+            // Add seasonal components
+            for (int i = 0; i < _seasonalComponents.Count; i++)
+            {
+                int seasonLength = _seasonalComponents[i].Length;
+                prediction = NumOps.Add(prediction, _seasonalComponents[i][seasonalPositions[i]]);
+            
+                // Update seasonal position for next period
+                seasonalPositions[i] = (seasonalPositions[i] + 1) % seasonLength;
+            }
+        
+            // Add regression component if included
+            if (_bayesianOptions.IncludeRegression && _regression != null && futureExog != null)
+            {
+                Vector<T> exogRow = futureExog.GetRow(t);
+                for (int i = 0; i < _regression.Length; i++)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(exogRow[i], _regression[i]));
+                }
+            }
+        
+            forecast[t] = prediction;
+        }
+    
+        return forecast;
+    }
+
+    /// <summary>
+    /// Resets the model to its untrained state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears the trained components, effectively resetting the model to its initial state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method erases all the learned patterns from your model.
+    /// 
+    /// After calling this method:
+    /// - The level returns to its initial value
+    /// - The trend (if included) returns to its initial value
+    /// - All seasonal components are reset to zero
+    /// - Regression coefficients (if included) are cleared
+    /// - All variance parameters return to their initial values
+    /// 
+    /// The model behaves as if it was never trained, and you would need to train it again before
+    /// making predictions.
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        // Reset level and trend to initial values
+        _level = NumOps.FromDouble(_bayesianOptions.InitialLevelValue);
+        _trend = _bayesianOptions.IncludeTrend ? NumOps.FromDouble(_bayesianOptions.InitialTrendValue) : NumOps.Zero;
+    
+        // Reset seasonal components
+        _seasonalComponents.Clear();
+        foreach (int period in _bayesianOptions.SeasonalPeriods)
+        {
+            _seasonalComponents.Add(new Vector<T>(period));
+        }
+    
+        // Reset observation variance
+        _observationVariance = NumOps.FromDouble(_bayesianOptions.InitialObservationVariance);
+    
+        // Reset state covariance 
+        int stateSize = GetStateSize();
+        _stateCovariance = new Matrix<T>(stateSize, stateSize);
+    
+        // Reset regression component if included
+        if (_bayesianOptions.IncludeRegression && _regression != null)
+        {
+            _regression = new Vector<T>(_regression.Length);
+        }
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the current model.
+    /// </summary>
+    /// <returns>A new instance of the BSTS model with the same state and parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a complete copy of the model, including its configuration and trained components.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
+    /// 
+    /// Unlike CreateInstance(), which creates a blank model with the same settings,
+    /// Clone() creates a complete copy including:
+    /// - The model configuration (level, trend, seasonal settings, etc.)
+    /// - All trained components and their current values
+    /// - The current uncertainty estimates
+    /// 
+    /// This is useful for:
+    /// - Creating a backup before experimenting with a model
+    /// - Using the same trained model in multiple scenarios
+    /// - Creating ensemble models that use variations of the same base model
+    /// </para>
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new BayesianStructuralTimeSeriesModel<T>((BayesianStructuralTimeSeriesOptions<T>)Options);
+    
+        // Copy level and trend
+        clone._level = _level;
+        if (_bayesianOptions.IncludeTrend)
+        {
+            clone._trend = _trend;
+        }
+    
+        // Copy seasonal components
+        clone._seasonalComponents.Clear();
+        foreach (var component in _seasonalComponents)
+        {
+            Vector<T> componentCopy = new Vector<T>(component.Length);
+            for (int i = 0; i < component.Length; i++)
+            {
+                componentCopy[i] = component[i];
+            }
+            clone._seasonalComponents.Add(componentCopy);
+        }
+    
+        // Copy state covariance
+        clone._stateCovariance = new Matrix<T>(_stateCovariance.Rows, _stateCovariance.Columns);
+        for (int i = 0; i < _stateCovariance.Rows; i++)
+        {
+            for (int j = 0; j < _stateCovariance.Columns; j++)
+            {
+                clone._stateCovariance[i, j] = _stateCovariance[i, j];
+            }
+        }
+    
+        // Copy observation variance
+        clone._observationVariance = _observationVariance;
+    
+        // Copy regression component if included
+        if (_bayesianOptions.IncludeRegression && _regression != null)
+        {
+            clone._regression = new Vector<T>(_regression.Length);
+            for (int i = 0; i < _regression.Length; i++)
+            {
+                clone._regression[i] = _regression[i];
+            }
+        }
+    
+        return clone;
+    }
+
+    /// <summary>
+    /// Implements the core training algorithm for the Bayesian Structural Time Series model.
+    /// </summary>
+    /// <param name="x">Feature matrix of external variables.</param>
+    /// <param name="y">Target vector of time series values.</param>
+    /// <remarks>
+    /// <para>
+    /// This method contains the implementation details of the training process, handling initialization,
+    /// Kalman filtering, smoothing, and parameter estimation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the engine room of the training process.
+    /// 
+    /// While the public Train method provides a high-level interface, this method does the actual work:
+    /// 1. Initializes regression coefficients for external factors (if included)
+    /// 2. Runs the Kalman filter to estimate model components based on historical data
+    /// 3. Optionally performs backward smoothing to improve estimates using all available information
+    /// 4. Estimates optimal parameters to balance fit and flexibility
+    /// 
+    /// Think of it as the detailed step-by-step recipe that the chef follows when you order a meal.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        int n = y.Length;
+        Matrix<T> states = new Matrix<T>(n, GetStateSize());
+
+        // Initialize or update regression component if included
+        if (_bayesianOptions.IncludeRegression)
+        {
+            if (_regression == null || _regression.Length != x.Columns)
+            {
+                _regression = new Vector<T>(x.Columns);
+            }
+
+            // Initialize regression coefficients using Ordinary Least Squares (OLS)
+            InitializeRegressionCoefficients(x, y);
+        }
+    
+        // Kalman filter
+        for (int t = 0; t < n; t++)
+        {
+            // Prediction step
+            Vector<T> predictedState = PredictState(x.GetRow(t));
+            Matrix<T> predictedCovariance = PredictCovariance();
+
+            // Update step
+            T innovation = CalculateInnovation(y[t], predictedState);
+            var kalmanGain = CalculateKalmanGain(predictedCovariance);
+            UpdateState(predictedState, kalmanGain, innovation);
+            UpdateCovariance(predictedCovariance, kalmanGain);
+
+            // Store state
+            states.SetRow(t, GetCurrentState());
+        }
+
+        // Backward smoothing (optional)
+        if (_bayesianOptions.PerformBackwardSmoothing)
+        {
+            PerformBackwardSmoothing(states);
+        }
+
+        // Parameter estimation (e.g., EM algorithm or variational inference)
+        EstimateParameters(x, y, states);
+    }
+
+    /// <summary>
+    /// Predicts a single value based on a single input vector of external regressors.
+    /// </summary>
+    /// <param name="input">Vector of external regressors for a single time point.</param>
+    /// <returns>The predicted value for that time point.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides a convenient way to get a prediction for a single time point without
+    /// having to create a matrix with a single row.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a shortcut for getting just one prediction.
+    /// 
+    /// Instead of providing a table of inputs for multiple time periods, you can provide
+    /// just one set of external factors and get back a single prediction.
+    /// 
+    /// For example, if you want to predict tomorrow's sales based on tomorrow's promotions, 
+    /// weather forecast, and other factors, this method lets you do that directly.
+    /// 
+    /// Under the hood, it:
+    /// 1. Takes your single set of inputs
+    /// 2. Creates a small table with just one row
+    /// 3. Gets a prediction using the main prediction engine
+    /// 4. Returns that single prediction to you
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Validate input
+        if (_bayesianOptions.IncludeRegression && _regression != null && input.Length != _regression.Length)
+        {
+            throw new ArgumentException(
+                $"Input vector length ({input.Length}) must match the number of regression variables ({_regression.Length}).",
+                nameof(input));
+        }
+    
+        // Create a matrix with a single row
+        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            singleRowMatrix[0, i] = input[i];
+        }
+    
+        // Use the existing Predict method
+        Vector<T> predictions = Predict(singleRowMatrix);
+    
+        // Return the single prediction
+        return predictions[0];
     }
 }

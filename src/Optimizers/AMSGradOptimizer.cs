@@ -13,12 +13,12 @@ namespace AiDotNet.Optimizers;
 /// It remembers past information to make better decisions about how quickly to learn in different parts of the problem.
 /// </para>
 /// </remarks>
-public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
+public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the AMSGrad optimizer.
     /// </summary>
-    private AMSGradOptimizerOptions _options;
+    private AMSGradOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The first moment vector (moving average of gradients).
@@ -44,30 +44,17 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// Initializes a new instance of the AMSGradOptimizer class.
     /// </summary>
     /// <param name="options">The options for configuring the AMSGrad optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the AMSGrad optimizer with its initial configuration.
     /// You can customize various aspects of how it learns, or use default settings.
     /// </para>
     /// </remarks>
     public AMSGradOptimizer(
-        AMSGradOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        AMSGradOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new AMSGradOptimizerOptions();
+        _options = options ?? new AMSGradOptimizerOptions<T, TInput, TOutput>();
+
         InitializeAdaptiveParameters();
     }
 
@@ -82,6 +69,7 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
+
         CurrentLearningRate = NumOps.FromDouble(_options.LearningRate);
         _t = 0;
     }
@@ -96,17 +84,17 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// using the AMSGrad steps until it reaches the best possible solution or hits a stopping condition.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
-
-        _m = new Vector<T>(currentSolution.Coefficients.Length);
-        _v = new Vector<T>(currentSolution.Coefficients.Length);
-        _vHat = new Vector<T>(currentSolution.Coefficients.Length);
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var parameters = currentSolution.GetParameters();
+        _m = new Vector<T>(parameters.Length);
+        _v = new Vector<T>(parameters.Length);
+        _vHat = new Vector<T>(parameters.Length);
         InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
@@ -148,15 +136,16 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It uses the current and past gradients to determine how much to change each parameter.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
         var beta1 = NumOps.FromDouble(_options.Beta1);
         var beta2 = NumOps.FromDouble(_options.Beta2);
         var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
         var oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
 
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        for (int i = 0; i < parameters.Length; i++)
         {
             // Update biased first moment estimate
             _m![i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
@@ -170,12 +159,12 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
             // Compute bias-corrected first moment estimate
             var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
 
-            // Update parameters
+            // Update par
             var update = NumOps.Divide(NumOps.Multiply(CurrentLearningRate, mHat), NumOps.Add(NumOps.Sqrt(_vHat[i]), NumOps.FromDouble(_options.Epsilon)));
-            newCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], update);
+            newCoefficients[i] = NumOps.Subtract(parameters[i], update);
         }
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -189,7 +178,7 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// If not, it might decrease the rate to be more careful.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -204,8 +193,8 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate, 
-                NumOps.FromDouble(_options.MinLearningRate), 
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
                 NumOps.FromDouble(_options.MaxLearningRate));
         }
     }
@@ -221,9 +210,9 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// it will stop and let you know there's an error.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is AMSGradOptimizerOptions amsGradOptions)
+        if (options is AMSGradOptimizerOptions<T, TInput, TOutput> amsGradOptions)
         {
             _options = amsGradOptions;
         }
@@ -242,7 +231,7 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's like looking at the current settings on a machine.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -295,7 +284,7 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<AMSGradOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<AMSGradOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _t = reader.ReadInt32();
@@ -315,7 +304,7 @@ public class AMSGradOptimizer<T> : GradientBasedOptimizerBase<T>
     /// The key includes specific AMSGrad parameters to ensure it's unique to this optimizer's current state.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_AMSGrad_{_options.Beta1}_{_options.Beta2}_{_t}";

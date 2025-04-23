@@ -22,51 +22,8 @@ namespace AiDotNet.Interfaces;
 /// without retraining.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface ITimeSeriesModel<T> : IModelSerializer
+public interface ITimeSeriesModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
-    /// <summary>
-    /// Trains the time series model using historical data.
-    /// </summary>
-    /// <remarks>
-    /// This method fits the model to the provided input-output pairs to learn patterns in the data.
-    /// 
-    /// <b>For Beginners:</b> Training is how the model "learns" from your historical data. You provide:
-    /// 
-    /// - x: Your input features organized in rows and columns. For time series, these are often
-    ///   previous values and possibly other related variables. For example, to predict tomorrow's
-    ///   temperature, your inputs might include today's temperature, humidity, and pressure.
-    ///   
-    /// - y: The actual values you want to predict (the "correct answers" for your historical data).
-    ///   Following our example, these would be the temperatures that actually occurred.
-    /// 
-    /// During training, the model analyzes these input-output pairs to discover patterns and
-    /// relationships it can use to make future predictions.
-    /// </remarks>
-    /// <param name="x">The matrix of input features where each row represents a time point and each column represents a feature.</param>
-    /// <param name="y">The vector of target values corresponding to each row in x.</param>
-    void Train(Matrix<T> x, Vector<T> y);
-
-    /// <summary>
-    /// Generates predictions for new input data based on the trained model.
-    /// </summary>
-    /// <remarks>
-    /// This method applies the patterns learned during training to make predictions on new data.
-    /// 
-    /// <b>For Beginners:</b> After your model has learned from historical data, you can use this method
-    /// to make predictions for new situations. You provide:
-    /// 
-    /// - input: New data points that you want predictions for, formatted the same way as your
-    ///   training data. For example, if you want to predict tomorrow's temperature, you would
-    ///   provide today's temperature, humidity, and pressure.
-    /// 
-    /// The model will return its predictions based on the patterns it learned during training.
-    /// 
-    /// Note: You must train the model before making predictions, otherwise the results won't be meaningful.
-    /// </remarks>
-    /// <param name="input">The matrix of input features to generate predictions for.</param>
-    /// <returns>A vector containing the predicted values for each row of input data.</returns>
-    Vector<T> Predict(Matrix<T> input);
-
     /// <summary>
     /// Evaluates the model's performance using test data.
     /// </summary>
@@ -94,4 +51,21 @@ public interface ITimeSeriesModel<T> : IModelSerializer
     /// <param name="yTest">The vector of actual target values corresponding to xTest.</param>
     /// <returns>A dictionary of evaluation metrics with metric names as keys and metric values as values.</returns>
     Dictionary<string, T> EvaluateModel(Matrix<T> xTest, Vector<T> yTest);
+
+    /// <summary>
+    /// Predicts a single value based on the provided input vector.
+    /// </summary>
+    /// <param name="input">The input vector containing features for prediction.</param>
+    /// <returns>The predicted value for the given input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates a single prediction based on the input vector, providing a 
+    /// convenient way to get individual predictions without creating a matrix.
+    /// </para>
+    /// <para><b>For Beginners:</b> This lets you get a prediction for a single point in time
+    /// rather than a whole series of predictions at once. It's like asking "What's the forecast
+    /// for tomorrow?" instead of "What's the forecast for the next week?"
+    /// </para>
+    /// </remarks>
+    T PredictSingle(Vector<T> input);
 }

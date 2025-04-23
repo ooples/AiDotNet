@@ -239,8 +239,8 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// starting values to begin training.
     /// </para>
     /// </remarks>
-    public FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T> activationFunction)
-        : base([inputSize], [outputSize])
+    public FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
+        : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
         Weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
         Biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
@@ -278,8 +278,8 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// which is perfect for classification tasks.
     /// </para>
     /// </remarks>
-    public FeedForwardLayer(int inputSize, int outputSize, IVectorActivationFunction<T> activationFunction)
-        : base([inputSize], [outputSize])
+    public FeedForwardLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? activationFunction = null)
+        : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
         Weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
         Biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);

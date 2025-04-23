@@ -138,7 +138,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <para><b>For Beginners:</b> This creates an exact duplicate of your vector.
     /// Changes to the copy won't affect the original vector, and vice versa.</para>
     /// </remarks>
-    public new Vector<T> Copy()
+    public new Vector<T> Clone()
     {
         return new Vector<T>([.. this]);
     }

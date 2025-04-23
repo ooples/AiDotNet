@@ -206,55 +206,13 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public GARCHModel(GARCHModelOptions<T>? options = null) : base(options ?? new GARCHModelOptions<T>())
     {
-        _garchOptions = (GARCHModelOptions<T>)_options;
+        _garchOptions = (GARCHModelOptions<T>)Options;
         _meanModel = _garchOptions.MeanModel ?? new ARIMAModel<T>();
         _omega = new Vector<T>(1);
         _alpha = new Vector<T>(_garchOptions.ARCHOrder);
         _beta = new Vector<T>(_garchOptions.GARCHOrder);
         _residuals = new Vector<T>(0);
         _conditionalVariances = new Vector<T>(0);
-    }
-
-    /// <summary>
-    /// Trains the GARCH model on the provided input and output data.
-    /// </summary>
-    /// <param name="x">The input features matrix (typically time indicators or related variables).</param>
-    /// <param name="y">The target values vector (the time series data to forecast).</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the GARCH model in multiple steps: First, it trains the mean model to capture the average behavior
-    /// of the time series. Then, it calculates residuals (differences between actual and predicted values) and uses these
-    /// to estimate the parameters of the variance equation through maximum likelihood estimation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the model patterns in both your data values and their volatility.
-    /// 
-    /// The training process follows these steps:
-    /// 1. Train a model to predict the average values (mean model)
-    /// 2. Calculate the errors in these predictions (residuals)
-    /// 3. Find patterns in how these errors change over time
-    /// 4. Determine the best parameters (omega, alpha, beta) to model the volatility
-    /// 
-    /// This is like first learning to predict the temperature, then learning to predict
-    /// how much the temperature might vary from your prediction.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        // Step 1: Train the mean model
-        _meanModel.Train(x, y);
-
-        // Step 2: Calculate residuals from the mean model
-        Vector<T> meanPredictions = _meanModel.Predict(x);
-        _residuals = y.Subtract(meanPredictions);
-
-        // Step 3: Initialize GARCH parameters
-        InitializeParameters();
-
-        // Step 4: Estimate GARCH parameters using Maximum Likelihood Estimation
-        EstimateParameters(_residuals);
-
-        // Step 5: Calculate final residuals and conditional variances
-        CalculateResidualsAndVariances(_residuals);
     }
 
     /// <summary>
@@ -441,9 +399,9 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         T convergenceThreshold = NumOps.FromDouble(1e-6);
         T momentumFactor = NumOps.FromDouble(0.9);
 
-        Vector<T> previousOmega = _omega.Copy();
-        Vector<T> previousAlpha = _alpha.Copy();
-        Vector<T> previousBeta = _beta.Copy();
+        Vector<T> previousOmega = _omega.Clone();
+        Vector<T> previousAlpha = _alpha.Clone();
+        Vector<T> previousBeta = _beta.Clone();
 
         Vector<T> velocityOmega = new Vector<T>(_omega.Length);
         Vector<T> velocityAlpha = new Vector<T>(_alpha.Length);
@@ -484,17 +442,17 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
             if (NumOps.GreaterThan(improvement, NumOps.Zero))
             {
                 currentLearningRate = NumOps.Multiply(currentLearningRate, NumOps.FromDouble(1.05)); // Increase learning rate
-                previousOmega = _omega.Copy();
-                previousAlpha = _alpha.Copy();
-                previousBeta = _beta.Copy();
+                previousOmega = _omega.Clone();
+                previousAlpha = _alpha.Clone();
+                previousBeta = _beta.Clone();
                 previousLogLikelihood = currentLogLikelihood;
             }
             else
             {
                 currentLearningRate = NumOps.Multiply(currentLearningRate, NumOps.FromDouble(0.5)); // Decrease learning rate
-                _omega = previousOmega.Copy();
-                _alpha = previousAlpha.Copy();
-                _beta = previousBeta.Copy();
+                _omega = previousOmega.Clone();
+                _alpha = previousAlpha.Clone();
+                _beta = previousBeta.Clone();
 
                 if (NumOps.LessThan(currentLearningRate, minLearningRate))
                 {
@@ -931,6 +889,214 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
 
         string optionsJson = reader.ReadString();
         _garchOptions = JsonConvert.DeserializeObject<GARCHModelOptions<T>>(optionsJson) ?? new();
-        _options = _garchOptions;
+    }
+
+    /// <summary>
+    /// Resets the model to its initial state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the GARCH model to its initial state, clearing any learned parameters and returning to the
+    /// initial configuration provided in the options. This is useful when you want to retrain the model from scratch.
+    /// </para>
+    /// <para><b>For Beginners:</b> This resets the model to start fresh.
+    /// 
+    /// Resetting the model:
+    /// - Clears all learned parameters (omega, alpha, beta)
+    /// - Reinitializes the mean model
+    /// - Empties stored residuals and variances
+    /// - Returns the model to its original state before training
+    /// 
+    /// This is useful when you want to:
+    /// - Train the model on different data
+    /// - Try different settings or approaches
+    /// - Start with a clean slate after experimentation
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        _omega = new Vector<T>(1);
+        _alpha = new Vector<T>(_garchOptions.ARCHOrder);
+        _beta = new Vector<T>(_garchOptions.GARCHOrder);
+        _residuals = new Vector<T>(0);
+        _conditionalVariances = new Vector<T>(0);
+    
+        // Initialize with reasonable default values
+        InitializeParameters();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the GARCH model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the GARCH model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the GARCH model with the same configuration options as the current instance.
+    /// This is useful for creating copies or clones of the model for purposes like cross-validation or ensemble modeling.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new copy of the model with the same settings.
+    /// 
+    /// Creating a new instance:
+    /// - Makes a fresh copy of the model with the same configuration
+    /// - The new copy hasn't been trained yet
+    /// - You can train and use the copy independently from the original
+    /// 
+    /// This is helpful when you want to:
+    /// - Train multiple versions of the same model on different data subsets
+    /// - Compare different training approaches while keeping the base configuration the same
+    /// - Create an ensemble of similar models
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new GARCHModel<T>(_garchOptions);
+    }
+
+    /// <summary>
+    /// Returns metadata about the model, including its type, parameters, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed metadata about the GARCH model, including its type, current parameters (omega, alpha, beta),
+    /// and configuration options. This metadata can be used for model selection, comparison, documentation, and serialization purposes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about your model's settings and state.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (GARCH)
+    /// - Current parameter values (omega, alpha, beta)
+    /// - Information about the mean model
+    /// - Configuration settings from when you created the model
+    /// - A serialized version of the entire model
+    /// 
+    /// This information is useful for:
+    /// - Keeping track of different models you've created
+    /// - Comparing model configurations
+    /// - Documenting which settings worked best
+    /// - Sharing model information with others
+    /// - Storing model details in a database or registry
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.GARCHModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include the actual model state variables
+                { "Omega", _omega },
+                { "Alpha", _alpha },
+                { "Beta", _beta },
+                { "MeanModel", _meanModel.GetType().Name },
+            
+                // Include model configuration as well
+                { "ARCHOrder", _garchOptions.ARCHOrder },
+                { "GARCHOrder", _garchOptions.GARCHOrder },
+                { "UseMeanModel", _meanModel != null },
+            },
+            ModelData = this.Serialize()
+        };
+        return metadata;
+    }
+
+    /// <summary>
+    /// Core implementation of the training logic for the GARCH model.
+    /// </summary>
+    /// <param name="x">The input features matrix.</param>
+    /// <param name="y">The target values vector (the time series data to model).</param>
+    /// <remarks>
+    /// <para>
+    /// This method implements the core training mechanism for the GARCH model, which involves
+    /// training the mean model first, then estimating the parameters of the variance equation
+    /// based on the residuals. It follows a multi-step process that captures both the average
+    /// behavior of the series and its changing volatility patterns.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the engine that powers the model's learning process.
+    /// 
+    /// This method:
+    /// 1. Trains the model that predicts the average values (mean model)
+    /// 2. Calculates the errors in these predictions (residuals)
+    /// 3. Sets up initial GARCH parameters to model the volatility
+    /// 4. Finds the optimal parameter values to best explain the volatility patterns
+    /// 5. Calculates the final volatility estimates for the historical data
+    /// 
+    /// It's the actual "learning" part of the model, where it discovers patterns
+    /// in both the values and the volatility of your time series data.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Step 1: Train the mean model
+        _meanModel.Train(x, y);
+
+        // Step 2: Calculate residuals from the mean model
+        Vector<T> meanPredictions = _meanModel.Predict(x);
+        _residuals = y.Subtract(meanPredictions);
+
+        // Step 3: Initialize GARCH parameters
+        InitializeParameters();
+
+        // Step 4: Estimate GARCH parameters using Maximum Likelihood Estimation
+        EstimateParameters(_residuals);
+
+        // Step 5: Calculate final residuals and conditional variances
+        CalculateResidualsAndVariances(_residuals);
+    }
+
+    /// <summary>
+    /// Predicts a single value based on the input vector.
+    /// </summary>
+    /// <param name="input">The input vector containing features for the prediction.</param>
+    /// <returns>The predicted value for the given input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates a single prediction by combining the mean prediction from the mean model
+    /// with a simulated residual based on the estimated volatility. It creates appropriate context
+    /// for the prediction and ensures consistency with the model's learned patterns.
+    /// </para>
+    /// <para><b>For Beginners:</b> This generates a prediction for a single point in time.
+    /// 
+    /// The method:
+    /// 1. Creates a context for generating a single prediction
+    /// 2. Gets the mean prediction (expected value) from the mean model
+    /// 3. Estimates the volatility (uncertainty) for this time point
+    /// 4. Generates a realistic random variation based on this volatility
+    /// 5. Combines the mean prediction with the random variation
+    /// 
+    /// This approach provides not just an expected value, but also incorporates
+    /// the appropriate level of randomness based on current volatility conditions.
+    /// It's like predicting that tomorrow's temperature will be 75°F, but with 
+    /// a range of ±3° because weather conditions are currently stable.
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Create a matrix with a single row for the prediction
+        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            inputMatrix[0, i] = input[i];
+        }
+    
+        // Make sure we have some volatility estimate to work with
+        if (_conditionalVariances.Length == 0)
+        {
+            throw new InvalidOperationException("Model has not been trained. Cannot make predictions without volatility estimates.");
+        }
+    
+        // Get the mean prediction from the mean model
+        T meanPrediction = _meanModel.PredictSingle(input);
+    
+        // Get the last known conditional variance
+        T lastVariance = _conditionalVariances[_conditionalVariances.Length - 1];
+    
+        // Generate a random residual based on the estimated variance
+        T standardNormal = GenerateStandardNormal();
+        T residual = NumOps.Multiply(NumOps.Sqrt(lastVariance), standardNormal);
+    
+        // Combine the mean prediction with the residual
+        return NumOps.Add(meanPrediction, residual);
     }
 }

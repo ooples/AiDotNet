@@ -1,5 +1,8 @@
 ﻿namespace AiDotNet.Models.Options;
 
+using AiDotNet.ActivationFunctions;
+using AiDotNet.LossFunctions;
+
 /// <summary>
 /// Configuration options for Multilayer Perceptron (MLP), a type of feedforward artificial neural
 /// network that consists of multiple layers of neurons.
@@ -32,7 +35,7 @@
 /// need to adjust them based on your specific problem.
 /// </para>
 /// </remarks>
-public class MultilayerPerceptronOptions<T> : NonLinearRegressionOptions
+public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressionOptions
 {
     /// <summary>
     /// Gets or sets the sizes of each layer in the neural network, including input, hidden, and output layers.
@@ -257,8 +260,6 @@ public class MultilayerPerceptronOptions<T> : NonLinearRegressionOptions
     /// - Outputs the input value unchanged for positive inputs
     /// - Is computationally efficient and helps networks learn faster
     /// 
-    /// This is specified as a function that can be applied to your data type T.
-    /// 
     /// You might want to change this to:
     /// - Sigmoid: If outputs need to be between 0 and 1
     /// - Tanh: If outputs need to be between -1 and 1
@@ -267,46 +268,37 @@ public class MultilayerPerceptronOptions<T> : NonLinearRegressionOptions
     /// For most problems, ReLU works well and is a good default choice.
     /// </para>
     /// </remarks>
-    public Func<T, T> HiddenActivationFunction { get; set; } = NeuralNetworkHelper<T>.ReLU;
+    public IActivationFunction<T>? HiddenActivation { get; set; } = new ReLUActivation<T>();
 
     /// <summary>
-    /// Gets or sets the derivative of the activation function used in the hidden layers for backpropagation.
+    /// Gets or sets the vector-based activation function used in the hidden layers of the network.
     /// </summary>
-    /// <value>The derivative of the hidden layer activation function, defaulting to ReLU derivative.</value>
+    /// <value>The hidden layer vector activation function, defaulting to ReLU.</value>
     /// <remarks>
     /// <para>
-    /// During backpropagation, the training algorithm needs to compute the derivative of the activation
-    /// function to determine how to update the network weights. This parameter specifies the derivative
-    /// of the activation function used in the hidden layers. It must be consistent with the chosen
-    /// HiddenActivationFunction. For example, if ReLU is used as the activation function, then the
-    /// ReLU derivative must be specified here.
+    /// This property provides a vector-optimized implementation of the activation function for hidden layers.
+    /// When set, it will be used instead of the scalar <see cref="HiddenActivation"/> property for more
+    /// efficient computation on entire vectors of data. The default implementation uses ReLU activation,
+    /// which is well-suited for most neural network hidden layers.
     /// </para>
-    /// <para><b>For Beginners:</b> This setting provides the mathematical derivative of the
-    /// hidden layer activation function, which is needed during training.
+    /// <para><b>For Beginners:</b> This is a more efficient version of the hidden layer activation
+    /// function that works on entire groups of neurons at once.
     /// 
-    /// When a neural network learns, it needs to know:
-    /// - How to adjust each neuron to improve its predictions
-    /// - This requires calculating how small changes in each neuron affect the overall error
-    /// - The derivative (rate of change) of the activation function is essential for this calculation
+    /// It serves the same purpose as the regular hidden activation function, but:
+    /// - It can process multiple neurons simultaneously
+    /// - It's optimized for performance on modern hardware
+    /// - It's particularly helpful for large networks
     /// 
-    /// This must match your choice of HiddenActivationFunction:
-    /// - If you use ReLU as your activation, you need the ReLU derivative here
-    /// - If you change to a different activation function, you must change this too
-    /// 
-    /// The default is the derivative of the ReLU function, which is:
-    /// - 0 for negative inputs
-    /// - 1 for positive inputs
-    /// 
-    /// You typically won't need to change this directly - instead, when changing the activation function,
-    /// make sure to update this property to its matching derivative.
+    /// You typically don't need to change this unless you're implementing custom activation
+    /// functions or optimizing for specific hardware.
     /// </para>
     /// </remarks>
-    public Func<T, T> HiddenActivationFunctionDerivative { get; set; } = NeuralNetworkHelper<T>.ReLUDerivative;
+    public IVectorActivationFunction<T>? HiddenVectorActivation { get; set; } = new ReLUActivation<T>();
 
     /// <summary>
     /// Gets or sets the activation function used in the output layer of the network.
     /// </summary>
-    /// <value>The output layer activation function, defaulting to Linear.</value>
+    /// <value>The output layer activation function, defaulting to Linear (Identity).</value>
     /// <remarks>
     /// <para>
     /// The output activation function determines the range and type of values that the neural network
@@ -336,39 +328,35 @@ public class MultilayerPerceptronOptions<T> : NonLinearRegressionOptions
     /// problem you're solving and the loss function you're using.
     /// </para>
     /// </remarks>
-    public Func<T, T> OutputActivationFunction { get; set; } = NeuralNetworkHelper<T>.Linear;
+    public IActivationFunction<T>? OutputActivation { get; set; } = new IdentityActivation<T>();
 
     /// <summary>
-    /// Gets or sets the derivative of the activation function used in the output layer for backpropagation.
+    /// Gets or sets the vector-based activation function used in the output layer of the network.
     /// </summary>
-    /// <value>The derivative of the output layer activation function, defaulting to Linear derivative.</value>
+    /// <value>The output layer vector activation function, defaulting to Linear (Identity).</value>
     /// <remarks>
     /// <para>
-    /// Similar to the hidden layer activation derivative, this parameter specifies the derivative of the
-    /// output layer activation function for use during backpropagation. It must be consistent with the chosen
-    /// OutputActivationFunction. For the linear activation function, the derivative is simply 1 for all inputs.
+    /// This property provides a vector-optimized implementation of the activation function for the output layer.
+    /// When set, it will be used instead of the scalar <see cref="OutputActivation"/> property for more
+    /// efficient computation on entire vectors of data. The default implementation uses the identity (linear)
+    /// activation, which is appropriate for regression problems.
     /// </para>
-    /// <para><b>For Beginners:</b> This setting provides the mathematical derivative of the
-    /// output layer activation function, which is needed during training.
+    /// <para><b>For Beginners:</b> This is a more efficient version of the output layer activation
+    /// function that works on entire groups of neurons at once.
     /// 
-    /// Just like with the hidden layers, the network needs to know how changes in the final layer
-    /// affect the overall prediction. This requires the derivative of the output activation function.
+    /// It serves the same purpose as the regular output activation function, but:
+    /// - It can process multiple output neurons simultaneously
+    /// - It's optimized for performance on modern hardware
+    /// - It's particularly helpful for networks with multiple outputs
     /// 
-    /// This must match your choice of OutputActivationFunction:
-    /// - If you use Linear as your output activation, you need the Linear derivative here
-    /// - If you change to Sigmoid, you need the Sigmoid derivative
-    /// 
-    /// The default is the derivative of the Linear function, which is simply 1 for all inputs
-    /// (meaning the rate of change is constant).
-    /// 
-    /// As with the hidden layer derivative, you typically won't change this directly - when changing
-    /// the output activation function, make sure to update this property to its matching derivative.
+    /// For regression problems, the default linear activation is usually appropriate.
+    /// For classification, you might want to use sigmoid or softmax vector activations.
     /// </para>
     /// </remarks>
-    public Func<T, T> OutputActivationFunctionDerivative { get; set; } = NeuralNetworkHelper<T>.LinearDerivative;
+    public IVectorActivationFunction<T>? OutputVectorActivation { get; set; } = new IdentityActivation<T>();
 
     /// <summary>
-    /// Gets or sets the function used to calculate the error between the network's predictions and the true values.
+    /// Gets or sets the loss function used to calculate the error between predictions and targets.
     /// </summary>
     /// <value>The loss function, defaulting to Mean Squared Error.</value>
     /// <remarks>
@@ -403,39 +391,7 @@ public class MultilayerPerceptronOptions<T> : NonLinearRegressionOptions
     /// - Multi-class classification → Categorical Cross-Entropy + Softmax output activation
     /// </para>
     /// </remarks>
-    public Func<Vector<T>, Vector<T>, T> LossFunction { get; set; } = NeuralNetworkHelper<T>.MeanSquaredError;
-
-    /// <summary>
-    /// Gets or sets the derivative of the loss function used for backpropagation.
-    /// </summary>
-    /// <value>The derivative of the loss function, defaulting to Mean Squared Error derivative.</value>
-    /// <remarks>
-    /// <para>
-    /// During backpropagation, the network needs to compute how changes in its output affect the loss.
-    /// This parameter specifies the derivative of the loss function with respect to the network outputs.
-    /// It must be consistent with the chosen LossFunction. For Mean Squared Error, the derivative at each
-    /// output is proportional to the difference between the predicted and actual values.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting provides the mathematical derivative of the
-    /// loss function, which tells the network how to adjust its predictions.
-    /// 
-    /// During training, the network needs to know:
-    /// - In which direction to adjust its predictions to reduce errors
-    /// - By how much to make these adjustments
-    /// - The derivative of the loss function provides this information
-    /// 
-    /// This must match your choice of LossFunction:
-    /// - If you use Mean Squared Error as your loss, you need its derivative here
-    /// - If you change to a different loss function, you must update this too
-    /// 
-    /// The default is the derivative of the Mean Squared Error function, which is proportional
-    /// to the difference between predicted and actual values.
-    /// 
-    /// As with the activation function derivatives, you typically won't change this directly -
-    /// when changing the loss function, make sure to update this property to its matching derivative.
-    /// </para>
-    /// </remarks>
-    public Func<Vector<T>, Vector<T>, Vector<T>> LossFunctionDerivative { get; set; } = NeuralNetworkHelper<T>.MeanSquaredErrorDerivative;
+    public ILossFunction<T>? LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
 
     /// <summary>
     /// Gets or sets the optimization algorithm used to update the network weights during training.
@@ -474,7 +430,7 @@ public class MultilayerPerceptronOptions<T> : NonLinearRegressionOptions
     /// models behave during training.
     /// </para>
     /// </remarks>
-    public IOptimizer<T> Optimizer { get; set; } = new AdamOptimizer<T>(new AdamOptimizerOptions
+    public IOptimizer<T, TInput, TOutput> Optimizer { get; set; } = new AdamOptimizer<T, TInput, TOutput>(new AdamOptimizerOptions<T, TInput, TOutput>
     {
         LearningRate = 0.001,
         Beta1 = 0.9,

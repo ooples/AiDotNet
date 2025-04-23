@@ -243,7 +243,7 @@ public class AddLayer<T> : LayerBase<T>
 
         _lastInputs = inputs;
 
-        var result = inputs[0].Copy();
+        var result = inputs[0].Clone();
         for (int i = 1; i < inputs.Length; i++)
         {
             result = result.Add(inputs[i]);
@@ -307,7 +307,7 @@ public class AddLayer<T> : LayerBase<T>
         var inputGradients = new Tensor<T>[_lastInputs.Length];
         for (int i = 0; i < _lastInputs.Length; i++)
         {
-            inputGradients[i] = gradientWithActivation.Copy();
+            inputGradients[i] = gradientWithActivation.Clone();
         }
 
         return inputGradients[0];

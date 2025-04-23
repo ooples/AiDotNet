@@ -209,14 +209,7 @@ public class LambdaLayer<T> : LayerBase<T>
         _lastInput = input;
         var output = _forwardFunction(input);
     
-        if (ScalarActivation != null)
-        {
-            output = ApplyActivation(output);
-        }
-        else if (VectorActivation != null)
-        {
-            output = ApplyVectorActivation(output);
-        }
+        output = ApplyActivation(output);
 
         _lastOutput = output;
         return output;
@@ -256,16 +249,7 @@ public class LambdaLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        Tensor<T> gradient = outputGradient;
-
-        if (ScalarActivation != null)
-        {
-            gradient = ApplyActivationDerivative(gradient, _lastOutput);
-        }
-        else if (VectorActivation != null)
-        {
-            gradient = ApplyVectorActivationDerivative(gradient, _lastOutput);
-        }
+        Tensor<T> gradient = ApplyActivationDerivative(outputGradient, _lastOutput);
 
         if (_backwardFunction != null)
         {
@@ -302,122 +286,6 @@ public class LambdaLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // Lambda layers typically don't have trainable parameters
-    }
-
-    /// <summary>
-    /// Applies the element-wise activation function to the input tensor.
-    /// </summary>
-    /// <param name="input">The input tensor to activate.</param>
-    /// <returns>The activated tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the element-wise activation function to the input tensor. It processes each element
-    /// of the tensor individually.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method applies the standard activation function to each value.
-    /// 
-    /// The method:
-    /// - Creates a new tensor to hold the results
-    /// - Applies the activation function to each value one at a time
-    /// - Returns the new tensor with all values transformed
-    /// 
-    /// This adds non-linearity to your layer, which helps the network learn complex patterns.
-    /// </para>
-    /// </remarks>
-    private new Tensor<T> ApplyActivation(Tensor<T> input)
-    {
-        var output = new Tensor<T>(input.Shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            output[i] = ScalarActivation!.Activate(input[i]);
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Applies the vector activation function to the input tensor.
-    /// </summary>
-    /// <param name="input">The input tensor to activate.</param>
-    /// <returns>The activated tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the vector activation function to the input tensor. Vector activation functions
-    /// operate on entire vectors rather than individual elements.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method applies the advanced vector activation function.
-    /// 
-    /// The method:
-    /// - Processes the entire tensor at once
-    /// - Uses the vector activation function that was provided
-    /// - Can capture relationships between different values
-    /// 
-    /// This is a more sophisticated way to add non-linearity, allowing the activation
-    /// to consider how different features relate to each other.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplyVectorActivation(Tensor<T> input)
-    {
-        return VectorActivation!.Activate(input);
-    }
-
-    /// <summary>
-    /// Applies the derivative of the element-wise activation function to the gradient tensor.
-    /// </summary>
-    /// <param name="gradient">The gradient tensor to modify.</param>
-    /// <param name="output">The output from the last forward pass.</param>
-    /// <returns>The gradient tensor with the activation derivative applied.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the derivative of the element-wise activation function to the gradient tensor.
-    /// This is used during the backward pass to calculate gradients for backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how sensitive the activation function is to changes.
-    /// 
-    /// During backpropagation (learning):
-    /// - We need to know how much a small change in input affects the output
-    /// - This method calculates that sensitivity for each value individually
-    /// - It multiplies the incoming gradient by the derivative of the activation function
-    /// 
-    /// This is a key part of the math that allows neural networks to learn through backpropagation.
-    /// </para>
-    /// </remarks>
-    private new Tensor<T> ApplyActivationDerivative(Tensor<T> gradient, Tensor<T> output)
-    {
-        var result = new Tensor<T>(gradient.Shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            result[i] = NumOps.Multiply(gradient[i], ScalarActivation!.Derivative(output[i]));
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies the derivative of the vector activation function to the gradient tensor.
-    /// </summary>
-    /// <param name="gradient">The gradient tensor to modify.</param>
-    /// <param name="output">The output from the last forward pass.</param>
-    /// <returns>The gradient tensor with the activation derivative applied.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the derivative of the vector activation function to the gradient tensor.
-    /// This is used during the backward pass to calculate gradients for backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how sensitive the vector activation function is to changes.
-    /// 
-    /// During backpropagation:
-    /// - This method uses the vector derivative of the activation function
-    /// - It applies this to the entire tensor at once
-    /// - It captures how changes to each value affect other values
-    /// 
-    /// This is the vector-based version of the activation derivative, which allows for more
-    /// complex relationships between different features during learning.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplyVectorActivationDerivative(Tensor<T> gradient, Tensor<T> output)
-    {
-        return gradient.ElementwiseMultiply(VectorActivation!.Derivative(output));
     }
 
     /// <summary>

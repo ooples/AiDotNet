@@ -25,18 +25,18 @@ namespace AiDotNet;
 /// your model without having to understand all the complex details at once.
 /// </para>
 /// </remarks>
-public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
+public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
 {
     private readonly PredictionStatsOptions _options;
-    private IFeatureSelector<T>? _featureSelector;
-    private INormalizer<T>? _normalizer;
-    private IRegularization<T>? _regularization;
-    private IFitnessCalculator<T>? _fitnessCalculator;
-    private IFitDetector<T>? _fitDetector;
-    private IRegression<T>? _regression;
-    private IOptimizer<T>? _optimizer;
-    private IDataPreprocessor<T>? _dataPreprocessor;
-    private IOutlierRemoval<T>? _outlierRemoval;
+    private IFeatureSelector<T, TInput>? _featureSelector;
+    private INormalizer<T, TInput, TOutput>? _normalizer;
+    private IRegularization<T, TInput, TOutput>? _regularization;
+    private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
+    private IFitDetector<T, TInput, TOutput>? _fitDetector;
+    private IFullModel<T, TInput, TOutput>? _model;
+    private IOptimizer<T, TInput, TOutput>? _optimizer;
+    private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
+    private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
 
     /// <summary>
     /// Creates a new instance of the PredictionModelBuilder.
@@ -62,7 +62,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// For example, when predicting house prices, the number of bedrooms might be important,
     /// but the house's street number probably isn't.
     /// </remarks>
-    public IPredictionModelBuilder<T> ConfigureFeatureSelector(IFeatureSelector<T> selector)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector)
     {
         _featureSelector = selector;
         return this;
@@ -79,7 +79,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// normalization might scale both to ranges like 0-1 so the model doesn't think
     /// income is 10,000 times more important than age just because the numbers are bigger.
     /// </remarks>
-    public IPredictionModelBuilder<T> ConfigureNormalizer(INormalizer<T> normalizer)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer)
     {
         _normalizer = normalizer;
         return this;
@@ -96,7 +96,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// rather than just memorizing answers to specific questions. This helps the model perform better
     /// on new, unseen data.
     /// </remarks>
-    public IPredictionModelBuilder<T> ConfigureRegularization(IRegularization<T> regularization)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRegularization(IRegularization<T, TInput, TOutput> regularization)
     {
         _regularization = regularization;
         return this;
@@ -113,7 +113,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// we might care about the average error in dollars, but when predicting if an email is spam,
     /// we might care more about the percentage of emails correctly classified.
     /// </remarks>
-    public IPredictionModelBuilder<T> ConfigureFitnessCalculator(IFitnessCalculator<T> calculator)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator)
     {
         _fitnessCalculator = calculator;
         return this;
@@ -129,25 +129,25 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// (overfitting) or not learning enough (underfitting). It's like having a teacher who can tell
     /// if a student is just memorizing answers or not studying enough.
     /// </remarks>
-    public IPredictionModelBuilder<T> ConfigureFitDetector(IFitDetector<T> detector)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector)
     {
         _fitDetector = detector;
         return this;
     }
 
     /// <summary>
-    /// Configures the core regression algorithm to use for predictions.
+    /// Configures the core algorithm to use for predictions.
     /// </summary>
-    /// <param name="regression">The regression algorithm to use.</param>
+    /// <param name="model">The prediction algorithm to use.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This is the main "brain" of your AI model - the algorithm that will
     /// learn patterns from your data and make predictions. Different algorithms work better for
     /// different types of problems, so you can choose the one that fits your needs.
     /// </remarks>
-    public IPredictionModelBuilder<T> ConfigureRegression(IRegression<T> regression)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model)
     {
-        _regression = regression;
+        _model = model;
         return this;
     }
 
@@ -161,7 +161,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// It's like having someone adjust the knobs on a radio to get the clearest signal.
     /// The optimizer tries different settings and keeps the ones that work best.
     /// </remarks>
-    public IPredictionModelBuilder<T> ConfigureOptimizer(IOptimizer<T> optimizationAlgorithm)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _optimizer = optimizationAlgorithm;
         return this;
@@ -177,7 +177,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// It's like washing and cutting vegetables before cooking. This might include handling missing values,
     /// converting text to numbers, or combining related features.
     /// </remarks>
-    public IPredictionModelBuilder<T> ConfigureDataPreprocessor(IDataPreprocessor<T> dataPreprocessor)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor)
     {
         _dataPreprocessor = dataPreprocessor;
         return this;
@@ -194,7 +194,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// a $10,000,000 mansion would be an outlier. These unusual points can sometimes confuse the model,
     /// so we might want to handle them specially.
     /// </remarks>
-    public IPredictionModelBuilder<T> ConfigureOutlierRemoval(IOutlierRemoval<T> outlierRemoval)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval)
     {
         _outlierRemoval = outlierRemoval;
         return this;
@@ -217,27 +217,30 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// The input matrix 'x' contains your features (like house size, number of bedrooms, etc. if predicting house prices),
     /// and the vector 'y' contains the known answers (actual house prices) for those examples.
     /// </remarks>
-    public IPredictiveModel<T> Build(Matrix<T> x, Vector<T> y)
+    public IPredictiveModel<T, TInput, TOutput> Build(TInput x, TOutput y)
     {
+        var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
+        var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+
         // Validate inputs
         if (x == null)
             throw new ArgumentNullException(nameof(x), "Input features matrix can't be null");
         if (y == null)
             throw new ArgumentNullException(nameof(y), "Output vector can't be null");
-        if (x.Rows != y.Length)
-            throw new ArgumentException("Number of rows in features matrix must match length of actual values vector", nameof(x));
-        if (_regression == null)
-            throw new InvalidOperationException("Regression method must be specified");
+        if (convertedX.Rows != convertedY.Length)
+            throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
+        if (_model == null)
+            throw new InvalidOperationException("Model implementation must be specified");
 
         // Use defaults for these interfaces if they aren't set
-        var normalizer = _normalizer ?? new NoNormalizer<T>();
-        var optimizer = _optimizer ?? new NormalOptimizer<T>();
-        var featureSelector = _featureSelector ?? new NoFeatureSelector<T>();
-        var fitDetector = _fitDetector ?? new DefaultFitDetector<T>();
-        var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator<T>();
-        var regularization = _regularization ?? new NoRegularization<T>();
-        var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T>();
-        var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T>(normalizer, featureSelector, outlierRemoval);
+        var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
+        var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>();
+        var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
+        var fitDetector = _fitDetector ?? new DefaultFitDetector<T, TInput, TOutput>();
+        var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator<T, TInput, TOutput>();
+        var regularization = _regularization ?? new NoRegularization<T, TInput, TOutput>();
+        var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
+        var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
 
         // Preprocess the data
         var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
@@ -246,9 +249,9 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         // Optimize the model
-        var optimizationResult = optimizer.Optimize(OptimizerHelper<T>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+        var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
-        return new PredictionModelResult<T>(_regression, optimizationResult, normInfo);
+        return new PredictionModelResult<T, TInput, TOutput>(_model, optimizationResult, normInfo);
     }
 
     /// <summary>
@@ -265,7 +268,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// 
     /// The input matrix should have the same number of columns (features) as the data you used to train the model.
     /// </remarks>
-    public Vector<T> Predict(Matrix<T> newData, IPredictiveModel<T> modelResult)
+    public TOutput Predict(TInput newData, IPredictiveModel<T, TInput, TOutput> modelResult)
     {
         return modelResult.Predict(newData);
     }
@@ -283,7 +286,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// Think of it like saving a document in a word processor - you can close the program and come back later
     /// to continue where you left off.
     /// </remarks>
-    public void SaveModel(IPredictiveModel<T> modelResult, string filePath)
+    public void SaveModel(IPredictiveModel<T, TInput, TOutput> modelResult, string filePath)
     {
         File.WriteAllBytes(filePath, SerializeModel(modelResult));
     }
@@ -300,7 +303,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// This is useful when you want to use your model in different applications or at different times
     /// without the time and computational cost of retraining.
     /// </remarks>
-    public IPredictiveModel<T> LoadModel(string filePath)
+    public IPredictiveModel<T, TInput, TOutput> LoadModel(string filePath)
     {
         byte[] modelData = File.ReadAllBytes(filePath);
         return DeserializeModel(modelData);
@@ -318,7 +321,7 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// You might use this directly if you want to store the model in a database or send it over a network,
     /// rather than saving it to a file.
     /// </remarks>
-    public byte[] SerializeModel(IPredictiveModel<T> modelResult)
+    public byte[] SerializeModel(IPredictiveModel<T, TInput, TOutput> modelResult)
     {
         return modelResult.Serialize();
     }
@@ -335,9 +338,9 @@ public class PredictionModelBuilder<T> : IPredictionModelBuilder<T>
     /// 
     /// You might use this directly if you retrieved a serialized model from a database or received it over a network.
     /// </remarks>
-    public IPredictiveModel<T> DeserializeModel(byte[] modelData)
+    public IPredictiveModel<T, TInput, TOutput> DeserializeModel(byte[] modelData)
     {
-        var result = new PredictionModelResult<T>();
+        var result = new PredictionModelResult<T, TInput, TOutput>();
         result.Deserialize(modelData);
 
         return result;

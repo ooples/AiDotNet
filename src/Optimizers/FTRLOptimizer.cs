@@ -26,12 +26,12 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
+public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the FTRL algorithm.
     /// </summary>
-    private FTRLOptimizerOptions _options;
+    private FTRLOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// Auxiliary vector used in the FTRL update rule.
@@ -57,25 +57,12 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <param name="options">The options for configuring the FTRL algorithm.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     public FTRLOptimizer(
-        FTRLOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        FTRLOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new FTRLOptimizerOptions();
+        _options = options ?? new FTRLOptimizerOptions<T, TInput, TOutput>();
+
         InitializeAdaptiveParameters();
     }
 
@@ -90,6 +77,7 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
+
         CurrentLearningRate = NumOps.FromDouble(_options.Alpha);
         _t = 0;
     }
@@ -110,16 +98,17 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
+        
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var parameters = currentSolution.GetParameters();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
-
-        _z = new Vector<T>(currentSolution.Coefficients.Length);
-        _n = new Vector<T>(currentSolution.Coefficients.Length);
+        _z = new Vector<T>(parameters.Length);
+        _n = new Vector<T>(parameters.Length);
         InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
@@ -162,21 +151,22 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="currentSolution">The current solution.</param>
     /// <param name="gradient">The calculated gradient.</param>
     /// <returns>The updated solution.</returns>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
         var alpha = NumOps.FromDouble(_options.Alpha);
         var beta = NumOps.FromDouble(_options.Beta);
         var lambda1 = NumOps.FromDouble(_options.Lambda1);
         var lambda2 = NumOps.FromDouble(_options.Lambda2);
 
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        for (int i = 0; i < parameters.Length; i++)
         {
             var sigma = NumOps.Divide(
                 NumOps.Subtract(NumOps.Sqrt(NumOps.Add(_n![i], NumOps.Multiply(gradient[i], gradient[i]))), NumOps.Sqrt(_n[i])),
                 alpha
             );
-            _z![i] = NumOps.Add(_z[i], NumOps.Subtract(gradient[i], NumOps.Multiply(sigma, currentSolution.Coefficients[i])));
+            _z![i] = NumOps.Add(_z[i], NumOps.Subtract(gradient[i], NumOps.Multiply(sigma, parameters[i])));
             _n![i] = NumOps.Add(_n[i], NumOps.Multiply(gradient[i], gradient[i]));
 
             var sign = NumOps.SignOrZero(_z[i]);
@@ -202,7 +192,7 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
             }
         }
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -216,7 +206,7 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -248,9 +238,9 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="options">The new options to be set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type FTRLOptimizerOptions.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is FTRLOptimizerOptions ftrlOptions)
+        if (options is FTRLOptimizerOptions<T, TInput, TOutput> ftrlOptions)
         {
             _options = ftrlOptions;
         }
@@ -269,7 +259,7 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <returns>The current optimization algorithm options.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -323,7 +313,7 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<FTRLOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<FTRLOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _t = reader.ReadInt32();
@@ -343,7 +333,7 @@ public class FTRLOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="X">The input data matrix.</param>
     /// <param name="y">The target values vector.</param>
     /// <returns>A string that uniquely identifies the gradient for the given inputs.</returns>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_FTRL_{_options.Alpha}_{_options.Beta}_{_options.Lambda1}_{_options.Lambda2}_{_t}";

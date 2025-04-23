@@ -26,7 +26,7 @@
 /// but doesn't actually do anything.
 /// </para>
 /// </remarks>
-public class NoOutlierRemoval<T> : IOutlierRemoval<T>
+public class NoOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, TOutput>
 {
     /// <summary>
     /// Returns the original inputs and outputs without removing any data points.
@@ -50,7 +50,7 @@ public class NoOutlierRemoval<T> : IOutlierRemoval<T>
     /// This is useful when you want to maintain the same code structure but skip the outlier removal step.
     /// </para>
     /// </remarks>
-    public (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs)
+    public (TInput CleanedInputs, TOutput CleanedOutputs) RemoveOutliers(TInput inputs, TOutput outputs)
     {
         return (inputs, outputs);
     }

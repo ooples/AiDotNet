@@ -179,31 +179,6 @@ public class NeuralNetworkArchitecture<T>
     public int InputDepth { get; }
 
     /// <summary>
-    /// Gets or sets the list of Restricted Boltzmann Machine layers for pre-training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This property stores Restricted Boltzmann Machine (RBM) layers that can be used for unsupervised
-    /// pre-training of the network, which can improve the network's performance, especially for deep
-    /// architectures with limited labeled data.
-    /// </para>
-    /// <para><b>For Beginners:</b> These are special layers used for pre-training the network.
-    /// 
-    /// Restricted Boltzmann Machines (RBMs) are a type of neural network layer that:
-    /// - Can learn patterns in data without supervision
-    /// - Help initialize the weights of a network before the main training
-    /// - Often improve performance on complex tasks
-    /// 
-    /// Think of RBM pre-training like teaching a student the basics before they start
-    /// advanced courses. It gives the network a better starting point for learning
-    /// the specific task you want it to perform.
-    /// 
-    /// This is an advanced feature that you can ignore when first starting with neural networks.
-    /// </para>
-    /// </remarks>
-    public List<RestrictedBoltzmannMachine<T>> RbmLayers { get; set; }
-
-    /// <summary>
     /// Gets the type of task the neural network is designed to perform.
     /// </summary>
     /// <remarks>
@@ -303,6 +278,12 @@ public class NeuralNetworkArchitecture<T>
         };
 
     /// <summary>
+    /// Determines whether the network should return the full sequence or just the final output.
+    /// </summary>
+    /// <returns>True if full sequence should be returned; otherwise, false.</returns>
+    public bool ShouldReturnFullSequence { get; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="NeuralNetworkArchitecture{T}"/> class with the specified parameters.
     /// </summary>
     /// <param name="inputType">The type of input data (one-dimensional, two-dimensional, or three-dimensional).</param>
@@ -357,7 +338,7 @@ public class NeuralNetworkArchitecture<T>
         int inputDepth = 1,
         int outputSize = 0,
         List<ILayer<T>>? layers = null,
-        List<RestrictedBoltzmannMachine<T>>? rbmLayers = null)
+        bool shouldReturnFullSequence = false)
     {
         InputType = inputType;
         TaskType = taskType;
@@ -366,9 +347,8 @@ public class NeuralNetworkArchitecture<T>
         InputHeight = inputHeight;
         InputWidth = inputWidth;
         InputDepth = inputDepth;
-
+        ShouldReturnFullSequence = shouldReturnFullSequence;
         Layers = layers;
-        RbmLayers = rbmLayers ?? [];
         OutputSize = outputSize;
 
         ValidateInputDimensions();
@@ -669,21 +649,6 @@ public class NeuralNetworkArchitecture<T>
             if (firstLayerInputSize != InputSize)
             {
                 throw new ArgumentException($"The first layer's input size ({firstLayerInputSize}) must match the input size ({InputSize}).");
-            }
-        }
-
-        // Validate RBM layers if provided
-        if (RbmLayers.Count > 0)
-        {
-            int previousLayerSize = InputSize;
-            foreach (var rbm in RbmLayers)
-            {
-                if (rbm.VisibleSize != previousLayerSize)
-                {
-                    throw new ArgumentException($"RBM visible size ({rbm.VisibleSize}) must match the previous layer size ({previousLayerSize}).");
-                }
-
-                previousLayerSize = rbm.HiddenSize;
             }
         }
     }

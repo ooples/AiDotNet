@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Regression;
+﻿global using AiDotNet.Models.Options;
+
+namespace AiDotNet.Regression;
 
 /// <summary>
 /// Implements a Gaussian Process Regression model, which is a non-parametric, probabilistic approach 
@@ -86,7 +88,7 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public GaussianProcessRegression(GaussianProcessRegressionOptions? options = null, IRegularization<T>? regularization = null)
+    public GaussianProcessRegression(GaussianProcessRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         Options = options ?? new GaussianProcessRegressionOptions();
@@ -147,13 +149,13 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         }
 
         // Apply regularization to the kernel matrix
-        Matrix<T> regularizedKernelMatrix = Regularization.RegularizeMatrix(_kernelMatrix);
+        Matrix<T> regularizedKernelMatrix = Regularization.Regularize(_kernelMatrix);
 
         // Solve (K + σ²I + R)α = y, where R is the regularization term
         _alpha = MatrixSolutionHelper.SolveLinearSystem(regularizedKernelMatrix, y, Options.DecompositionType);
 
         // Apply regularization to the alpha coefficients
-        _alpha = Regularization.RegularizeCoefficients(_alpha);
+        _alpha = Regularization.Regularize(_alpha);
 
         // Store x as support vectors for prediction
         SupportVectors = x;
@@ -382,9 +384,9 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        var metadata = base.GetModelMetadata();
+        var metadata = base.GetModelMetaData();
         metadata.AdditionalInfo["NoiseLevel"] = Options.NoiseLevel;
         metadata.AdditionalInfo["OptimizeHyperparameters"] = Options.OptimizeHyperparameters;
         metadata.AdditionalInfo["MaxIterations"] = Options.MaxIterations;
@@ -402,5 +404,40 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     protected override ModelType GetModelType()
     {
         return ModelType.GaussianProcessRegression;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Gaussian Process Regression model with the same configuration.
+    /// </summary>
+    /// <returns>
+    /// A new instance of <see cref="GaussianProcessRegression{T}"/> with the same configuration as the current instance.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new Gaussian Process Regression model that has the same configuration as the current instance.
+    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
+    /// The new instance will have the same hyperparameters and options as the original,
+    /// but will not share learned data unless explicitly trained with the same dataset.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+    /// 
+    /// It's like creating a blueprint copy of your model that can be used to:
+    /// - Save your model's settings
+    /// - Create a new identical model
+    /// - Transfer your model's configuration to another system
+    /// 
+    /// This is useful when you want to:
+    /// - Create multiple similar Gaussian Process models
+    /// - Save a model's configuration for later use
+    /// - Reset a model while keeping its hyperparameters
+    /// 
+    /// Note that while the settings are copied, the training data and learned patterns are not automatically
+    /// transferred, so the new instance will need training before it can make predictions.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create and return a new instance with the same configuration
+        return new GaussianProcessRegression<T>(Options, Regularization);
     }
 }

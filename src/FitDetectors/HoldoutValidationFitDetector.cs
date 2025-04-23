@@ -18,7 +18,7 @@ namespace AiDotNet.FitDetectors;
 /// - High variance: When your model's performance varies significantly between different data sets
 /// </para>
 /// </remarks>
-public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
+public class HoldoutValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the holdout validation fit detector.
@@ -56,7 +56,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// The result gives you actionable insights about your model's performance.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -98,7 +98,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// The method uses thresholds (set in the options) to make these determinations.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingMSE = evaluationData.TrainingSet.ErrorStats.MSE;
         var validationMSE = evaluationData.ValidationSet.ErrorStats.MSE;
@@ -108,20 +108,20 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
         var validationR2 = evaluationData.ValidationSet.PredictionStats.R2;
         var testR2 = evaluationData.TestSet.PredictionStats.R2;
 
-        if (_numOps.GreaterThan(_numOps.Subtract(trainingR2, validationR2), _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.GreaterThan(NumOps.Subtract(trainingR2, validationR2), NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(validationR2, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(validationR2, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
-        else if (_numOps.GreaterThan(_numOps.Abs(_numOps.Subtract(validationMSE, testMSE)), _numOps.FromDouble(_options.HighVarianceThreshold)))
+        else if (NumOps.GreaterThan(NumOps.Abs(NumOps.Subtract(validationMSE, testMSE)), NumOps.FromDouble(_options.HighVarianceThreshold)))
         {
             return FitType.HighVariance;
         }
-        else if (_numOps.GreaterThan(validationR2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-                 _numOps.LessThan(_numOps.Abs(_numOps.Subtract(validationR2, testR2)), _numOps.FromDouble(_options.StabilityThreshold)))
+        else if (NumOps.GreaterThan(validationR2, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+                 NumOps.LessThan(NumOps.Abs(NumOps.Subtract(validationR2, testR2)), NumOps.FromDouble(_options.StabilityThreshold)))
         {
             return FitType.GoodFit;
         }
@@ -153,16 +153,16 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// the actual values. It ranges from 0 to 1, where 1 means perfect predictions.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var validationR2 = evaluationData.ValidationSet.PredictionStats.R2;
         var testR2 = evaluationData.TestSet.PredictionStats.R2;
 
-        var r2Difference = _numOps.Abs(_numOps.Subtract(validationR2, testR2));
-        var maxR2 = _numOps.GreaterThan(validationR2, testR2) ? validationR2 : testR2;
+        var r2Difference = NumOps.Abs(NumOps.Subtract(validationR2, testR2));
+        var maxR2 = NumOps.GreaterThan(validationR2, testR2) ? validationR2 : testR2;
 
-        var confidence = _numOps.Subtract(_numOps.One, _numOps.Divide(r2Difference, maxR2));
-        return _numOps.GreaterThan(confidence, _numOps.Zero) ? confidence : _numOps.Zero;
+        var confidence = NumOps.Subtract(NumOps.One, NumOps.Divide(r2Difference, maxR2));
+        return NumOps.GreaterThan(confidence, NumOps.Zero) ? confidence : NumOps.Zero;
     }
 
     /// <summary>
@@ -209,7 +209,7 @@ public class HoldoutValidationFitDetector<T> : FitDetectorBase<T>
     /// better performance.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

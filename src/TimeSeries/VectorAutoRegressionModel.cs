@@ -86,72 +86,6 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the VAR model using the provided input data.
-    /// </summary>
-    /// <param name="x">The input matrix where each column represents a different time series variable.</param>
-    /// <param name="y">The target values vector (not used in VAR models as they use the input matrix directly).</param>
-    /// <exception cref="ArgumentException">Thrown when input dimensions don't match the model configuration or there's insufficient data.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Training a VAR model involves finding the best coefficients to explain how each variable
-    /// depends on past values of itself and other variables.
-    /// 
-    /// The training process follows these steps:
-    /// 
-    /// 1. Validate that the input data has the correct dimensions and sufficient observations
-    /// 2. Prepare the lagged data matrix (organizing past values for use in estimation)
-    /// 3. For each variable, estimate an equation using Ordinary Least Squares (OLS) regression
-    /// 4. Calculate the residuals (errors) between the model's predictions and actual values
-    /// 
-    /// Each equation in the VAR model has the form:
-    /// y_t = c + A₁y_{t-1} + A₂y_{t-2} + ... + A_py_{t-p} + e_t
-    /// 
-    /// Where:
-    /// - y_t is the vector of variables at time t
-    /// - c is the vector of intercepts
-    /// - A₁, A₂, etc. are matrices of coefficients
-    /// - p is the lag order
-    /// - e_t is the vector of error terms
-    /// 
-    /// The y parameter is typically not used in VAR models since all variables are contained in the x matrix.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        if (x.Columns != _varOptions.OutputDimension)
-        {
-            throw new ArgumentException("The number of columns in x must match the OutputDimension.");
-        }
-
-        int n = x.Rows;
-        int m = x.Columns;
-
-        if (n <= _varOptions.Lag)
-        {
-            throw new ArgumentException($"Not enough data points. Need more than {_varOptions.Lag} observations.");
-        }
-
-        // Prepare lagged data
-        Matrix<T> laggedData = PrepareLaggedData(x);
-
-        // Estimate coefficients using OLS for each equation
-        for (int i = 0; i < m; i++)
-        {
-            Vector<T> yi = x.GetColumn(i).Slice(_varOptions.Lag, n - _varOptions.Lag);
-            Vector<T> coeffs = EstimateOLS(laggedData, yi);
-            _intercepts[i] = coeffs[0];
-            for (int j = 0; j < m * _varOptions.Lag; j++)
-            {
-                _coefficients[i, j] = coeffs[j + 1];
-            }
-        }
-
-        // Calculate residuals
-        _residuals = CalculateResiduals(x);
-    }
-
-    /// <summary>
     /// Generates forecasts using the trained VAR model.
     /// </summary>
     /// <param name="input">The input matrix containing the most recent observations of all variables.</param>
@@ -472,5 +406,744 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         }
 
         return residuals;
+    }
+
+    /// <summary>
+    /// Implements the model-specific training logic for the VAR model.
+    /// </summary>
+    /// <param name="x">The input matrix where each column represents a different time series variable.</param>
+    /// <param name="y">The target values vector (not used in VAR models as they use the input matrix directly).</param>
+    /// <exception cref="ArgumentException">Thrown when input dimensions don't match the model configuration or there's insufficient data.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method handles the specific training logic for Vector Autoregression models. It validates input data,
+    /// prepares lagged data, estimates coefficients, and calculates residuals.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method does the actual work of training the VAR model. It follows these steps:
+    /// 
+    /// 1. It checks that your data has the right format and enough observations to work with
+    /// 2. It organizes the data to show how past values relate to current values
+    /// 3. For each variable (like GDP, unemployment, etc.), it finds the best equation
+    ///    that explains that variable based on past values of all variables
+    /// 4. It calculates how well these equations fit the data by measuring the errors
+    /// 
+    /// When training completes, the model has learned the mathematical relationships between
+    /// all of your time series variables across time. Each equation shows how one variable
+    /// depends on past values of itself and other variables.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Validate input dimensions
+        if (x.Columns != _varOptions.OutputDimension)
+        {
+            throw new ArgumentException($"The number of columns in x ({x.Columns}) must match the OutputDimension ({_varOptions.OutputDimension}).");
+        }
+
+        int n = x.Rows;
+        int m = x.Columns;
+
+        // Validate sufficient observations
+        if (n <= _varOptions.Lag)
+        {
+            throw new ArgumentException($"Not enough data points. Need more than {_varOptions.Lag} observations for a VAR({_varOptions.Lag}) model. Found {n} observations.");
+        }
+
+        // Check for missing values
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < m; j++)
+            {
+                // Check if the value is NaN or infinity (implementation depends on type T)
+                if (!IsValidValue(x[i, j]))
+                {
+                    throw new ArgumentException($"Invalid value detected at position ({i},{j}). VAR models cannot handle missing values.");
+                }
+            }
+        }
+
+        try
+        {
+            // Prepare lagged data
+            Matrix<T> laggedData = PrepareLaggedData(x);
+
+            // Initialize matrices
+            _coefficients = new Matrix<T>(m, m * _varOptions.Lag);
+            _intercepts = new Vector<T>(m);
+
+            // Estimate coefficients using OLS for each equation
+            for (int i = 0; i < m; i++)
+            {
+                // Extract the dependent variable for the current equation
+                Vector<T> yi = x.GetColumn(i).Slice(_varOptions.Lag, n - _varOptions.Lag);
+            
+                try
+                {
+                    // Estimate coefficients for this equation
+                    Vector<T> coeffs = EstimateOLS(laggedData, yi);
+                
+                    // Store intercept
+                    _intercepts[i] = coeffs[0];
+                
+                    // Store coefficients for lagged variables
+                    for (int j = 0; j < m * _varOptions.Lag; j++)
+                    {
+                        _coefficients[i, j] = coeffs[j + 1];
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Failed to estimate equation for variable {i}: {ex.Message}", ex);
+                }
+            }
+
+            // Calculate residuals
+            _residuals = CalculateResiduals(x);
+        }
+        catch (Exception ex)
+        {
+            // Reset model state on failure
+            _coefficients = new Matrix<T>(_varOptions.OutputDimension, _varOptions.OutputDimension * _varOptions.Lag);
+            _intercepts = new Vector<T>(_varOptions.OutputDimension);
+            _residuals = new Matrix<T>(0, _varOptions.OutputDimension);
+        
+            throw new InvalidOperationException("VAR model training failed: " + ex.Message, ex);
+        }
+    }
+
+    /// <summary>
+    /// Predicts a single value from one of the variables in the VAR system.
+    /// </summary>
+    /// <param name="input">Vector of input features for prediction.</param>
+    /// <returns>The predicted value for the specified variable.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
+    /// <exception cref="ArgumentException">Thrown when the input vector has incorrect length or the variableIndex is out of range.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method generates a prediction for a single variable in the VAR system based on the
+    /// lagged values provided in the input vector.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// The VAR model is designed to predict multiple related time series at once, but sometimes
+    /// you might only need a prediction for one specific variable (like just GDP, not unemployment
+    /// or inflation).
+    /// 
+    /// This method lets you predict one variable based on past values of all variables. The input
+    /// should contain:
+    /// - The variable index you want to predict (which of your time series)
+    /// - The recent history of all variables in your system
+    /// 
+    /// The method uses the equation specifically estimated for that variable, applying the learned
+    /// coefficients to calculate the next value.
+    /// 
+    /// For example, if you want to predict GDP (variable 0), it will use the equation:
+    /// GDP_next = intercept + coefficient1*GDP_t-1 + coefficient2*Unemployment_t-1 + ...
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Check if the model has been trained
+        if (_coefficients.Rows == 0 || _intercepts.Length == 0)
+        {
+            throw new InvalidOperationException("The VAR model must be trained before making predictions.");
+        }
+    
+        // Extract which variable to predict (last element of input)
+        int variableIndex;
+        if (input.Length > 0)
+        {
+            variableIndex = Convert.ToInt32(input[input.Length - 1]);
+        }
+        else
+        {
+            throw new ArgumentException("Input vector must contain at least one element indicating which variable to predict.", nameof(input));
+        }
+    
+        // Validate variable index
+        if (variableIndex < 0 || variableIndex >= _varOptions.OutputDimension)
+        {
+            throw new ArgumentException($"Variable index {variableIndex} is out of range [0, {_varOptions.OutputDimension - 1}].", nameof(input));
+        }
+    
+        // Verify input length (should contain lagged values for all variables + variable index)
+        int expectedLength = _varOptions.OutputDimension * _varOptions.Lag + 1;
+        if (input.Length != expectedLength)
+        {
+            throw new ArgumentException($"Input vector length ({input.Length}) does not match expected length ({expectedLength}).", nameof(input));
+        }
+    
+        // Start with the intercept term
+        T prediction = _intercepts[variableIndex];
+    
+        // Add contributions from lagged variables
+        for (int j = 0; j < _varOptions.OutputDimension * _varOptions.Lag; j++)
+        {
+            // Input vector contains lagged values first, then variable index
+            prediction = NumOps.Add(prediction, NumOps.Multiply(_coefficients[variableIndex, j], input[j]));
+        }
+    
+        return prediction;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the VectorAutoRegressionModel class.
+    /// </summary>
+    /// <returns>A new instance of the VectorAutoRegressionModel class.</returns>
+    /// <remarks>
+    /// <para>
+    /// This factory method creates a new instance of the model with the same options
+    /// as the current instance. It's used by Clone and DeepCopy methods.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates a brand new, untrained copy of the VAR model with all the
+    /// same configuration settings as the original. It's like getting a clean template
+    /// based on your original specifications.
+    /// 
+    /// This is primarily used when you want to:
+    /// - Create a copy of your model to experiment with different training approaches
+    /// - Clone the model as part of serialization/deserialization
+    /// - Make a deep copy that's completely independent of the original
+    /// 
+    /// The new model will have the same structure (number of variables and lag order)
+    /// but won't have any trained coefficients until you train it.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a new instance with the same options
+        return new VectorAutoRegressionModel<T>(_varOptions);
+    }
+
+    /// <summary>
+    /// Generates multi-step forecasts for all variables in the VAR system.
+    /// </summary>
+    /// <param name="historyMatrix">Matrix containing historical observations for all variables.</param>
+    /// <param name="steps">Number of steps to forecast.</param>
+    /// <returns>Matrix of forecasted values where each row is a time step and each column is a variable.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
+    /// <exception cref="ArgumentException">Thrown when history matrix dimensions don't match model configuration or steps is not positive.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method generates multi-step ahead forecasts for all variables in the VAR system.
+    /// For each forecast step, it uses previously forecasted values as inputs for the next step.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method lets you forecast multiple time periods into the future for all variables
+    /// in your system. For example, you could forecast GDP, unemployment, and inflation for
+    /// the next 4 quarters.
+    /// 
+    /// It works like this:
+    /// 1. It starts with your historical data for all variables
+    /// 2. It predicts the next period for all variables
+    /// 3. It adds these predictions to the history
+    /// 4. It uses this updated history to predict the next period
+    /// 5. It repeats steps 3-4 until it reaches the requested forecast horizon
+    /// 
+    /// This approach is called "iterative forecasting" and it allows the model to capture
+    /// how variables interact over multiple time periods. Note that forecast uncertainty
+    /// typically increases the further ahead you predict.
+    /// </para>
+    /// </remarks>
+    public Matrix<T> Forecast(Matrix<T> historyMatrix, int steps)
+    {
+        // Check if the model has been trained
+        if (_coefficients.Rows == 0 || _intercepts.Length == 0)
+        {
+            throw new InvalidOperationException("The VAR model must be trained before forecasting.");
+        }
+    
+        // Validate input dimensions
+        if (historyMatrix.Columns != _varOptions.OutputDimension)
+        {
+            throw new ArgumentException($"History matrix columns ({historyMatrix.Columns}) must match the number of variables ({_varOptions.OutputDimension}).");
+        }
+    
+        // Validate steps
+        if (steps <= 0)
+        {
+            throw new ArgumentException("Forecast steps must be positive.", nameof(steps));
+        }
+    
+        // Validate sufficient history
+        if (historyMatrix.Rows < _varOptions.Lag)
+        {
+            throw new ArgumentException($"History matrix must contain at least {_varOptions.Lag} observations. Found {historyMatrix.Rows}.");
+        }
+    
+        // Initialize forecast matrix
+        Matrix<T> forecasts = new Matrix<T>(steps, _varOptions.OutputDimension);
+    
+        // Create a working copy of history that we'll extend with forecasts
+        List<Vector<T>> workingHistory = new List<Vector<T>>();
+        for (int i = 0; i < historyMatrix.Rows; i++)
+        {
+            workingHistory.Add(historyMatrix.GetRow(i));
+        }
+    
+        // Generate forecasts iteratively
+        for (int step = 0; step < steps; step++)
+        {
+            // Extract the most recent lags from working history
+            Matrix<T> recentHistory = new Matrix<T>(_varOptions.Lag, _varOptions.OutputDimension);
+            for (int i = 0; i < _varOptions.Lag; i++)
+            {
+                recentHistory.SetRow(i, workingHistory[workingHistory.Count - _varOptions.Lag + i]);
+            }
+        
+            // Generate forecast for current step
+            Vector<T> forecast = Predict(recentHistory);
+        
+            // Store forecast
+            forecasts.SetRow(step, forecast);
+        
+            // Add forecast to working history for next iteration
+            workingHistory.Add(forecast);
+        }
+    
+        return forecasts;
+    }
+
+    /// <summary>
+    /// Analyzes the dynamic relationships between variables in the VAR system.
+    /// </summary>
+    /// <param name="horizon">The number of steps for the impulse response functions.</param>
+    /// <returns>A dictionary of impulse response matrices, one for each variable.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
+    /// <exception cref="ArgumentException">Thrown when horizon is not positive.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method computes impulse response functions to analyze how shocks to one variable
+    /// affect all variables in the system over time.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// One of the most valuable aspects of VAR models is understanding how variables affect
+    /// each other over time. This method helps you see these relationships.
+    /// 
+    /// It calculates what would happen to all variables if you introduced a one-time shock
+    /// (increase or decrease) to one variable. For example:
+    /// 
+    /// - What happens to unemployment and inflation if GDP suddenly increases by 1%?
+    /// - How long do these effects last?
+    /// - Do they fade away or persist?
+    /// 
+    /// The results show how shocks propagate through the system over several time periods,
+    /// helping you understand the dynamic relationships between your variables.
+    /// 
+    /// The output contains impulse response functions for each variable, showing how a shock
+    /// to that variable affects all variables in the system over the specified time horizon.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, Matrix<T>> ImpulseResponseAnalysis(int horizon)
+    {
+        // Check if the model has been trained
+        if (_coefficients.Rows == 0 || _intercepts.Length == 0)
+        {
+            throw new InvalidOperationException("The VAR model must be trained before performing impulse response analysis.");
+        }
+    
+        // Validate horizon
+        if (horizon <= 0)
+        {
+            throw new ArgumentException("Horizon must be positive.", nameof(horizon));
+        }
+    
+        Dictionary<string, Matrix<T>> impulseResponses = new Dictionary<string, Matrix<T>>();
+        int k = _varOptions.OutputDimension;
+    
+        // Estimate residual covariance matrix
+        Matrix<T> residCov = EstimateResidualCovariance();
+    
+        // Get Cholesky decomposition of residual covariance for orthogonalized impulses
+        Matrix<T> cholesky;
+        try
+        {
+            cholesky = CholeskyDecomposition(residCov);
+        }
+        catch (Exception)
+        {
+            // If Cholesky fails, use diagonal matrix instead
+            var diagValues = new Vector<T>(k);
+            for (int i = 0; i < k; i++)
+            {
+                diagValues[i] = NumOps.Sqrt(residCov[i, i]);
+            }
+
+            cholesky = Matrix<T>.CreateDiagonal(diagValues);
+        }
+    
+        // For each variable, create a shock and compute responses
+        for (int shockVar = 0; shockVar < k; shockVar++)
+        {
+            // Create impulse vector (one unit shock to variable shockVar)
+            Vector<T> impulse = new Vector<T>(k);
+            for (int i = 0; i < k; i++)
+            {
+                impulse[i] = cholesky[i, shockVar];
+            }
+        
+            // Compute impulse responses for all variables over the horizon
+            Matrix<T> responses = new Matrix<T>(horizon + 1, k); // +1 for initial period
+        
+            // Initial period: direct impact of shock
+            for (int i = 0; i < k; i++)
+            {
+                responses[0, i] = impulse[i];
+            }
+        
+            // Compute responses for each subsequent period
+            Matrix<T> varMatrix = ConstructVARMatrix();
+            Matrix<T> currentImpact = Matrix<T>.CreateIdentity(k);
+        
+            for (int h = 1; h <= horizon; h++)
+            {
+                // Calculate impact matrix for period h
+                currentImpact = currentImpact.Multiply(varMatrix);
+            
+                // Calculate responses for all variables at horizon h
+                for (int respVar = 0; respVar < k; respVar++)
+                {
+                    T response = NumOps.Zero;
+                    for (int j = 0; j < k; j++)
+                    {
+                        response = NumOps.Add(response, NumOps.Multiply(currentImpact[respVar, j], impulse[j]));
+                    }
+                    responses[h, respVar] = response;
+                }
+            }
+        
+            // Store the impulse response matrix for this shock variable
+            impulseResponses[$"Variable_{shockVar}"] = responses;
+        }
+    
+        return impulseResponses;
+    }
+
+    /// <summary>
+    /// Estimates the covariance matrix of residuals.
+    /// </summary>
+    /// <returns>The covariance matrix of residuals.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the variance-covariance matrix of the model's residuals,
+    /// which represents the unexplained variance and covariance between variables.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method calculates how the random, unexplained parts of your variables
+    /// relate to each other. It shows:
+    /// 
+    /// - How much random variation exists in each variable (the diagonal elements)
+    /// - How the random parts of different variables move together (the off-diagonal elements)
+    /// 
+    /// This information is important for:
+    /// - Assessing how much uncertainty exists in the model
+    /// - Understanding if shocks to multiple variables tend to occur together
+    /// - Properly calculating confidence intervals for forecasts
+    /// - Performing impulse response analysis
+    /// </para>
+    /// </remarks>
+    private Matrix<T> EstimateResidualCovariance()
+    {
+        if (_residuals.Rows == 0)
+        {
+            throw new InvalidOperationException("No residuals available. The model must be trained first.");
+        }
+    
+        int n = _residuals.Rows;
+        int k = _residuals.Columns;
+        Matrix<T> covariance = new Matrix<T>(k, k);
+    
+        // Calculate degrees of freedom adjustment
+        int dof = n - _varOptions.Lag * k - 1; // Subtract number of estimated parameters per equation
+        if (dof <= 0) dof = 1; // Prevent division by zero
+        T dofAdjustment = NumOps.Divide(NumOps.One, NumOps.FromDouble(dof));
+    
+        // Calculate covariance matrix
+        for (int i = 0; i < k; i++)
+        {
+            for (int j = 0; j <= i; j++) // Take advantage of symmetry
+            {
+                T sum = NumOps.Zero;
+                for (int t = 0; t < n; t++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_residuals[t, i], _residuals[t, j]));
+                }
+            
+                // Apply degrees of freedom adjustment
+                T cov = NumOps.Multiply(sum, dofAdjustment);
+            
+                // Set both (i,j) and (j,i) elements due to symmetry
+                covariance[i, j] = cov;
+                covariance[j, i] = cov;
+            }
+        }
+    
+        return covariance;
+    }
+
+    /// <summary>
+    /// Constructs the VAR coefficient matrix in companion form.
+    /// </summary>
+    /// <returns>The VAR matrix in companion form.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method organizes the VAR coefficients into a companion matrix form
+    /// that facilitates multi-step computations like impulse response functions.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates a special matrix that represents how all variables in your
+    /// system evolve over time based on their past values. This companion form allows
+    /// for easy calculation of multi-step forecasts and impulse responses.
+    /// 
+    /// The companion matrix packages all the coefficients in a specific structure that
+    /// makes it easier to compute how shocks propagate through the system over time.
+    /// 
+    /// This is primarily used internally for advanced analyses like impulse response
+    /// functions and forecast error variance decomposition.
+    /// </para>
+    /// </remarks>
+    private Matrix<T> ConstructVARMatrix()
+    {
+        int k = _varOptions.OutputDimension;
+        int p = _varOptions.Lag;
+        int kp = k * p;
+    
+        // Create matrix of size (k*p × k*p)
+        Matrix<T> companion = new Matrix<T>(kp, kp);
+    
+        // Fill in the coefficient blocks
+        for (int i = 0; i < k; i++)
+        {
+            for (int j = 0; j < k * p; j++)
+            {
+                if (j < k * p)
+                {
+                    companion[i, j] = _coefficients[i, j];
+                }
+            }
+        }
+    
+        // Fill in the identity blocks
+        for (int i = k; i < kp; i++)
+        {
+            companion[i, i - k] = NumOps.One;
+        }
+    
+        return companion;
+    }
+
+    /// <summary>
+    /// Performs Cholesky decomposition of a symmetric positive definite matrix.
+    /// </summary>
+    /// <param name="matrix">The symmetric positive definite matrix to decompose.</param>
+    /// <returns>The lower triangular Cholesky factor.</returns>
+    /// <exception cref="ArgumentException">Thrown when the matrix is not symmetric positive definite.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method computes the Cholesky decomposition of a symmetric positive definite matrix,
+    /// which is useful for computing orthogonalized impulse responses.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Cholesky decomposition is a mathematical technique that breaks down a symmetric matrix
+    /// into a product of a lower triangular matrix and its transpose. It's used in VAR analysis to:
+    /// 
+    /// - Create orthogonalized shocks for impulse response analysis
+    /// - Decompose the relationships between variables' error terms
+    /// - Account for contemporaneous correlations between variables
+    /// 
+    /// This decomposition helps ensure that when you're analyzing how a shock to one variable
+    /// affects others, you're accounting for how shocks tend to occur together in your data.
+    /// </para>
+    /// </remarks>
+    private Matrix<T> CholeskyDecomposition(Matrix<T> matrix)
+    {
+        if (matrix.Rows != matrix.Columns)
+        {
+            throw new ArgumentException("Matrix must be square for Cholesky decomposition.");
+        }
+    
+        int n = matrix.Rows;
+        Matrix<T> result = new Matrix<T>(n, n);
+    
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j <= i; j++)
+            {
+                T sum = NumOps.Zero;
+            
+                if (j == i) // Diagonal elements
+                {
+                    for (int k = 0; k < j; k++)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Square(result[j, k]));
+                    }
+                
+                    T diagonal = NumOps.Subtract(matrix[j, j], sum);
+                    if (NumOps.LessThanOrEquals(diagonal, NumOps.Zero))
+                    {
+                        throw new ArgumentException("Matrix is not positive definite.");
+                    }
+                
+                    result[j, j] = NumOps.Sqrt(diagonal);
+                }
+                else // Off-diagonal elements
+                {
+                    for (int k = 0; k < j; k++)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(result[i, k], result[j, k]));
+                    }
+                
+                    if (!NumOps.Equals(result[j, j], NumOps.Zero))
+                    {
+                        result[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), result[j, j]);
+                    }
+                    else
+                    {
+                        result[i, j] = NumOps.Zero;
+                    }
+                }
+            }
+        }
+    
+        return result;
+    }
+
+    /// <summary>
+    /// Checks if a value is valid (not NaN or infinity).
+    /// </summary>
+    /// <param name="value">The value to check.</param>
+    /// <returns>True if the value is valid, false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method determines whether a value is valid for use in the VAR model.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This is a helper method that checks if a value is suitable for use in the model.
+    /// It makes sure there are no missing or invalid values in your data.
+    /// 
+    /// VAR models require complete data without any missing values or infinities,
+    /// as these would distort the estimated relationships between variables.
+    /// </para>
+    /// </remarks>
+    private bool IsValidValue(T value)
+    {
+        // Implementation depends on type T - this shows a general approach
+        // For floating point types, you'd check for NaN and infinity
+        // For this generic implementation, we'll use a simple non-zero check
+        try
+        {
+            double doubleValue = Convert.ToDouble(value);
+            return !double.IsNaN(doubleValue) && !double.IsInfinity(doubleValue);
+        }
+        catch
+        {
+            // If conversion fails, assume it's valid (for non-numeric types)
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Resets the VAR model to its untrained state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears all trained parameters and returns the model to its initial state.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method resets the model to its initial state, clearing all the coefficients
+    /// and other parameters that were learned during training.
+    /// 
+    /// It's useful when you want to:
+    /// - Retrain the model with different data
+    /// - Try different model specifications
+    /// - Clear the model's memory to free up resources
+    /// 
+    /// After calling this method, the model will need to be trained again before
+    /// it can be used for predictions.
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        base.Reset();
+    
+        _coefficients = new Matrix<T>(_varOptions.OutputDimension, _varOptions.OutputDimension * _varOptions.Lag);
+        _intercepts = new Vector<T>(_varOptions.OutputDimension);
+        _residuals = new Matrix<T>(0, _varOptions.OutputDimension);
+    }
+
+    /// <summary>
+    /// Gets metadata about the VAR model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides comprehensive metadata about the VAR model, including configuration
+    /// parameters, model coefficients, and serialized model data.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method returns important information about your VAR model in a structured format.
+    /// The metadata includes:
+    /// 
+    /// - The type of model (VAR)
+    /// - Configuration details (like lag order and number of variables)
+    /// - The coefficients that describe relationships between variables
+    /// - Serialized model data for storage or transfer
+    /// 
+    /// This information is useful for documentation, model management, and comparing different
+    /// models. It provides a complete snapshot of the model's structure and parameters.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.VARModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include the actual model state variables
+                { "Coefficients", _coefficients },
+                { "Intercepts", _intercepts },
+                { "Residuals", _residuals },
+            
+                // Include model configuration
+                { "OutputDimension", _varOptions.OutputDimension },
+                { "Lag", _varOptions.Lag },
+                { "DecompositionType", _varOptions.DecompositionType },
+            
+                // Include model statistics
+                { "HasTrainingData", _residuals.Rows > 0 },
+                { "NumberOfObservations", _residuals.Rows + _varOptions.Lag },
+                { "NumberOfParameters", _varOptions.OutputDimension * (_varOptions.OutputDimension * _varOptions.Lag + 1) }
+            },
+            ModelData = this.Serialize()
+        };
+    
+        // Add residual statistics if available
+        if (_residuals.Rows > 0)
+        {
+            // Calculate residual statistics for each variable
+            for (int i = 0; i < _varOptions.OutputDimension; i++)
+            {
+                Vector<T> variableResiduals = _residuals.GetColumn(i);
+            
+                metadata.AdditionalInfo[$"Variable_{i}_ResidualMean"] = Convert.ToDouble(variableResiduals.Average());
+                metadata.AdditionalInfo[$"Variable_{i}_ResidualStdDev"] = Convert.ToDouble(variableResiduals.StandardDeviation());
+                metadata.AdditionalInfo[$"Variable_{i}_ResidualMin"] = Convert.ToDouble(variableResiduals.Min());
+                metadata.AdditionalInfo[$"Variable_{i}_ResidualMax"] = Convert.ToDouble(variableResiduals.Max());
+            }
+        }
+    
+        return metadata;
     }
 }

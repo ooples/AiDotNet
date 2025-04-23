@@ -36,12 +36,12 @@ public class Experience<T>
     /// <summary>
     /// Gets the state of the environment before the action was taken.
     /// </summary>
-    /// <value>A vector representing the state of the environment.</value>
+    /// <value>A tensor representing the state of the environment.</value>
     /// <remarks>
     /// <para>
     /// The state represents the environment's condition or configuration at the moment the agent made its decision.
     /// In reinforcement learning, a state should contain all relevant information needed for the agent to make an
-    /// optimal decision. The format and content of the state vector depend on the specific problem being solved.
+    /// optimal decision. The format and content of the state tensor depend on the specific problem being solved.
     /// </para>
     /// <para><b>For Beginners:</b> This is a snapshot of the situation before making a decision.
     /// 
@@ -54,7 +54,7 @@ public class Experience<T>
     /// In a self-driving car, the state might include sensor readings, camera images, and the car's position.
     /// </para>
     /// </remarks>
-    public Vector<T> State { get; }
+    public Tensor<T> State { get; }
 
     /// <summary>
     /// Gets the action that was taken by the agent.
@@ -112,7 +112,7 @@ public class Experience<T>
     /// <summary>
     /// Gets the state of the environment after the action was taken.
     /// </summary>
-    /// <value>A vector representing the new state of the environment.</value>
+    /// <value>A tensor representing the new state of the environment.</value>
     /// <remarks>
     /// <para>
     /// The next state represents the environment's condition or configuration after the agent's action has been executed.
@@ -134,7 +134,7 @@ public class Experience<T>
     /// By comparing State and NextState, the agent can learn how its actions affect the environment.
     /// </para>
     /// </remarks>
-    public Vector<T> NextState { get; }
+    public Tensor<T> NextState { get; }
 
     /// <summary>
     /// Gets a value indicating whether this action ended the episode.
@@ -191,7 +191,7 @@ public class Experience<T>
     /// got this feedback, and ended up in this new situation."
     /// </para>
     /// </remarks>
-    public Experience(Vector<T> state, int action, T reward, Vector<T> nextState, bool done)
+    public Experience(Tensor<T> state, int action, T reward, Tensor<T> nextState, bool done)
     {
         State = state;
         Action = action;

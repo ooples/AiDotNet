@@ -77,41 +77,6 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     }
 
     /// <summary>
-    /// Trains the VARMA model using the provided input data and target values.
-    /// </summary>
-    /// <param name="x">The input features matrix.</param>
-    /// <param name="y">The target values vector.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Training a VARMA model happens in three main steps:
-    /// 
-    /// 1. First, it trains the VAR part (inherited from the parent class)
-    ///    - This captures how each variable depends on past values of itself and other variables
-    /// 
-    /// 2. Then it calculates residuals (prediction errors)
-    ///    - These are the differences between what the VAR model predicted and what actually happened
-    /// 
-    /// 3. Finally, it estimates the MA coefficients
-    ///    - These capture how past prediction errors influence current values
-    /// 
-    /// This two-stage approach (first VAR, then MA) is a practical way to estimate VARMA models,
-    /// which can be challenging to estimate directly. It's like first getting the big picture right,
-    /// then fine-tuning by learning from past mistakes.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        base.Train(x, y); // Train VAR part
-
-        // Calculate residuals
-        _residuals = CalculateResiduals(x, y);
-
-        // Estimate MA coefficients using residuals
-        EstimateMACoefficients();
-    }
-
-    /// <summary>
     /// Generates forecasts using the trained VARMA model.
     /// </summary>
     /// <param name="input">The input features matrix.</param>

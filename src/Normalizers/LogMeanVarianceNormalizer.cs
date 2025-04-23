@@ -42,26 +42,10 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class LogMeanVarianceNormalizer<T> : INormalizer<T>
+/// <typeparam name="TInput">The type of input data structure.</typeparam>
+/// <typeparam name="TOutput">The type of output data structure.</typeparam>
+public class LogMeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutput>
 {
-    /// <summary>
-    /// The numeric operations provider for the specified type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field holds a reference to an object that provides operations for the numeric type T.
-    /// These operations include logarithm, exponentiation, addition, subtraction, and statistical 
-    /// calculations needed for the log-mean-variance normalization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like having a specialized calculator that knows how to handle various types of numbers.
-    /// 
-    /// Since this normalizer needs to perform advanced mathematical operations (logarithms, exponents,
-    /// statistical calculations, etc.) on different types of numbers, it uses this helper to ensure
-    /// the calculations work correctly regardless of whether you're using decimals, doubles, or other numeric types.
-    /// </para>
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-
     /// <summary>
     /// A small value added to prevent numerical issues with logarithms of zero or very small numbers.
     /// </summary>
@@ -84,7 +68,7 @@ public class LogMeanVarianceNormalizer<T> : INormalizer<T>
     private readonly T _epsilon;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="LogMeanVarianceNormalizer{T}"/> class.
+    /// Initializes a new instance of the <see cref="LogMeanVarianceNormalizer{T, TInput, TOutput}"/> class.
     /// </summary>
     /// <param name="numOps">Optional numeric operations provider. If not provided, a default one will be created.</param>
     /// <remarks>
@@ -104,22 +88,21 @@ public class LogMeanVarianceNormalizer<T> : INormalizer<T>
     /// that range from microscopic to gigantic in size.
     /// </para>
     /// </remarks>
-    public LogMeanVarianceNormalizer(INumericOperations<T>? numOps = null)
+    public LogMeanVarianceNormalizer() : base()
     {
-        _numOps = numOps ?? MathHelper.GetNumericOperations<T>();
-        _epsilon = _numOps.FromDouble(1e-10);
+        _epsilon = NumOps.FromDouble(1e-10);
     }
 
     /// <summary>
-    /// Normalizes a vector using the log-mean-variance approach.
+    /// Normalizes output data using the log-mean-variance approach.
     /// </summary>
-    /// <param name="vector">The input vector to normalize.</param>
+    /// <param name="data">The input data to normalize.</param>
     /// <returns>
-    /// A tuple containing the normalized vector and the normalization parameters, which include the shift, mean, and standard deviation.
+    /// A tuple containing the normalized data and the normalization parameters, which include the shift, mean, and standard deviation.
     /// </returns>
     /// <remarks>
     /// <para>
-    /// This method normalizes a vector by:
+    /// This method normalizes data by:
     /// 1. Shifting values if necessary to ensure all are positive (required for logarithm)
     /// 2. Applying a logarithm transformation to compress the range
     /// 3. Computing the mean and standard deviation of the log-transformed values
@@ -151,35 +134,77 @@ public class LogMeanVarianceNormalizer<T> : INormalizer<T>
     /// This transformation preserves the important relationships in highly varied data.
     /// </para>
     /// </remarks>
-    public (Vector<T>, NormalizationParameters<T>) NormalizeVector(Vector<T> vector)
+    public override (TOutput, NormalizationParameters<T>) NormalizeOutput(TOutput data)
     {
-        T minValue = vector.Min();
-        T shift = _numOps.GreaterThan(minValue, _numOps.Zero) 
-            ? _numOps.Zero
-            : _numOps.Add(_numOps.Add(_numOps.Negate(minValue), _numOps.One), _epsilon);
-        var logVector = vector.Transform(x => _numOps.Log(_numOps.Add(x, shift)));
-        T mean = logVector.Average();
+        if (data is Vector<T> vector)
+        {
+            T minValue = vector.Min();
+            T shift = NumOps.GreaterThan(minValue, NumOps.Zero) 
+                ? NumOps.Zero
+                : NumOps.Add(NumOps.Add(NumOps.Negate(minValue), NumOps.One), _epsilon);
+            var logVector = vector.Transform(x => NumOps.Log(NumOps.Add(x, shift)));
+            T mean = logVector.Average();
+            
+            T variance = logVector.Select(x => NumOps.Power(NumOps.Subtract(x, mean), NumOps.FromDouble(2))).Average();
+            T stdDev = NumOps.Sqrt(NumOps.GreaterThan(variance, _epsilon) ? variance : _epsilon);
+            var normalizedVector = logVector.Transform(x => NumOps.Divide(NumOps.Subtract(x, mean), stdDev));
+            normalizedVector = normalizedVector.Transform(x => NumOps.IsNaN(x) ? NumOps.Zero : x);
+            var parameters = new NormalizationParameters<T>(NumOps) 
+            { 
+                Method = NormalizationMethod.LogMeanVariance,
+                Shift = shift, 
+                Mean = mean, 
+                StdDev = stdDev 
+            };
+            return ((TOutput)(object)normalizedVector, parameters);
+        }
+        else if (data is Tensor<T> tensor)
+        {
+            // Flatten tensor to apply log-mean-variance normalization
+            var flattenedTensor = tensor.ToVector();
+            
+            T minValue = flattenedTensor.Min();
+            T shift = NumOps.GreaterThan(minValue, NumOps.Zero) 
+                ? NumOps.Zero
+                : NumOps.Add(NumOps.Add(NumOps.Negate(minValue), NumOps.One), _epsilon);
+                
+            var logVector = flattenedTensor.Transform(x => NumOps.Log(NumOps.Add(x, shift)));
+            T mean = logVector.Average();
+            
+            T variance = logVector.Select(x => NumOps.Power(NumOps.Subtract(x, mean), NumOps.FromDouble(2))).Average();
+            T stdDev = NumOps.Sqrt(NumOps.GreaterThan(variance, _epsilon) ? variance : _epsilon);
+            var normalizedVector = logVector.Transform(x => NumOps.Divide(NumOps.Subtract(x, mean), stdDev));
+            normalizedVector = normalizedVector.Transform(x => NumOps.IsNaN(x) ? NumOps.Zero : x);
+            
+            // Convert back to tensor with the same shape
+            var normalizedTensor = Tensor<T>.FromVector(normalizedVector);
+            if (tensor.Shape.Length > 1)
+            {
+                normalizedTensor = normalizedTensor.Reshape(tensor.Shape);
+            }
+            
+            var parameters = new NormalizationParameters<T>(NumOps) 
+            { 
+                Method = NormalizationMethod.LogMeanVariance,
+                Shift = shift, 
+                Mean = mean, 
+                StdDev = stdDev 
+            };
+            
+            return ((TOutput)(object)normalizedTensor, parameters);
+        }
         
-        T variance = logVector.Select(x => _numOps.Power(_numOps.Subtract(x, mean), _numOps.FromDouble(2))).Average();
-        T stdDev = _numOps.Sqrt(_numOps.GreaterThan(variance, _epsilon) ? variance : _epsilon);
-        var normalizedVector = logVector.Transform(x => _numOps.Divide(_numOps.Subtract(x, mean), stdDev));
-        normalizedVector = normalizedVector.Transform(x => _numOps.IsNaN(x) ? _numOps.Zero : x);
-        var parameters = new NormalizationParameters<T>(_numOps) 
-        { 
-            Method = NormalizationMethod.LogMeanVariance,
-            Shift = shift, 
-            Mean = mean, 
-            StdDev = stdDev 
-        };
-        return (normalizedVector, parameters);
+        throw new InvalidOperationException(
+            $"Unsupported data type {typeof(TOutput).Name}. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
-    /// Normalizes a matrix using the log-mean-variance approach, applying normalization separately to each column.
+    /// Normalizes input data using the log-mean-variance approach, applying normalization separately to each column.
     /// </summary>
-    /// <param name="matrix">The input matrix to normalize.</param>
+    /// <param name="data">The input data to normalize.</param>
     /// <returns>
-    /// A tuple containing the normalized matrix and a list of normalization parameters for each column.
+    /// A tuple containing the normalized data and a list of normalization parameters for each column.
     /// </returns>
     /// <remarks>
     /// <para>
@@ -204,26 +229,88 @@ public class LogMeanVarianceNormalizer<T> : INormalizer<T>
     /// - The parameters for each column, so you can convert back to original values later if needed
     /// </para>
     /// </remarks>
-    public (Matrix<T>, List<NormalizationParameters<T>>) NormalizeMatrix(Matrix<T> matrix)
+    public override (TInput, List<NormalizationParameters<T>>) NormalizeInput(TInput data)
     {
-        var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
-        var parametersList = new List<NormalizationParameters<T>>();
-        for (int i = 0; i < matrix.Columns; i++)
+        if (data is Matrix<T> matrix)
         {
-            var column = matrix.GetColumn(i);
-            var (normalizedColumn, parameters) = NormalizeVector(column);
-            normalizedMatrix.SetColumn(i, normalizedColumn);
-            parametersList.Add(parameters);
+            var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
+            var parametersList = new List<NormalizationParameters<T>>();
+            
+            for (int i = 0; i < matrix.Columns; i++)
+            {
+                var column = matrix.GetColumn(i);
+                // Convert column to TOutput for normalize method
+                var (normalizedColumn, parameters) = NormalizeOutput((TOutput)(object)column);
+                // Convert back to Vector<T>
+                if (normalizedColumn is Vector<T> normalizedVector)
+                {
+                    normalizedMatrix.SetColumn(i, normalizedVector);
+                    parametersList.Add(parameters);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
+                }
+            }
+            
+            return ((TInput)(object)normalizedMatrix, parametersList);
         }
-        return (normalizedMatrix, parametersList);
+        else if (data is Tensor<T> tensor && tensor.Shape.Length == 2)
+        {
+            // Convert 2D tensor to matrix for column-wise normalization
+            var rows = tensor.Shape[0];
+            var cols = tensor.Shape[1];
+            var newMatrix = new Matrix<T>(rows, cols);
+            
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    newMatrix[i, j] = tensor[i, j];
+                }
+            }
+            
+            // Normalize each column separately
+            var normalizedColumns = new List<Vector<T>>();
+            var parametersList = new List<NormalizationParameters<T>>();
+            
+            for (int i = 0; i < cols; i++)
+            {
+                var column = newMatrix.GetColumn(i);
+                // Convert column to TOutput for normalize method
+                var (normalizedColumn, parameters) = NormalizeOutput((TOutput)(object)column);
+                // Convert back to Vector<T>
+                if (normalizedColumn is Vector<T> normalizedVector)
+                {
+                    normalizedColumns.Add(normalizedVector);
+                    parametersList.Add(parameters);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
+                }
+            }
+            
+            // Convert back to tensor
+            var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
+            var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
+            
+            return ((TInput)(object)normalizedTensor, parametersList);
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported data type {typeof(TInput).Name}. " +
+            $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
-    /// Denormalizes a vector using the provided normalization parameters.
+    /// Reverses the normalization of data using the provided normalization parameters.
     /// </summary>
-    /// <param name="vector">The normalized vector to denormalize.</param>
+    /// <param name="data">The normalized data to denormalize.</param>
     /// <param name="parameters">The normalization parameters containing shift, mean, and standard deviation.</param>
-    /// <returns>A denormalized vector with values converted back to their original scale.</returns>
+    /// <returns>A denormalized data with values converted back to their original scale.</returns>
     /// <remarks>
     /// <para>
     /// This method reverses the log-mean-variance normalization by:
@@ -249,12 +336,40 @@ public class LogMeanVarianceNormalizer<T> : INormalizer<T>
     /// on the normalized values.
     /// </para>
     /// </remarks>
-    public Vector<T> DenormalizeVector(Vector<T> vector, NormalizationParameters<T> parameters)
+    public override TOutput Denormalize(TOutput data, NormalizationParameters<T> parameters)
     {
-        return vector
-            .Multiply(parameters.StdDev)
-            .Add(parameters.Mean)
-            .Transform(x => _numOps.Subtract(_numOps.Exp(x), parameters.Shift));
+        if (data is Vector<T> vector)
+        {
+            var denormalizedVector = vector
+                .Multiply(parameters.StdDev)
+                .Add(parameters.Mean)
+                .Transform(x => NumOps.Subtract(NumOps.Exp(x), parameters.Shift));
+                
+            return (TOutput)(object)denormalizedVector;
+        }
+        else if (data is Tensor<T> tensor)
+        {
+            // Flatten tensor for denormalization
+            var flattenedTensor = tensor.ToVector();
+            
+            var denormalizedVector = flattenedTensor
+                .Multiply(parameters.StdDev)
+                .Add(parameters.Mean)
+                .Transform(x => NumOps.Subtract(NumOps.Exp(x), parameters.Shift));
+            
+            // Convert back to tensor with the same shape
+            var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
+            if (tensor.Shape.Length > 1)
+            {
+                denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
+            }
+            
+            return (TOutput)(object)denormalizedTensor;
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported data type {typeof(TOutput).Name}. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
@@ -293,24 +408,53 @@ public class LogMeanVarianceNormalizer<T> : INormalizer<T>
     /// This reflects the complexity of working with logarithmic transformations.
     /// </para>
     /// </remarks>
-    public Vector<T> DenormalizeCoefficients(Vector<T> coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
+    public override TOutput Denormalize(TOutput coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        return coefficients.PointwiseMultiply(
-            Vector<T>.FromArray(xParams.Select(p => 
-                _numOps.Divide(yParams.StdDev, _numOps.GreaterThan(p.StdDev, _epsilon) ? p.StdDev : _epsilon)
-            ).ToArray())
-        );
+        if (coefficients is Vector<T> vector)
+        {
+            var denormalizedCoefficients = vector.PointwiseMultiply(
+                Vector<T>.FromArray(xParams.Select(p => 
+                    NumOps.Divide(yParams.StdDev, NumOps.GreaterThan(p.StdDev, _epsilon) ? p.StdDev : _epsilon)
+                ).ToArray())
+            );
+            
+            return (TOutput)(object)denormalizedCoefficients;
+        }
+        else if (coefficients is Tensor<T> tensor)
+        {
+            // Flatten tensor for denormalization
+            var flattenedTensor = tensor.ToVector();
+            
+            var denormalizedVector = flattenedTensor.PointwiseMultiply(
+                Vector<T>.FromArray(xParams.Select(p => 
+                    NumOps.Divide(yParams.StdDev, NumOps.GreaterThan(p.StdDev, _epsilon) ? p.StdDev : _epsilon)
+                ).ToArray())
+            );
+            
+            // Convert back to tensor with the same shape
+            var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
+            if (tensor.Shape.Length > 1)
+            {
+                denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
+            }
+            
+            return (TOutput)(object)denormalizedTensor;
+        }
+        
+        throw new InvalidOperationException(
+            $"Unsupported coefficients type {typeof(TOutput).Name}. " +
+            $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>
-    /// Denormalizes the y-intercept from a regression model that was trained on log-mean-variance normalized data.
+    /// Calculates the denormalized Y-intercept (constant term) for a linear model.
     /// </summary>
     /// <param name="xMatrix">The original input feature matrix.</param>
-    /// <param name="y">The original output vector.</param>
-    /// <param name="coefficients">The regression coefficients.</param>
+    /// <param name="y">The original target vector.</param>
+    /// <param name="coefficients">The model coefficients.</param>
     /// <param name="xParams">The normalization parameters for the input features.</param>
     /// <param name="yParams">The normalization parameters for the output variable.</param>
-    /// <returns>A denormalized y-intercept that can be used with log-transformed original data.</returns>
+    /// <returns>The denormalized Y-intercept for use with non-normalized data.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the appropriate y-intercept for a model trained on normalized data
@@ -342,22 +486,40 @@ public class LogMeanVarianceNormalizer<T> : INormalizer<T>
     /// - Exponentiates the result to get predictions in the original scale
     /// </para>
     /// </remarks>
-    public T DenormalizeYIntercept(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients, 
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
-        T denormalizedLogIntercept = yParams.Mean;
-        for (int i = 0; i < coefficients.Length; i++)
+        // Extract vector from coefficients
+        Vector<T> coefficientsVector;
+        if (coefficients is Vector<T> vector)
         {
-            denormalizedLogIntercept = _numOps.Subtract(denormalizedLogIntercept, 
-                _numOps.Multiply(coefficients[i], 
-                    _numOps.Divide(
-                        _numOps.Multiply(xParams[i].Mean, yParams.StdDev), 
-                        _numOps.GreaterThan(xParams[i].StdDev, _epsilon) ? xParams[i].StdDev : _epsilon
+            coefficientsVector = vector;
+        }
+        else if (coefficients is Tensor<T> tensor)
+        {
+            coefficientsVector = tensor.ToVector();
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Unsupported coefficients type {typeof(TOutput).Name}. " +
+                $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
+        }
+        
+        // Calculate y-intercept
+        T denormalizedLogIntercept = yParams.Mean;
+        for (int i = 0; i < coefficientsVector.Length; i++)
+        {
+            denormalizedLogIntercept = NumOps.Subtract(denormalizedLogIntercept, 
+                NumOps.Multiply(coefficientsVector[i], 
+                    NumOps.Divide(
+                        NumOps.Multiply(xParams[i].Mean, yParams.StdDev), 
+                        NumOps.GreaterThan(xParams[i].StdDev, _epsilon) ? xParams[i].StdDev : _epsilon
                     )
                 )
             );
         }
 
-        return _numOps.Subtract(_numOps.Exp(denormalizedLogIntercept), yParams.Shift);
+        return NumOps.Subtract(NumOps.Exp(denormalizedLogIntercept), yParams.Shift);
     }
 }

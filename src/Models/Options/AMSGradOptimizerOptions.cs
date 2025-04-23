@@ -16,7 +16,7 @@ namespace AiDotNet.Models.Options;
 /// by giving more attention to important patterns and less to noise in the data. Unlike some other methods, AMSGrad
 /// ensures that your learning progress never goes backward, which helps it reach better solutions.</para>
 /// </remarks>
-public class AMSGradOptimizerOptions : GradientBasedOptimizerOptions
+public class AMSGradOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the initial step size used for parameter updates during optimization.

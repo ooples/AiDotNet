@@ -4,6 +4,8 @@
 /// Implements the Interquartile Range (IQR) method for removing outliers from datasets.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of input data structure.</typeparam>
+/// <typeparam name="TOutput">The type of output data structure.</typeparam>
 /// <remarks>
 /// This class uses the IQR method, a robust statistical technique for identifying outliers.
 /// 
@@ -12,7 +14,7 @@
 /// statistical approach that uses quartiles (which divide your data into four equal parts) to identify
 /// which data points should be considered outliers.
 /// </remarks>
-public class IQROutlierRemoval<T> : IOutlierRemoval<T>
+public class IQROutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, TOutput>
 {
     private readonly T _iqrMultiplier;
     private readonly INumericOperations<T> _numOps;
@@ -65,17 +67,20 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
     /// in both directions by a factor of your multiplier. Any data point that falls outside this
     /// extended range for ANY feature is considered an outlier and removed from both inputs and outputs.
     /// </remarks>
-    public (Matrix<T> CleanedInputs, Vector<T> CleanedOutputs) RemoveOutliers(Matrix<T> inputs, Vector<T> outputs)
+    public (TInput CleanedInputs, TOutput CleanedOutputs) RemoveOutliers(TInput inputs, TOutput outputs)
     {
+        // Convert to concrete types
+        var (inputMatrix, outputVector) = OutlierRemovalHelper<T, TInput, TOutput>.ConvertToMatrixVector(inputs, outputs);
+        
         var cleanedInputs = new List<Vector<T>>();
         var cleanedOutputs = new List<T>();
 
-        for (int i = 0; i < outputs.Length; i++)
+        for (int i = 0; i < outputVector.Length; i++)
         {
             bool isOutlier = false;
-            for (int j = 0; j < inputs.Columns; j++)
+            for (int j = 0; j < inputMatrix.Columns; j++)
             {
-                var column = inputs.GetColumn(j);
+                var column = inputMatrix.GetColumn(j);
                 var quartiles = new Quartile<T>(column);
                 var q1 = quartiles.Q1;
                 var q3 = quartiles.Q3;
@@ -92,11 +97,19 @@ public class IQROutlierRemoval<T> : IOutlierRemoval<T>
 
             if (!isOutlier)
             {
-                cleanedInputs.Add(new Vector<T>(inputs.GetRow(i)));
-                cleanedOutputs.Add(outputs[i]);
+                cleanedInputs.Add(new Vector<T>(inputMatrix.GetRow(i)));
+                cleanedOutputs.Add(outputVector[i]);
             }
         }
 
-        return (new Matrix<T>(cleanedInputs), new Vector<T>(cleanedOutputs));
+        var cleanedInputMatrix = new Matrix<T>(cleanedInputs);
+        var cleanedOutputVector = new Vector<T>(cleanedOutputs);
+        
+        // Convert back to original types
+        return OutlierRemovalHelper<T, TInput, TOutput>.ConvertToOriginalTypes(
+            cleanedInputMatrix, 
+            cleanedOutputVector, 
+            typeof(TInput), 
+            typeof(TOutput));
     }
 }

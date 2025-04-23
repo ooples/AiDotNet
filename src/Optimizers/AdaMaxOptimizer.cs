@@ -19,24 +19,88 @@ namespace AiDotNet.Optimizers;
 /// - Good for problems where the gradients can be sparse or have different scales
 /// </para>
 /// </remarks>
-public class AdaMaxOptimizer<T> : GradientBasedOptimizerBase<T>
+public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
-    private AdaMaxOptimizerOptions _options;
+    /// <summary>
+    /// The configuration options specific to the AdaMax optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the configuration parameters that control the behavior of the AdaMax algorithm,
+    /// such as learning rate, beta values, and convergence criteria.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the instruction manual for our learning assistant.
+    /// It contains all the settings that determine how the optimizer behaves, such as how fast it learns
+    /// and how it balances new information with what it already knows.
+    /// </para>
+    /// </remarks>
+    private AdaMaxOptimizerOptions<T, TInput, TOutput> _options;
+
+    /// <summary>
+    /// The first moment vector that tracks the exponentially weighted moving average of gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector maintains an exponentially decaying average of past gradients, which provides
+    /// momentum to the optimization process and helps smooth out noisy gradient updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the optimizer's memory of which direction it's been moving.
+    /// 
+    /// Imagine you're walking through a foggy forest:
+    /// - Each step, you get a hint about which way to go (the gradient)
+    /// - But instead of just following the latest hint, you remember a weighted average of all past hints
+    /// - This helps you stay on a consistent path even if some hints are misleading
+    /// 
+    /// This "memory" helps the optimizer move more steadily toward the solution.
+    /// </para>
+    /// </remarks>
     private Vector<T>? _m; // First moment vector
+
+    /// <summary>
+    /// The exponentially weighted infinity norm of past gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector tracks the maximum magnitude of gradients seen so far (with exponential decay),
+    /// which AdaMax uses to scale the learning rate for each parameter individually.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the optimizer's memory of how dramatic the changes have been.
+    /// 
+    /// Continuing our forest analogy:
+    /// - For each direction you might walk, you remember the strongest hint you've ever received
+    /// - This helps you decide how big or small your steps should be in each direction
+    /// - If you've received strong hints to go north, you might take bigger steps north
+    /// - If hints about going east have always been mild, you take smaller steps east
+    /// 
+    /// This adaptive step sizing helps the optimizer learn efficiently across different parameters.
+    /// </para>
+    /// </remarks>
     private Vector<T>? _u; // Exponentially weighted infinity norm
+
+    /// <summary>
+    /// The current time step or iteration counter.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This counter tracks how many optimization steps have been performed, which is used
+    /// to correct the bias in the moment estimates during the early iterations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like a counter that keeps track of how many learning steps we've taken.
+    /// 
+    /// It serves two important purposes:
+    /// 1. It helps us know when to stop (if we've taken too many steps without improvement)
+    /// 2. It's used in calculations to make the early learning steps more accurate
+    /// 
+    /// Without this counter, the optimizer might behave poorly in the first few iterations
+    /// because it doesn't have enough history to make good decisions yet.
+    /// </para>
+    /// </remarks>
     private int _t; // Time step
 
     /// <summary>
     /// Initializes a new instance of the AdaMaxOptimizer class.
     /// </summary>
     /// <param name="options">The options for configuring the AdaMax optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     /// <remarks>
     /// <para>
     /// This constructor sets up the AdaMax optimizer with the specified options and components.
@@ -54,17 +118,10 @@ public class AdaMaxOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     public AdaMaxOptimizer(
-        AdaMaxOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        AdaMaxOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new AdaMaxOptimizerOptions();
+        _options = options ?? new AdaMaxOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
     }
 
@@ -115,16 +172,17 @@ public class AdaMaxOptimizer<T> : GradientBasedOptimizerBase<T>
     /// you get a hint about which direction to go next.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var parameters = currentSolution.GetParameters();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _m = new Vector<T>(currentSolution.Coefficients.Length);
-        _u = new Vector<T>(currentSolution.Coefficients.Length);
+        _m = new Vector<T>(parameters.Length);
+        _u = new Vector<T>(parameters.Length);
         InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
@@ -178,14 +236,15 @@ public class AdaMaxOptimizer<T> : GradientBasedOptimizerBase<T>
     /// The result is a new, slightly improved set of stereo settings (or in our case, a better solution).
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
         var beta1 = NumOps.FromDouble(_options.Beta1);
         var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
         var beta2 = NumOps.FromDouble(_options.Beta2);
 
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        for (int i = 0; i < parameters.Length; i++)
         {
             // Update biased first moment estimate
             _m![i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
@@ -198,10 +257,10 @@ public class AdaMaxOptimizer<T> : GradientBasedOptimizerBase<T>
 
             // Update parameters
             var update = NumOps.Divide(NumOps.Multiply(alpha, _m[i]), _u[i]);
-            newCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], update);
+            newCoefficients[i] = NumOps.Subtract(parameters[i], update);
         }
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -224,7 +283,7 @@ public class AdaMaxOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This helps the optimizer to learn efficiently: not too slow, but also not so fast that it becomes unstable.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -265,9 +324,9 @@ public class AdaMaxOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This ensures that your optimizer always has the correct and up-to-date settings to work with.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is AdaMaxOptimizerOptions adaMaxOptions)
+        if (options is AdaMaxOptimizerOptions<T, TInput, TOutput> adaMaxOptions)
         {
             _options = adaMaxOptions;
         }
@@ -295,7 +354,7 @@ public class AdaMaxOptimizer<T> : GradientBasedOptimizerBase<T>
     /// This is useful if you want to know exactly how your optimizer is currently configured.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -377,7 +436,7 @@ public class AdaMaxOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<AdaMaxOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<AdaMaxOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _t = reader.ReadInt32();
@@ -409,7 +468,7 @@ public class AdaMaxOptimizer<T> : GradientBasedOptimizerBase<T>
     /// saving time and effort.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_AdaMax_{_options.Beta1}_{_options.Beta2}_{_t}";

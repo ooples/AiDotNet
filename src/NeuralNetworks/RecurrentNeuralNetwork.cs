@@ -33,6 +33,29 @@ namespace AiDotNet.NeuralNetworks;
 public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     /// <summary>
+    /// The learning rate used for updating the network parameters during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The learning rate is a crucial hyperparameter that determines the step size at each iteration
+    /// while moving toward a minimum of the loss function. It influences how quickly the network adapts
+    /// to the training data. A higher learning rate allows for faster learning but may overshoot the optimal
+    /// solution, while a lower learning rate provides more precise updates but may require more training time.
+    /// </para>
+    /// <para><b>For Beginners:</b> The learning rate is like the size of the steps the network takes when learning.
+    /// 
+    /// Think of it as adjusting the volume on a radio:
+    /// - A high learning rate is like turning the knob quickly: you might find the right station faster,
+    ///   but you could also overshoot it.
+    /// - A low learning rate is like turning the knob very slowly: you're less likely to miss the station,
+    ///   but it takes longer to find it.
+    /// 
+    /// The right learning rate helps the network learn efficiently without making wild guesses.
+    /// </para>
+    /// </remarks>
+    private T _learningRate;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="RecurrentNeuralNetwork{T}"/> class with the specified architecture.
     /// </summary>
     /// <param name="architecture">The neural network architecture to use for the RNN.</param>
@@ -54,8 +77,9 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     /// determines what kind of calculations it can perform and how it will process information.
     /// </para>
     /// </remarks>
-    public RecurrentNeuralNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public RecurrentNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double learningRate = 0.01) : base(architecture)
     {
+        _learningRate = NumOps.FromDouble(learningRate);
     }
 
     /// <summary>
@@ -96,45 +120,6 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultRNNLayers(Architecture));
         }
-    }
-
-    /// <summary>
-    /// Processes the input through the recurrent neural network to produce a prediction.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector after processing through the network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the forward pass of the Recurrent Neural Network. It processes the input
-    /// through each layer of the network in sequence, transforming it according to the operations defined
-    /// in each layer. For an RNN, this typically involves updating the internal state based on both the
-    /// current input and the previous state, capturing temporal dependencies in the data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is how the RNN processes information and makes predictions.
-    /// 
-    /// During the prediction process:
-    /// - The input data (like a word or time point) enters the network
-    /// - The data flows through each layer in sequence
-    /// - Each recurrent layer combines the current input with its memory of previous inputs
-    /// - The final output represents the network's prediction or answer
-    /// 
-    /// What makes this special is that when processing sequences (like words in a sentence):
-    /// - The first word is processed with no prior context
-    /// - The second word is processed while remembering information about the first word
-    /// - The third word is processed with memory of both previous words
-    /// ...and so on
-    /// 
-    /// This allows the network to understand relationships and patterns that unfold over time or sequence.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-        return current;
     }
 
     /// <summary>
@@ -182,101 +167,309 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Saves the state of the Recurrent Neural Network to a binary writer.
+    /// Makes a prediction using the current state of the Recurrent Neural Network.
     /// </summary>
-    /// <param name="writer">The binary writer to save the state to.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if layer serialization fails.</exception>
+    /// <param name="input">The input tensor to make a prediction for.</param>
+    /// <returns>The predicted output tensor after passing through all layers of the network.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the input tensor is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the input tensor has incorrect dimensions.</exception>
     /// <remarks>
     /// <para>
-    /// This method serializes the entire state of the Recurrent Neural Network, including all layers and their
-    /// parameters. It writes the number of layers and the type and state of each layer to the provided binary writer.
-    /// This allows the network state to be saved and later restored, which is useful for deploying trained models or
-    /// continuing training from a checkpoint.
+    /// This method performs a forward pass through the network, transforming the input data through each layer
+    /// to produce a final prediction. It includes input validation to ensure the provided tensor matches the
+    /// expected input shape of the network.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the entire state of the RNN to a file.
+    /// <para><b>For Beginners:</b> This is how the network processes new data to make predictions.
     /// 
-    /// When serializing:
-    /// - All the network's layers are saved (their types and internal values)
-    /// - The saved file can later be used to restore the exact same network state
+    /// The prediction process:
+    /// 1. Checks if the input data is valid and has the correct shape
+    /// 2. Passes the input through each layer of the network
+    /// 3. Each layer transforms the data, with recurrent layers using their internal state
+    /// 4. The final layer produces the network's prediction
     /// 
-    /// This is useful for:
-    /// - Saving a trained model to use later
-    /// - Sharing a model with others
-    /// - Creating backups during long training processes
-    /// - Pausing and resuming training
-    /// 
-    /// Think of it like taking a complete snapshot of the network that can be restored later.
+    /// Think of it like a game of telephone, where each person (layer) passes along a message,
+    /// but also remembers previous messages to provide context.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-        writer.Write(Layers.Count);
+        // Validate input
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
+        }
+
+        var inputShape = input.Shape;
+        var expectedShape = Architecture.GetInputShape();
+
+        // Ensure input has correct shape
+        if (inputShape.Length != expectedShape.Length)
+        {
+            throw new ArgumentException($"Input tensor has wrong number of dimensions. Expected {expectedShape.Length}, got {inputShape.Length}.");
+        }
+
+        // Check if dimensions match
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (inputShape[i] != expectedShape[i])
+            {
+                throw new ArgumentException($"Input dimension mismatch at index {i}. Expected {expectedShape[i]}, got {inputShape[i]}.");
+            }
+        }
+
+        // Forward pass through each layer in the network
+        Tensor<T> currentOutput = input;
         foreach (var layer in Layers)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            currentOutput = layer.Forward(currentOutput);
+        }
+
+        return currentOutput;
+    }
+
+    /// <summary>
+    /// Trains the Recurrent Neural Network using the provided input and expected output.
+    /// </summary>
+    /// <param name="input">The input tensor used for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
+    /// <exception cref="ArgumentNullException">Thrown when either input or expectedOutput is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method implements the training process for the RNN. It performs a forward pass, calculates the error
+    /// between the network's prediction and the expected output, and then backpropagates this error to adjust
+    /// the network's parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how the network learns from examples.
+    /// 
+    /// The training process:
+    /// 1. Takes a sequence of inputs and their correct answers (expected outputs)
+    /// 2. Makes predictions using the current network state
+    /// 3. Compares the predictions to the correct answers to calculate the error
+    /// 4. Uses this error to adjust the network's internal settings (backpropagation through time)
+    /// 
+    /// It's like learning to predict weather patterns:
+    /// - The network looks at a series of past weather conditions (input)
+    /// - It tries to predict the next day's weather (output)
+    /// - It compares its prediction to what actually happened
+    /// - It adjusts its understanding based on its mistakes
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
+        }
+
+        if (expectedOutput == null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput), "Expected output tensor cannot be null.");
+        }
+
+        // Forward pass
+        Tensor<T> output = Predict(input);
+
+        // Calculate error/loss
+        Tensor<T> error = output.Subtract(expectedOutput);
+
+        // Backpropagate error through time
+        BackpropagateError(error);
+
+        // Update network parameters
+        UpdateNetworkParameters();
+    }
+
+    /// <summary>
+    /// Backpropagates the error through the network layers.
+    /// </summary>
+    /// <param name="error">The initial error tensor to backpropagate.</param>
+    /// <remarks>
+    /// <para>
+    /// This method propagates the error backwards through each layer of the network, allowing each layer
+    /// to compute its local gradients. In an RNN, this process involves unrolling the network through time,
+    /// which is crucial for capturing dependencies in sequential data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how the network learns from its mistakes.
+    /// 
+    /// The backpropagation process:
+    /// 1. Starts with the error at the output layer
+    /// 2. Moves backwards through each layer
+    /// 3. Each layer figures out how much it contributed to the error
+    /// 4. This information is used to update the network's parameters
+    /// 
+    /// Think of it like tracing back through a series of decisions to understand where things went wrong,
+    /// so you can make better decisions next time.
+    /// </para>
+    /// </remarks>
+    private void BackpropagateError(Tensor<T> error)
+    {
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            error = Layers[i].Backward(error);
         }
     }
 
     /// <summary>
-    /// Loads the state of the Recurrent Neural Network from a binary reader.
+    /// Updates the parameters of all layers in the network based on computed gradients.
     /// </summary>
-    /// <param name="reader">The binary reader to load the state from.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if layer deserialization fails.</exception>
     /// <remarks>
     /// <para>
-    /// This method deserializes the state of the Recurrent Neural Network from a binary reader. It reads
-    /// the number of layers, recreates each layer based on its type, and deserializes the layer state.
-    /// This allows a previously saved network state to be restored, which is essential for deploying trained
-    /// models or continuing training from a checkpoint.
+    /// This method applies the computed gradients to update the parameters of each layer in the network.
+    /// It uses the learning rate to control the size of the updates. In an RNN, this process adjusts
+    /// both the weights for processing current inputs and the recurrent weights that handle sequential information.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved RNN state from a file.
+    /// <para><b>For Beginners:</b> This is how the network improves its performance over time.
     /// 
-    /// When deserializing:
-    /// - The number and types of layers are read from the file
-    /// - Each layer is recreated and its state is restored
+    /// The parameter update process:
+    /// 1. Goes through each layer in the network
+    /// 2. Checks if the layer has any parameters to update
+    /// 3. Calculates how much to change each parameter based on the gradients and learning rate
+    /// 4. Applies these changes to the layer's parameters
     /// 
-    /// This allows you to:
-    /// - Load a previously trained model
-    /// - Continue using or training a model from where you left off
-    /// - Use models created by others
-    /// 
-    /// Think of it like restoring a complete snapshot of the network that was saved earlier.
-    /// For example, you might train an RNN to generate text, save it, and then later load it
-    /// to generate new text without having to retrain the model.
+    /// It's like fine-tuning a musical instrument. After hearing how it sounds (the error),
+    /// you make small adjustments to each part (the parameters) to improve the overall performance.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    private void UpdateNetworkParameters()
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-        for (int i = 0; i < layerCount; i++)
+        foreach (var layer in Layers)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            if (layer.GetParameterGradients() != null)
+            {
+                Vector<T> updates = layer.GetParameterGradients().Multiply(_learningRate);
+                layer.UpdateParameters(updates);
+            }
         }
+    }
+
+    /// <summary>
+    /// Gets metadata about the Recurrent Neural Network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata that describes the RNN, including its type, architecture details,
+    /// and other relevant information. This metadata can be useful for model management, documentation,
+    /// and versioning.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides a summary of your network's setup and characteristics.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Recurrent Neural Network)
+    /// - How many inputs and outputs the network has
+    /// - A description of the network's structure
+    /// - Additional information specific to RNNs
+    /// 
+    /// This is useful for:
+    /// - Keeping track of different versions of your model
+    /// - Comparing different network configurations
+    /// - Documenting your model's setup for future reference
+    /// 
+    /// Think of it like a spec sheet for a car, listing all its important features and capabilities.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.RecurrentNeuralNetwork,
+            FeatureCount = Architecture.GetInputShape()[0],
+            Description = $"RNN with {Layers.Count} layers",
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputShape", Architecture.GetInputShape() },
+                { "OutputShape", Architecture.GetOutputShape() },
+            },
+            ModelData = this.Serialize()
+        };
+
+        return metadata;
+    }
+
+    /// <summary>
+    /// Serializes network-specific data for the Recurrent Neural Network.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the specific configuration and state of the RNN to a binary stream.
+    /// It includes RNN-specific parameters that are essential for later reconstruction of the network.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the unique settings of your RNN.
+    /// 
+    /// It writes:
+    /// - The size of the hidden state (which determines the network's memory capacity)
+    /// - The length of sequences the network is designed to handle
+    /// - Any other RNN-specific parameters
+    /// 
+    /// Saving these details allows you to recreate the exact same network structure later.
+    /// It's like writing down a recipe so you can make the same dish again in the future.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(Convert.ToDouble(_learningRate));
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data for the Recurrent Neural Network.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the specific configuration and state of the RNN from a binary stream.
+    /// It reconstructs the RNN-specific parameters to match the state of the network when it was serialized.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads the unique settings of your RNN.
+    /// 
+    /// It reads:
+    /// - The size of the hidden state (which determines the network's memory capacity)
+    /// - The length of sequences the network is designed to handle
+    /// - Any other RNN-specific parameters
+    /// 
+    /// Loading these details allows you to recreate the exact same network structure that was previously saved.
+    /// It's like following a recipe to recreate a dish exactly as it was made before.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _learningRate = NumOps.FromDouble(reader.ReadDouble());
+    }
+
+    /// <summary>
+    /// Creates a new instance of the recurrent neural network with the same configuration.
+    /// </summary>
+    /// <returns>
+    /// A new instance of <see cref="RecurrentNeuralNetwork{T}"/> with the same configuration as the current instance.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new recurrent neural network that has the same configuration as the current instance.
+    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
+    /// The new instance will have the same architecture and learning rate as the original,
+    /// but will not share parameter values unless they are explicitly copied after creation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+    /// 
+    /// It's like creating a blueprint copy of your network that can be used to:
+    /// - Save your model's settings
+    /// - Create a new identical model
+    /// - Transfer your model's configuration to another system
+    /// 
+    /// This is useful when you want to:
+    /// - Create multiple similar recurrent neural networks
+    /// - Save a model's configuration for later use
+    /// - Reset a model while keeping its settings
+    /// 
+    /// Note that while the settings are copied, the learned parameters (like the weights that determine
+    /// how the network processes sequences) are not automatically transferred, so the new instance
+    /// will need training or parameter copying to match the performance of the original.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        // Create a new instance with the cloned architecture and the same learning rate
+        double learningRate = Convert.ToDouble(_learningRate);
+        return new RecurrentNeuralNetwork<T>(Architecture, learningRate);
     }
 }

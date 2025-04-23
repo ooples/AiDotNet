@@ -117,5 +117,5 @@ public class DynamicRegressionWithARIMAErrorsOptions<T> : TimeSeriesRegressionOp
     /// model generalize better to new situations. Think of it as encouraging the model to find simpler explanations
     /// rather than complicated ones that might just be capturing noise in your data.</para>
     /// </remarks>
-    public IRegularization<T>? Regularization { get; set; }
+    public IRegularization<T, Matrix<T>, Vector<T>>? Regularization { get; set; }
 }

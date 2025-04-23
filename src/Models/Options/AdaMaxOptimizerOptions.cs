@@ -13,7 +13,7 @@ namespace AiDotNet.Models.Options;
 /// Think of it as a specialized tool that works better than general-purpose tools for certain specific tasks.
 /// </para>
 /// </remarks>
-public class AdaMaxOptimizerOptions : GradientBasedOptimizerOptions
+public class AdaMaxOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the learning rate, which controls how quickly the model adapts to the problem.

@@ -52,7 +52,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// - With regularization, you learn general bike-riding skills that work on many different paths.
     /// </para>
     /// </remarks>
-    protected IRegularization<T> Regularization { get; private set; }
+    protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
 
     /// <summary>
     /// Gets the maximum depth of the decision tree.
@@ -88,16 +88,21 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     public virtual int NumberOfTrees => 1;
 
     /// <summary>
+    /// Random number generator used for tree building and sampling.
+    /// </summary>
+    protected Random Random => new(Options.Seed ?? Environment.TickCount);
+
+    /// <summary>
     /// Initializes a new instance of the AsyncDecisionTreeRegressionBase class.
     /// </summary>
     /// <param name="options">The options for configuring the decision tree.</param>
     /// <param name="regularization">The regularization method to use.</param>
-    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T>? regularization)
+    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization)
     {
         Options = options ?? new();
         NumOps = MathHelper.GetNumericOperations<T>();
         FeatureImportances = new Vector<T>(0);
-        Regularization = regularization ?? new NoRegularization<T>();
+        Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
     }
 
     /// <summary>
@@ -149,7 +154,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// It's like getting a report card for your model, showing how well it learned and what it learned.
     /// </para>
     /// </remarks>
-    public abstract ModelMetadata<T> GetModelMetadata();
+    public abstract ModelMetaData<T> GetModelMetaData();
 
     /// <summary>
     /// Asynchronously calculates the importance of each feature in the model.
@@ -337,5 +342,416 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         node.Right = DeserializeNode(reader);
 
         return node;
+    }
+
+    /// <summary>
+    /// Gets the model parameters as a vector representation.
+    /// </summary>
+    /// <returns>A vector containing a serialized representation of the decision tree structure.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides a vector representation of the asynchronous decision tree model. Decision trees
+    /// have a hierarchical structure that doesn't naturally fit into a flat vector format,
+    /// so this representation is a simplified encoding of the tree structure suitable for
+    /// certain optimization algorithms or model comparison techniques.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method converts the tree structure into a flat list of numbers.
+    /// 
+    /// Decision trees are complex structures with branches and nodes, which don't naturally fit
+    /// into a simple list of parameters like linear models do. This method creates a specialized
+    /// representation of the tree that can be used by certain algorithms or for model comparison.
+    /// 
+    /// The exact format of this representation depends on the specific implementation, but
+    /// generally includes information about:
+    /// - Each node's feature index (which feature it splits on)
+    /// - Each node's split value (the threshold for the decision)
+    /// - Each node's prediction value (for leaf nodes)
+    /// - The tree structure (how nodes connect to each other)
+    /// 
+    /// This is primarily used by advanced algorithms and not typically needed for regular use.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        // Get the total number of nodes in the tree
+        int nodeCount = CountNodes(Root);
+    
+        // For each node, we store:
+        // 1. Feature index (as converted double)
+        // 2. Split value 
+        // 3. Prediction value
+        // 4. IsLeaf flag (as converted double: 1.0 for leaf, 0.0 for non-leaf)
+        // Plus we need one additional parameter for the node count
+        Vector<T> parameters = new(nodeCount * 4 + 1);
+    
+        // Store the node count as the first parameter
+        parameters[0] = NumOps.FromDouble(nodeCount);
+    
+        // If the tree is empty, return just the node count
+        if (Root == null)
+        {
+            return parameters;
+        }
+    
+        // Traverse the tree and store each node's parameters
+        int currentIndex = 1;
+        SerializeNodeToVector(Root, parameters, ref currentIndex);
+    
+        return parameters;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the model with the specified parameters.
+    /// </summary>
+    /// <param name="parameters">A vector containing a serialized representation of the decision tree structure.</param>
+    /// <returns>A new model instance with the reconstructed tree structure.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs a decision tree model from a parameter vector that was previously
+    /// created using the GetParameters method. Due to the complex nature of tree structures,
+    /// this reconstruction is approximate and is primarily intended for use with optimization
+    /// algorithms or model comparison techniques.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method rebuilds a decision tree from a flat list of numbers.
+    /// 
+    /// It takes the specialized vector representation created by GetParameters() and attempts
+    /// to reconstruct a decision tree from it. This is challenging because decision trees
+    /// are complex structures that don't easily convert to and from simple lists of numbers.
+    /// 
+    /// This method is primarily used by advanced algorithms and not typically needed for regular use.
+    /// For most purposes, the Serialize and Deserialize methods provide a more reliable way to
+    /// save and load tree models.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    {
+        // Create a new instance with the same options
+        var newModel = CreateNewInstance();
+    
+        // If the parameter vector is empty or invalid, return the empty model
+        if (parameters.Length < 1)
+        {
+            return newModel;
+        }
+    
+        // Get the node count from the first parameter
+        int nodeCount = NumOps.ToInt32(parameters[0]);
+    
+        // If there are no nodes, return the empty model
+        if (nodeCount == 0)
+        {
+            return newModel;
+        }
+    
+        // Check if the parameter vector has the expected length
+        if (parameters.Length != nodeCount * 4 + 1)
+        {
+            throw new ArgumentException("Invalid parameter vector length");
+        }
+    
+        // Reconstruct the tree from the parameter vector
+        int currentIndex = 1;
+        ((AsyncDecisionTreeRegressionBase<T>)newModel).Root = DeserializeNodeFromVector(parameters, ref currentIndex);
+    
+        // Assume the feature importances are already calculated and stored in the parameters
+        // or recalculate them based on the reconstructed tree
+        if (FeatureImportances.Length > 0)
+        {
+            ((AsyncDecisionTreeRegressionBase<T>)newModel).FeatureImportances = new Vector<T>(FeatureImportances);
+        }
+    
+        return newModel;
+    }
+
+    /// <summary>
+    /// Gets the indices of all features that are used in the decision tree.
+    /// </summary>
+    /// <returns>An enumerable collection of indices for features used in the tree.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method identifies all features that are used as split criteria in the decision tree.
+    /// Features that don't appear in any decision node are not considered active.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method tells you which input features are actually used in the tree.
+    /// 
+    /// Decision trees often don't use all available features - they select the most informative ones
+    /// during training. This method returns the positions (indices) of features that are actually
+    /// used in decision nodes throughout the tree.
+    /// 
+    /// For example, if your dataset has 10 features but the tree only uses features at positions
+    /// 2, 5, and 7, this method would return [2, 5, 7].
+    /// 
+    /// This is useful for:
+    /// - Feature selection (identifying which features matter)
+    /// - Model simplification (removing unused features)
+    /// - Understanding which inputs actually affect the prediction
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<int> GetActiveFeatureIndices()
+    {
+        var activeFeatures = new HashSet<int>();
+        CollectActiveFeatures(Root, activeFeatures);
+        return activeFeatures;
+    }
+
+    /// <summary>
+    /// Determines whether a specific feature is used in the decision tree.
+    /// </summary>
+    /// <param name="featureIndex">The zero-based index of the feature to check.</param>
+    /// <returns>True if the feature is used in at least one decision node; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method checks whether a specific feature is used as a split criterion in any node of the decision tree.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method checks if a specific input feature is used in the tree.
+    /// 
+    /// You provide the position (index) of a feature, and the method tells you whether that feature
+    /// is used in any decision node throughout the tree.
+    /// 
+    /// For example, if feature #3 is never used to make a decision in the tree, this method would
+    /// return false because that feature doesn't affect the model's predictions.
+    /// 
+    /// This is useful when you want to check a specific feature's importance rather than
+    /// getting all important features at once.
+    /// </para>
+    /// </remarks>
+    public virtual bool IsFeatureUsed(int featureIndex)
+    {
+        return IsFeatureUsedInSubtree(Root, featureIndex);
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the decision tree model.
+    /// </summary>
+    /// <returns>A new instance of the model with the same parameters and tree structure.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a complete copy of the asynchronous decision tree model, including all nodes, connections,
+    /// and learned parameters. The copy is independent of the original model, so modifications to one
+    /// don't affect the other.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact independent copy of your model.
+    /// 
+    /// The copy has the same:
+    /// - Tree structure (all nodes and their connections)
+    /// - Decision rules (which features to split on and at what values)
+    /// - Prediction values at leaf nodes
+    /// - Feature importance scores
+    /// 
+    /// But it's completely separate from the original model - changes to one won't affect the other.
+    /// 
+    /// This is useful when you want to:
+    /// - Experiment with modifying a model without affecting the original
+    /// - Create multiple similar models to use in different contexts
+    /// - Save a "checkpoint" of your model before making changes
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        return Clone();
+    }
+
+    /// <summary>
+    /// Creates a clone of the decision tree model.
+    /// </summary>
+    /// <returns>A new instance of the model with the same parameters and tree structure.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a complete copy of the asynchronous decision tree model, including the entire tree structure
+    /// and all learned parameters. Specific implementations should override this method to ensure all
+    /// implementation-specific properties are properly copied.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact independent copy of your model.
+    /// 
+    /// Cloning a model means creating a new model that's exactly the same as the original,
+    /// including all its learned parameters and settings. However, the clone is independent -
+    /// changes to one model won't affect the other.
+    /// 
+    /// Think of it like photocopying a document - the copy has all the same information,
+    /// but you can mark up the copy without changing the original.
+    /// 
+    /// Note: Specific decision tree algorithms will customize this method to ensure all their
+    /// unique properties are properly copied.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        // Create a new instance with the same options
+        var clone = CreateNewInstance();
+    
+        // Deep copy the tree structure
+        if (Root != null)
+        {
+            ((AsyncDecisionTreeRegressionBase<T>)clone).Root = DeepCloneNode(Root);
+        }
+    
+        // Copy feature importances
+        if (FeatureImportances.Length > 0)
+        {
+            ((AsyncDecisionTreeRegressionBase<T>)clone).FeatureImportances = new Vector<T>(FeatureImportances);
+        }
+    
+        return clone;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the async decision tree model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the model with the same configuration but no trained parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This abstract method must be implemented by derived classes to create a new instance of the specific
+    /// decision tree model type with the same configuration options but without copying the trained parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
+    /// any learned parameters.
+    /// 
+    /// Think of it like getting a blank notepad with the same paper quality and size, 
+    /// but without any writing on it yet. The new model has the same:
+    /// - Maximum depth setting
+    /// - Minimum samples split setting
+    /// - Split criterion (how nodes decide which feature to split on)
+    /// - Other configuration options
+    /// 
+    /// But it doesn't have any of the actual tree structure that was learned from data.
+    /// 
+    /// This is mainly used internally when doing things like cross-validation or 
+    /// creating ensembles of similar models with different training data.
+    /// </para>
+    /// </remarks>
+    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance();
+
+    /// <summary>
+    /// Counts the total number of nodes in the tree.
+    /// </summary>
+    /// <param name="node">The current node being counted.</param>
+    /// <returns>The total number of nodes in the subtree rooted at the given node.</returns>
+    private int CountNodes(DecisionTreeNode<T>? node)
+    {
+        if (node == null)
+            return 0;
+    
+        return 1 + CountNodes(node.Left) + CountNodes(node.Right);
+    }
+
+    /// <summary>
+    /// Serializes a node and its children to a parameter vector.
+    /// </summary>
+    /// <param name="node">The node to serialize.</param>
+    /// <param name="parameters">The parameter vector to write to.</param>
+    /// <param name="currentIndex">The current index in the parameter vector.</param>
+    private void SerializeNodeToVector(DecisionTreeNode<T> node, Vector<T> parameters, ref int currentIndex)
+    {
+        // Store the node's parameters
+        parameters[currentIndex++] = NumOps.FromDouble(node.FeatureIndex);
+        parameters[currentIndex++] = node.SplitValue;
+        parameters[currentIndex++] = node.Prediction;
+        parameters[currentIndex++] = NumOps.FromDouble(node.IsLeaf ? 1.0 : 0.0);
+    
+        // Recursively serialize child nodes
+        if (node.Left != null)
+            SerializeNodeToVector(node.Left, parameters, ref currentIndex);
+    
+        if (node.Right != null)
+            SerializeNodeToVector(node.Right, parameters, ref currentIndex);
+    }
+
+    /// <summary>
+    /// Deserializes a node and its children from a parameter vector.
+    /// </summary>
+    /// <param name="parameters">The parameter vector to read from.</param>
+    /// <param name="currentIndex">The current index in the parameter vector.</param>
+    /// <returns>The reconstructed node.</returns>
+    private DecisionTreeNode<T>? DeserializeNodeFromVector(Vector<T> parameters, ref int currentIndex)
+    {
+        // Read the node's parameters
+        int featureIndex = NumOps.ToInt32(parameters[currentIndex++]);
+        T splitValue = parameters[currentIndex++];
+        T prediction = parameters[currentIndex++];
+        bool isLeaf = NumOps.ToInt32(parameters[currentIndex++]) == 1;
+    
+        // Create the node
+        var node = new DecisionTreeNode<T>
+        {
+            FeatureIndex = featureIndex,
+            SplitValue = splitValue,
+            Prediction = prediction,
+            IsLeaf = isLeaf
+        };
+    
+        // If it's not a leaf node, recursively deserialize child nodes
+        if (!isLeaf)
+        {
+            node.Left = DeserializeNodeFromVector(parameters, ref currentIndex);
+            node.Right = DeserializeNodeFromVector(parameters, ref currentIndex);
+        }
+    
+        return node;
+    }
+
+    /// <summary>
+    /// Collects all feature indices used in the tree.
+    /// </summary>
+    /// <param name="node">The current node being examined.</param>
+    /// <param name="activeFeatures">The set of active feature indices.</param>
+    private void CollectActiveFeatures(DecisionTreeNode<T>? node, HashSet<int> activeFeatures)
+    {
+        if (node == null)
+            return;
+    
+        // If it's not a leaf node, add its feature index to the set
+        if (!node.IsLeaf)
+        {
+            activeFeatures.Add(node.FeatureIndex);
+        }
+    
+        // Recursively collect features from child nodes
+        CollectActiveFeatures(node.Left, activeFeatures);
+        CollectActiveFeatures(node.Right, activeFeatures);
+    }
+
+    /// <summary>
+    /// Checks if a specific feature is used in a subtree.
+    /// </summary>
+    /// <param name="node">The current node being examined.</param>
+    /// <param name="featureIndex">The index of the feature to check for.</param>
+    /// <returns>True if the feature is used in the subtree; otherwise, false.</returns>
+    private bool IsFeatureUsedInSubtree(DecisionTreeNode<T>? node, int featureIndex)
+    {
+        if (node == null)
+            return false;
+    
+        // Check if this node uses the feature
+        if (!node.IsLeaf && node.FeatureIndex == featureIndex)
+            return true;
+    
+        // Recursively check child nodes
+        return IsFeatureUsedInSubtree(node.Left, featureIndex) || 
+               IsFeatureUsedInSubtree(node.Right, featureIndex);
+    }
+
+    /// <summary>
+    /// Creates a deep clone of a node and its children.
+    /// </summary>
+    /// <param name="node">The node to clone.</param>
+    /// <returns>A new node that is an exact copy of the original node and its subtree.</returns>
+    private DecisionTreeNode<T> DeepCloneNode(DecisionTreeNode<T> node)
+    {
+        var clone = new DecisionTreeNode<T>
+        {
+            FeatureIndex = node.FeatureIndex,
+            SplitValue = node.SplitValue,
+            Prediction = node.Prediction,
+            IsLeaf = node.IsLeaf
+        };
+    
+        // Recursively clone child nodes
+        if (node.Left != null)
+            clone.Left = DeepCloneNode(node.Left);
+    
+        if (node.Right != null)
+            clone.Right = DeepCloneNode(node.Right);
+    
+        return clone;
     }
 }

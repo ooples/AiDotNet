@@ -19,7 +19,7 @@ namespace AiDotNet.FitDetectors;
 /// This detector will tell you if your model is good, moderate, poor, or very poor based on this AUC value.
 /// </para>
 /// </remarks>
-public class ROCCurveFitDetector<T> : FitDetectorBase<T>
+public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the ROC curve fit detector.
@@ -59,7 +59,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     public ROCCurveFitDetector(ROCCurveFitDetectorOptions? options = null)
     {
         _options = options ?? new ROCCurveFitDetectorOptions();
-        Auc = _numOps.Zero;
+        Auc = NumOps.Zero;
     }
 
     /// <summary>
@@ -82,12 +82,13 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// The result contains all this information for you to use.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
 
-        var (fpr, tpr) = StatisticsHelper<T>.CalculateROCCurve(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
+        var (fpr, tpr) = StatisticsHelper<T>.CalculateROCCurve(ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted));
         Auc = StatisticsHelper<T>.CalculateAUC(fpr, tpr);
 
         var fitType = DetermineFitType(evaluationData);
@@ -126,13 +127,13 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// The thresholds for these categories are set in the options.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        if (_numOps.GreaterThanOrEquals(Auc, _numOps.FromDouble(_options.GoodFitThreshold)))
+        if (NumOps.GreaterThanOrEquals(Auc, NumOps.FromDouble(_options.GoodFitThreshold)))
             return FitType.GoodFit;
-        else if (_numOps.GreaterThanOrEquals(Auc, _numOps.FromDouble(_options.ModerateFitThreshold)))
+        else if (NumOps.GreaterThanOrEquals(Auc, NumOps.FromDouble(_options.ModerateFitThreshold)))
             return FitType.Moderate;
-        else if (_numOps.GreaterThanOrEquals(Auc, _numOps.FromDouble(_options.PoorFitThreshold)))
+        else if (NumOps.GreaterThanOrEquals(Auc, NumOps.FromDouble(_options.PoorFitThreshold)))
             return FitType.PoorFit;
         else
             return FitType.VeryPoorFit;
@@ -156,9 +157,9 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// This helps you understand how much you should trust the detector's assessment.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        return _numOps.Multiply(Auc, _numOps.FromDouble(_options.ConfidenceScalingFactor));
+        return NumOps.Multiply(Auc, NumOps.FromDouble(_options.ConfidenceScalingFactor));
     }
 
     /// <summary>
@@ -183,7 +184,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
     /// These recommendations are starting points that you can try to improve your model's performance.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -203,7 +204,7 @@ public class ROCCurveFitDetector<T> : FitDetectorBase<T>
                 break;
         }
 
-        if (_numOps.LessThan(Auc, _numOps.FromDouble(_options.BalancedDatasetThreshold)))
+        if (NumOps.LessThan(Auc, NumOps.FromDouble(_options.BalancedDatasetThreshold)))
         {
             recommendations.Add("The dataset might be imbalanced. Consider using balanced accuracy, F1 score, or other metrics suitable for imbalanced data.");
         }

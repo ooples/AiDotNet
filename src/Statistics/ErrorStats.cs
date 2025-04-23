@@ -373,4 +373,99 @@ public class ErrorStats<T>
         // Populate error list
         ErrorList = [..StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
     }
+
+    /// <summary>
+    /// Retrieves the value of a specific error metric.
+    /// </summary>
+    /// <param name="metricType">The type of metric to retrieve.</param>
+    /// <returns>The value of the requested metric.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method allows you to retrieve any of the calculated error metrics by specifying the desired metric type.
+    /// It provides a flexible way to access individual metrics without needing to reference specific properties.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method is like a vending machine for error metrics.
+    /// 
+    /// You tell it which error metric you want (using the MetricType), and it gives you the value.
+    /// For example:
+    /// - If you ask for MetricType.MAE, it gives you the Mean Absolute Error
+    /// - If you ask for MetricType.RMSE, it gives you the Root Mean Squared Error
+    /// 
+    /// This is useful when you want to work with different error metrics in a flexible way,
+    /// especially if you don't know in advance which metric you'll need.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when an unsupported MetricType is provided.</exception>
+    public T GetMetric(MetricType metricType)
+    {
+        return metricType switch
+        {
+            MetricType.MAE => MAE,
+            MetricType.MSE => MSE,
+            MetricType.RMSE => RMSE,
+            MetricType.MAPE => MAPE,
+            MetricType.MeanBiasError => MeanBiasError,
+            MetricType.MedianAbsoluteError => MedianAbsoluteError,
+            MetricType.MaxError => MaxError,
+            MetricType.TheilUStatistic => TheilUStatistic,
+            MetricType.DurbinWatsonStatistic => DurbinWatsonStatistic,
+            MetricType.SampleStandardError => SampleStandardError,
+            MetricType.PopulationStandardError => PopulationStandardError,
+            MetricType.AIC => AIC,
+            MetricType.BIC => BIC,
+            MetricType.AICAlt => AICAlt,
+            MetricType.AUCPR => AUCPR,
+            MetricType.AUCROC => AUCROC,
+            MetricType.SMAPE => SMAPE,
+            MetricType.MeanSquaredLogError => MeanSquaredLogError,
+            _ => throw new ArgumentException($"Metric {metricType} is not available in ErrorStats.", nameof(metricType)),
+        };
+    }
+
+    /// <summary>
+    /// Checks if a specific metric is available in this ErrorStats instance.
+    /// </summary>
+    /// <param name="metricType">The type of metric to check for.</param>
+    /// <returns>True if the metric is available, false otherwise.</returns>
+    /// <remarks>
+    /// For Beginners:
+    /// This method allows you to check if a particular metric is available before trying to get its value.
+    /// It's useful when you're not sure if a specific metric was calculated for this set of errors.
+    /// 
+    /// For example:
+    /// <code>
+    /// if (stats.HasMetric(MetricType.MAE))
+    /// {
+    ///     var maeValue = stats.GetMetric(MetricType.MAE);
+    ///     // Use maeValue...
+    /// }
+    /// </code>
+    /// 
+    /// This prevents errors that might occur if you try to access a metric that wasn't calculated.
+    /// </remarks>
+    public bool HasMetric(MetricType metricType)
+    {
+        return metricType switch
+        {
+            MetricType.MAE => true,
+            MetricType.MSE => true,
+            MetricType.RMSE => true,
+            MetricType.MAPE => true,
+            MetricType.MeanBiasError => true,
+            MetricType.MedianAbsoluteError => true,
+            MetricType.MaxError => true,
+            MetricType.TheilUStatistic => true,
+            MetricType.DurbinWatsonStatistic => true,
+            MetricType.SampleStandardError => true,
+            MetricType.PopulationStandardError => true,
+            MetricType.AIC => true,
+            MetricType.BIC => true,
+            MetricType.AICAlt => true,
+            MetricType.AUCPR => true,
+            MetricType.AUCROC => true,
+            MetricType.SMAPE => true,
+            MetricType.MeanSquaredLogError => true,
+            _ => false,
+        };
+    }
 }

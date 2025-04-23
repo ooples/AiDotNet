@@ -16,9 +16,39 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
+public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
-    private MomentumOptimizerOptions _options;
+    /// <summary>
+    /// The configuration options specific to the Momentum optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the configuration parameters that control the behavior of the Momentum algorithm,
+    /// such as initial momentum value, learning rate, and adaptive parameter settings.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like the instruction manual for your ball-rolling experiment. It contains all the settings
+    /// that determine how the ball behaves - how fast it starts rolling (learning rate), how much it remembers
+    /// its previous direction (momentum), and whether these properties change automatically during the experiment.
+    /// </para>
+    /// </remarks>
+    private MomentumOptimizerOptions<T, TInput, TOutput> _options;
+
+    /// <summary>
+    /// Stores the current velocity vector for each parameter in the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The velocity vector represents the direction and magnitude of parameter updates in the previous iteration.
+    /// It's used to add momentum to the optimization process, helping to accelerate convergence and overcome
+    /// local minima.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like keeping track of how fast and in which direction your ball is currently rolling.
+    /// For each part of your model (each parameter), it remembers both the speed and direction of movement.
+    /// This "memory" helps the ball maintain its course through small bumps and roll faster in consistent directions.
+    /// </para>
+    /// </remarks>
     private Vector<T>? _velocity;
 
     /// <summary>
@@ -35,17 +65,10 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     public MomentumOptimizer(
-        MomentumOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        MomentumOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new MomentumOptimizerOptions();
+        _options = options ?? new MomentumOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
     }
 
@@ -84,15 +107,15 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _velocity = new Vector<T>(currentSolution.Coefficients.Length);
+        _velocity = new Vector<T>(currentSolution.GetParameters().Length);
         InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
@@ -166,15 +189,16 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="currentSolution">The current model solution.</param>
     /// <param name="velocity">The current velocity vector.</param>
     /// <returns>An updated symbolic model with improved coefficients.</returns>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> velocity)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
     {
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
-            newCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], velocity[i]);
+            newCoefficients[i] = NumOps.Subtract(parameters[i], velocity[i]);
         }
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -193,7 +217,7 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -243,9 +267,9 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is MomentumOptimizerOptions momentumOptions)
+        if (options is MomentumOptimizerOptions<T, TInput, TOutput> momentumOptions)
         {
             _options = momentumOptions;
         }
@@ -268,7 +292,7 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <returns>The current MomentumOptimizerOptions object.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -329,7 +353,7 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<MomentumOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<MomentumOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
         }
     }
@@ -353,7 +377,7 @@ public class MomentumOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="X">The input data matrix.</param>
     /// <param name="y">The target output vector.</param>
     /// <returns>A string representing the unique gradient cache key.</returns>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_Momentum_{_options.InitialMomentum}_{_options.InitialLearningRate}";

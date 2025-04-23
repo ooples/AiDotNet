@@ -19,7 +19,7 @@ namespace AiDotNet.FitDetectors;
 /// which is important for real-world applications.
 /// </para>
 /// </remarks>
-public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
+public class StratifiedKFoldCrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Stratified K-Fold Cross-Validation fit detector.
@@ -62,7 +62,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// The result gives you both the diagnosis and a treatment plan for your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -110,29 +110,29 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     ///   This suggests there might be issues with your data or model setup.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var avgTrainingMetric = evaluationData.TrainingSet.PredictionStats.GetMetric(_options.PrimaryMetric);
         var avgValidationMetric = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
         var testMetric = evaluationData.TestSet.PredictionStats.GetMetric(_options.PrimaryMetric);
 
-        var metricDifference = _numOps.Subtract(avgTrainingMetric, avgValidationMetric);
-        var testDifference = _numOps.Subtract(avgValidationMetric, testMetric);
+        var metricDifference = NumOps.Subtract(avgTrainingMetric, avgValidationMetric);
+        var testDifference = NumOps.Subtract(avgValidationMetric, testMetric);
 
-        if (_numOps.GreaterThan(metricDifference, _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.GreaterThan(metricDifference, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(avgValidationMetric, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(avgValidationMetric, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
-        else if (_numOps.GreaterThan(_numOps.Abs(testDifference), _numOps.FromDouble(_options.HighVarianceThreshold)))
+        else if (NumOps.GreaterThan(NumOps.Abs(testDifference), NumOps.FromDouble(_options.HighVarianceThreshold)))
         {
             return FitType.HighVariance;
         }
-        else if (_numOps.GreaterThan(avgValidationMetric, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-                 _numOps.LessThan(_numOps.Abs(testDifference), _numOps.FromDouble(_options.StabilityThreshold)))
+        else if (NumOps.GreaterThan(avgValidationMetric, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+                 NumOps.LessThan(NumOps.Abs(testDifference), NumOps.FromDouble(_options.StabilityThreshold)))
         {
             return FitType.GoodFit;
         }
@@ -163,16 +163,16 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// "I'm only 50% sure of this diagnosis."
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var avgValidationMetric = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
         var testMetric = evaluationData.TestSet.PredictionStats.GetMetric(_options.PrimaryMetric);
 
-        var metricDifference = _numOps.Abs(_numOps.Subtract(avgValidationMetric, testMetric));
-        var maxMetric = _numOps.GreaterThan(avgValidationMetric, testMetric) ? avgValidationMetric : testMetric;
+        var metricDifference = NumOps.Abs(NumOps.Subtract(avgValidationMetric, testMetric));
+        var maxMetric = NumOps.GreaterThan(avgValidationMetric, testMetric) ? avgValidationMetric : testMetric;
 
-        var confidence = _numOps.Subtract(_numOps.One, _numOps.Divide(metricDifference, maxMetric));
-        return _numOps.GreaterThan(confidence, _numOps.Zero) ? confidence : _numOps.Zero;
+        var confidence = NumOps.Subtract(NumOps.One, NumOps.Divide(metricDifference, maxMetric));
+        return NumOps.GreaterThan(confidence, NumOps.Zero) ? confidence : NumOps.Zero;
     }
 
         /// <summary>
@@ -214,7 +214,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// model is currently performing.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

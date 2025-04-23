@@ -36,7 +36,7 @@ namespace AiDotNet.Models.Options;
 /// This class lets you configure the SGD optimization process.
 /// </para>
 /// </remarks>
-public class StochasticGradientDescentOptimizerOptions : GradientBasedOptimizerOptions
+public class StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the maximum number of iterations for the optimization algorithm.

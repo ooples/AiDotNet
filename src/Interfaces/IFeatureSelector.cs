@@ -28,7 +28,7 @@
 /// 
 /// This interface provides a standard way to implement different feature selection techniques.
 /// </remarks>
-public interface IFeatureSelector<T>
+public interface IFeatureSelector<T, TInput>
 {
     /// <summary>
     /// Selects the most relevant features from the provided feature matrix.
@@ -59,5 +59,5 @@ public interface IFeatureSelector<T>
     /// 
     /// By removing less important features, your models can run faster and often make better predictions.
     /// </remarks>
-    Matrix<T> SelectFeatures(Matrix<T> allFeaturesMatrix);
+    TInput SelectFeatures(TInput allFeaturesMatrix);
 }

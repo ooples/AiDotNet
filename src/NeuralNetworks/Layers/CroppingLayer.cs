@@ -253,6 +253,7 @@ public class CroppingLayer<T> : LayerBase<T>
         {
             outputShape[i] = inputShape[i] - cropTop[i] - cropBottom[i] - cropLeft[i] - cropRight[i];
         }
+
         return outputShape;
     }
 

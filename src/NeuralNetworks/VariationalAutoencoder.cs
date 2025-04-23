@@ -102,30 +102,53 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     private LogVarianceLayer<T>? _logVarianceLayer { get; set; }
 
     /// <summary>
+    /// Gets or sets the gradient optimizer used for training the VAE.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loss function used for calculating reconstruction loss.
+    /// </summary>
+    private ILossFunction<T> _lossFunction { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="VariationalAutoencoder{T}"/> class with the 
-    /// specified architecture and latent space size.
+    /// specified architecture, latent space size, and optional optimizer and loss function.
     /// </summary>
     /// <param name="architecture">The neural network architecture that defines the overall structure.</param>
     /// <param name="latentSize">The size of the latent space dimension.</param>
+    /// <param name="optimizer">The gradient optimizer to use for training (optional).</param>
+    /// <param name="lossFunction">The loss function to use for reconstruction loss (optional).</param>
     /// <remarks>
     /// <para>
-    /// This constructor creates a new VAE with the provided architecture and latent size. The architecture
-    /// defines the general structure of the network, while the latent size specifically controls the
-    /// dimensionality of the compressed representation that the VAE will learn.
+    /// This constructor creates a new VAE with the provided architecture, latent size, and optional
+    /// optimizer and loss function. If no optimizer or loss function is provided, default ones will be used.
     /// </para>
-    /// <para><b>For Beginners:</b> This is where you set up your VAE with basic settings.
+    /// <para><b>For Beginners:</b> This is where you set up your VAE with basic settings and optional advanced configurations.
     /// 
     /// When creating a VAE, you need to specify:
     /// - The overall architecture (like how many layers, their sizes, etc.)
     /// - The latent size (how many attributes or features to use in the compressed representation)
     /// 
-    /// It's like configuring a new camera - you choose the general model (architecture) and then 
-    /// specify how much compression you want for the images (latent size).
+    /// You can also optionally specify:
+    /// - An optimizer (a method for adjusting the network's internal values during training)
+    /// - A loss function (a way to measure how well the VAE is performing)
+    /// 
+    /// If you don't specify an optimizer or loss function, the VAE will use default options that work well in most cases.
     /// </para>
     /// </remarks>
-    public VariationalAutoencoder(NeuralNetworkArchitecture<T> architecture, int latentSize) : base(architecture)
+    public VariationalAutoencoder(
+        NeuralNetworkArchitecture<T> architecture, 
+        int latentSize,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0) : base(architecture, maxGradNorm)
     {
         LatentSize = latentSize;
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        InitializeLayers();
     }
 
     /// <summary>
@@ -415,43 +438,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Processes an input vector through the full VAE pipeline to produce a reconstruction.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The reconstructed output vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the full VAE pipeline: encoding the input to latent distribution parameters,
-    /// sampling from the latent distribution using the reparameterization trick, and decoding the sample
-    /// back to the original data space. During training, this process helps the model learn a useful latent
-    /// representation while ensuring good reconstruction quality.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method runs the complete process of compressing and then reconstructing your data.
-    /// 
-    /// The complete VAE process:
-    /// 1. The encoder compresses your input into mean and variance values (the encode step)
-    /// 2. The reparameterization trick adds some randomness to create a latent vector
-    /// 3. The decoder reconstructs a new version of the input from this latent vector
-    /// 
-    /// What makes VAEs special is that:
-    /// - The reconstruction won't be a perfect copy, but a similar, plausible version
-    /// - The randomness forces the model to learn a meaningful latent space
-    /// - This means the latent space can be used to generate new examples or smoothly transition between examples
-    /// 
-    /// For instance, with face images, the complete process takes an image, compresses it into
-    /// a compact representation with some controlled randomness, and then generates a
-    /// new face image that looks similar but might have slightly different details.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var (mean, logVariance) = Encode(input);
-        var latentVector = Reparameterize(mean, logVariance);
-
-        return Decode(latentVector);
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the VAE network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>
@@ -510,142 +496,333 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Saves the VAE network structure and parameters to a binary stream.
+    /// Makes a prediction using the Variational Autoencoder by encoding the input, sampling from the latent space, and decoding.
     /// </summary>
-    /// <param name="writer">The binary writer to save the network to.</param>
+    /// <param name="input">The input tensor to make a prediction for.</param>
+    /// <returns>The reconstructed output tensor after passing through the VAE.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the type information and parameters of each layer, including the specialized
-    /// mean and log variance layers. This allows the network to be reconstructed later using the 
-    /// Deserialize method. Serialization is useful for saving trained models to disk or transferring
-    /// them between applications.
+    /// This method performs a full forward pass through the VAE:
+    /// 1. Encodes the input to get mean and log variance of the latent distribution.
+    /// 2. Samples a point from this distribution using the reparameterization trick.
+    /// 3. Decodes the sampled point to produce a reconstruction of the input.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the VAE to a file so you can use it later.
+    /// <para><b>For Beginners:</b> This method takes your input data, compresses it, and then tries to recreate it.
     /// 
-    /// When saving the VAE:
-    /// - Information about each layer's type is saved
-    /// - All the learned parameter values are saved
-    /// - The entire structure of the network is preserved
-    /// - The special mean and log variance layers are saved with their configuration
+    /// The process:
+    /// 1. The input is compressed into a small representation (encoding)
+    /// 2. A random point is chosen from this compressed space (sampling)
+    /// 3. This point is then expanded back into the original data format (decoding)
     /// 
-    /// This is useful for:
-    /// - Saving a trained model after spending time and resources on training
-    /// - Sharing your model with others
-    /// - Using your model in a different application
-    /// 
-    /// It's like taking a snapshot of the entire VAE that can be restored later.
+    /// The output is the VAE's attempt to recreate the input. It won't be exactly the same,
+    /// but it should capture the important features of the original input.
     /// </para>
     /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when serialization encounters issues with layer information or when the mean layer 
-    /// or log variance layer have not been properly initialized.
-    /// </exception>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
+        // Flatten the input tensor to a vector
+        var inputVector = input.ToVector();
 
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
-        {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
+        // Encode the input
+        var (mean, logVariance) = Encode(inputVector);
 
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
+        // Sample from the latent space
+        var latentSample = Reparameterize(mean, logVariance);
 
-            writer.Write(fullName);
-            layer.Serialize(writer);
-        }
+        // Decode the sample
+        var reconstructed = Decode(latentSample);
 
-        // Serialize mean and log variance layers
-        if (_meanLayer != null && _logVarianceLayer != null)
-        {
-            writer.WriteInt32Array(_meanLayer.GetInputShape());
-            writer.Write(_meanLayer.Axis);
-            _meanLayer.Serialize(writer);
-
-            writer.WriteInt32Array(_logVarianceLayer.GetInputShape());
-            writer.Write(_logVarianceLayer.Axis);
-            _logVarianceLayer.Serialize(writer);
-        }
-        else
-        {
-            throw new InvalidOperationException("MeanLayer and LogVarianceLayer have not been properly initialized.");
-        }
+        // Reshape the output to match the input shape
+        return new Tensor<T>(input.Shape, reconstructed);
     }
 
     /// <summary>
-    /// Loads a VAE network structure and parameters from a binary stream.
+    /// Trains the Variational Autoencoder using the provided input data.
     /// </summary>
-    /// <param name="reader">The binary reader to load the network from.</param>
+    /// <param name="input">The input tensor used for training.</param>
+    /// <param name="expectedOutput">The expected output tensor (typically the same as the input for VAEs).</param>
     /// <remarks>
     /// <para>
-    /// This method reconstructs the network by reading the type information and parameters of each layer,
-    /// including the specialized mean and log variance layers. It's used to load previously saved models
-    /// for inference or continued training.
+    /// This method implements the training process for the VAE:
+    /// 1. Performs a forward pass to get the reconstructed output.
+    /// 2. Calculates the reconstruction loss and the KL divergence.
+    /// 3. Computes the total loss (reconstruction loss + KL divergence).
+    /// 4. Backpropagates the error and updates the network parameters using the specified optimizer.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved VAE from a file.
+    /// <para><b>For Beginners:</b> This method teaches the VAE to compress and reconstruct data effectively.
     /// 
-    /// When loading the VAE:
-    /// - The number and types of layers are read from the file
-    /// - Each layer is created with the correct type
-    /// - The parameter values are loaded into each layer
-    /// - The special mean and log variance layers are reconstructed with their configuration
+    /// The training process:
+    /// 1. The VAE tries to reconstruct the input
+    /// 2. It measures how well it did (reconstruction error) using the specified loss function
+    /// 3. It also measures how well it's using the latent space (KL divergence)
+    /// 4. It combines these measurements into a total score
+    /// 5. It then adjusts its internal settings to do better next time, using the specified optimizer
     /// 
-    /// This allows you to:
-    /// - Use a model that was trained earlier
-    /// - Continue training a model from where you left off
-    /// - Use models created by others
-    /// 
-    /// It's like reassembling the VAE from a blueprint and parts list that was saved earlier.
+    /// This process is repeated many times with different inputs to improve the VAE's performance.
     /// </para>
     /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when deserialization encounters issues with layer information.
-    /// </exception>
-    public override void Deserialize(BinaryReader reader)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
+        // Flatten the input tensor to a vector
+        var inputVector = input.ToVector();
 
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
+        // Forward pass
+        var (mean, logVariance) = Encode(inputVector);
+        var latentSample = Reparameterize(mean, logVariance);
+        var reconstructed = Decode(latentSample);
 
-        for (int i = 0; i < layerCount; i++)
+        // Calculate reconstruction loss
+        var reconstructionLoss = CalculateReconstructionLoss(inputVector, reconstructed);
+
+        // Calculate KL divergence
+        var klDivergence = CalculateKLDivergence(mean, logVariance);
+
+        // Calculate total loss
+        var totalLoss = NumOps.Add(reconstructionLoss, klDivergence);
+
+        // Backpropagation
+        var gradient = CalculateGradient(totalLoss);
+
+        // Update parameters using the optimizer
+        _optimizer.UpdateParameters(Layers);
+    }
+
+    /// <summary>
+    /// Calculates the gradient for the entire Variational Autoencoder network.
+    /// </summary>
+    /// <param name="totalLoss">The total loss value used to initiate the gradient calculation.</param>
+    /// <returns>A list of tensors representing the gradients for each layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs a full backward pass through the VAE network:
+    /// 1. Calculates gradients for the decoder layers.
+    /// 2. Computes gradients for the latent space (mean and log variance).
+    /// 3. Calculates gradients for the encoder layers.
+    /// 4. Applies gradient clipping to prevent exploding gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method figures out how to adjust each part of the VAE to improve its performance.
+    /// 
+    /// It works backwards through the network:
+    /// 1. Starting from the output, it calculates how to change the decoder
+    /// 2. Then it figures out how to adjust the middle (latent) part
+    /// 3. Finally, it calculates changes for the encoder
+    /// 4. It also makes sure the changes aren't too big, which could cause problems
+    /// 
+    /// This process helps the VAE learn from its mistakes and get better over time.
+    /// </para>
+    /// </remarks>
+    private List<Tensor<T>> CalculateGradient(T totalLoss)
+    {
+        var gradients = new List<Tensor<T>>();
+
+        // Backward pass through the decoder layers
+        Tensor<T> currentGradient = new Tensor<T>([1], new Vector<T>(Enumerable.Repeat(totalLoss, 1)));
+        for (int i = Layers.Count - 1; i >= Layers.Count / 2; i--)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            var layerGradient = Layers[i].Backward(currentGradient);
+            gradients.Insert(0, layerGradient);
+            currentGradient = layerGradient;
         }
 
-        // Deserialize mean and log variance layers
-        int[] meanInputShape = reader.ReadInt32Array();
-        int meanAxis = reader.ReadInt32();
-        _meanLayer = new MeanLayer<T>(meanInputShape, meanAxis);
-        _meanLayer.Deserialize(reader);
+        // Backward pass through the latent space
+        var (meanGradient, logVarianceGradient) = CalculateLatentGradients(currentGradient);
 
-        int[] logVarianceInputShape = reader.ReadInt32Array();
-        int logVarianceAxis = reader.ReadInt32();
-        _logVarianceLayer = new LogVarianceLayer<T>(logVarianceInputShape, logVarianceAxis);
-        _logVarianceLayer.Deserialize(reader);
+        // Backward pass through the encoder layers
+        for (int i = (Layers.Count / 2) - 1; i >= 0; i--)
+        {
+            if (Layers[i] is MeanLayer<T>)
+            {
+                currentGradient = Layers[i].Backward(meanGradient);
+            }
+            else if (Layers[i] is LogVarianceLayer<T>)
+            {
+                currentGradient = Layers[i].Backward(logVarianceGradient);
+            }
+            else
+            {
+                currentGradient = Layers[i].Backward(currentGradient);
+            }
+            gradients.Insert(0, currentGradient);
+        }
+
+        // Apply gradient clipping to prevent exploding gradients
+        ClipGradients(gradients);
+
+        return gradients;
+    }
+
+    /// <summary>
+    /// Calculates the gradients for the latent space (mean and log variance) of the VAE.
+    /// </summary>
+    /// <param name="upstreamGradient">The gradient flowing back from the decoder.</param>
+    /// <returns>A tuple containing the gradients for the mean and log variance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the gradients for the latent space parameters:
+    /// 1. It calculates the gradient for the mean, considering both the upstream gradient and the KL divergence.
+    /// 2. It calculates the gradient for the log variance, incorporating the reparameterization trick.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method figures out how to adjust the "compression" part of the VAE.
+    /// 
+    /// The VAE compresses data into two parts: a "best guess" (mean) and an "uncertainty range" (variance):
+    /// - This method calculates how to change both parts to make the VAE work better
+    /// - It considers both how well the VAE is reconstructing data and how well it's compressing information
+    /// - The calculations are complex because they need to balance good reconstruction with efficient compression
+    /// 
+    /// This process is key to making the VAE learn a useful compressed representation of the data.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the mean layer or log variance layer have not been properly initialized.
+    /// </exception>
+    private (Tensor<T> MeanGradient, Tensor<T> LogVarianceGradient) CalculateLatentGradients(Tensor<T> upstreamGradient)
+    {
+        if (_meanLayer == null || _logVarianceLayer == null)
+        {
+            throw new InvalidOperationException("MeanLayer and LogVarianceLayer have not been properly initialized.");
+        }
+
+        var meanGradient = new Tensor<T>(upstreamGradient.Shape);
+        var logVarianceGradient = new Tensor<T>(upstreamGradient.Shape);
+
+        // Get the outputs of the mean and log variance layers
+        var meanOutput = _meanLayer.Forward(upstreamGradient);
+        var logVarianceOutput = _logVarianceLayer.Forward(upstreamGradient);
+
+        for (int i = 0; i < upstreamGradient.Length; i++)
+        {
+            // Gradient for mean: upstream gradient + KL divergence gradient
+            meanGradient[i] = NumOps.Add(upstreamGradient[i], meanOutput[i]);
+
+            // Gradient for log variance: 0.5 * (exp(log_var) - 1) + upstream gradient * 0.5 * exp(log_var) * epsilon
+            var expLogVar = NumOps.Exp(logVarianceOutput[i]);
+            var epsilon = NumOps.Divide(NumOps.Subtract(meanOutput[i], upstreamGradient[i]), expLogVar);
+            logVarianceGradient[i] = NumOps.Add(
+                NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Subtract(expLogVar, NumOps.One)),
+                NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(0.5), upstreamGradient[i]), NumOps.Multiply(expLogVar, epsilon))
+            );
+        }
+
+        return (meanGradient, logVarianceGradient);
+    }
+
+    /// <summary>
+    /// Calculates the reconstruction loss between the input and reconstructed output.
+    /// </summary>
+    private T CalculateReconstructionLoss(Vector<T> input, Vector<T> reconstructed)
+    {
+        return _lossFunction.CalculateLoss(input, reconstructed);
+    }
+
+    /// <summary>
+    /// Calculates the KL divergence between the learned distribution and a standard normal distribution.
+    /// </summary>
+    private T CalculateKLDivergence(Vector<T> mean, Vector<T> logVariance)
+    {
+        T sum = NumOps.Zero;
+        for (int i = 0; i < mean.Length; i++)
+        {
+            T term1 = NumOps.Exp(logVariance[i]);
+            T term2 = NumOps.Multiply(mean[i], mean[i]);
+            T term3 = logVariance[i];
+            sum = NumOps.Add(sum, NumOps.Subtract(NumOps.Add(term1, term2), NumOps.Add(NumOps.One, term3)));
+        }
+
+        return NumOps.Multiply(NumOps.FromDouble(0.5), sum);
+    }
+
+    /// <summary>
+    /// Gets metadata about the Variational Autoencoder model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// This method returns metadata about the VAE, including the model type, input/output dimensions,
+    /// latent size, and layer configuration. This information is useful for model management, serialization,
+    /// and transfer learning.
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.VariationalAutoencoder,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputDimension", Layers[0].GetInputShape()[0] },
+                { "LatentSize", LatentSize },
+                { "LayerCount", Layers.Count },
+                { "EncoderLayers", Layers.Take(Layers.Count / 2).Select(l => l.GetType().Name).ToArray() },
+                { "DecoderLayers", Layers.Skip(Layers.Count / 2).Select(l => l.GetType().Name).ToArray() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes network-specific data for the Variational Autoencoder.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// This method writes the specific configuration and state of the VAE to a binary stream.
+    /// It includes network-specific parameters that are essential for later reconstruction of the network.
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(LatentSize);
+        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
+        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data for the Variational Autoencoder.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// This method reads the specific configuration and state of the VAE from a binary stream.
+    /// It reconstructs the network-specific parameters to match the state of the network when it was serialized.
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        LatentSize = reader.ReadInt32();
+        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
+        _lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ?? new MeanSquaredErrorLoss<T>();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Variational Autoencoder with the same architecture and configuration.
+    /// </summary>
+    /// <returns>A new instance of the Variational Autoencoder with the same configuration as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new Variational Autoencoder with the same architecture, latent size,
+    /// optimizer, loss function, and gradient clipping settings as the current instance. The new
+    /// instance has freshly initialized parameters, making it useful for creating separate instances
+    /// with identical configurations or for resetting the network while preserving its structure.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a brand new VAE with the same setup as the current one.
+    /// 
+    /// Think of it like creating a copy of your VAE's blueprint:
+    /// - It has the same overall structure
+    /// - It uses the same latent size (compression level)
+    /// - It has the same optimizer (learning method)
+    /// - It uses the same loss function (way of measuring performance)
+    /// - But it starts with fresh parameters (internal values)
+    /// 
+    /// This is useful when you want to:
+    /// - Start over with a fresh network but keep the same design
+    /// - Create multiple networks with identical settings for comparison
+    /// - Reset a network to its initial state
+    /// 
+    /// The new VAE will need to be trained from scratch, as it doesn't inherit any
+    /// of the learned knowledge from the original network.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new VariationalAutoencoder<T>(
+            Architecture,
+            LatentSize,
+            _optimizer,
+            _lossFunction,
+            Convert.ToDouble(MaxGradNorm));
     }
 }

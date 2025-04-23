@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// positions of each point (too complex).
 /// </para>
 /// </remarks>
-public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
+public class InformationCriteriaFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the information criteria fit detector.
@@ -59,7 +59,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// All of this is packaged into a single result that you can use to understand and improve your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -95,7 +95,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// that balance how well your model fits the data against how complex it is. Lower values are generally better.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingAic = evaluationData.TrainingSet.ErrorStats.AIC;
         var validationAic = evaluationData.ValidationSet.ErrorStats.AIC;
@@ -105,8 +105,8 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
         var validationBic = evaluationData.ValidationSet.ErrorStats.BIC;
         var testBic = evaluationData.TestSet.ErrorStats.BIC;
 
-        var aicDiff = Convert.ToDouble(_numOps.Subtract(_numOps.GreaterThan(validationAic, testAic) ? validationAic : testAic, trainingAic));
-        var bicDiff = Convert.ToDouble(_numOps.Subtract(_numOps.GreaterThan(validationBic, testBic) ? validationBic : testBic, trainingBic));
+        var aicDiff = Convert.ToDouble(NumOps.Subtract(NumOps.GreaterThan(validationAic, testAic) ? validationAic : testAic, trainingAic));
+        var bicDiff = Convert.ToDouble(NumOps.Subtract(NumOps.GreaterThan(validationBic, testBic) ? validationBic : testBic, trainingBic));
 
         if (aicDiff < _options.AicThreshold && bicDiff < _options.BicThreshold)
         {
@@ -120,8 +120,8 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
         {
             return FitType.Underfit;
         }
-        else if (Math.Abs(Convert.ToDouble(_numOps.Subtract(validationAic, testAic))) > _options.HighVarianceThreshold ||
-                 Math.Abs(Convert.ToDouble(_numOps.Subtract(validationBic, testBic))) > _options.HighVarianceThreshold)
+        else if (Math.Abs(Convert.ToDouble(NumOps.Subtract(validationAic, testAic))) > _options.HighVarianceThreshold ||
+                 Math.Abs(Convert.ToDouble(NumOps.Subtract(validationBic, testBic))) > _options.HighVarianceThreshold)
         {
             return FitType.HighVariance;
         }
@@ -151,7 +151,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// The calculation uses a mathematical formula that converts differences in AIC/BIC into a confidence score.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingAic = evaluationData.TrainingSet.ErrorStats.AIC;
         var validationAic = evaluationData.ValidationSet.ErrorStats.AIC;
@@ -161,14 +161,14 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
         var validationBic = evaluationData.ValidationSet.ErrorStats.BIC;
         var testBic = evaluationData.TestSet.ErrorStats.BIC;
 
-        var aicConfidence = Math.Exp(-(Convert.ToDouble(_numOps.Subtract(validationAic, trainingAic)) / 2)) * 
-            Math.Exp(-(Convert.ToDouble(_numOps.Subtract(testAic, trainingAic))) / 2);
-        var bicConfidence = Math.Exp(-(Convert.ToDouble(_numOps.Subtract(validationBic, trainingBic)) / 2)) * 
-            Math.Exp(-(Convert.ToDouble(_numOps.Subtract(testBic, trainingBic))) / 2);
+        var aicConfidence = Math.Exp(-(Convert.ToDouble(NumOps.Subtract(validationAic, trainingAic)) / 2)) * 
+            Math.Exp(-(Convert.ToDouble(NumOps.Subtract(testAic, trainingAic))) / 2);
+        var bicConfidence = Math.Exp(-(Convert.ToDouble(NumOps.Subtract(validationBic, trainingBic)) / 2)) * 
+            Math.Exp(-(Convert.ToDouble(NumOps.Subtract(testBic, trainingBic))) / 2);
 
         var averageConfidence = (aicConfidence + bicConfidence) / 2;
 
-        return _numOps.FromDouble(averageConfidence);
+        return NumOps.FromDouble(averageConfidence);
     }
 
     /// <summary>
@@ -198,7 +198,7 @@ public class InformationCriteriaFitDetector<T> : FitDetectorBase<T>
     /// - Feature selection: The process of choosing which input variables (features) to include in your model
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

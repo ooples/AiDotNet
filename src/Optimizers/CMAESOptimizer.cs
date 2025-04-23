@@ -15,17 +15,12 @@ namespace AiDotNet.Optimizers;
 /// between inputs and outputs isn't straightforward.
 /// </para>
 /// </remarks>
-public class CMAESOptimizer<T> : OptimizerBase<T>
+public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the CMA-ES optimization algorithm.
     /// </summary>
-    private CMAESOptimizerOptions<T> _options;
-
-    /// <summary>
-    /// Random number generator for the algorithm.
-    /// </summary>
-    private Random _random;
+    private CMAESOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The current population of candidate solutions.
@@ -73,23 +68,17 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// </para>
     /// </remarks>
     public CMAESOptimizer(
-        CMAESOptimizerOptions<T>? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
+        CMAESOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new CMAESOptimizerOptions<T>();
-        _random = new Random(_options.Seed);
+        _options = options ?? new CMAESOptimizerOptions<T, TInput, TOutput>();
         _population = Matrix<T>.Empty();
         _mean = Vector<T>.Empty();
         _C = Matrix<T>.Empty();
         _pc = Vector<T>.Empty();
         _ps = Vector<T>.Empty();
         _sigma = NumOps.Zero;
+
         InitializeAdaptiveParameters();
     }
 
@@ -123,27 +112,52 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// The process continues until it reaches the maximum number of generations or meets the stopping criteria.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
-        InitializeCMAESParameters(inputData.XTrain.Columns);
+        int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        var initialSolution = InitializeRandomSolution(inputData.XTrain);
+        _mean = initialSolution.GetParameters();
+        _C = Matrix<T>.CreateIdentity(dimensions);
+        _pc = new Vector<T>(dimensions);
+        _ps = new Vector<T>(dimensions);
+
+        // Keep track of our current best model to use as a template
+        var currentBestModel = initialSolution;
 
         for (int generation = 0; generation < _options.MaxGenerations; generation++)
         {
             var population = GeneratePopulation();
-            var fitnessValues = EvaluatePopulation(population, inputData);
+
+            // Use the current best model as a template for evaluating the population
+            var populationResults = EvaluatePopulationWithModels(population, inputData, currentBestModel);
+            var fitnessValues = populationResults.Item1;
+
+            // Store the best model from this population for the next iteration
+            if (populationResults.Item2 != null)
+            {
+                currentBestModel = populationResults.Item2;
+            }
 
             UpdateDistribution(population, fitnessValues);
 
-            var currentSolution = new VectorModel<T>(_mean);
+            // Create a new solution with the updated mean parameters
+            var currentSolution = currentBestModel.WithParameters(_mean);
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);
+
+            // Update our current best model if this solution is better
+            if (NumOps.GreaterThan(currentStepData.FitnessScore, bestStepData.FitnessScore))
+            {
+                currentBestModel = currentSolution;
+            }
+
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(generation, bestStepData))
@@ -160,23 +174,6 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
-    }
-
-    /// <summary>
-    /// Initializes the CMA-ES specific parameters.
-    /// </summary>
-    /// <param name="dimensions">The number of dimensions in the problem space.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method sets up the initial values for the mean, covariance matrix,
-    /// and evolution paths based on the number of dimensions in your problem.
-    /// </para>
-    /// </remarks>
-    private void InitializeCMAESParameters(int dimensions)
-    {
-        _mean = InitializeRandomSolution(dimensions).Coefficients;
-        _C = Matrix<T>.CreateIdentity(dimensions);
-        _pc = new Vector<T>(dimensions);
-        _ps = new Vector<T>(dimensions);
     }
 
     /// <summary>
@@ -254,34 +251,44 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     private double GenerateStandardNormal()
     {
-        double u1 = 1.0 - _random.NextDouble();
-        double u2 = 1.0 - _random.NextDouble();
+        double u1 = 1.0 - Random.NextDouble();
+        double u2 = 1.0 - Random.NextDouble();
 
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
     }
 
     /// <summary>
-    /// Evaluates the fitness of each individual in the population.
+    /// Evaluates the fitness of each individual in the population and returns the best model.
     /// </summary>
     /// <param name="population">The population to evaluate.</param>
     /// <param name="inputData">The input data for evaluation.</param>
-    /// <returns>A vector of fitness scores for the population.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method calculates how good each potential solution in the population is,
-    /// based on the problem you're trying to solve.
-    /// </para>
-    /// </remarks>
-    private Vector<T> EvaluatePopulation(Matrix<T> population, OptimizationInputData<T> inputData)
+    /// <param name="templateModel">A template model to use for creating new models with updated parameters.</param>
+    /// <returns>A tuple containing: 1) A vector of fitness scores for the population, 2) The best model from this population.</returns>
+    private (Vector<T>, IFullModel<T, TInput, TOutput>?) EvaluatePopulationWithModels(
+        Matrix<T> population,
+        OptimizationInputData<T, TInput, TOutput> inputData,
+        IFullModel<T, TInput, TOutput> templateModel)
     {
         var fitnessValues = new Vector<T>(population.Rows);
+        IFullModel<T, TInput, TOutput>? bestModel = null;
+        T bestFitness = NumOps.MinValue;
+
         for (int i = 0; i < population.Rows; i++)
         {
-            var solution = new VectorModel<T>(population.GetRow(i));
+            // Create a new solution with the population member's parameters
+            var solution = templateModel.WithParameters(population.GetRow(i));
             var stepData = EvaluateSolution(solution, inputData);
             fitnessValues[i] = stepData.FitnessScore;
+
+            // Keep track of the best model in this population
+            if (bestModel == null || NumOps.GreaterThan(stepData.FitnessScore, bestFitness))
+            {
+                bestModel = solution;
+                bestFitness = stepData.FitnessScore;
+            }
         }
 
-        return fitnessValues;
+        return (fitnessValues, bestModel);
     }
 
     /// <summary>
@@ -402,9 +409,9 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// It checks to make sure you're providing the right kind of options specific to the CMA-ES algorithm.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is CMAESOptimizerOptions<T> cmaesOptions)
+        if (options is CMAESOptimizerOptions<T, TInput, TOutput> cmaesOptions)
         {
             _options = cmaesOptions;
         }
@@ -423,7 +430,7 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
     /// You can use this to check or save the current configuration.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -480,7 +487,7 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         base.Deserialize(baseData);
 
         string optionsJson = reader.ReadString();
-        _options = JsonConvert.DeserializeObject<CMAESOptimizerOptions<T>>(optionsJson)
+        _options = JsonConvert.DeserializeObject<CMAESOptimizerOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
         // Deserialize CMA-ES specific data
@@ -490,7 +497,5 @@ public class CMAESOptimizer<T> : OptimizerBase<T>
         _pc = SerializationHelper<T>.DeserializeVector(reader);
         _ps = SerializationHelper<T>.DeserializeVector(reader);
         _sigma = SerializationHelper<T>.ReadValue(reader);
-
-        _random = new Random(_options.Seed);
     }
 }

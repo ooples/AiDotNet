@@ -16,7 +16,7 @@
 /// model on many slightly different versions of your data to see how consistently it performs.
 /// </para>
 /// </remarks>
-public class BootstrapFitDetector<T> : FitDetectorBase<T>
+public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the bootstrap fit detector.
@@ -80,7 +80,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -124,7 +124,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var bootstrapResults = PerformBootstrap(evaluationData);
 
@@ -132,26 +132,26 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
         var meanValidationR2 = new Vector<T>(bootstrapResults.Select(r => r.ValidationR2)).Average();
         var meanTestR2 = new Vector<T>(bootstrapResults.Select(r => r.TestR2)).Average();
 
-        var r2Difference = _numOps.Abs(_numOps.Subtract(meanTrainingR2, meanValidationR2));
+        var r2Difference = NumOps.Abs(NumOps.Subtract(meanTrainingR2, meanValidationR2));
 
-        if (_numOps.GreaterThan(meanTrainingR2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-            _numOps.GreaterThan(meanValidationR2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-            _numOps.GreaterThan(meanTestR2, _numOps.FromDouble(_options.GoodFitThreshold)))
+        if (NumOps.GreaterThan(meanTrainingR2, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+            NumOps.GreaterThan(meanValidationR2, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+            NumOps.GreaterThan(meanTestR2, NumOps.FromDouble(_options.GoodFitThreshold)))
         {
             return FitType.GoodFit;
         }
-        else if (_numOps.GreaterThan(r2Difference, _numOps.FromDouble(_options.OverfitThreshold)) &&
-                 _numOps.GreaterThan(meanTrainingR2, meanValidationR2))
+        else if (NumOps.GreaterThan(r2Difference, NumOps.FromDouble(_options.OverfitThreshold)) &&
+                 NumOps.GreaterThan(meanTrainingR2, meanValidationR2))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(meanTrainingR2, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.LessThan(meanValidationR2, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.LessThan(meanTestR2, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(meanTrainingR2, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.LessThan(meanValidationR2, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.LessThan(meanTestR2, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
-        else if (_numOps.GreaterThan(r2Difference, _numOps.FromDouble(_options.OverfitThreshold)))
+        else if (NumOps.GreaterThan(r2Difference, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.HighVariance;
         }
@@ -178,21 +178,21 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
     /// as 1 minus the width of the confidence interval, clamped between 0 and 1.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var bootstrapResults = PerformBootstrap(evaluationData);
 
-        var r2Differences = bootstrapResults.Select(r => _numOps.Abs(_numOps.Subtract(r.TrainingR2, r.ValidationR2))).ToList();
+        var r2Differences = bootstrapResults.Select(r => NumOps.Abs(NumOps.Subtract(r.TrainingR2, r.ValidationR2))).ToList();
         r2Differences.Sort();
 
         int lowerIndex = (int)Math.Floor((1 - _options.ConfidenceInterval) / 2 * _options.NumberOfBootstraps);
         int upperIndex = (int)Math.Ceiling((1 + _options.ConfidenceInterval) / 2 * _options.NumberOfBootstraps) - 1;
 
-        var confidenceInterval = _numOps.Subtract(r2Differences[upperIndex], r2Differences[lowerIndex]);
-        var confidenceLevel = _numOps.Subtract(_numOps.One, confidenceInterval);
-        var lessThan = _numOps.LessThan(_numOps.One, confidenceLevel) ? _numOps.One : confidenceLevel;
+        var confidenceInterval = NumOps.Subtract(r2Differences[upperIndex], r2Differences[lowerIndex]);
+        var confidenceLevel = NumOps.Subtract(NumOps.One, confidenceInterval);
+        var lessThan = NumOps.LessThan(NumOps.One, confidenceLevel) ? NumOps.One : confidenceLevel;
 
-        return _numOps.GreaterThan(_numOps.Zero, lessThan) ? _numOps.Zero : lessThan;
+        return NumOps.GreaterThan(NumOps.Zero, lessThan) ? NumOps.Zero : lessThan;
     }
 
     /// <summary>
@@ -217,7 +217,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -274,7 +274,7 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
     /// The number of bootstrap samples is determined by the NumberOfBootstraps option.
     /// </para>
     /// </remarks>
-    private List<BootstrapResult<T>> PerformBootstrap(ModelEvaluationData<T> evaluationData)
+    private List<BootstrapResult<T>> PerformBootstrap(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var results = new List<BootstrapResult<T>>();
 
@@ -322,6 +322,6 @@ public class BootstrapFitDetector<T> : FitDetectorBase<T>
         var noise = _random.NextDouble() * 0.1 - 0.05; // Random noise between -0.05 and 0.05
         var resampledR2 = Math.Max(0, Math.Min(1, Convert.ToDouble(originalR2) + noise));
 
-        return _numOps.FromDouble(resampledR2);
+        return NumOps.FromDouble(resampledR2);
     }
 }

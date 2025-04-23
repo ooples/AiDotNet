@@ -1,4 +1,4 @@
-namespace AiDotNet.TimeSeries;
+﻿namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements an Unobserved Components Model (UCM) for time series decomposition and forecasting.
@@ -45,7 +45,7 @@ namespace AiDotNet.TimeSeries;
 /// - Provides insights that simpler models might miss
 /// </para>
 /// </remarks>
-public class UnobservedComponentsModel<T> : TimeSeriesModelBase<T>
+public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Configuration options for the Unobserved Components Model.
@@ -56,7 +56,7 @@ public class UnobservedComponentsModel<T> : TimeSeriesModelBase<T>
     /// a cycle component, how many seasonal periods to consider, how many iterations
     /// to run, and whether to optimize the model parameters automatically.
     /// </remarks>
-    private readonly UnobservedComponentsOptions<T> _ucOptions;
+    private readonly UnobservedComponentsOptions<T, TInput, TOutput> _ucOptions;
     
     /// <summary>
     /// The estimated trend component of the time series.
@@ -263,10 +263,10 @@ public class UnobservedComponentsModel<T> : TimeSeriesModelBase<T>
     /// 
     /// If you don't provide options, the model will use reasonable default settings.
     /// </remarks>
-    public UnobservedComponentsModel(UnobservedComponentsOptions<T>? options = null) 
-        : base(options ?? new UnobservedComponentsOptions<T>())
+    public UnobservedComponentsModel(UnobservedComponentsOptions<T, TInput, TOutput>? options = null) 
+        : base(options ?? new UnobservedComponentsOptions<T, TInput, TOutput>())
     {
-        _ucOptions = options ?? new UnobservedComponentsOptions<T>();
+        _ucOptions = options ?? new UnobservedComponentsOptions<T, TInput, TOutput>();
         
         // Initialize model components
         _trend = new Vector<T>(_ucOptions.MaxIterations);
@@ -285,60 +285,6 @@ public class UnobservedComponentsModel<T> : TimeSeriesModelBase<T>
         _processNoise = Matrix<T>.Empty();
         _observationNoise = NumOps.Zero;
         _convergenceThreshold = NumOps.Zero;
-    }
-
-    /// <summary>
-    /// Trains the Unobserved Components Model on the provided data.
-    /// </summary>
-    /// <param name="x">Feature matrix (typically just time indices for UCM models).</param>
-    /// <param name="y">Target vector (the time series values to be decomposed).</param>
-    /// <remarks>
-    /// For Beginners:
-    /// This method is where the model learns from your data. It works through these steps:
-    /// 
-    /// 1. Initial Estimates: First, it makes educated guesses about the trend, seasonal,
-    ///    and cycle components in your data using simple techniques.
-    /// 
-    /// 2. Kalman Filter: Then it uses a sophisticated statistical technique (Kalman filtering)
-    ///    that works through your data point by point, constantly updating its understanding
-    ///    of each component based on new observations.
-    /// 
-    /// 3. Smoothing: Next, it goes back through the data a second time, now using information
-    ///    from both past and future to refine its estimates.
-    /// 
-    /// 4. Parameter Optimization (optional): Finally, it can fine-tune its internal settings
-    ///    to better match your specific data patterns.
-    /// 
-    /// The process repeats until the estimates stabilize (converge) or until it reaches
-    /// the maximum number of iterations. After training, the model will have separated
-    /// your time series into its component parts, which can be used for analysis or prediction.
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        _y = y.Copy();
-        int n = _y.Length;
-
-        // Initialize components
-        InitializeComponents(_y);
-        InitializeKalmanParameters();
-
-        // Kalman filter and smoothing
-        for (int iteration = 0; iteration < _ucOptions.MaxIterations; iteration++)
-        {
-            KalmanFilter(_y);
-            KalmanSmoother(_y);
-
-            if (HasConverged())
-            {
-                break;
-            }
-        }
-
-        // Optimize parameters if needed
-        if (_ucOptions.OptimizeParameters)
-        {
-            OptimizeParameters(x, _y);
-        }
     }
 
     /// <summary>
@@ -920,20 +866,20 @@ public class UnobservedComponentsModel<T> : TimeSeriesModelBase<T>
     private void OptimizeParameters(Matrix<T> x, Vector<T> y)
     {
         // Use the user-defined optimizer if provided, otherwise use LBFGSOptimizer as default
-        IOptimizer<T> optimizer = _ucOptions.Optimizer ?? new LBFGSOptimizer<T>();
+        var optimizer = _ucOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
 
         // Prepare the optimization input data
-        var inputData = new OptimizationInputData<T>
+        var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>
         {
             XTrain = x,
             YTrain = y
         };
 
         // Run optimization
-        OptimizationResult<T> result = optimizer.Optimize(inputData);
+        var result = optimizer.Optimize(inputData);
 
         // Update model parameters with optimized values
-        UpdateModelParameters(result.BestSolution.Coefficients);
+        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
     }
 
     /// <summary>
@@ -1070,39 +1016,6 @@ public class UnobservedComponentsModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Predicts a single value based on the time index.
-    /// </summary>
-    /// <param name="x">Vector containing the time index.</param>
-    /// <returns>The predicted value.</returns>
-    /// <remarks>
-    /// For Beginners:
-    /// This private method generates a prediction for a single time point by combining
-    /// all the decomposed components.
-    /// 
-    /// It:
-    /// 1. Extracts the time index from the input (typically the first value)
-    /// 2. Gets the trend, seasonal, cycle, and irregular components for that time index
-    /// 3. Adds these components together to form the complete prediction
-    /// 
-    /// For example, a prediction might combine:
-    /// - An upward trend component of 105
-    /// - A seasonal component of +10 for this time of year
-    /// - A cycle component of -5 for the current phase of the business cycle
-    /// - An irregular component of +2
-    /// 
-    /// Resulting in a total prediction of 112.
-    /// </remarks>
-    private T PredictSingle(Vector<T> x)
-    {
-        int timeIndex = Convert.ToInt32(x[0]); // Assume the first column is the time index
-        T prediction = NumOps.Add(_trend[timeIndex], _seasonal[timeIndex]);
-        prediction = NumOps.Add(prediction, _cycle[timeIndex]);
-        prediction = NumOps.Add(prediction, _irregular[timeIndex]);
-
-        return prediction;
-    }
-
-    /// <summary>
     /// Evaluates the model's performance on test data.
     /// </summary>
     /// <param name="xTest">Test input matrix containing time indices.</param>
@@ -1124,8 +1037,8 @@ public class UnobservedComponentsModel<T> : TimeSeriesModelBase<T>
     /// - RMSE (Root Mean Squared Error): The square root of MSE, which gives errors in the same units
     ///   as your original data. For example, if forecasting sales in dollars, RMSE is also in dollars.
     /// 
-    /// - R� (R-squared): The proportion of variance in the dependent variable explained by the model.
-    ///   Values range from 0 to 1, with higher values indicating better fit. An R� of 0.75 means
+    /// - R² (R-squared): The proportion of variance in the dependent variable explained by the model.
+    ///   Values range from 0 to 1, with higher values indicating better fit. An R² of 0.75 means
     ///   the model explains 75% of the variation in the data.
     /// 
     /// These metrics together provide a comprehensive assessment of model performance.
@@ -1259,5 +1172,677 @@ public class UnobservedComponentsModel<T> : TimeSeriesModelBase<T>
 
         // Read options
         _ucOptions.MaxIterations = reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// Implements the model-specific training logic for the Unobserved Components Model.
+    /// </summary>
+    /// <param name="x">The input features matrix (typically time indices).</param>
+    /// <param name="y">The target values (time series data).</param>
+    /// <exception cref="ArgumentException">Thrown when the input data is invalid.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method handles the core training process for the UCM model, orchestrating
+    /// the initialization, Kalman filtering, smoothing, and parameter optimization steps.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method coordinates the learning process for the model. It manages the different
+    /// steps that transform your raw time series data into separate components (trend, seasonal,
+    /// cycle, and irregular).
+    /// 
+    /// The process follows these main steps:
+    /// 1. It makes initial guesses about the components using simple techniques
+    /// 2. It sets up the mathematical structures needed for the Kalman filter
+    /// 3. It runs the Kalman filter to refine these initial estimates 
+    /// 4. It applies the Kalman smoother to further improve the estimates using future information
+    /// 5. It checks if the estimates have stabilized (converged)
+    /// 6. If requested, it optimizes the model parameters to better fit your specific data
+    /// 
+    /// When the training completes, your time series will be fully decomposed into its 
+    /// component parts, which can then be used for analysis or forecasting.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Save the original time series data
+        _y = y.Clone();
+        int n = _y.Length;
+    
+        if (n < 2)
+        {
+            throw new ArgumentException("Time series must contain at least 2 observations for training.", nameof(y));
+        }
+    
+        // Verify that options are appropriate for the data length
+        if (_ucOptions.SeasonalPeriod >= n)
+        {
+            throw new ArgumentException($"Seasonal period ({_ucOptions.SeasonalPeriod}) must be less than the number of observations ({n}).", nameof(_ucOptions));
+        }
+    
+        // Initialize components with initial estimates
+        InitializeComponents(_y);
+    
+        // Save initial trend estimates for convergence checking
+        _previousTrend = _trend.Clone();
+    
+        // Initialize Kalman filter parameters
+        InitializeKalmanParameters();
+    
+        // Iterative refinement of components
+        bool converged = false;
+        int iteration = 0;
+    
+        while (!converged && iteration < _ucOptions.MaxIterations)
+        {
+            // Apply Kalman filter to estimate state at each time point
+            KalmanFilter(_y);
+        
+            // Apply Kalman smoother to refine estimates using future information
+            KalmanSmoother(_y);
+        
+            // Check for convergence
+            converged = HasConverged();
+        
+            iteration++;
+        }
+    
+        // Optimize parameters if requested
+        if (_ucOptions.OptimizeParameters)
+        {
+            try
+            {
+                OptimizeParameters(x, _y);
+            }
+            catch (Exception ex)
+            {
+                // Log warning but continue with unoptimized parameters
+                System.Diagnostics.Debug.WriteLine($"Parameter optimization failed: {ex.Message}");
+                // In production, you might use a proper logging framework here
+            }
+        }
+    
+        // Final refinement with optimized parameters if optimization was performed
+        if (_ucOptions.OptimizeParameters)
+        {
+            KalmanFilter(_y);
+            KalmanSmoother(_y);
+        }
+    }
+
+    /// <summary>
+    /// Generates a prediction for a single input vector.
+    /// </summary>
+    /// <param name="input">A vector containing the time index and any additional features.</param>
+    /// <returns>The predicted value for the specified time point.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
+    /// <exception cref="ArgumentException">Thrown when the input index is invalid or out of range.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method combines the trend, seasonal, cycle, and irregular components to produce
+    /// a prediction for a single time point.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method makes a prediction for a single point in time by adding together
+    /// all the components the model has identified in your data:
+    /// 
+    /// - Trend component: The long-term direction (going up, down, or flat)
+    /// - Seasonal component: Regular patterns tied to the calendar (like weekly or yearly cycles)
+    /// - Cycle component: Longer-term patterns not tied to fixed periods (like business cycles)
+    /// - Irregular component: Random variations or "noise" in the data
+    /// 
+    /// For example, if forecasting retail sales, the prediction might combine:
+    /// - An upward trend (business growth)
+    /// - A seasonal peak (December holiday shopping)
+    /// - A downward cycle (current economic recession)
+    /// - Some random variation
+    /// 
+    /// The result gives you a comprehensive forecast that accounts for all identified patterns.
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        if (_trend.Length == 0 || _seasonal.Length == 0 || _cycle.Length == 0 || _irregular.Length == 0)
+        {
+            throw new InvalidOperationException("Model must be trained before making predictions.");
+        }
+    
+        // Extract time index from input
+        int timeIndex;
+        if (input.Length > 0)
+        {
+            timeIndex = Convert.ToInt32(input[0]);
+        }
+        else
+        {
+            throw new ArgumentException("Input vector must contain at least one element (time index).", nameof(input));
+        }
+    
+        // Validate time index
+        if (timeIndex < 0 || timeIndex >= _trend.Length)
+        {
+            throw new ArgumentException($"Time index {timeIndex} is out of range [0, {_trend.Length - 1}].", nameof(input));
+        }
+    
+        // Combine components to produce the prediction
+        T prediction = NumOps.Zero;
+    
+        // Add trend component
+        prediction = NumOps.Add(prediction, _trend[timeIndex]);
+    
+        // Add seasonal component if enabled
+        if (_ucOptions.SeasonalPeriod > 1)
+        {
+            prediction = NumOps.Add(prediction, _seasonal[timeIndex]);
+        }
+    
+        // Add cycle component if enabled
+        if (_ucOptions.IncludeCycle)
+        {
+            prediction = NumOps.Add(prediction, _cycle[timeIndex]);
+        }
+    
+        // Add a portion of the irregular component to maintain some of the time series character
+        // This is optional and depends on the application
+        T irregularComponent = NumOps.Multiply(_irregular[timeIndex], NumOps.FromDouble(0.2));
+        prediction = NumOps.Add(prediction, irregularComponent);
+    
+        return prediction;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the UnobservedComponentsModel class.
+    /// </summary>
+    /// <returns>A new instance of the UnobservedComponentsModel class.</returns>
+    /// <remarks>
+    /// <para>
+    /// This factory method creates a new instance of the model with the same options
+    /// as the current instance. It's used by Clone and DeepCopy methods.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates a fresh copy of the model with the same settings
+    /// but no trained components. It's like getting a blank copy of the original
+    /// model's template.
+    /// 
+    /// This is used internally when you clone a model or make a deep copy.
+    /// It ensures that the copy is of the exact same type as the original,
+    /// with all the same configuration options.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a new instance with the same options
+        return new UnobservedComponentsModel<T, TInput, TOutput>(_ucOptions);
+    }
+
+    /// <summary>
+    /// Forecasts multiple steps into the future using the decomposed components.
+    /// </summary>
+    /// <param name="horizon">The number of time steps to forecast.</param>
+    /// <param name="startIndex">The time index to start forecasting from (defaults to the end of the training data).</param>
+    /// <returns>A vector containing the forecasted values.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
+    /// <exception cref="ArgumentException">Thrown when horizon is not positive or startIndex is invalid.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method generates forecasts for multiple future time points by extending each component
+    /// (trend, seasonal, cycle) based on its natural pattern and properties.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method predicts values for multiple future time points by:
+    /// 
+    /// 1. Extending the trend component using its growth pattern
+    /// 2. Repeating the seasonal component based on its period
+    /// 3. Continuing the cycle component based on its frequency
+    /// 4. Adding small random variations to represent the irregular component
+    /// 
+    /// For example, a 12-month forecast of retail sales might:
+    /// - Continue the upward trend line
+    /// - Repeat the December sales peak and summer slump
+    /// - Account for the current phase of the business cycle
+    /// - Include small random variations
+    /// 
+    /// The result is a comprehensive forecast that captures all the patterns
+    /// identified in your historical data.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Forecast(int horizon, int startIndex = -1)
+    {
+        if (_trend.Length == 0 || _seasonal.Length == 0 || _cycle.Length == 0 || _irregular.Length == 0)
+        {
+            throw new InvalidOperationException("Model must be trained before forecasting.");
+        }
+    
+        if (horizon <= 0)
+        {
+            throw new ArgumentException("Forecast horizon must be positive.", nameof(horizon));
+        }
+    
+        // If startIndex is not specified, use the last point in the training data
+        if (startIndex < 0)
+        {
+            startIndex = _trend.Length - 1;
+        }
+    
+        if (startIndex < 0 || startIndex >= _trend.Length)
+        {
+            throw new ArgumentException($"Start index {startIndex} is out of range [0, {_trend.Length - 1}].", nameof(startIndex));
+        }
+    
+        Vector<T> forecast = new Vector<T>(horizon);
+    
+        // Calculate trend component forecasts
+        Vector<T> trendForecast = ForecastTrend(horizon, startIndex);
+    
+        // Calculate seasonal component forecasts
+        Vector<T> seasonalForecast = ForecastSeasonal(horizon, startIndex);
+    
+        // Calculate cycle component forecasts
+        Vector<T> cycleForecast = ForecastCycle(horizon, startIndex);
+    
+        // Generate irregular component forecasts (small random variations)
+        Vector<T> irregularForecast = ForecastIrregular(horizon);
+    
+        // Combine components to produce the final forecast
+        for (int i = 0; i < horizon; i++)
+        {
+            forecast[i] = NumOps.Zero;
+            forecast[i] = NumOps.Add(forecast[i], trendForecast[i]);
+            forecast[i] = NumOps.Add(forecast[i], seasonalForecast[i]);
+            forecast[i] = NumOps.Add(forecast[i], cycleForecast[i]);
+            forecast[i] = NumOps.Add(forecast[i], irregularForecast[i]);
+        }
+    
+        return forecast;
+    }
+
+    /// <summary>
+    /// Forecasts the trend component for future time points.
+    /// </summary>
+    /// <param name="horizon">The number of time steps to forecast.</param>
+    /// <param name="startIndex">The time index to start forecasting from.</param>
+    /// <returns>A vector containing the forecasted trend values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method extrapolates the trend component using a linear or damped growth model.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method predicts how the long-term direction of your data will continue
+    /// into the future. It examines the recent trend and projects it forward,
+    /// potentially with some damping (slowing down) over time to avoid unrealistic
+    /// growth or decline.
+    /// </para>
+    /// </remarks>
+    private Vector<T> ForecastTrend(int horizon, int startIndex)
+    {
+        Vector<T> trendForecast = new Vector<T>(horizon);
+    
+        // Calculate recent slope in the trend
+        T slope = NumOps.Zero;
+        int lookback = Math.Min(5, startIndex); // Look at the last 5 points or fewer if not available
+    
+        if (lookback > 0)
+        {
+            slope = NumOps.Divide(
+                NumOps.Subtract(_trend[startIndex], _trend[startIndex - lookback]),
+                NumOps.FromDouble(lookback)
+            );
+        }
+    
+        // Apply damping factor to avoid explosive forecasts
+        T dampingFactor = NumOps.FromDouble(0.95); // Gradually reduce the impact of the slope
+    
+        // Generate trend forecasts using damped growth model
+        T currentTrend = _trend[startIndex];
+        T currentSlope = slope;
+    
+        for (int i = 0; i < horizon; i++)
+        {
+            // Add damped slope to current trend
+            currentTrend = NumOps.Add(currentTrend, currentSlope);
+            trendForecast[i] = currentTrend;
+        
+            // Dampen the slope for next iteration
+            currentSlope = NumOps.Multiply(currentSlope, dampingFactor);
+        }
+    
+        return trendForecast;
+    }
+
+    /// <summary>
+    /// Forecasts the seasonal component for future time points.
+    /// </summary>
+    /// <param name="horizon">The number of time steps to forecast.</param>
+    /// <param name="startIndex">The time index to start forecasting from.</param>
+    /// <returns>A vector containing the forecasted seasonal values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method extends the seasonal component by repeating the last complete seasonal cycle.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method predicts the seasonal patterns in your future data by repeating
+    /// the patterns observed in your historical data. For example, if December always
+    /// has higher sales in your historical data, the forecast will show higher sales
+    /// in future Decembers too.
+    /// </para>
+    /// </remarks>
+    private Vector<T> ForecastSeasonal(int horizon, int startIndex)
+    {
+        Vector<T> seasonalForecast = new Vector<T>(horizon);
+    
+        // If no seasonality is included in the model, return zeros
+        if (_ucOptions.SeasonalPeriod <= 1)
+        {
+            return seasonalForecast; // All zeros
+        }
+    
+        int period = _ucOptions.SeasonalPeriod;
+    
+        // Use the last complete seasonal cycle as the pattern for forecasting
+        int seasonStart = Math.Max(0, startIndex - period + 1);
+    
+        for (int i = 0; i < horizon; i++)
+        {
+            int patternIndex = (seasonStart + i) % period;
+        
+            // Find the most recent occurrence of this seasonal position
+            for (int j = startIndex; j >= 0; j--)
+            {
+                if (j % period == patternIndex)
+                {
+                    seasonalForecast[i] = _seasonal[j];
+                    break;
+                }
+            }
+        }
+    
+        return seasonalForecast;
+    }
+
+    /// <summary>
+    /// Forecasts the cycle component for future time points.
+    /// </summary>
+    /// <param name="horizon">The number of time steps to forecast.</param>
+    /// <param name="startIndex">The time index to start forecasting from.</param>
+    /// <returns>A vector containing the forecasted cycle values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method extends the cycle component using its auto-regressive properties,
+    /// gradually dampening the cycle amplitude over time.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method predicts how cyclical patterns (like business cycles or economic ups and downs)
+    /// will continue in the future. Unlike seasonal patterns, these cycles don't have fixed lengths,
+    /// so the method uses recent cycle behavior to project forward, while gradually reducing the
+    /// cycle strength over time (since cycles are harder to predict far into the future).
+    /// </para>
+    /// </remarks>
+    private Vector<T> ForecastCycle(int horizon, int startIndex)
+    {
+        Vector<T> cycleForecast = new Vector<T>(horizon);
+    
+        // If no cycle is included in the model, return zeros
+        if (!_ucOptions.IncludeCycle)
+        {
+            return cycleForecast; // All zeros
+        }
+    
+        // Estimate cycle properties from the most recent data
+        T cycleAmplitude = _cycle[startIndex];
+    
+        // Calculate approximate cycle frequency
+        T cyclePeriod = NumOps.Divide(NumOps.FromDouble(_ucOptions.CycleMinPeriod + _ucOptions.CycleMaxPeriod), NumOps.FromDouble(2));
+    
+        // Find the phase of the cycle at the starting point
+        T cyclePhase = NumOps.Zero;
+        int lookback = Math.Min(startIndex, Convert.ToInt32(cyclePeriod));
+    
+        if (lookback > 0 && !NumOps.Equals(_cycle[startIndex], NumOps.Zero))
+        {
+            // Estimate phase based on recent movement
+            if (NumOps.LessThan(_cycle[startIndex], _cycle[startIndex - 1]))
+            {
+                // Cycle is decreasing
+                if (NumOps.LessThan(_cycle[startIndex], NumOps.Zero))
+                {
+                    // In the negative half and decreasing (between π and 3π/2)
+                    cyclePhase = NumOps.FromDouble(4 * Math.PI / 3);
+                }
+                else
+                {
+                    // In the positive half and decreasing (between π/2 and π)
+                    cyclePhase = NumOps.FromDouble(3 * Math.PI / 4);
+                }
+            }
+            else
+            {
+                // Cycle is increasing
+                if (NumOps.LessThan(_cycle[startIndex], NumOps.Zero))
+                {
+                    // In the negative half and increasing (between 3π/2 and 2π)
+                    cyclePhase = NumOps.FromDouble(7 * Math.PI / 4);
+                }
+                else
+                {
+                    // In the positive half and increasing (between 0 and π/2)
+                    cyclePhase = NumOps.FromDouble(Math.PI / 4);
+                }
+            }
+        }
+    
+        // Damping factor to reduce cycle amplitude over time
+        T dampingFactor = NumOps.FromDouble(0.98);
+    
+        // Generate cycle forecasts
+        for (int i = 0; i < horizon; i++)
+        {
+            // Calculate cycle position using phase and frequency
+            T position = NumOps.Add(cyclePhase, NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), NumOps.FromDouble(i)), cyclePeriod));
+        
+            // Apply cycle equation: amplitude * damping^i * cos(position)
+            T dampedAmplitude = NumOps.Multiply(cycleAmplitude, NumOps.Power(dampingFactor, NumOps.FromDouble(i)));
+            cycleForecast[i] = NumOps.Multiply(dampedAmplitude, MathHelper.Cos(position));
+        }
+    
+        return cycleForecast;
+    }
+
+    /// <summary>
+    /// Generates small random variations for the irregular component forecast.
+    /// </summary>
+    /// <param name="horizon">The number of time steps to forecast.</param>
+    /// <returns>A vector containing the forecasted irregular values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates small random variations based on the historical irregular component,
+    /// with decreasing variance over time.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method adds small random fluctuations to your forecast to represent the unpredictable
+    /// noise that exists in any real-world data. The randomness is calibrated to match the level
+    /// of randomness in your historical data, and it decreases for points further in the future
+    /// (since the forecast shouldn't be dominated by unpredictable elements).
+    /// </para>
+    /// </remarks>
+    private Vector<T> ForecastIrregular(int horizon)
+    {
+        Vector<T> irregularForecast = new Vector<T>(horizon);
+    
+        // Calculate the standard deviation of the historical irregular component
+        T irregularStdDev = _irregular.StandardDeviation();
+    
+        // Create a random number generator
+        Random random = new Random();
+    
+        // Damping factor to reduce irregular component over time
+        T dampingFactor = NumOps.FromDouble(0.9);
+    
+        // Generate irregular component forecasts with decreasing variance
+        for (int i = 0; i < horizon; i++)
+        {
+            // Calculate damped standard deviation
+            T dampedStdDev = NumOps.Multiply(irregularStdDev, NumOps.Power(dampingFactor, NumOps.FromDouble(i)));
+        
+            // Generate random value with appropriate standard deviation
+            // Using Gaussian approximation (Box-Muller transform)
+            double u1 = 1.0 - random.NextDouble();
+            double u2 = 1.0 - random.NextDouble();
+            double randomGaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+        
+            irregularForecast[i] = NumOps.Multiply(dampedStdDev, NumOps.FromDouble(randomGaussian));
+        }
+    
+        return irregularForecast;
+    }
+
+    /// <summary>
+    /// Gets the decomposed components of the time series.
+    /// </summary>
+    /// <returns>A dictionary containing the trend, seasonal, cycle, and irregular components.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method provides access to the individual decomposed components identified by the model.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method gives you the separate pieces that make up your time series, like
+    /// looking inside a watch to see all the gears and springs. You can examine:
+    /// 
+    /// - The trend component: The overall direction (going up, down, or flat)
+    /// - The seasonal component: Regular patterns tied to the calendar
+    /// - The cycle component: Longer-term patterns not tied to fixed periods
+    /// - The irregular component: Random variations or "noise"
+    /// 
+    /// This decomposition helps you understand what's really driving your data and
+    /// makes it easier to interpret and forecast.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, Vector<T>> GetComponents()
+    {
+        if (_trend.Length == 0 || _seasonal.Length == 0 || _cycle.Length == 0 || _irregular.Length == 0)
+        {
+            throw new InvalidOperationException("Model must be trained before getting components.");
+        }
+    
+        Dictionary<string, Vector<T>> components = new Dictionary<string, Vector<T>>
+        {
+            ["Trend"] = _trend.Clone(),
+            ["Seasonal"] = _seasonal.Clone(),
+            ["Cycle"] = _cycle.Clone(),
+            ["Irregular"] = _irregular.Clone()
+        };
+    
+        return components;
+    }
+
+    /// <summary>
+    /// Resets the model to its untrained state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears all trained parameters and decomposed components,
+    /// returning the model to its initial state.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method clears all the learning the model has done, basically
+    /// giving you a fresh start. It's like erasing the whiteboard so you
+    /// can use the same model to analyze a different time series.
+    /// 
+    /// After calling this method, you'll need to train the model again
+    /// before making predictions.
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        base.Reset();
+    
+        // Reset decomposed components
+        _trend = new Vector<T>(0);
+        _previousTrend = new Vector<T>(0);
+        _seasonal = new Vector<T>(0);
+        _cycle = new Vector<T>(0);
+        _irregular = new Vector<T>(0);
+        _y = new Vector<T>(0);
+    
+        // Reset Kalman filter state
+        _stateCovariance = Matrix<T>.Empty();
+        _state = new Vector<T>(0);
+        _stateTransition = Matrix<T>.Empty();
+        _observationModel = Matrix<T>.Empty();
+        _processNoise = Matrix<T>.Empty();
+        _observationNoise = NumOps.Zero;
+    
+        // Clear filtered results
+        _filteredState = [];
+        _filteredCovariance = [];
+    }
+
+    /// <summary>
+    /// Gets metadata about the model, including its type, components, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed metadata about the Unobserved Components Model, including its type,
+    /// trained components (trend, seasonal, cycle), and configuration options. This metadata can be used
+    /// for model selection, comparison, documentation, and serialization purposes.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This provides a summary of your model's settings and what it has learned.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Unobserved Components Model)
+    /// - Information about each component (trend, seasonal, cycle, irregular)
+    /// - Configuration settings like seasonal period and whether cycles are included
+    /// - A serialized version of the entire model
+    /// 
+    /// This information is useful for:
+    /// - Keeping track of different models you've created
+    /// - Comparing model configurations
+    /// - Documenting which settings worked best
+    /// - Sharing model information with others
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.UnobservedComponentsModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include information about model components
+                { "HasTrend", _trend.Length > 0 },
+                { "HasSeasonal", _seasonal.Length > 0 && _ucOptions.SeasonalPeriod > 1 },
+                { "HasCycle", _cycle.Length > 0 && _ucOptions.IncludeCycle },
+                { "TrendLength", _trend.Length },
+                { "DataLength", _y.Length },
+            
+                // Include information about model configuration
+                { "SeasonalPeriod", _ucOptions.SeasonalPeriod },
+                { "IncludeCycle", _ucOptions.IncludeCycle },
+                { "CycleMinPeriod", _ucOptions.CycleMinPeriod },
+                { "CycleMaxPeriod", _ucOptions.CycleMaxPeriod },
+                { "MaxIterations", _ucOptions.MaxIterations },
+                { "OptimizeParameters", _ucOptions.OptimizeParameters },
+            
+                // Include statistical information if available
+                { "TrendMean", _trend.Length > 0 ? Convert.ToDouble(_trend.Average()) : 0.0 },
+                { "SeasonalAmplitude", _seasonal.Length > 0 ? Convert.ToDouble(NumOps.Subtract(_seasonal.Max(), _seasonal.Min())) : 0.0 },
+                { "IrregularStdDev", _irregular.Length > 0 ? Convert.ToDouble(_irregular.StandardDeviation()) : 0.0 }
+            },
+            ModelData = this.Serialize()
+        };
+    
+        return metadata;
     }
 }

@@ -16,7 +16,7 @@
 /// selector to be provided.
 /// </para>
 /// </remarks>
-public class NoFeatureSelector<T> : IFeatureSelector<T>
+public class NoFeatureSelector<T, TInput> : IFeatureSelector<T, TInput>
 {
     /// <summary>
     /// Returns the input feature matrix without any selection or modification.
@@ -37,8 +37,8 @@ public class NoFeatureSelector<T> : IFeatureSelector<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public Matrix<T> SelectFeatures(Matrix<T> allFeaturesMatrix)
+    public TInput SelectFeatures(TInput allFeaturesInput)
     {
-        return allFeaturesMatrix;
+        return allFeaturesInput;
     }
 }

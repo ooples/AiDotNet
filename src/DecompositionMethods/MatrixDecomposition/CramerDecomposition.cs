@@ -183,7 +183,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>A new matrix with the specified column replaced.</returns>
     private static Matrix<T> ReplaceColumn(Matrix<T> original, Vector<T> column, int colIndex)
     {
-        Matrix<T> result = original.Copy();
+        Matrix<T> result = original.Clone();
         for (int i = 0; i < original.Rows; i++)
         {
             result[i, colIndex] = column[i];

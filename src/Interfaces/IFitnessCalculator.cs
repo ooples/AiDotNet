@@ -21,7 +21,7 @@
 /// 
 /// This interface provides methods to calculate these fitness scores in a standardized way.
 /// </remarks>
-public interface IFitnessCalculator<T>
+public interface IFitnessCalculator<T, TInput, TOutput>
 {
     /// <summary>
     /// Calculates a fitness score based on comprehensive model evaluation data.
@@ -44,7 +44,7 @@ public interface IFitnessCalculator<T>
     /// For example, if you're predicting house prices, this might calculate the average 
     /// percentage error in your predictions compared to actual prices.
     /// </remarks>
-    T CalculateFitnessScore(ModelEvaluationData<T> evaluationData);
+    T CalculateFitnessScore(ModelEvaluationData<T, TInput, TOutput> evaluationData);
 
     /// <summary>
     /// Calculates a fitness score based on basic dataset statistics.
@@ -65,7 +65,7 @@ public interface IFitnessCalculator<T>
     /// For example, if you're building a spam filter, this might calculate accuracy
     /// based on how many emails were correctly classified as spam or not spam.
     /// </remarks>
-    T CalculateFitnessScore(DataSetStats<T> dataSet);
+    T CalculateFitnessScore(DataSetStats<T, TInput, TOutput> dataSet);
 
     /// <summary>
     /// Indicates whether higher fitness scores represent better performance.

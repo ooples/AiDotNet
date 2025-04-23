@@ -28,7 +28,48 @@
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
+    /// <summary>
+    /// The options that control the behavior of the conditional inference tree.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the configuration settings for the conditional inference tree, including maximum tree depth,
+    /// minimum samples required for splitting, statistical significance threshold, and parallelism settings.
+    /// These options determine how the tree is constructed during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the settings that control how the decision tree works:
+    /// 
+    /// - How deep (complex) the tree can grow
+    /// - How many data points are needed before asking a question
+    /// - How confident the model must be that a pattern is real before creating a split
+    /// - How many calculations can run at the same time for better performance
+    /// 
+    /// These settings shape how the model learns from your data and makes predictions.
+    /// </para>
+    /// </remarks>
     private readonly ConditionalInferenceTreeOptions _options;
+
+    /// <summary>
+    /// The root node of the decision tree.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds the root node of the conditional inference tree, which is the starting point for both
+    /// traversing the tree during prediction and for accessing the entire tree structure. The tree is built
+    /// during training and consists of decision nodes (with feature index and threshold) and leaf nodes (with predictions).
+    /// A null root indicates that the model has not been trained yet.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the starting point of the decision tree.
+    /// 
+    /// Think of a decision tree like a flowchart that starts with a single question:
+    /// - The root node is the first question at the top of the flowchart
+    /// - From there, you follow branches based on your answers
+    /// - Eventually you reach a final prediction at the bottom
+    /// 
+    /// All predictions begin by evaluating this root node, then following the appropriate path
+    /// through the tree based on the feature values of the data point being predicted.
+    /// </para>
+    /// </remarks>
     private ConditionalInferenceTreeNode<T>? _root;
 
     /// <summary>
@@ -54,7 +95,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// Think of it like teaching a student the principles rather than just memorizing specific examples.
     /// </para>
     /// </remarks>
-    public ConditionalInferenceTreeRegression(ConditionalInferenceTreeOptions options, IRegularization<T>? regularization = null)
+    public ConditionalInferenceTreeRegression(ConditionalInferenceTreeOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options;
@@ -87,8 +128,8 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
-        var regularizedX = Regularization.RegularizeMatrix(x);
-        var regularizedY = Regularization.RegularizeCoefficients(y);
+        var regularizedX = Regularization.Regularize(x);
+        var regularizedY = Regularization.Regularize(y);
 
         _root = await BuildTreeAsync(regularizedX, regularizedY, 0);
         await CalculateFeatureImportancesAsync(x.Columns);
@@ -340,7 +381,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var regularizedInput = Regularization.RegularizeMatrix(input);
+        var regularizedInput = Regularization.Regularize(input);
         var tasks = Enumerable.Range(0, input.Rows)
             .Select(i => new Func<T>(() => PredictSingle(regularizedInput.GetRow(i))));
 
@@ -464,7 +505,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// <summary>
     /// Gets metadata about the regression model.
     /// </summary>
-    /// <returns>A <see cref="ModelMetadata{T}"/> object containing model information.</returns>
+    /// <returns>A <see cref="ModelMetaData{T}"/> object containing model information.</returns>
     /// <remarks>
     /// <para>
     /// This method returns metadata about the regression model, including its type, hyperparameters,
@@ -487,9 +528,9 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// - Generating reports about the model's performance
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        var metadata = new ModelMetadata<T>
+        var metadata = new ModelMetaData<T>
         {
             ModelType = ModelType.ConditionalInferenceTree,
             AdditionalInfo = new Dictionary<string, object>
@@ -701,5 +742,36 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
         }
 
         return node;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the conditional inference tree regression model with the same configuration.
+    /// </summary>
+    /// <returns>
+    /// A new instance of <see cref="ConditionalInferenceTreeRegression{T}"/> with the same configuration as the current instance.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new conditional inference tree regression model that has the same configuration 
+    /// as the current instance. It's used for model persistence, cloning, and transferring the model's 
+    /// configuration to new instances.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+    /// 
+    /// It's like creating a blueprint copy of your model that can be used to:
+    /// - Save your model's settings
+    /// - Create a new identical model
+    /// - Transfer your model's configuration to another system
+    /// 
+    /// This is useful when you want to:
+    /// - Create multiple similar models
+    /// - Save a model's configuration for later use
+    /// - Reset a model while keeping its settings
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create and return a new instance with the same configuration
+        return new ConditionalInferenceTreeRegression<T>(_options, Regularization);
     }
 }

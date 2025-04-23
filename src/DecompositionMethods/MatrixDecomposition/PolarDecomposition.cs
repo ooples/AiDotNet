@@ -142,7 +142,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     private void DecomposeNewtonSchulz()
     {
-        Matrix<T> X = A.Copy();
+        Matrix<T> X = A.Clone();
         Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows);
         T tolerance = _numOps.FromDouble(1e-12);
         int maxIterations = 100;
@@ -203,7 +203,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     private void DecomposeHalleyIteration()
     {
-        Matrix<T> X = A.Copy();
+        Matrix<T> X = A.Clone();
         T tolerance = _numOps.FromDouble(1e-12);
         int maxIterations = 100;
 
@@ -258,7 +258,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     private void DecomposeQRIteration()
     {
-        Matrix<T> X = A.Copy();
+        Matrix<T> X = A.Clone();
         T tolerance = _numOps.FromDouble(1e-12);
         int maxIterations = 100;
 
@@ -311,7 +311,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     private void DecomposeScalingAndSquaring()
     {
-        Matrix<T> X = A.Copy();
+        Matrix<T> X = A.Clone();
         T norm = MatrixHelper<T>.SpectralNorm(X);
         int scalingFactor = (int)Math.Ceiling(MathHelper.Log2(Convert.ToDouble(norm)));
 

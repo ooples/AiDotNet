@@ -19,7 +19,7 @@ namespace AiDotNet.FitDetectors;
 /// - Instability: When your model doesn't consistently perform well across different data arrangements
 /// </para>
 /// </remarks>
-public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
+public class KFoldCrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the K-Fold Cross-Validation fit detector.
@@ -55,7 +55,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// 3. Specific recommendations to improve your model
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -94,29 +94,29 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// - Test set: Completely new data used to evaluate the final model
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var avgTrainingR2 = evaluationData.TrainingSet.PredictionStats.R2;
         var avgValidationR2 = evaluationData.ValidationSet.PredictionStats.R2;
         var testR2 = evaluationData.TestSet.PredictionStats.R2;
 
-        var r2Difference = _numOps.Subtract(avgTrainingR2, avgValidationR2);
-        var testDifference = _numOps.Subtract(avgValidationR2, testR2);
+        var r2Difference = NumOps.Subtract(avgTrainingR2, avgValidationR2);
+        var testDifference = NumOps.Subtract(avgValidationR2, testR2);
 
-        if (_numOps.GreaterThan(r2Difference, _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.GreaterThan(r2Difference, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(avgValidationR2, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(avgValidationR2, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
-        else if (_numOps.GreaterThan(_numOps.Abs(testDifference), _numOps.FromDouble(_options.HighVarianceThreshold)))
+        else if (NumOps.GreaterThan(NumOps.Abs(testDifference), NumOps.FromDouble(_options.HighVarianceThreshold)))
         {
             return FitType.HighVariance;
         }
-        else if (_numOps.GreaterThan(avgValidationR2, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-                 _numOps.LessThan(_numOps.Abs(testDifference), _numOps.FromDouble(_options.StabilityThreshold)))
+        else if (NumOps.GreaterThan(avgValidationR2, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+                 NumOps.LessThan(NumOps.Abs(testDifference), NumOps.FromDouble(_options.StabilityThreshold)))
         {
             return FitType.GoodFit;
         }
@@ -142,16 +142,16 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// A higher confidence value means you can trust the fit assessment more.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var avgValidationR2 = evaluationData.ValidationSet.PredictionStats.R2;
         var testR2 = evaluationData.TestSet.PredictionStats.R2;
 
-        var r2Difference = _numOps.Abs(_numOps.Subtract(avgValidationR2, testR2));
-        var maxR2 = _numOps.GreaterThan(avgValidationR2, testR2) ? avgValidationR2 : testR2;
+        var r2Difference = NumOps.Abs(NumOps.Subtract(avgValidationR2, testR2));
+        var maxR2 = NumOps.GreaterThan(avgValidationR2, testR2) ? avgValidationR2 : testR2;
 
-        var confidence = _numOps.Subtract(_numOps.One, _numOps.Divide(r2Difference, maxR2));
-        return _numOps.GreaterThan(confidence, _numOps.Zero) ? confidence : _numOps.Zero;
+        var confidence = NumOps.Subtract(NumOps.One, NumOps.Divide(r2Difference, maxR2));
+        return NumOps.GreaterThan(confidence, NumOps.Zero) ? confidence : NumOps.Zero;
     }
 
     /// <summary>
@@ -178,7 +178,7 @@ public class KFoldCrossValidationFitDetector<T> : FitDetectorBase<T>
     /// - Feature selection: Choosing which input variables to include in your model
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

@@ -15,7 +15,7 @@ namespace AiDotNet.FitDetectors;
 /// This gives us confidence that your model has truly learned meaningful patterns.
 /// </para>
 /// </remarks>
-public class PermutationTestFitDetector<T> : FitDetectorBase<T>
+public class PermutationTestFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Random number generator used for permutation simulations.
@@ -57,7 +57,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// 3. Specific recommendations to improve your model
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -95,7 +95,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// (a measure of statistical significance).
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingPValue = PerformPermutationTest(evaluationData.TrainingSet.PredictionStats);
         var validationPValue = PerformPermutationTest(evaluationData.ValidationSet.PredictionStats);
@@ -148,7 +148,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// if there was no real pattern in the data.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainingPValue = PerformPermutationTest(evaluationData.TrainingSet.PredictionStats);
         var validationPValue = PerformPermutationTest(evaluationData.ValidationSet.PredictionStats);
@@ -157,7 +157,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
         var averagePValue = (trainingPValue + validationPValue + testPValue) / 3;
         var confidenceLevel = 1 - averagePValue;
 
-        return _numOps.FromDouble(confidenceLevel);
+        return NumOps.FromDouble(confidenceLevel);
     }
 
     /// <summary>
@@ -179,7 +179,7 @@ public class PermutationTestFitDetector<T> : FitDetectorBase<T>
     /// take the next steps in improving your model's performance.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

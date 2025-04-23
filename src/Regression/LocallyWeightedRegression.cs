@@ -77,7 +77,7 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public LocallyWeightedRegression(LocallyWeightedRegressionOptions? options = null, IRegularization<T>? regularization = null)
+    public LocallyWeightedRegression(LocallyWeightedRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new LocallyWeightedRegressionOptions();
@@ -192,7 +192,7 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         var weightedY = _yTrain.PointwiseMultiply(weights);
 
         // Add regularization
-        weightedX = Regularization.RegularizeMatrix(weightedX);
+        weightedX = Regularization.Regularize(weightedX);
 
         // Solve the weighted least squares problem
         var xTx = weightedX.Transpose().Multiply(weightedX);
@@ -200,7 +200,7 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         var coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
 
         // Apply regularization to coefficients
-        coefficients = Regularization.RegularizeCoefficients(coefficients);
+        coefficients = Regularization.Regularize(coefficients);
 
         // Make prediction
         return input.DotProduct(coefficients);
@@ -394,5 +394,32 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         {
             _yTrain[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the LocallyWeightedRegression with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new LocallyWeightedRegression instance with the same options and regularization as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the LocallyWeightedRegression model with the same configuration options
+    /// and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
+    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of model with identical settings:
+    /// - This method creates a new, empty model with the same configuration
+    /// - It's like making a copy of a recipe before you start cooking
+    /// - The new model has the same settings but no trained data
+    /// - This is useful for techniques that need multiple models, like cross-validation
+    /// 
+    /// For example, when testing your model on different subsets of data,
+    /// you'd want each test to use a model with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new LocallyWeightedRegression<T>(_options, Regularization);
     }
 }

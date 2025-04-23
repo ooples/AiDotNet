@@ -72,7 +72,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// just as different fitness calculators might prioritize accuracy, simplicity, or generalization.
     /// </para>
     /// </remarks>
-    private readonly IFitnessCalculator<T> _fitnessCalculator;
+    private readonly IFitnessCalculator<T, Matrix<T>, Vector<T>> _fitnessCalculator;
     
     /// <summary>
     /// The list of feature indices that have been selected for the final model.
@@ -114,7 +114,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// how well your recipe turned out.
     /// </para>
     /// </remarks>
-    private readonly IModelEvaluator<T> _modelEvaluator;
+    private readonly IModelEvaluator<T, Matrix<T>, Vector<T>> _modelEvaluator;
 
     /// <summary>
     /// Creates a new stepwise regression model.
@@ -161,15 +161,15 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// </remarks>
     public StepwiseRegression(StepwiseRegressionOptions<T>? options = null, 
         PredictionStatsOptions? predictionOptions = null, 
-        IFitnessCalculator<T>? fitnessCalculator = null, 
-        IRegularization<T>? regularization = null, 
-        IModelEvaluator<T>? modelEvaluator = null)
+        IFitnessCalculator<T, Matrix<T>, Vector<T>>? fitnessCalculator = null, 
+        IRegularization<T, Matrix<T>, Vector<T>>? regularization = null, 
+        IModelEvaluator<T, Matrix<T>, Vector<T>>? modelEvaluator = null)
         : base(options, regularization)
     {
         _options = options ?? new StepwiseRegressionOptions<T>();
-        _fitnessCalculator = fitnessCalculator ?? new AdjustedRSquaredFitnessCalculator<T>();
+        _fitnessCalculator = fitnessCalculator ?? new AdjustedRSquaredFitnessCalculator<T, Matrix<T>, Vector<T>>();
         _selectedFeatures = [];
-        _modelEvaluator = modelEvaluator ?? new ModelEvaluator<T>();
+        _modelEvaluator = modelEvaluator ?? new DefaultModelEvaluator<T, Matrix<T>, Vector<T>>();
     }
 
     /// <summary>
@@ -393,9 +393,9 @@ public class StepwiseRegression<T> : RegressionBase<T>
             var regression = new MultipleRegression<T>(Options, Regularization);
             regression.Train(currentX, y);
 
-            var input = new ModelEvaluationInput<T>
+            var input = new ModelEvaluationInput<T, Matrix<T>, Vector<T>>
             {
-                InputData = OptimizerHelper<T>.CreateOptimizationInputData(currentX, y, currentX, y, currentX, y)
+                InputData = OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(currentX, y, currentX, y, currentX, y)
             };
             var evaluationData = _modelEvaluator.EvaluateModel(input);
             var score = _fitnessCalculator.CalculateFitnessScore(evaluationData);
@@ -531,5 +531,57 @@ public class StepwiseRegression<T> : RegressionBase<T>
         {
             _selectedFeatures.Add(reader.ReadInt32());
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Stepwise Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Stepwise Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Stepwise Regression model, including its coefficients,
+    /// intercept, configuration options, selected features, fitness calculator, and model evaluator. 
+    /// The new instance is completely independent of the original, allowing modifications without 
+    /// affecting the original model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact copy of the current regression model.
+    /// 
+    /// The copy includes:
+    /// - The same coefficients (the importance values for each feature)
+    /// - The same intercept (the starting point value)
+    /// - The same list of selected features (the ingredients that were chosen as important)
+    /// - The same configuration settings (like whether to use forward or backward selection)
+    /// - The same fitness calculator (the judge that evaluates model quality)
+    /// - The same model evaluator (the measurement tools that assess performance)
+    /// 
+    /// This is useful when you want to:
+    /// - Create a backup before further training or modification
+    /// - Create variations of the same model for different purposes
+    /// - Share the model while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        var newModel = new StepwiseRegression<T>(
+            options: _options, 
+            predictionOptions: null, 
+            fitnessCalculator: _fitnessCalculator, 
+            regularization: Regularization, 
+            modelEvaluator: _modelEvaluator);
+        
+        // Copy the coefficients
+        if (Coefficients != null)
+        {
+            newModel.Coefficients = Coefficients.Clone();
+        }
+        
+        // Copy the intercept
+        newModel.Intercept = Intercept;
+        
+        // Create a deep copy of the selected features list
+        newModel._selectedFeatures = [.. _selectedFeatures];
+        
+        return newModel;
     }
 }

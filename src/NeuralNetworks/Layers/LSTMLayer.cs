@@ -1020,7 +1020,7 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private (Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>) 
-    BackwardStep(Tensor<T> dh, Tensor<T> dc_next, Tensor<T> x, Tensor<T> prev_h, Tensor<T> prev_c)
+        BackwardStep(Tensor<T> dh, Tensor<T> dc_next, Tensor<T> x, Tensor<T> prev_h, Tensor<T> prev_c)
     {
         // Forward pass calculations (needed for backward pass)
         var concat = Tensor<T>.Concatenate([x, prev_h], 1);

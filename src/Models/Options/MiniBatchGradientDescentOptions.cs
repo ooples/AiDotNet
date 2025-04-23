@@ -30,7 +30,7 @@ namespace AiDotNet.Models.Options;
 /// in each batch, how long to train, and how the algorithm adjusts its step size over time.
 /// </para>
 /// </remarks>
-public class MiniBatchGradientDescentOptions : GradientBasedOptimizerOptions
+public class MiniBatchGradientDescentOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the number of training examples used in each mini-batch.
@@ -232,40 +232,4 @@ public class MiniBatchGradientDescentOptions : GradientBasedOptimizerOptions
     /// </para>
     /// </remarks>
     public double LearningRateDecreaseFactor { get; set; } = 0.95;
-
-    /// <summary>
-    /// Gets or sets the random seed used for mini-batch selection.
-    /// </summary>
-    /// <value>The random seed, defaulting to null (use system-generated seed).</value>
-    /// <remarks>
-    /// <para>
-    /// The seed value controls the randomization used when selecting mini-batches from the training data.
-    /// Setting a specific seed ensures that the same sequence of mini-batches will be selected across
-    /// different runs, which can be useful for reproducibility and debugging. When set to null, the system
-    /// will use a random seed, typically derived from the system clock, resulting in different mini-batch
-    /// sequences for each run. The null default allows for more robust training through different sampling
-    /// patterns in repeated runs.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting controls whether the random selection of training examples
-    /// for each batch follows the same pattern every time you run the algorithm.
-    /// 
-    /// Imagine shuffling a deck of cards:
-    /// - Seed = null (default): Each time you run the algorithm, the deck is shuffled differently
-    /// - Seed = 42 (or any number): The deck is always shuffled in exactly the same way
-    /// 
-    /// The default value of null means:
-    /// - Each run of the algorithm will use different random batches
-    /// - This helps ensure your model doesn't learn patterns that are specific to a particular order
-    /// - Different runs may give slightly different results
-    /// 
-    /// You might want to set a specific seed value if:
-    /// - You're debugging and want exactly reproducible results
-    /// - You're comparing different models and want to eliminate randomness as a variable
-    /// - You're conducting research that requires reproducibility
-    /// 
-    /// For most practical applications, leaving this as null is recommended to benefit from
-    /// the slight regularization effect that different random batches provide.
-    /// </para>
-    /// </remarks>
-    public int? Seed { get; set; } = null;
 }

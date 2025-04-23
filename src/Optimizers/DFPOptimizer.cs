@@ -15,12 +15,12 @@ namespace AiDotNet.Optimizers;
 /// handling complex optimization problems where the landscape of possible solutions is intricate.
 /// </para>
 /// </remarks>
-public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
+public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the DFP optimization algorithm.
     /// </summary>
-    private DFPOptimizerOptions _options;
+    private DFPOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The inverse Hessian matrix approximation used in the DFP algorithm.
@@ -54,17 +54,10 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     public DFPOptimizer(
-        DFPOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        DFPOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new DFPOptimizerOptions();
+        _options = options ?? new DFPOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();
         _inverseHessian = Matrix<T>.Empty();
         _adaptiveLearningRate = NumOps.Zero;
@@ -96,15 +89,15 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
     /// until it reaches the maximum number of iterations or meets the stopping criteria.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _inverseHessian = Matrix<T>.CreateIdentity(currentSolution.Coefficients.Length);
+        _inverseHessian = Matrix<T>.CreateIdentity(currentSolution.GetParameters().Length);
 
         InitializeAdaptiveParameters();
 
@@ -167,12 +160,13 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It uses line search to determine how big of a step to take, then updates the solution accordingly.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T> inputData)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, 
+        OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var stepSize = OptimizerHelper<T>.LineSearch(currentSolution, direction, gradient, inputData, _adaptiveLearningRate);
-        var newCoefficients = currentSolution.Coefficients.Add(direction.Multiply(stepSize));
+        var stepSize = LineSearch(currentSolution, direction, gradient, inputData);
+        var newCoefficients = currentSolution.GetParameters().Add(direction.Multiply(stepSize));
 
-        return currentSolution.UpdateCoefficients(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -186,7 +180,7 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It helps the optimizer make better decisions about which direction to move in future iterations.
     /// </para>
     /// </remarks>
-    private void UpdateInverseHessian(ISymbolicModel<T> currentSolution, ISymbolicModel<T> newSolution, Vector<T> gradient)
+    private void UpdateInverseHessian(IFullModel<T, TInput, TOutput> currentSolution, IFullModel<T, TInput, TOutput> newSolution, Vector<T> gradient)
     {
         if (_previousGradient == null)
         {
@@ -194,7 +188,7 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
             return;
         }
 
-        var s = newSolution.Coefficients.Subtract(currentSolution.Coefficients);
+        var s = newSolution.GetParameters().Subtract(currentSolution.GetParameters());
         var y = gradient.Subtract(_previousGradient);
 
         var sTy = s.DotProduct(y);
@@ -222,7 +216,7 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
     /// If not, it might decrease the step size to be more careful.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -254,9 +248,9 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It ensures that only the correct type of options (specific to DFP) can be used.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is DFPOptimizerOptions dfpOptions)
+        if (options is DFPOptimizerOptions<T, TInput, TOutput> dfpOptions)
         {
             _options = dfpOptions;
         }
@@ -275,7 +269,7 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's useful if you need to inspect or copy the current configuration.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -338,7 +332,7 @@ public class DFPOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<DFPOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<DFPOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             // Deserialize _inverseHessian

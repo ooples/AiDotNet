@@ -27,7 +27,7 @@ namespace AiDotNet.Interfaces;
 /// for machine learning models.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used in the optimization calculations (e.g., float, double).</typeparam>
-public interface IModelCache<T>
+public interface IModelCache<T, TInput, TOutput>
 {
     /// <summary>
     /// Retrieves previously cached optimization step data associated with the specified key.
@@ -55,7 +55,7 @@ public interface IModelCache<T>
     /// </remarks>
     /// <param name="key">A unique identifier for the cached data you want to retrieve.</param>
     /// <returns>The cached optimization step data if found; otherwise, null.</returns>
-    OptimizationStepData<T>? GetCachedStepData(string key);
+    OptimizationStepData<T, TInput, TOutput>? GetCachedStepData(string key);
 
     /// <summary>
     /// Stores optimization step data in the cache with the specified key.
@@ -83,7 +83,7 @@ public interface IModelCache<T>
     /// </remarks>
     /// <param name="key">A unique identifier to associate with this cached data.</param>
     /// <param name="stepData">The optimization step data to cache.</param>
-    void CacheStepData(string key, OptimizationStepData<T> stepData);
+    void CacheStepData(string key, OptimizationStepData<T, TInput, TOutput> stepData);
 
     /// <summary>
     /// Removes all cached optimization step data.

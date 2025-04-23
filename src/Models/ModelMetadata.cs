@@ -31,7 +31,7 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class ModelMetadata<T>
+public class ModelMetaData<T>
 {
     /// <summary>
     /// Gets or sets the type of the model.
@@ -216,4 +216,33 @@ public class ModelMetadata<T>
     /// </para>
     /// </remarks>
     public byte[] ModelData { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the importance of each feature in the model.
+    /// </summary>
+    /// <value>A dictionary mapping feature names to their importance values.</value>
+    /// <remarks>
+    /// <para>
+    /// This property stores the importance of each feature used by the model. Feature importance indicates how much each input 
+    /// variable contributes to the model's predictions. The exact meaning and scale of importance values can vary depending on 
+    /// the model type and the method used to calculate importance. This information is crucial for understanding which features 
+    /// have the most significant impact on the model's output and can be used for feature selection or model interpretation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This shows how important each input variable is to the model's predictions.
+    /// 
+    /// The feature importance dictionary:
+    /// - Maps each feature (input variable) name to a number representing its importance
+    /// - Higher values typically indicate more important features
+    /// - The exact meaning of the values depends on the type of model and how importance was calculated
+    /// 
+    /// This is useful for:
+    /// - Understanding which inputs have the biggest impact on predictions
+    /// - Identifying irrelevant or less important features
+    /// - Simplifying the model by focusing on the most important features
+    /// 
+    /// For example, in a house price prediction model, you might see that 'location' has a high importance value, 
+    /// while 'roof color' has a low value, indicating that location strongly influences the prediction but roof color doesn't.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, T> FeatureImportance { get; set; } = [];
 }

@@ -32,7 +32,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - Any classification problem with imbalanced classes
 /// </para>
 /// </remarks>
-public class WeightedCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class WeightedCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The weights to apply to each class when calculating the cross entropy loss.
@@ -107,13 +107,15 @@ public class WeightedCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBas
     /// a new weights vector with equal weights for all classes.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        if (_weights == null || _weights.Length != dataSet.Actual.Length)
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual);
+        if (_weights == null || _weights.Length != actual.Length)
         {
-            _weights = new Vector<T>(dataSet.Actual.Length);
+            _weights = new Vector<T>(actual.Length);
         }
 
-        return NeuralNetworkHelper<T>.WeightedCrossEntropyLoss(dataSet.Predicted, dataSet.Actual, _weights);
+        return new WeightedCrossEntropyLoss<T>(_weights).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

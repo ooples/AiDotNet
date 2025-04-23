@@ -31,7 +31,7 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     /// <remarks>
     /// ConcurrentDictionary is used to ensure thread safety when multiple operations might access the cache simultaneously.
     /// </remarks>
-    private readonly ConcurrentDictionary<string, ISymbolicModel<T>> _cache = new();
+    private readonly ConcurrentDictionary<string, IGradientModel<T>> _cache = new();
 
     /// <summary>
     /// Retrieves a cached gradient model using the specified key.
@@ -47,7 +47,7 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     /// needs to be calculated from scratch.
     /// </para>
     /// </remarks>
-    public ISymbolicModel<T>? GetCachedGradient(string key)
+    public IGradientModel<T>? GetCachedGradient(string key)
     {
         _cache.TryGetValue(key, out var gradient);
         return gradient;
@@ -68,7 +68,7 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     /// If a gradient with the same key already exists in the cache, it will be replaced with the new one.
     /// </para>
     /// </remarks>
-    public void CacheGradient(string key, ISymbolicModel<T> gradient)
+    public void CacheGradient(string key, IGradientModel<T> gradient)
     {
         _cache[key] = gradient;
     }

@@ -22,7 +22,7 @@
 /// - Different optimizers work better for different types of problems
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface IOptimizer<T> : IModelSerializer
+public interface IOptimizer<T, TInput, TOutput> : IModelSerializer
 {
     /// <summary>
     /// Performs the optimization process to find the best parameters for a model.
@@ -44,7 +44,7 @@ public interface IOptimizer<T> : IModelSerializer
     /// initial parameters, and any constraints.</param>
     /// <returns>The result of the optimization process, including the optimized parameters
     /// and performance metrics.</returns>
-    OptimizationResult<T> Optimize(OptimizationInputData<T> inputData);
+    OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData);
 
     /// <summary>
     /// Determines whether the optimization process should stop early.
@@ -87,5 +87,5 @@ public interface IOptimizer<T> : IModelSerializer
     /// - Regularization: Settings that prevent the model from becoming too complex
     /// </remarks>
     /// <returns>The configuration options for the optimization algorithm.</returns>
-    OptimizationAlgorithmOptions GetOptions();
+    OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions();
 }

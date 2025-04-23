@@ -47,7 +47,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - Different quantiles give you different insights about your predictions
 /// </para>
 /// </remarks>
-public class QuantileLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class QuantileLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The quantile value to use for the loss calculation, between 0 and 1.
@@ -125,8 +125,9 @@ public class QuantileLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// - If predicting sales, a 0.1 quantile loss would give you a conservative estimate to avoid overstocking
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.QuantileLoss(dataSet.Predicted, dataSet.Actual, _quantile);
+        return new OrdinalRegressionLoss<T>(Convert.ToInt32(_quantile)).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

@@ -39,7 +39,7 @@
 /// and forecasts your time series data.
 /// </para>
 /// </remarks>
-public class ProphetOptions<T> : TimeSeriesRegressionOptions<T>
+public class ProphetOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
 {
     /// <summary>
     /// Gets or sets the initial value for the trend component.
@@ -563,7 +563,7 @@ public class ProphetOptions<T> : TimeSeriesRegressionOptions<T>
     /// that requires understanding of optimization algorithms and their properties.
     /// </para>
     /// </remarks>
-    public IOptimizer<T>? Optimizer { get; set; } = null;
+    public IOptimizer<T, Matrix<T>, Vector<T>>? Optimizer { get; set; } = null;
 
     /// <summary>
     /// Gets or sets the number of Fourier terms used for modeling seasonality.
@@ -651,4 +651,39 @@ public class ProphetOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public List<T> Changepoints { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets whether to apply transformations to the predictions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the model will apply a transformation function to each prediction.
+    /// This can be useful for scaling, normalizing, or otherwise adjusting predictions
+    /// before returning them to the user.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting determines whether the model should modify
+    /// its predictions before returning them. For example, if your data was transformed
+    /// before training (like taking the logarithm to handle skewed data), you might need
+    /// to reverse that transformation on the predictions to get meaningful values.
+    /// </para>
+    /// </remarks>
+    public bool ApplyTransformation { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the function used to transform predictions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This function is applied to each prediction when ApplyTransformation is enabled.
+    /// It can be used to perform operations like scaling, normalizing, or applying
+    /// domain-specific transformations to predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the specific formula or operation the model uses
+    /// to adjust its predictions when ApplyTransformation is turned on. For example, 
+    /// if your original data was in dollars but you trained the model on data converted to
+    /// thousands of dollars, this function could multiply the predictions by 1000 to
+    /// convert them back to dollars.
+    /// </para>
+    /// </remarks>
+    public Func<T, T> TransformPrediction { get; set; } = (x) => x;
 }

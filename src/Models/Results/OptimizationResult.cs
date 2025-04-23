@@ -34,38 +34,41 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class OptimizationResult<T>
+public class OptimizationResult<T, TInput, TOutput>
 {
     /// <summary>
-    /// Gets or sets the best symbolic model found during optimization.
+    /// Gets or sets the best model found during optimization.
     /// </summary>
-    /// <value>An implementation of ISymbolicModel&lt;T&gt; representing the best solution.</value>
+    /// <value>An implementation of IFullModel&lt;T, TInput, TOutput&gt; representing the best solution.</value>
     /// <remarks>
     /// <para>
-    /// This property represents the best symbolic model found during the optimization process. A symbolic model is a 
-    /// mathematical expression or algorithm that can be evaluated with different inputs to produce predictions. Unlike 
-    /// black-box models like neural networks, symbolic models are typically human-readable and interpretable, such as 
-    /// polynomial equations, decision trees, or other mathematical expressions. The model encapsulates the relationship 
-    /// discovered between the input features and the target variable during the optimization process.
+    /// This property represents the best model found during the optimization process. The model can be either a symbolic 
+    /// model (such as a mathematical expression) or a more complex structure like a neural network, depending on the 
+    /// optimization approach used. For symbolic models, it encapsulates a mathematical expression or algorithm that can 
+    /// be evaluated with different inputs to produce predictions. For neural networks or other complex models, it 
+    /// represents the optimized network structure and parameters. The model captures the relationship discovered between 
+    /// the input features and the target variable during the optimization process.
     /// </para>
-    /// <para><b>For Beginners:</b> This is the best model or equation found during optimization.
+    /// <para><b>For Beginners:</b> This is the best model found during optimization.
     /// 
     /// The best solution:
-    /// - Contains the actual mathematical formula or algorithm
+    /// - Contains the actual model structure, whether it's a mathematical formula, a neural network, or another type of model
     /// - Represents the best model found during the optimization process
     /// - Can be used to make predictions with new data
-    /// - Is typically human-readable (unlike black-box models)
+    /// - May be human-readable (for symbolic models) or more complex (for neural networks)
     /// 
-    /// For example, in symbolic regression, this might be an equation like:
-    /// y = 3.2x₁² + 1.7x₂ - 0.5
+    /// For example:
+    /// - In symbolic regression, this might be an equation like: y = 3.2x₁² + 1.7x₂ - 0.5
+    /// - For a neural network, it would contain the optimized network structure and weights
     /// 
     /// This property is important because:
     /// - It's the primary output of the optimization process
-    /// - It can be used to understand the relationships in your data
+    /// - It can be used to understand the relationships in your data (especially for symbolic models)
     /// - It can be deployed to make predictions on new data
+    /// - It allows for flexibility in the types of models that can be optimized
     /// </para>
     /// </remarks>
-    public ISymbolicModel<T> BestSolution { get; set; }
+    public IFullModel<T, TInput, TOutput>? BestSolution { get; set; }
     
     /// <summary>
     /// Gets or sets the intercept term of the best solution.
@@ -442,7 +445,6 @@ public class OptimizationResult<T>
     public OptimizationResult()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        BestSolution = SymbolicModelFactory<T>.CreateRandomModel(false, 1); // Default to vector model
         FitnessHistory = Vector<T>.Empty();
         SelectedFeatures = [];
         TrainingResult = new DatasetResult();
@@ -506,7 +508,7 @@ public class OptimizationResult<T>
         /// square footage, number of bedrooms, location, etc. for each house.
         /// </para>
         /// </remarks>
-        public Matrix<T> X { get; set; }
+        public TInput X { get; set; }
     
         /// <summary>
         /// Gets or sets the target values for the dataset.
@@ -529,7 +531,7 @@ public class OptimizationResult<T>
         /// actual sale price for each house in your dataset.
         /// </para>
         /// </remarks>
-        public Vector<T> Y { get; set; }
+        public TOutput Y { get; set; }
     
         /// <summary>
         /// Gets or sets the model's predictions for the dataset.
@@ -553,7 +555,7 @@ public class OptimizationResult<T>
         /// estimated price for each house in the dataset.
         /// </para>
         /// </remarks>
-        public Vector<T> Predictions { get; set; }
+        public TOutput Predictions { get; set; }
     
         /// <summary>
         /// Gets or sets the error statistics for the model's predictions.
@@ -702,9 +704,7 @@ public class OptimizationResult<T>
         /// </remarks>
         public DatasetResult()
         {
-            X = Matrix<T>.Empty();
-            Y = Vector<T>.Empty();
-            Predictions = Vector<T>.Empty();
+            (X, Y, Predictions) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
             ErrorStats = ErrorStats<T>.Empty();
             PredictionStats = PredictionStats<T>.Empty();
             ActualBasicStats = BasicStats<T>.Empty();

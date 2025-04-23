@@ -91,7 +91,6 @@ public static class StatisticsHelper<T>
     public static T CalculateVariance(Vector<T> values, T mean)
     {
         T sumOfSquares = values.Select(x => _numOps.Square(_numOps.Subtract(x, mean))).Aggregate(_numOps.Zero, _numOps.Add);
-
         return _numOps.Divide(sumOfSquares, _numOps.FromDouble(values.Length - 1));
     }
 
@@ -130,9 +129,9 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
-    /// Calculates the standard deviation of a vector of values.
+    /// Calculates the standard deviation of a vector.
     /// </summary>
-    /// <param name="values">The vector of values to calculate standard deviation for.</param>
+    /// <param name="values">The collection of values to calculate standard deviation for.</param>
     /// <returns>The standard deviation of the values.</returns>
     /// <remarks>
     /// <para>
@@ -144,9 +143,9 @@ public static class StatisticsHelper<T>
     /// deviation means data points are spread out over a wider range.
     /// </para>
     /// </remarks>
-    public static T CalculateStandardDeviation(Vector<T> values)
+    public static T CalculateStandardDeviation(IEnumerable<T> values)
     {
-        return _numOps.Sqrt(CalculateVariance(values, values.Average()));
+        return _numOps.Sqrt(CalculateVariance(values));
     }
 
     /// <summary>
@@ -4206,7 +4205,7 @@ public static class StatisticsHelper<T>
     /// and hierarchical structure.
     /// </para>
     /// </remarks>
-    public static T CalculateDIC(ModelStats<T> modelStats)
+    public static T CalculateDIC<TInput, TOutput>(ModelStats<T, TInput, TOutput> modelStats)
     {
         // DIC = D(θ̄) + 2pD
         // where D(θ̄) is the deviance at the posterior mean, and pD is the effective number of parameters
@@ -4234,7 +4233,7 @@ public static class StatisticsHelper<T>
     /// WAIC helps you select the model that best balances fit and complexity.
     /// </para>
     /// </remarks>
-    public static T CalculateWAIC(ModelStats<T> modelStats)
+    public static T CalculateWAIC<TInput, TOutput>(ModelStats<T, TInput, TOutput> modelStats)
     {
         // WAIC = -2 * (lppd - pWAIC)
         // where lppd is the log pointwise predictive density, and pWAIC is the effective number of parameters
@@ -4262,7 +4261,7 @@ public static class StatisticsHelper<T>
     /// it often provides a more accurate estimate of a model's predictive performance.
     /// </para>
     /// </remarks>
-    public static T CalculateLOO(ModelStats<T> modelStats)
+    public static T CalculateLOO<TInput, TOutput>(ModelStats<T, TInput, TOutput> modelStats)
     {
         // LOO = -2 * (Σ log(p(yi | y-i)))
         // where p(yi | y-i) is the leave-one-out predictive density for the i-th observation
@@ -4291,7 +4290,7 @@ public static class StatisticsHelper<T>
     /// they directly assess the model's ability to generate data similar to what was observed.
     /// </para>
     /// </remarks>
-    public static T CalculatePosteriorPredictiveCheck(ModelStats<T> modelStats)
+    public static T CalculatePosteriorPredictiveCheck<TInput, TOutput>(ModelStats<T, TInput, TOutput> modelStats)
     {
         // Calculate the proportion of posterior predictive samples that are more extreme than the observed data
         var observedStatistic = modelStats.ObservedTestStatistic;
@@ -4319,7 +4318,7 @@ public static class StatisticsHelper<T>
     /// models. They're a fundamental tool in Bayesian model selection.
     /// </para>
     /// </remarks>
-    public static T CalculateBayesFactor(ModelStats<T> modelStats)
+    public static T CalculateBayesFactor<TInput, TOutput>(ModelStats<T, TInput, TOutput> modelStats)
     {
         // Bayes Factor = P(D|M1) / P(D|M2)
         // where P(D|M1) is the marginal likelihood of the current model and P(D|M2) is the marginal likelihood of a reference model
@@ -5000,10 +4999,10 @@ public static class StatisticsHelper<T>
     /// metrics helps you understand different aspects of your model's performance.
     /// </para>
     /// </remarks>
-    public static (T, T) CalculateAucF1Score(ModelEvaluationData<T> evaluationData)
+    public static (T, T) CalculateAucF1Score<TInput, TOutput>(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var actual = evaluationData.ModelStats.Actual;
-        var predicted = evaluationData.ModelStats.Predicted;
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
+        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
         var auc = StatisticsHelper<T>.CalculatePrecisionRecallAUC(actual, predicted);
         var (_, _, f1Score) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, PredictionType.Regression);
 

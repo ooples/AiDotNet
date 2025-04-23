@@ -16,7 +16,7 @@
 /// (high uncertainty and poor performance).
 /// </para>
 /// </remarks>
-public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
+public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Gaussian Process fit detector.
@@ -27,6 +27,11 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// for the Gaussian Process regression.
     /// </remarks>
     private readonly GaussianProcessFitDetectorOptions _options;
+
+    private Vector<T> _meanPrediction;
+    private Vector<T> _variancePrediction;
+    private T _averageUncertainty;
+    private T _rmse;
 
     /// <summary>
     /// Initializes a new instance of the GaussianProcessFitDetector class.
@@ -49,6 +54,10 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     public GaussianProcessFitDetector(GaussianProcessFitDetectorOptions? options = null)
     {
         _options = options ?? new GaussianProcessFitDetectorOptions();
+        _meanPrediction = Vector<T>.Empty();
+        _variancePrediction = Vector<T>.Empty();
+        _averageUncertainty = NumOps.Zero;
+        _rmse = NumOps.Zero;
     }
 
     /// <summary>
@@ -70,7 +79,7 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -111,25 +120,24 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var (meanPrediction, variancePrediction) = PerformGaussianProcessRegression(evaluationData);
+        (_meanPrediction, _variancePrediction) = PerformGaussianProcessRegression(evaluationData);
+        _averageUncertainty = _variancePrediction.Average();
+        _rmse = StatisticsHelper<T>.CalculateRootMeanSquaredError(ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual), _meanPrediction);
 
-        var averageUncertainty = variancePrediction.Average();
-        var rmse = StatisticsHelper<T>.CalculateRootMeanSquaredError(evaluationData.ModelStats.Actual, meanPrediction);
-
-        if (_numOps.LessThan(rmse, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-            _numOps.LessThan(averageUncertainty, _numOps.FromDouble(_options.LowUncertaintyThreshold)))
+        if (NumOps.LessThan(_rmse, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+            NumOps.LessThan(_averageUncertainty, NumOps.FromDouble(_options.LowUncertaintyThreshold)))
         {
             return FitType.GoodFit;
         }
-        else if (_numOps.GreaterThan(rmse, _numOps.FromDouble(_options.OverfitThreshold)) &&
-                 _numOps.LessThan(averageUncertainty, _numOps.FromDouble(_options.LowUncertaintyThreshold)))
+        else if (NumOps.GreaterThan(_rmse, NumOps.FromDouble(_options.OverfitThreshold)) &&
+                 NumOps.LessThan(_averageUncertainty, NumOps.FromDouble(_options.LowUncertaintyThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.GreaterThan(rmse, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.GreaterThan(averageUncertainty, _numOps.FromDouble(_options.HighUncertaintyThreshold)))
+        else if (NumOps.GreaterThan(_rmse, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.GreaterThan(_averageUncertainty, NumOps.FromDouble(_options.HighUncertaintyThreshold)))
         {
             return FitType.Underfit;
         }
@@ -161,18 +169,13 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// values indicating greater confidence in the fit assessment.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var (meanPrediction, variancePrediction) = PerformGaussianProcessRegression(evaluationData);
-
-        var averageUncertainty = variancePrediction.Average();
-        var rmse = StatisticsHelper<T>.CalculateRootMeanSquaredError(evaluationData.ModelStats.Actual, meanPrediction);
-
         // Normalize confidence level to [0, 1]
-        var uncertaintyFactor = _numOps.Divide(_numOps.One, _numOps.Add(_numOps.One, averageUncertainty));
-        var rmseFactor = _numOps.Divide(_numOps.One, _numOps.Add(_numOps.One, rmse));
+        var uncertaintyFactor = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, _averageUncertainty));
+        var rmseFactor = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, _rmse));
 
-        return _numOps.Multiply(uncertaintyFactor, rmseFactor);
+        return NumOps.Multiply(uncertaintyFactor, rmseFactor);
     }
 
     /// <summary>
@@ -200,7 +203,7 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// hyperparameter tuning, and data preprocessing.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -262,10 +265,10 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    private (Vector<T>, Vector<T>) PerformGaussianProcessRegression(ModelEvaluationData<T> evaluationData)
+    private (Vector<T>, Vector<T>) PerformGaussianProcessRegression(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var X = evaluationData.ModelStats.FeatureMatrix;
-        var y = evaluationData.ModelStats.Actual;
+        var X = ConversionsHelper.ConvertToMatrix<T, TInput>(evaluationData.ModelStats.Features);
+        var y = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
 
         // Hyperparameter optimization
         var optimizedHyperparameters = OptimizeHyperparameters(X, y);
@@ -278,7 +281,7 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
         // Add noise to the diagonal for numerical stability
         for (int i = 0; i < K.Rows; i++)
         {
-            K[i, i] = _numOps.Add(K[i, i], _numOps.FromDouble(_options.NoiseVariance));
+            K[i, i] = NumOps.Add(K[i, i], NumOps.FromDouble(_options.NoiseVariance));
         }
 
         // Perform Cholesky decomposition
@@ -300,7 +303,7 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
         {
             var kStarStar = CalculateRBFKernel(XStar.GetRow(i), XStar.GetRow(i));
             var v = choleskyDecomposition.Solve(KStar.GetColumn(i));
-            variancePrediction[i] = _numOps.Subtract(kStarStar, v.DotProduct(v));
+            variancePrediction[i] = NumOps.Subtract(kStarStar, v.DotProduct(v));
         }
 
         return (meanPrediction, variancePrediction);
@@ -334,7 +337,7 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
         // Implement a simple grid search for hyperparameter optimization
         double bestLengthScale = 1.0;
         double bestNoiseVariance = 0.1;
-        T bestLogLikelihood = _numOps.MinValue;
+        T bestLogLikelihood = NumOps.MinValue;
 
         var lengthScales = new[] { 0.1, 0.5, 1.0, 2.0, 5.0 };
         var noiseVariances = new[] { 0.01, 0.1, 0.5, 1.0 };
@@ -349,12 +352,12 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
                 var K = CalculateKernelMatrix(X, X);
                 for (int i = 0; i < K.Rows; i++)
                 {
-                    K[i, i] = _numOps.Add(K[i, i], _numOps.FromDouble(nv));
+                    K[i, i] = NumOps.Add(K[i, i], NumOps.FromDouble(nv));
                 }
 
                 var logLikelihood = CalculateLogLikelihood(K, y);
 
-                if (_numOps.GreaterThan(logLikelihood, bestLogLikelihood))
+                if (NumOps.GreaterThan(logLikelihood, bestLogLikelihood))
                 {
                     bestLogLikelihood = logLikelihood;
                     bestLengthScale = ls;
@@ -396,11 +399,11 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
         var L = choleskyDecomposition.L;
         var alpha = choleskyDecomposition.Solve(y);
     
-        var dataFit = _numOps.Multiply(_numOps.FromDouble(-0.5), y.DotProduct(alpha));
-        var complexity = _numOps.Multiply(_numOps.FromDouble(-1), L.LogDeterminant());
-        var normalization = _numOps.Multiply(_numOps.FromDouble(-0.5 * K.Rows), _numOps.Log(_numOps.FromDouble(2 * Math.PI)));
+        var dataFit = NumOps.Multiply(NumOps.FromDouble(-0.5), y.DotProduct(alpha));
+        var complexity = NumOps.Multiply(NumOps.FromDouble(-1), L.LogDeterminant());
+        var normalization = NumOps.Multiply(NumOps.FromDouble(-0.5 * K.Rows), NumOps.Log(NumOps.FromDouble(2 * Math.PI)));
 
-        return _numOps.Add(_numOps.Add(dataFit, complexity), normalization);
+        return NumOps.Add(NumOps.Add(dataFit, complexity), normalization);
     }
 
     /// <summary>
@@ -475,6 +478,6 @@ public class GaussianProcessFitDetector<T> : FitDetectorBase<T>
         var diff = x1 - x2;
         var squaredDist = diff.DotProduct(diff);
 
-        return _numOps.Exp(_numOps.Negate(_numOps.Divide(squaredDist, _numOps.FromDouble(2 * _options.LengthScale * _options.LengthScale))));
+        return NumOps.Exp(NumOps.Negate(NumOps.Divide(squaredDist, NumOps.FromDouble(2 * _options.LengthScale * _options.LengthScale))));
     }
 }

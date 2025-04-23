@@ -33,7 +33,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Configuration options specific to the Transfer Function Model.
     /// </summary>
-    private readonly TransferFunctionOptions<T> _tfOptions;
+    private readonly TransferFunctionOptions<T, Matrix<T>, Vector<T>> _tfOptions;
     
     /// <summary>
     /// Autoregressive (AR) parameters that capture the dependency on past values of the output series.
@@ -73,7 +73,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The optimization algorithm used to estimate model parameters.
     /// </summary>
-    private readonly IOptimizer<T> _optimizer;
+    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
 
     /// <summary>
     /// Initializes a new instance of the TransferFunctionModel class with optional configuration options.
@@ -94,10 +94,10 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// These parameters start empty and will be filled with values during the training process.
     /// </para>
     /// </remarks>
-    public TransferFunctionModel(TransferFunctionOptions<T>? options = null) : base(options ?? new())
+    public TransferFunctionModel(TransferFunctionOptions<T, Matrix<T>, Vector<T>>? options = null) : base(options ?? new())
     {
-        _tfOptions = options ?? new TransferFunctionOptions<T>();
-        _optimizer = _tfOptions.Optimizer ?? new LBFGSOptimizer<T>();
+        _tfOptions = options ?? new TransferFunctionOptions<T, Matrix<T>, Vector<T>>();
+        _optimizer = _tfOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
         _y = Vector<T>.Empty();
         _arParameters = Vector<T>.Empty();
         _maParameters = Vector<T>.Empty();
@@ -105,49 +105,6 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
         _outputLags = Vector<T>.Empty();
         _residuals = Vector<T>.Empty();
         _fitted = Vector<T>.Empty();
-    }
-
-    /// <summary>
-    /// Trains the Transfer Function Model using the provided input data and target values.
-    /// </summary>
-    /// <param name="x">The input features matrix containing external variables.</param>
-    /// <param name="y">The output time series data to model.</param>
-    /// <exception cref="ArgumentException">Thrown when the input matrix rows don't match the output vector length.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Training a Transfer Function Model involves finding the best values for all its parameters
-    /// to accurately capture the relationship between input and output time series.
-    /// 
-    /// The training process follows these steps:
-    /// 
-    /// 1. Validate that the input and output data have compatible dimensions
-    /// 2. Initialize the model parameters with small random values
-    /// 3. Use an optimization algorithm to find the parameter values that best fit the data
-    /// 4. Compute the residuals (errors) between the model's predictions and actual values
-    /// 
-    /// After training, the model will have learned:
-    /// - How the output series depends on its own past values
-    /// - How the output series is influenced by the input series
-    /// - The patterns in the error terms
-    /// 
-    /// These learned parameters can then be used to make predictions or analyze the relationship
-    /// between the input and output variables.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        if (x.Rows != y.Length)
-        {
-            throw new ArgumentException("Input matrix rows must match output vector length.");
-        }
-
-        int n = y.Length;
-        _y = y;
-
-        InitializeParameters();
-        OptimizeParameters(x, y);
-        ComputeResiduals(x, y);
     }
 
     /// <summary>
@@ -215,14 +172,14 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void OptimizeParameters(Matrix<T> x, Vector<T> y)
     {
-        var inputData = new OptimizationInputData<T>
+        var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>
         {
             XTrain = x,
             YTrain = y
         };
 
-        OptimizationResult<T> result = _optimizer.Optimize(inputData);
-        UpdateModelParameters(result.BestSolution.Coefficients);
+        OptimizationResult<T, Matrix<T>, Vector<T>> result = _optimizer.Optimize(inputData);
+        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
     }
 
     /// <summary>
@@ -546,5 +503,189 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
         _tfOptions.MAOrder = reader.ReadInt32();
         _tfOptions.InputLagOrder = reader.ReadInt32();
         _tfOptions.OutputLagOrder = reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// The core implementation of the training process for the Transfer Function Model.
+    /// </summary>
+    /// <param name="x">The input features matrix containing external variables.</param>
+    /// <param name="y">The output time series data to model.</param>
+    /// <exception cref="ArgumentException">Thrown when the input matrix rows don't match the output vector length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method implements the training process for the Transfer Function Model, handling validation,
+    /// initialization, parameter optimization, and residual computation.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This is the engine that powers the training process. It follows these steps:
+    /// 
+    /// 1. First, it checks that your input and output data have the right dimensions
+    /// 2. Then, it stores the output data for later use
+    /// 3. Next, it creates initial values for all model parameters
+    /// 4. It then finds the optimal values for these parameters to best fit your data
+    /// 5. Finally, it calculates how well these parameters worked by computing the errors
+    /// 
+    /// Each step builds on the previous one to create a model that understands both:
+    /// - How your target variable changes over time on its own
+    /// - How your input variables influence your target variable
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Validate input dimensions
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException("Input matrix rows must match output vector length.");
+        }
+
+        // Store the output time series
+        _y = y.Clone();
+
+        // Initialize model parameters
+        InitializeParameters();
+    
+        // Optimize parameters to best fit the data
+        OptimizeParameters(x, y);
+    
+        // Compute residuals to assess model fit
+        ComputeResiduals(x, y);
+    }
+
+    /// <summary>
+    /// Generates a prediction for a single input vector.
+    /// </summary>
+    /// <param name="input">The input vector containing features for prediction.</param>
+    /// <returns>The predicted value.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model hasn't been trained.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method generates a single prediction based on the input vector, using the trained model parameters
+    /// to combine autoregressive, moving average, and transfer function components.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates a prediction for a single point in time based on your input data.
+    /// 
+    /// It combines several components to make this prediction:
+    /// 
+    /// 1. The effect of past values of the output variable (AR component)
+    /// 2. The effect of past prediction errors (MA component)
+    /// 3. The effect of the input variables at different time lags
+    /// 4. The effect of additional past output values
+    /// 
+    /// The method checks if the model has been trained first and then carefully
+    /// applies each component to generate an accurate prediction. This is particularly
+    /// useful when you need just one prediction rather than a whole series.
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Check if the model has been trained
+        if (_arParameters.Length == 0 && _maParameters.Length == 0 && 
+            _inputLags.Length == 0 && _outputLags.Length == 0)
+        {
+            throw new InvalidOperationException("The model must be trained before making predictions.");
+        }
+    
+        // Create a matrix with a single row from the input vector
+        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            inputMatrix[0, i] = input[i];
+        }
+    
+        // Create an empty vector to store the single prediction
+        Vector<T> predictions = new Vector<T>(1);
+    
+        // Generate the prediction
+        predictions[0] = PredictSingle(inputMatrix, predictions, 0);
+    
+        return predictions[0];
+    }
+
+    /// <summary>
+    /// Gets metadata about the model, including its type, parameters, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed metadata about the Transfer Function Model, including its type,
+    /// parameters (AR, MA, input lags, output lags), and configuration options. This metadata can be used
+    /// for model selection, comparison, documentation, and serialization purposes.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method provides a summary of your model's settings and what it has learned.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Transfer Function Model)
+    /// - Information about each set of parameters and how many there are
+    /// - Configuration settings like AR order, MA order, etc.
+    /// - A serialized version of the entire model
+    /// 
+    /// This information is useful for:
+    /// - Keeping track of different models you've created
+    /// - Comparing model configurations
+    /// - Documenting which settings worked best
+    /// - Sharing model information with others
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.TransferFunctionModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Model structure information
+                { "AROrder", _tfOptions.AROrder },
+                { "MAOrder", _tfOptions.MAOrder },
+                { "InputLagOrder", _tfOptions.InputLagOrder },
+                { "OutputLagOrder", _tfOptions.OutputLagOrder },
+            
+                // Parameter information
+                { "ARParametersCount", _arParameters.Length },
+                { "MAParametersCount", _maParameters.Length },
+                { "InputLagsCount", _inputLags.Length },
+                { "OutputLagsCount", _outputLags.Length },
+            
+                // Model fit information (if available)
+                { "ResidualsMean", _residuals.Length > 0 ? Convert.ToDouble(_residuals.Mean()) : 0.0 },
+                { "ResidualsStdDev", _residuals.Length > 0 ? Convert.ToDouble(_residuals.StandardDeviation()) : 0.0 }
+            },
+            ModelData = this.Serialize()
+        };
+    
+        return metadata;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Transfer Function Model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the Transfer Function Model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the Transfer Function Model with the same configuration options
+    /// as the current instance. This new instance is not trained and will need to be trained on data.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates a fresh copy of the model with the same settings but no training.
+    /// 
+    /// It's useful when you want to:
+    /// - Create multiple versions of the same model
+    /// - Train models on different data sets
+    /// - Experiment with ensemble models (combining multiple models)
+    /// - Compare different training approaches with the same model structure
+    /// 
+    /// The new model copy will have identical configuration options but will need to be
+    /// trained from scratch on your data.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a new instance with the same options
+        return new TransferFunctionModel<T>(_tfOptions);
     }
 }

@@ -1,3 +1,5 @@
+global using AiDotNet.Regression;
+
 namespace AiDotNet.Interpolation;
 
 /// <summary>

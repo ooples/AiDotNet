@@ -238,12 +238,14 @@ public class MultiplyLayer<T> : LayerBase<T>
         {
             throw new ArgumentException("MultiplyLayer requires at least two inputs.");
         }
+
         _lastInputs = inputs;
-        var result = inputs[0].Copy();
+        var result = inputs[0].Clone();
         for (int i = 1; i < inputs.Length; i++)
         {
             result = result.ElementwiseMultiply(inputs[i]);
         }
+
         _lastOutput = ApplyActivation(result);
         return _lastOutput;
     }
@@ -288,7 +290,7 @@ public class MultiplyLayer<T> : LayerBase<T>
         var inputGradients = new Tensor<T>[_lastInputs.Length];
         for (int i = 0; i < _lastInputs.Length; i++)
         {
-            inputGradients[i] = activationGradient.Copy();
+            inputGradients[i] = activationGradient.Clone();
             for (int j = 0; j < _lastInputs.Length; j++)
             {
                 if (i != j)

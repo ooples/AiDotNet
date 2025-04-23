@@ -15,7 +15,7 @@ namespace AiDotNet.FitDetectors;
 /// points are removed, it's likely a more robust model.
 /// </para>
 /// </remarks>
-public class JackknifeFitDetector<T> : FitDetectorBase<T>
+public class JackknifeFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the jackknife fit detector.
@@ -53,7 +53,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// This method coordinates the entire analysis process by calling other specialized methods.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -84,18 +84,18 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// between these performances helps determine the fit type.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var jackknifeMSE = PerformJackknifeResampling(evaluationData);
         var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
 
-        var relativeDifference = _numOps.Divide(_numOps.Subtract(jackknifeMSE, originalMSE), originalMSE);
+        var relativeDifference = NumOps.Divide(NumOps.Subtract(jackknifeMSE, originalMSE), originalMSE);
 
-        if (_numOps.GreaterThan(relativeDifference, _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.GreaterThan(relativeDifference, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(relativeDifference, _numOps.Negate(_numOps.FromDouble(_options.UnderfitThreshold))))
+        else if (NumOps.LessThan(relativeDifference, NumOps.Negate(NumOps.FromDouble(_options.UnderfitThreshold))))
         {
             return FitType.Underfit;
         }
@@ -123,14 +123,14 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// - Values close to 0 mean low confidence (the assessment might not be reliable)
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var jackknifeMSE = PerformJackknifeResampling(evaluationData);
         var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
 
-        var relativeDifference = _numOps.Abs(_numOps.Divide(_numOps.Subtract(jackknifeMSE, originalMSE), originalMSE));
+        var relativeDifference = NumOps.Abs(NumOps.Divide(NumOps.Subtract(jackknifeMSE, originalMSE), originalMSE));
         
-        return _numOps.Subtract(_numOps.One, _numOps.LessThan(relativeDifference, _numOps.One) ? relativeDifference : _numOps.One);
+        return NumOps.Subtract(NumOps.One, NumOps.LessThan(relativeDifference, NumOps.One) ? relativeDifference : NumOps.One);
     }
 
     /// <summary>
@@ -155,7 +155,7 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// - Epochs: Complete passes through the training dataset during model training
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -208,10 +208,10 @@ public class JackknifeFitDetector<T> : FitDetectorBase<T>
     /// - Jackknife: A specific resampling technique where you leave out one data point at a time.
     /// </para>
     /// </remarks>
-    private T PerformJackknifeResampling(ModelEvaluationData<T> evaluationData)
+    private T PerformJackknifeResampling(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var actual = evaluationData.ModelStats.Actual;
-        var predicted = evaluationData.ModelStats.Predicted;
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
+        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
         var sampleSize = actual.Length;
 
         if (sampleSize < _options.MinSampleSize)

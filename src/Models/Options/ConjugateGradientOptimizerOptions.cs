@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// current slope. This class lets you control how this "smart hiker" behaves - how big steps they take, when they
 /// decide they're close enough to the bottom, and how many attempts they'll make before giving up.</para>
 /// </remarks>
-public class ConjugateGradientOptimizerOptions : GradientBasedOptimizerOptions
+public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the initial learning rate, which controls the size of the first optimization steps.

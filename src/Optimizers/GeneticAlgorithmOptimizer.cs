@@ -1,3 +1,5 @@
+global using AiDotNet.Genetics;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -21,17 +23,12 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
+public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Genetic Algorithm.
     /// </summary>
-    private GeneticAlgorithmOptimizerOptions _geneticOptions;
-
-    /// <summary>
-    /// A random number generator used for various probabilistic operations in the algorithm.
-    /// </summary>
-    private readonly Random _random;
+    private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _geneticOptions;
 
     /// <summary>
     /// The current crossover rate, which determines how often solutions are combined.
@@ -44,6 +41,11 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
     private T _currentMutationRate;
 
     /// <summary>
+    /// The genetic algorithm instance used for optimization.
+    /// </summary>
+    private GeneticBase<T, TInput, TOutput> _geneticAlgorithm;
+
+    /// <summary>
     /// Initializes a new instance of the GeneticAlgorithmOptimizer class.
     /// </summary>
     /// <remarks>
@@ -52,26 +54,35 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <param name="options">The options for configuring the genetic algorithm.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
     public GeneticAlgorithmOptimizer(
-        GeneticAlgorithmOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
+        GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null,
+        GeneticBase<T, TInput, TOutput>? geneticAlgorithm = null,
+        IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,
+        IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null)
+        : base(options ?? new())
     {
-        _geneticOptions = options ?? new GeneticAlgorithmOptimizerOptions();
-        _random = new Random();
+        _geneticOptions = options ?? new GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>();
         _currentCrossoverRate = NumOps.Zero;
         _currentMutationRate = NumOps.Zero;
+
+        // If no genetic algorithm is provided, create a default StandardGeneticAlgorithm
+        if (geneticAlgorithm == null)
+        {
+            // Need to provide a model factory - use a simple model as default
+            static IFullModel<T, TInput, TOutput> modelFactory()
+            {
+                return (IFullModel<T, TInput, TOutput>)new SimpleRegression<T>();
+            }
+
+            _geneticAlgorithm = new StandardGeneticAlgorithm<T, TInput, TOutput>(
+                modelFactory,
+                fitnessCalculator ?? new MeanSquaredErrorFitnessCalculator<T, TInput, TOutput>(),
+                modelEvaluator ?? new DefaultModelEvaluator<T, TInput, TOutput>());
+        }
+        else
+        {
+            _geneticAlgorithm = geneticAlgorithm;
+        }
 
         InitializeAdaptiveParameters();
     }
@@ -86,10 +97,11 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
-        AdaptiveParametersHelper<T>.UpdateAdaptiveGeneticParameters(ref _currentCrossoverRate, ref _currentMutationRate, currentStepData, previousStepData, _geneticOptions);
+        AdaptiveParametersHelper<T, TInput, TOutput>.UpdateAdaptiveGeneticParameters(ref _currentCrossoverRate, ref _currentMutationRate,
+            currentStepData, previousStepData, _geneticOptions);
     }
 
     /// <summary>
@@ -125,195 +137,36 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        int dimensions = inputData.XTrain.Columns;
-        var population = InitializePopulation(dimensions, _geneticOptions.PopulationSize);
-        var bestStepData = new OptimizationStepData<T>();
-        var prevStepData = new OptimizationStepData<T>();
-        var currentStepData = new OptimizationStepData<T>();
+        // Initialize genetic algorithm parameters
+        var geneticParams = _geneticAlgorithm.GetGeneticParameters();
+        geneticParams.PopulationSize = _geneticOptions.PopulationSize;
+        geneticParams.MaxGenerations = Options.MaxIterations;
+        geneticParams.CrossoverRate = Convert.ToDouble(_currentCrossoverRate);
+        geneticParams.MutationRate = Convert.ToDouble(_currentMutationRate);
 
-        for (int generation = 0; generation < Options.MaxIterations; generation++)
+        _geneticAlgorithm.ConfigureGeneticParameters(geneticParams);
+
+        // Let the genetic algorithm handle the evolutionary process
+        var evolutionStats = _geneticAlgorithm.Evolve(
+            Options.MaxIterations,
+            inputData.XTrain,
+            inputData.YTrain,
+            inputData.XValidation,
+            inputData.YValidation);
+
+        // Convert the result to optimization result format
+        var bestIndividual = _geneticAlgorithm.GetBestIndividual();
+        var model = _geneticAlgorithm.IndividualToModel(bestIndividual);
+
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
-            var populationStepData = new List<OptimizationStepData<T>>();
-
-            // Evaluate all individuals in the population
-            foreach (var individual in population)
-            {
-                currentStepData = EvaluateSolution(individual, inputData);
-                populationStepData.Add(currentStepData);
-
-                UpdateBestSolution(currentStepData, ref bestStepData);
-            }
-
-            // Update adaptive parameters
-            UpdateAdaptiveParameters(currentStepData, prevStepData);
-
-            // Update iteration history and check for early stopping
-            if (UpdateIterationHistoryAndCheckEarlyStopping(generation, bestStepData))
-            {
-                break;
-            }
-
-            // Perform genetic operations
-            population = PerformSelection(populationStepData);
-            population = PerformCrossover(population);
-            population = PerformMutation(population);
-
-            prevStepData = currentStepData;
-        }
+            Solution = model,
+            FitnessScore = bestIndividual.GetFitness(),
+        };
 
         return CreateOptimizationResult(bestStepData, inputData);
-    }
-
-    /// <summary>
-    /// Initializes the population for the genetic algorithm.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method creates the initial group of random solutions.
-    /// It's like coming up with a bunch of different recipes to start your cooking competition.
-    /// </para>
-    /// </remarks>
-    /// <param name="dimensions">The number of dimensions (features) in the problem.</param>
-    /// <param name="populationSize">The number of solutions to create.</param>
-    /// <returns>A list of random solutions.</returns>
-    private List<ISymbolicModel<T>> InitializePopulation(int dimensions, int populationSize)
-    {
-        var population = new List<ISymbolicModel<T>>();
-        for (int i = 0; i < populationSize; i++)
-        {
-            population.Add(SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions));
-        }
-
-        return population;
-    }
-
-    /// <summary>
-    /// Performs selection of the best solutions from the current population.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method chooses the best solutions to be used for creating
-    /// the next generation. It's like picking the best recipes from your cooking competition to
-    /// use as inspiration for the next round.
-    /// </para>
-    /// </remarks>
-    /// <param name="populationStepData">Data about each solution in the current population.</param>
-    /// <returns>A list of selected solutions.</returns>
-    private List<ISymbolicModel<T>> PerformSelection(List<OptimizationStepData<T>> populationStepData)
-    {
-        return TournamentSelection(populationStepData, _geneticOptions.PopulationSize);
-    }
-
-    /// <summary>
-    /// Performs tournament selection to choose the best solutions.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method randomly picks pairs of solutions and chooses the better one
-    /// from each pair. It's like having many small cooking contests and picking the winner from each.
-    /// </para>
-    /// </remarks>
-    /// <param name="populationStepData">Data about each solution in the current population.</param>
-    /// <param name="selectionSize">The number of solutions to select.</param>
-    /// <returns>A list of selected solutions.</returns>
-    private List<ISymbolicModel<T>> TournamentSelection(List<OptimizationStepData<T>> populationStepData, int selectionSize)
-    {
-        var selected = new List<ISymbolicModel<T>>();
-        for (int i = 0; i < selectionSize; i++)
-        {
-            int index1 = _random.Next(populationStepData.Count);
-            int index2 = _random.Next(populationStepData.Count);
-            selected.Add(_fitnessCalculator.IsBetterFitness(populationStepData[index1].FitnessScore, populationStepData[index2].FitnessScore)
-                ? populationStepData[index1].Solution
-                : populationStepData[index2].Solution);
-        }
-
-        return selected;
-    }
-
-    /// <summary>
-    /// Performs crossover to create new solutions from the selected solutions.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method creates new solutions by combining parts of existing solutions.
-    /// It's like creating new recipes by mixing ingredients or techniques from your best existing recipes.
-    /// </para>
-    /// </remarks>
-    /// <param name="population">The current population of solutions.</param>
-    /// <returns>A new population after crossover.</returns>
-    private List<ISymbolicModel<T>> PerformCrossover(List<ISymbolicModel<T>> population)
-    {
-        var newPopulation = new List<ISymbolicModel<T>>();
-        for (int i = 0; i < population.Count; i += 2)
-        {
-            var parent1 = population[i];
-            var parent2 = i + 1 < population.Count ? population[i + 1] : population[0];
-
-            var (child1, child2) = Crossover(parent1, parent2);
-            newPopulation.Add(child1);
-            newPopulation.Add(child2);
-        }
-
-        return newPopulation;
-    }
-
-    /// <summary>
-    /// Performs crossover between two parent solutions to create two child solutions.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method combines two parent solutions to create two new solutions.
-    /// It's like mixing ingredients from two different recipes to create two new recipes.
-    /// The crossover rate determines how often this mixing occurs.
-    /// </para>
-    /// </remarks>
-    /// <param name="parent1">The first parent solution.</param>
-    /// <param name="parent2">The second parent solution.</param>
-    /// <returns>A tuple containing two new child solutions.</returns>
-    private (ISymbolicModel<T>, ISymbolicModel<T>) Crossover(ISymbolicModel<T> parent1, ISymbolicModel<T> parent2)
-    {
-        if (NumOps.LessThan(NumOps.FromDouble(_random.NextDouble()), _currentCrossoverRate))
-        {
-            return SymbolicModelFactory<T>.Crossover(parent1, parent2, Convert.ToDouble(_currentCrossoverRate));
-        }
-        else
-        {
-            return (parent1, parent2);
-        }
-    }
-
-    /// <summary>
-    /// Performs mutation on the entire population.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method applies small random changes to each solution in the population.
-    /// It's like occasionally adding a surprise ingredient to each recipe to see if it improves the taste.
-    /// </para>
-    /// </remarks>
-    /// <param name="population">The current population of solutions.</param>
-    /// <returns>A new population after mutation.</returns>
-    private List<ISymbolicModel<T>> PerformMutation(List<ISymbolicModel<T>> population)
-    {
-        return [.. population.Select(Mutate)];
-    }
-
-    /// <summary>
-    /// Performs mutation on a single individual solution.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method makes a small random change to a single solution.
-    /// It's like slightly adjusting the amount of an ingredient in a recipe or trying a new cooking technique.
-    /// The mutation rate determines how often these changes occur.
-    /// </para>
-    /// </remarks>
-    /// <param name="individual">The individual solution to potentially mutate.</param>
-    /// <returns>The mutated solution if mutation occurred, otherwise the original solution.</returns>
-    private ISymbolicModel<T> Mutate(ISymbolicModel<T> individual)
-    {
-        if (NumOps.LessThan(NumOps.FromDouble(_random.NextDouble()), _currentMutationRate))
-        {
-            return SymbolicModelFactory<T>.Mutate(individual, Convert.ToDouble(_currentMutationRate));
-        }
-
-        return individual;
     }
 
     /// <summary>
@@ -326,9 +179,9 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
     /// </remarks>
     /// <param name="options">The new options to apply to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is GeneticAlgorithmOptimizerOptions geneticOptions)
+        if (options is GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> geneticOptions)
         {
             _geneticOptions = geneticOptions;
         }
@@ -347,7 +200,7 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <returns>The current genetic algorithm optimizer options.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _geneticOptions;
     }
@@ -376,6 +229,11 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
         string optionsJson = JsonConvert.SerializeObject(_geneticOptions);
         writer.Write(optionsJson);
 
+        // Serialize the genetic algorithm itself
+        byte[] geneticAlgorithmData = _geneticAlgorithm.Serialize();
+        writer.Write(geneticAlgorithmData.Length);
+        writer.Write(geneticAlgorithmData);
+
         return ms.ToArray();
     }
 
@@ -401,8 +259,16 @@ public class GeneticAlgorithmOptimizer<T> : OptimizerBase<T>
 
         // Deserialize GeneticAlgorithmOptimizerOptions
         string optionsJson = reader.ReadString();
-        _geneticOptions = JsonConvert.DeserializeObject<GeneticAlgorithmOptimizerOptions>(optionsJson)
+        _geneticOptions = JsonConvert.DeserializeObject<GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+
+        // Deserialize the genetic algorithm if data is available
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int geneticAlgorithmDataLength = reader.ReadInt32();
+            byte[] geneticAlgorithmData = reader.ReadBytes(geneticAlgorithmDataLength);
+            _geneticAlgorithm.Deserialize(geneticAlgorithmData);
+        }
 
         InitializeAdaptiveParameters();
     }

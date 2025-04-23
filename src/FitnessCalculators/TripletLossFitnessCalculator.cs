@@ -32,7 +32,7 @@ namespace AiDotNet.FitnessCalculators;
 /// compared to the positive examples.
 /// </para>
 /// </remarks>
-public class TripletLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class TripletLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The margin value that determines how far negative examples should be from anchor examples compared to positive examples.
@@ -103,10 +103,11 @@ public class TripletLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// then uses the NeuralNetworkHelper to calculate the actual Triplet Loss.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        var (anchor, positive, negative) = PrepareTripletData(dataSet.Features, dataSet.Actual);
-        return NeuralNetworkHelper<T>.TripletLoss(anchor, positive, negative, _margin);
+        var (anchor, positive, negative) = PrepareTripletData(ConversionsHelper.ConvertToMatrix<T, TInput>(dataSet.Features), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
+        return new TripletLoss<T>(Convert.ToDouble(_margin)).CalculateLoss(anchor, positive, negative);
     }
 
     /// <summary>

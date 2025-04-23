@@ -28,36 +28,8 @@ namespace AiDotNet.Interfaces;
 /// This interface provides the essential methods needed to work with neural networks in AiDotNet.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface INeuralNetwork<T>
+public interface INeuralNetwork<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
-    /// <summary>
-    /// Makes a prediction using the neural network for a given input.
-    /// </summary>
-    /// <remarks>
-    /// This method processes the input data through the neural network and returns the predicted output.
-    /// 
-    /// <b>For Beginners:</b> This is like asking the neural network a question and getting its answer.
-    /// 
-    /// When you call this method:
-    /// - You provide some input data (like an image, text, or measurements)
-    /// - The neural network processes this data through its layers
-    /// - Each neuron applies mathematical operations to the data
-    /// - The network returns its prediction or classification
-    /// 
-    /// For example:
-    /// - If you're using a neural network for house price prediction:
-    ///   * Input: house features (size, location, bedrooms, etc.)
-    ///   * Output: predicted price
-    /// - If you're using a neural network for image recognition:
-    ///   * Input: pixel values of an image
-    ///   * Output: probabilities for different object categories
-    /// 
-    /// This is the main method you'll use when applying a trained neural network to new data.
-    /// </remarks>
-    /// <param name="input">A vector containing the input data for the neural network.</param>
-    /// <returns>A vector containing the neural network's prediction or output.</returns>
-    Vector<T> Predict(Vector<T> input);
-
     /// <summary>
     /// Updates the internal parameters (weights and biases) of the neural network.
     /// </summary>
@@ -84,87 +56,6 @@ public interface INeuralNetwork<T>
     /// </remarks>
     /// <param name="parameters">A vector containing the new parameter values for the neural network.</param>
     void UpdateParameters(Vector<T> parameters);
-
-    /// <summary>
-    /// Saves the neural network's state to a binary stream.
-    /// </summary>
-    /// <remarks>
-    /// This method writes the neural network's architecture and parameters to a binary stream,
-    /// allowing the model to be saved to a file or other storage medium.
-    /// 
-    /// <b>For Beginners:</b> This is like saving your neural network to a file.
-    /// 
-    /// When you call this method:
-    /// - The neural network's structure and all its learned knowledge are converted to binary data
-    /// - This data is written to the provided BinaryWriter
-    /// - You can then save this data to a file, database, or other storage
-    /// 
-    /// For example:
-    /// - After spending hours or days training a neural network
-    /// - You can serialize it to save all its learned knowledge
-    /// - Later, you can load this saved network and use it without retraining
-    /// 
-    /// This is useful when:
-    /// - You want to save a trained model for later use
-    /// - You want to share your model with others
-    /// - You want to deploy your model to a production environment
-    /// </remarks>
-    /// <param name="writer">The BinaryWriter to which the neural network will be serialized.</param>
-    void Serialize(BinaryWriter writer);
-
-    /// <summary>
-    /// Loads a neural network's state from a binary stream.
-    /// </summary>
-    /// <remarks>
-    /// This method reads the neural network's architecture and parameters from a binary stream,
-    /// restoring a previously saved model.
-    /// 
-    /// <b>For Beginners:</b> This is like loading a saved neural network from a file.
-    /// 
-    /// When you call this method:
-    /// - The neural network reads its structure and learned knowledge from binary data
-    /// - The network rebuilds itself using this data
-    /// - After deserializing, the network is exactly as it was when serialized
-    /// 
-    /// For example:
-    /// - You download a pre-trained neural network for language translation
-    /// - You deserialize this network into your application
-    /// - Immediately, your application can translate text without any training
-    /// 
-    /// This is particularly useful when:
-    /// - You want to use a model that took a long time to train
-    /// - You need to deploy the same model across multiple devices or applications
-    /// - You're creating an application that non-technical users will use
-    /// </remarks>
-    /// <param name="reader">The BinaryReader from which the neural network will be deserialized.</param>
-    void Deserialize(BinaryReader reader);
-
-    /// <summary>
-    /// Retrieves the current parameters (weights and biases) of the neural network.
-    /// </summary>
-    /// <remarks>
-    /// This method returns a vector containing all the parameters that define the neural network's behavior.
-    /// 
-    /// <b>For Beginners:</b> This is like looking at the neural network's current knowledge.
-    /// 
-    /// Neural networks store their knowledge in parameters (weights and biases):
-    /// - These parameters determine how the network processes information
-    /// - They represent what the network has learned from training data
-    /// - This method lets you see the current values of these parameters
-    /// 
-    /// For example:
-    /// - You might want to analyze how the parameters have changed during training
-    /// - You could save these parameters to use in another model
-    /// - You might need to modify specific parameters for experimentation
-    /// 
-    /// This method is useful for:
-    /// - Debugging neural network behavior
-    /// - Implementing custom training algorithms
-    /// - Analyzing what the network has learned
-    /// - Transferring knowledge between models
-    /// </remarks>
-    /// <returns>A vector containing all the neural network's current parameter values.</returns>
-    Vector<T> GetParameters();
 
     /// <summary>
     /// Sets whether the neural network is in training mode or inference (prediction) mode.

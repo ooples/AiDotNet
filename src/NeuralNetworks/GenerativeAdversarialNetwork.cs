@@ -30,30 +30,6 @@ namespace AiDotNet.NeuralNetworks;
 public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
 {
     /// <summary>
-    /// Gets the fitness calculator used to evaluate how well the networks are performing.
-    /// </summary>
-    /// <value>The fitness calculator instance used for evaluating network performance.</value>
-    /// <remarks>
-    /// <para>
-    /// The fitness calculator is used to compute loss values that guide the training of both the generator
-    /// and discriminator networks. In GANs, the choice of loss function is critical for stable training
-    /// and good performance. Common choices include binary cross-entropy loss or Wasserstein loss.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is how the networks know how well they're doing.
-    /// 
-    /// Think of the fitness calculator as:
-    /// - A scoring system that evaluates how well each network is performing
-    /// - For the discriminator, it measures how accurately it can distinguish real from fake
-    /// - For the generator, it measures how well it can fool the discriminator
-    /// - These scores guide how the networks should improve in the next training step
-    /// 
-    /// Just like a coach provides feedback to athletes, the fitness calculator provides
-    /// feedback to help both networks improve their performance.
-    /// </para>
-    /// </remarks>
-    private readonly IFitnessCalculator<T> _fitnessCalculator;
-
-    /// <summary>
     /// Gets or sets the momentum values for the optimizer.
     /// </summary>
     /// <value>A vector of momentum values for each parameter.</value>
@@ -172,6 +148,30 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     private double _currentLearningRate = 0.001;
+
+    /// <summary>
+    /// Gets or sets the initial learning rate for the optimizer.
+    /// </summary>
+    /// <value>A double representing the initial learning rate.</value>
+    /// <remarks>
+    /// <para>
+    /// The initial learning rate is the starting point for the optimizer's step size. It determines
+    /// how large the initial parameter updates are during training. This value is typically reduced
+    /// over time using learning rate decay to fine-tune the model as it approaches convergence.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets the starting speed of learning for the networks.
+    /// 
+    /// Think of the initial learning rate as:
+    /// - The initial step size the networks take when learning
+    /// - A larger value means bigger initial steps (faster initial learning, but potentially unstable)
+    /// - A smaller value means smaller initial steps (slower initial learning, but potentially more stable)
+    /// - It's often reduced over time as the networks fine-tune their performance
+    /// 
+    /// Finding the right initial learning rate is crucial for effective GAN training,
+    /// as it impacts both the speed of convergence and the stability of the training process.
+    /// </para>
+    /// </remarks>
+    private double _initialLearningRate = 0.001;
 
     /// <summary>
     /// Gets or sets the rate at which the learning rate decays during training.
@@ -302,7 +302,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public GenerativeAdversarialNetwork(NeuralNetworkArchitecture<T> generatorArchitecture, 
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
-        IFitnessCalculator<T> fitnessCalculator,
         InputType inputType,
         double initialLearningRate = 0.001)
         : base(new NeuralNetworkArchitecture<T>(
@@ -312,9 +311,9 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
             generatorArchitecture.InputSize, 
             discriminatorArchitecture.OutputSize, 
             0, 0, 0, 
-            null, null))
+            null))
     {
-        _fitnessCalculator = fitnessCalculator;
+        _initialLearningRate = initialLearningRate;
         _currentLearningRate = initialLearningRate;
     
         // Initialize optimizer parameters
@@ -325,7 +324,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         _generatorLosses = new List<T>();
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
-        _fitnessCalculator = fitnessCalculator;
         _momentum = Vector<T>.Empty();
         _secondMoment = Vector<T>.Empty();
 
@@ -333,357 +331,236 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Generates a synthetic image from random noise input.
+    /// Performs one step of training for both the generator and discriminator using tensor batches.
     /// </summary>
-    /// <param name="noise">The random noise vector used as input to the generator.</param>
-    /// <returns>A vector representing the generated image.</returns>
+    /// <param name="realImages">A tensor containing real images for training the discriminator.</param>
+    /// <param name="noise">A tensor containing random noise for training the generator.</param>
+    /// <returns>A tuple containing the discriminator and generator loss values.</returns>
     /// <remarks>
     /// <para>
-    /// This method passes a noise vector through the Generator network to produce a synthetic image.
-    /// The noise vector serves as a seed for the generation process, with different noise vectors
-    /// resulting in different generated images. The dimensionality and distribution of the noise
-    /// vector are important factors in the diversity and quality of the generated images.
+    /// This method performs one complete training iteration for the GAN using tensor-based operations
+    /// for maximum efficiency. It first trains the Discriminator on batches of both real images and 
+    /// fake images generated by the Generator. Then it trains the Generator to create images that can
+    /// fool the Discriminator. This adversarial training process is optimized for batch processing.
     /// </para>
-    /// <para><b>For Beginners:</b> This creates a new synthetic image from random input.
+    /// <para><b>For Beginners:</b> This is one round of the competition between generator and discriminator.
     /// 
-    /// Think of this method as:
-    /// - Taking random inspiration (noise) and turning it into an artwork
-    /// - Different random inputs will create different outputs
-    /// - The quality and realism depend on how well-trained the Generator is
-    /// - After training, this is the main function you'll use to create new content
+    /// The tensor-based training step:
+    /// - Processes entire batches of images in parallel
+    /// - First trains the discriminator on both real and generated images
+    /// - Then trains the generator to create more convincing fake images
+    /// - Returns the loss values to track progress
+    /// - Is much faster than training with individual vectors
     /// 
-    /// For example, you might generate 100 different images by feeding 
-    /// 100 different random noise vectors to this method.
-    /// </para>
-    /// </remarks>
-    public Vector<T> GenerateImage(Vector<T> noise)
-    {
-        return Generator.Predict(noise);
-    }
-
-    /// <summary>
-    /// Evaluates how real an image appears to the discriminator.
-    /// </summary>
-    /// <param name="image">The image vector to evaluate.</param>
-    /// <returns>A value between 0 and 1 representing the discriminator's confidence that the image is real.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method passes an image through the Discriminator network to determine how likely the
-    /// image is to be real rather than generated. A value close to 1 indicates the Discriminator
-    /// thinks the image is real, while a value close to 0 indicates it thinks the image is fake.
-    /// This method can be used to evaluate both real images and images created by the Generator.
-    /// </para>
-    /// <para><b>For Beginners:</b> This checks how convincing an image is to the discriminator.
-    /// 
-    /// Think of this method as:
-    /// - Asking the art detective, "Do you think this painting is real?"
-    /// - The answer is a number between 0 and 1
-    /// - 0 means "definitely fake"
-    /// - 1 means "definitely real" 
-    /// - 0.5 means "unsure - could be either"
-    /// 
-    /// This can be used to evaluate how well the generator is performing
-    /// by seeing if its images can fool the discriminator.
+    /// This efficient implementation is critical for training GANs in reasonable timeframes.
     /// </para>
     /// </remarks>
-    public T DiscriminateImage(Vector<T> image)
+    public (T discriminatorLoss, T generatorLoss) TrainStep(Tensor<T> realImages, Tensor<T> noise)
     {
-        var result = Discriminator.Predict(image);
-        return result[0];
-    }
-
-    /// <summary>
-    /// Performs one step of training for both the generator and discriminator.
-    /// </summary>
-    /// <param name="realImages">A vector of real images for training the discriminator.</param>
-    /// <param name="noise">A vector of random noise for training the generator.</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs one complete training iteration for the GAN. It first trains the Discriminator
-    /// on both real images and fake images generated by the Generator. Then it trains the Generator to
-    /// create images that can fool the Discriminator. This adversarial training process is the core of
-    /// how GANs learn to generate realistic data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is one round of the competition between the forger and detective.
-    /// 
-    /// The training step works like this:
-    /// - First, the detective (discriminator) learns to better distinguish real from fake:
-    ///   1. It examines real images and learns to recognize them
-    ///   2. It examines fake images from the generator and learns to spot them
-    /// - Then, the forger (generator) gets its turn:
-    ///   3. It creates new fake images from random noise
-    ///   4. It learns from how well these fakes fooled the discriminator
-    /// 
-    /// This back-and-forth process is what drives both networks to improve.
-    /// You'll typically run thousands of these training steps.
-    /// </para>
-    /// </remarks>
-    public void TrainStep(Vector<T> realImages, Vector<T> noise)
-    {
-        // Train the discriminator
-        var fakeImages = GenerateImage(noise);
-        var realLabels = CreateLabelVector(realImages.Length, NumOps.One);
-        var fakeLabels = CreateLabelVector(fakeImages.Length, NumOps.Zero);
-
-        // Train on real images
-        var realLoss = TrainDiscriminator(realImages, realLabels);
-
-        // Train on fake images
-        var fakeLoss = TrainDiscriminator(fakeImages, fakeLabels);
-
-        var discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
-
-        // Train the generator
-        var generatedImages = GenerateImage(noise);
-        var allRealLabels = CreateLabelVector(generatedImages.Length, NumOps.One);
-
+        // Ensure we're in training mode
+        Generator.SetTrainingMode(true);
+        Discriminator.SetTrainingMode(true);
+    
+        // ----- Train the discriminator -----
+    
+        // Generate fake images
+        Tensor<T> fakeImages = GenerateImages(noise);
+    
+        // Get batch size from real images tensor
+        int batchSize = realImages.Shape[0];
+    
+        // Create label tensors (1 for real, 0 for fake)
+        Tensor<T> realLabels = CreateLabelTensor(batchSize, NumOps.One);
+        Tensor<T> fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
+    
+        // Train discriminator on real images
+        T realLoss = TrainDiscriminatorBatch(realImages, realLabels);
+    
+        // Train discriminator on fake images
+        T fakeLoss = TrainDiscriminatorBatch(fakeImages, fakeLabels);
+    
+        // Compute total discriminator loss
+        T discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
+        discriminatorLoss = NumOps.Divide(discriminatorLoss, NumOps.FromDouble(2.0)); // Average loss
+    
+        // ----- Train the generator -----
+    
+        // Generate new fake images for generator training
+        Tensor<T> newFakeImages = GenerateImages(noise);
+    
+        // For generator training, we want the discriminator to think fake images are real
+        Tensor<T> allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
+    
         // Train the generator to fool the discriminator
-        var generatorLoss = TrainGenerator(noise, allRealLabels);
+        T generatorLoss = TrainGeneratorBatch(noise, newFakeImages, allRealLabels);
+    
+        // Track generator loss for monitoring
+        _generatorLosses.Add(generatorLoss);
+        if (_generatorLosses.Count > 100)
+        {
+            _generatorLosses.RemoveAt(0); // Keep only recent losses
+        }
+    
+        // ----- Adaptive learning rate adjustment -----
+    
+        // Adapt learning rate based on recent performance
+        if (_generatorLosses.Count >= 20)
+        {
+            var recentAverage = _generatorLosses.Skip(_generatorLosses.Count - 10).Average(l => Convert.ToDouble(l));
+            var previousAverage = _generatorLosses.Skip(_generatorLosses.Count - 20).Take(10).Average(l => Convert.ToDouble(l));
+        
+            // If loss is not improving or worsening, adjust learning rate
+            if (recentAverage > previousAverage * 0.95)
+            {
+                _currentLearningRate *= 0.95; // Reduce learning rate by 5%
+            }
+            else if (recentAverage < previousAverage * 0.8)
+            {
+                // Loss is improving significantly, we can potentially increase learning rate slightly
+                _currentLearningRate = Math.Min(_currentLearningRate * 1.05, 0.001); // Increase but cap
+            }
+        }
+    
+        return (discriminatorLoss, generatorLoss);
     }
 
     /// <summary>
-    /// Creates a vector filled with a specified value, typically used for labels.
+    /// Creates a tensor filled with a specified value, typically used for labels.
     /// </summary>
-    /// <param name="length">The length of the vector to create.</param>
-    /// <param name="value">The value to fill the vector with.</param>
-    /// <returns>A vector of the specified length filled with the specified value.</returns>
+    /// <param name="batchSize">The batch size (first dimension of the tensor).</param>
+    /// <param name="value">The value to fill the tensor with.</param>
+    /// <returns>A tensor filled with the specified value.</returns>
     /// <remarks>
     /// <para>
-    /// This utility method creates a vector of a specified length and fills it with a single value.
-    /// In the context of GANs, it's typically used to create label vectors where 1 represents "real"
-    /// and 0 represents "fake". These label vectors are used as targets during the training process.
+    /// This utility method creates a tensor with shape [batchSize, 1] filled with a single value.
+    /// In the context of GANs, it's typically used to create label tensors where 1 represents "real"
+    /// and 0 represents "fake". These label tensors are used as targets during the training process.
     /// </para>
-    /// <para><b>For Beginners:</b> This creates training labels (what the network should aim for).
+    /// <para><b>For Beginners:</b> This creates batches of training labels efficiently.
     /// 
     /// Think of this method as:
     /// - Creating a list of "correct answers" for training
     /// - For real images, the correct answer is usually 1 ("real")
     /// - For fake images, the correct answer is usually 0 ("fake")
-    /// - When training the generator to fool the discriminator, we use 1 ("real") as the target
+    /// - This method creates these answers for multiple images at once
     /// 
-    /// This is like creating a grading key that the networks try to match during training.
+    /// This tensor-based approach is more efficient than creating individual labels.
     /// </para>
     /// </remarks>
-    private static Vector<T> CreateLabelVector(int length, T value)
+    private Tensor<T> CreateLabelTensor(int batchSize, T value)
     {
-        return new Vector<T>(Enumerable.Repeat(value, length).ToArray());
-    }
-
-    /// <summary>
-    /// Trains the discriminator on a batch of images with corresponding labels.
-    /// </summary>
-    /// <param name="images">The images to train on, either real or generated.</param>
-    /// <param name="labels">The labels indicating whether each image is real (1) or fake (0).</param>
-    /// <returns>The loss value for this training step.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method trains the Discriminator network to better distinguish between real and fake images.
-    /// It computes predictions for the given images, calculates the loss between these predictions and
-    /// the expected labels, and updates the Discriminator's weights to reduce this loss. The goal is
-    /// for the Discriminator to assign high scores to real images and low scores to fake ones.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the detective to better spot real and fake images.
-    /// 
-    /// The discriminator training process:
-    /// - The discriminator examines a batch of images and makes its predictions
-    /// - These predictions are compared to the correct answers (labels)
-    /// - The discriminator calculates how wrong it was (the loss)
-    /// - It adjusts its internal parameters to make better predictions next time
-    /// 
-    /// For example, if the discriminator mistakenly thinks a fake image is real,
-    /// it will adjust its parameters to be more skeptical of similar images in the future.
-    /// </para>
-    /// </remarks>
-    private T TrainDiscriminator(Vector<T> images, Vector<T> labels)
-    {
-        var predictions = Discriminator.Predict(images);
-        var dataSetStats = new DataSetStats<T>
+        // Create a tensor of shape [batchSize, 1] filled with the specified value
+        var shape = new int[] { batchSize, 1 };
+        var tensor = new Tensor<T>(shape);
+    
+        // Fill with the specified value
+        for (int i = 0; i < batchSize; i++)
         {
-            Predicted = predictions,
-            Actual = labels
-        };
-        var loss = _fitnessCalculator.CalculateFitnessScore(dataSetStats);
-
-        // Perform backpropagation and update weights
-        var gradients = CalculateGradients(predictions, labels);
-        ApplyGradients(Discriminator, gradients);
-    
-        return loss;
-    }
-
-    /// <summary>
-    /// Trains the generator to create images that can fool the discriminator.
-    /// </summary>
-    /// <param name="noise">The random noise vector used as input to the generator.</param>
-    /// <param name="targetLabels">The target labels, typically all 1's to make the discriminator think the generated images are real.</param>
-    /// <returns>The loss value for this training step.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method trains the Generator network to create images that the Discriminator will classify as real.
-    /// It first generates fake images from the noise input, then passes these images through the Discriminator.
-    /// The loss is calculated based on how well these fake images fool the Discriminator. The Generator's weights
-    /// are then updated to reduce this loss, making it better at creating realistic images. During this process,
-    /// the Discriminator's weights are frozen, as we're only training the Generator.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the forger to create more convincing fake images.
-    /// 
-    /// The generator training process:
-    /// - The generator creates fake images from random noise
-    /// - These images are evaluated by the discriminator
-    /// - The generator's goal is to make images that the discriminator thinks are real
-    /// - It adjusts its parameters to make more convincing images next time
-    /// - Only the generator learns in this step - the discriminator is temporarily frozen
-    /// 
-    /// This is where the generator learns to create more realistic content
-    /// based on the discriminator's feedback.
-    /// </para>
-    /// </remarks>
-    private T TrainGenerator(Vector<T> noise, Vector<T> targetLabels)
-    {
-        // Step 1: Generate fake images using the generator
-        var generatedImages = Generator.Predict(noise);
-    
-        // Step 2: Forward pass through discriminator
-        // Note: We need to keep track of activations for backpropagation
-        Discriminator.SetTrainingMode(false); // Freeze discriminator weights during generator training
-        var discriminatorOutput = Discriminator.Predict(generatedImages);
-    
-        // Step 3: Calculate loss - we want the discriminator to classify fake images as real
-        var dataSetStats = new DataSetStats<T>
-        {
-            Predicted = discriminatorOutput,
-            Actual = targetLabels
-        };
-        var loss = _fitnessCalculator.CalculateFitnessScore(dataSetStats);
-    
-        // Step 4: Backpropagation through the combined network (Generator + Discriminator)
-        // First, get gradients from discriminator output with respect to its inputs
-        var outputGradients = new Vector<T>(discriminatorOutput.Length);
-        for (int i = 0; i < discriminatorOutput.Length; i++)
-        {
-            // For binary cross-entropy loss when target is 1 (real), gradient is -1/(output)
-            outputGradients[i] = NumOps.Divide(
-                NumOps.Negate(NumOps.One),
-                NumOps.Add(discriminatorOutput[i], NumOps.FromDouble(1e-10)) // Add small epsilon to avoid division by zero
-            );
+            tensor[i, 0] = value;
         }
     
-        // Step 5: Backpropagate through discriminator to get gradients at its input (which is the generator's output)
-        var discriminatorInputGradients = Discriminator.Backpropagate(outputGradients);
+        return tensor;
+    }
+
+    /// <summary>
+    /// Trains the generator to create images that can fool the discriminator using tensor operations.
+    /// </summary>
+    /// <param name="noise">The tensor containing noise vectors used as input to the generator.</param>
+    /// <param name="generatedImages">The tensor containing images generated from the noise.</param>
+    /// <param name="targetLabels">The tensor containing target labels (typically all 1's).</param>
+    /// <returns>The batch loss value for this training step.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method trains the Generator network to create images that the Discriminator will classify
+    /// as real. It uses efficient tensor operations to process entire batches of data in parallel.
+    /// During this process, the Discriminator's weights are frozen as we're only training the Generator.
+    /// The generator's goal is to create images that receive high "real" scores from the discriminator.
+    /// </para>
+    /// <para><b>For Beginners:</b> This efficiently teaches the generator to create convincing fake images.
+    /// 
+    /// The tensor-based generator training:
+    /// - Processes batches of noise vectors to generate fake images
+    /// - Passes these fake images through the discriminator
+    /// - Calculates how well the fake images fooled the discriminator
+    /// - Updates only the generator's parameters to create more convincing images
+    /// 
+    /// This optimized approach is essential for effective GAN training.
+    /// </para>
+    /// </remarks>
+    private T TrainGeneratorBatch(Tensor<T> noise, Tensor<T> generatedImages, Tensor<T> targetLabels)
+    {
+        // Ensure generator is in training mode and discriminator is not (we don't want to update discriminator)
+        Generator.SetTrainingMode(true);
+        Discriminator.SetTrainingMode(false); // Freeze discriminator weights
     
-        // Step 6: Backpropagate through generator using the gradients from discriminator
-        var generatorGradients = Generator.Backpropagate(discriminatorInputGradients, noise);
+        // Forward pass through discriminator with generated images
+        Tensor<T> discriminatorOutput = Discriminator.Predict(generatedImages);
     
-        // Step 7: Extract the actual parameter gradients from the generator
-        var parameterGradients = Generator.GetParameterGradients();
+        // Calculate generator loss - we want the discriminator to classify fake images as real
+        T loss = CalculateBatchLoss(discriminatorOutput, targetLabels);
     
-        // Step 8: Apply gradients to update generator parameters
-        ApplyGradients(Generator, parameterGradients);
+        // Calculate gradients for discriminator output
+        Tensor<T> outputGradients = CalculateBatchGradients(discriminatorOutput, targetLabels);
     
-        // Step 9: Re-enable training mode for discriminator for future training steps
+        // Backpropagate through discriminator to get gradients at its input (which is the generator's output)
+        Tensor<T> discriminatorInputGradients = Discriminator.Backpropagate(outputGradients);
+    
+        // Backpropagate through generator using the gradients from discriminator
+        Generator.Backpropagate(discriminatorInputGradients);
+    
+        // Update generator parameters
+        UpdateNetworkParameters(Generator);
+    
+        // Re-enable training mode for discriminator for future training steps
         Discriminator.SetTrainingMode(true);
     
-        // Step 10: Track metrics for monitoring training progress
-        _generatorLosses.Add(loss);
-        if (_generatorLosses.Count > 100)
-        {
-            _generatorLosses.RemoveAt(0); // Keep only recent losses for moving average
-        }
-    
-        // Optional: Implement early stopping or adaptive learning rate based on loss trends
-        if (_generatorLosses.Count >= 10)
-        {
-            var recentAverage = _generatorLosses.Skip(_generatorLosses.Count - 5).Average(l => Convert.ToDouble(l));
-            var previousAverage = _generatorLosses.Skip(_generatorLosses.Count - 10).Take(5).Average(l => Convert.ToDouble(l));
-        
-            // If loss is not improving, reduce learning rate
-            if (recentAverage > previousAverage * 0.99)
-            {
-                _currentLearningRate *= 0.95; // Reduce learning rate by 5%
-            }
-        }
-    
         return loss;
     }
 
     /// <summary>
-    /// Calculates the gradients for backpropagation based on predictions and target values.
-    /// </summary>
-    /// <param name="predictions">The predicted values from the network.</param>
-    /// <param name="targets">The target values (labels).</param>
-    /// <returns>A vector of gradients for each prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the gradients for the network based on the difference between the
-    /// predicted values and the target values. In a more complex implementation, this calculation
-    /// would depend on the specific loss function being used. These gradients are then used to
-    /// update the network's weights during backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates how much to adjust the network based on its errors.
-    /// 
-    /// Think of the gradient calculation as:
-    /// - Measuring how wrong each prediction was
-    /// - Determining the direction and amount to adjust each parameter
-    /// - The bigger the error, the larger the gradient and adjustment
-    /// - This guides the learning process toward better predictions
-    /// 
-    /// For example, if the discriminator predicted 0.3 for a real image (label 1),
-    /// the gradient would indicate it needs to adjust to give higher scores to similar images.
-    /// </para>
-    /// </remarks>
-    private Vector<T> CalculateGradients(Vector<T> predictions, Vector<T> targets)
-    {
-        // Simple gradient calculation - in a real implementation, this would be more complex
-        // and would depend on your loss function
-        var gradients = new Vector<T>(predictions.Length);
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            gradients[i] = NumOps.Subtract(predictions[i], targets[i]);
-        }
-        return gradients;
-    }
-
-    /// <summary>
-    /// Applies calculated gradients to update the parameters of a network.
+    /// Updates the parameters of a network using the Adam optimizer with the calculated gradients.
     /// </summary>
     /// <param name="network">The neural network to update.</param>
-    /// <param name="gradients">The gradients to apply.</param>
     /// <remarks>
     /// <para>
-    /// This method applies the calculated gradients to update the parameters of the specified network.
-    /// It implements the Adam optimizer, which is an adaptive optimization algorithm well-suited for
-    /// GAN training. The method includes gradient clipping to prevent exploding gradients, momentum
-    /// to smooth updates, and adaptive learning rates based on the history of gradients. It also
-    /// includes learning rate decay and bias correction for more stable training.
+    /// This method applies the calculated gradients to update the parameters of the specified network
+    /// using the Adam optimizer. It includes gradient clipping, momentum, and adaptive learning rates
+    /// for stable and efficient training. This tensor-based implementation handles all parameters
+    /// at once for better performance.
     /// </para>
-    /// <para><b>For Beginners:</b> This updates the network's internal values based on its learning.
+    /// <para><b>For Beginners:</b> This updates the network's internal values using an advanced algorithm.
     /// 
-    /// Think of applying gradients as:
-    /// - Making adjustments to the network's internal knobs and dials
-    /// - Using an advanced algorithm (Adam) that adapts to how training is progressing
-    /// - Preventing wild adjustments that could destabilize training
-    /// - Gradually reducing the size of adjustments as training progresses
+    /// The parameter update process:
+    /// - Uses the Adam optimizer, which adapts to the training dynamics
+    /// - Applies momentum to smooth updates and avoid oscillations
+    /// - Includes adaptive learning rates for different parameters
+    /// - Prevents excessively large updates that could destabilize training
     /// 
-    /// This method contains several advanced techniques that help GANs train more
-    /// stably, which is critical since they can be notoriously difficult to train.
+    /// This approach helps GANs train more reliably and efficiently.
     /// </para>
     /// </remarks>
-    private void ApplyGradients(ConvolutionalNeuralNetwork<T> network, Vector<T> gradients)
+    private void UpdateNetworkParameters(ConvolutionalNeuralNetwork<T> network)
     {
-        // Get current parameters
-        var currentParams = network.GetParameters();
-        var updatedParams = new Vector<T>(currentParams.Length);
+        // Get current parameters and gradients
+        var parameters = network.GetParameters();
+        var gradients = network.GetParameterGradients();
     
-        // Initialize momentum if it doesn't exist
-        if (_momentum == null || _momentum.Length != currentParams.Length)
+        // Initialize optimizer state if not already done
+        if (_momentum == null || _momentum.Length != parameters.Length)
         {
-            _momentum = new Vector<T>(currentParams.Length);
+            _momentum = new Vector<T>(parameters.Length);
             _momentum.Fill(NumOps.Zero);
+        }
+    
+        if (_secondMoment == null || _secondMoment.Length != parameters.Length)
+        {
+            _secondMoment = new Vector<T>(parameters.Length);
+            _secondMoment.Fill(NumOps.Zero);
         }
     
         // Gradient clipping to prevent exploding gradients
         var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0); // Typical threshold value
+        var clipThreshold = NumOps.FromDouble(5.0);
     
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
@@ -694,55 +571,47 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
             }
         }
     
-        // Apply Adam optimizer parameters
+        // Adam optimizer parameters
         var learningRate = NumOps.FromDouble(_currentLearningRate);
         var beta1 = NumOps.FromDouble(0.9);  // Momentum coefficient
         var beta2 = NumOps.FromDouble(0.999); // RMS coefficient
-        var epsilon = NumOps.FromDouble(1e-8); // Small value to prevent division by zero
+        var epsilon = NumOps.FromDouble(1e-8);
     
-        // Update parameters with momentum and adaptive learning rate
-        for (int i = 0; i < currentParams.Length && i < gradients.Length; i++)
+        // Updated parameters vector
+        var updatedParameters = new Vector<T>(parameters.Length);
+    
+        // Apply Adam updates to all parameters at once
+        for (int i = 0; i < parameters.Length; i++)
         {
-            // Update momentum
+            // Update momentum (first moment)
             _momentum[i] = NumOps.Add(
                 NumOps.Multiply(beta1, _momentum[i]),
                 NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
             );
         
-            // Update second moment estimate if using Adam
-            if (_secondMoment != null)
-            {
-                _secondMoment[i] = NumOps.Add(
-                    NumOps.Multiply(beta2, _secondMoment[i]),
-                    NumOps.Multiply(
-                        NumOps.Subtract(NumOps.One, beta2),
-                        NumOps.Multiply(gradients[i], gradients[i])
-                    )
-                );
-            
-                // Bias correction
-                var momentumCorrected = NumOps.Divide(_momentum[i], NumOps.Subtract(NumOps.One, _beta1Power));
-                var secondMomentCorrected = NumOps.Divide(_secondMoment[i], NumOps.Subtract(NumOps.One, _beta2Power));
-            
-                // Adam update
-                var adaptiveLR = NumOps.Divide(
-                    learningRate,
-                    NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
-                );
-            
-                updatedParams[i] = NumOps.Subtract(
-                    currentParams[i],
-                    NumOps.Multiply(adaptiveLR, momentumCorrected)
-                );
-            }
-            else
-            {
-                // Simple SGD with momentum
-                updatedParams[i] = NumOps.Subtract(
-                    currentParams[i],
-                    NumOps.Multiply(learningRate, _momentum[i])
-                );
-            }
+            // Update second moment
+            _secondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _secondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, beta2),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+        
+            // Bias correction
+            var momentumCorrected = NumOps.Divide(_momentum[i], NumOps.Subtract(NumOps.One, _beta1Power));
+            var secondMomentCorrected = NumOps.Divide(_secondMoment[i], NumOps.Subtract(NumOps.One, _beta2Power));
+        
+            // Adam update
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
+            );
+        
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, momentumCorrected)
+            );
         }
     
         // Update beta powers for next iteration
@@ -753,147 +622,85 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         _currentLearningRate *= _learningRateDecay;
     
         // Update network parameters
-        network.UpdateParameters(updatedParams);
+        network.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
-    /// Makes a prediction using the current state of the Generative Adversarial Network.
+    /// Evaluates the GAN by generating a batch of images and calculating metrics for their quality.
     /// </summary>
-    /// <param name="input">The input vector (typically random noise) to make a prediction for.</param>
-    /// <returns>The generated output vector (typically an image).</returns>
+    /// <param name="sampleSize">The number of images to generate for evaluation.</param>
+    /// <returns>A dictionary containing evaluation metrics.</returns>
     /// <remarks>
     /// <para>
-    /// In the context of a GAN, "predict" typically means generating synthetic data from an input noise vector.
-    /// This method is essentially a wrapper around the GenerateImage method, emphasizing that in a GAN,
-    /// prediction is the process of generating new synthetic data rather than classifying existing data.
+    /// This tensor-based method evaluates the current performance of the GAN by generating a batch
+    /// of images and calculating several metrics. It computes statistics on the discriminator scores,
+    /// checks for diversity in the outputs, and detects potential mode collapse. This efficient
+    /// implementation processes all images in parallel for better performance.
     /// </para>
-    /// <para><b>For Beginners:</b> This creates new data from random input, like the GenerateImage method.
+    /// <para><b>For Beginners:</b> This tests how well the GAN is performing using batch processing.
     /// 
-    /// In a GAN, "prediction" means:
-    /// - Taking random noise and transforming it into structured data
-    /// - Using the Generator to create something new
-    /// - This is different from typical neural networks where prediction means classification
+    /// The tensor-based evaluation:
+    /// - Generates multiple sample images in a single batch operation
+    /// - Has the discriminator score all images at once
+    /// - Calculates statistics like average score and diversity measures
+    /// - Identifies potential issues like mode collapse
     /// 
-    /// This method is provided to conform to the NeuralNetworkBase interface, but
-    /// functionally it does the same thing as GenerateImage.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        // In a GAN, "predict" typically means generating an image
-        return GenerateImage(input);
-    }
-
-    /// <summary>
-    /// Updates the parameters of both the generator and discriminator networks.
-    /// </summary>
-    /// <param name="parameters">A vector containing the parameters to update both networks with.</param>
-    /// <remarks>
-    /// <para>
-    /// This method updates the parameters of both the Generator and Discriminator networks. It splits the input
-    /// parameter vector into two parts - one for the Generator and one for the Discriminator - and applies these
-    /// updates to the respective networks. This is typically used when loading a pre-trained GAN or when
-    /// implementing advanced training strategies that involve directly manipulating the networks' parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This updates both networks with new parameter values.
-    /// 
-    /// When updating parameters:
-    /// - The input is a long list of numbers representing all values in both networks
-    /// - The method divides this list between the generator and discriminator
-    /// - Each network gets its own chunk of values
-    /// - The networks use these values to update their internal settings
-    /// 
-    /// This method is primarily used when loading a saved model or implementing
-    /// advanced optimization techniques rather than during normal training.
+    /// This provides comprehensive metrics on GAN performance in an efficient manner.
     /// </para>
     /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
+    public Dictionary<string, double> EvaluateModel(int sampleSize = 100)
     {
-        // Split parameters between generator and discriminator
-        int generatorParamCount = Generator.GetParameterCount();
-        var generatorParams = parameters.SubVector(0, generatorParamCount);
-        var discriminatorParams = parameters.SubVector(generatorParamCount, parameters.Length - generatorParamCount);
+        var metrics = new Dictionary<string, double>();
 
-        Generator.UpdateParameters(generatorParams);
-        Discriminator.UpdateParameters(discriminatorParams);
-    }
+        // Generate sample images in a single batch
+        var noise = GenerateRandomNoiseTensor(sampleSize, Generator.Architecture.InputSize);
+        var generatedImages = GenerateImages(noise);
 
-    /// <summary>
-    /// Serializes the Generative Adversarial Network to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when writer is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method saves the state of the Generative Adversarial Network to a binary stream. It separately
-    /// serializes the Generator and Discriminator networks, including labels to identify each part.
-    /// This allows the GAN to be saved to disk and later restored with its trained parameters intact.
-    /// </para>
-    /// <para><b>For Beginners:</b> This saves the complete GAN to a file so you can use it later.
-    /// 
-    /// When saving the GAN:
-    /// - It separately saves both the generator and discriminator
-    /// - Each part is labeled so they can be correctly loaded later
-    /// - All weights and settings for both networks are preserved
-    /// 
-    /// This is like taking a snapshot of the entire system - including both the
-    /// forger and detective networks. You can later load this snapshot to use
-    /// the trained GAN without having to train it again.
-    /// </para>
-    /// </remarks>
-    public override void Serialize(BinaryWriter writer)
-    {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
+        // Get discriminator scores for all images at once
+        var discriminatorScores = DiscriminateImages(generatedImages);
 
-        // Serialize Generator
-        writer.Write("Generator");
-        Generator.Serialize(writer);
+        // Convert to list for statistical calculations
+        var scoresList = new List<double>(sampleSize);
+        for (int i = 0; i < sampleSize; i++)
+        {
+            scoresList.Add(Convert.ToDouble(discriminatorScores[i, 0]));
+        }
 
-        // Serialize Discriminator
-        writer.Write("Discriminator");
-        Discriminator.Serialize(writer);
-    }
+        // Calculate metrics
+        double averageScore = scoresList.Average();
+        double stdDevScore = StatisticsHelper<double>.CalculateStandardDeviation(scoresList);
+        double minScore = scoresList.Min();
+        double maxScore = scoresList.Max();
 
-    /// <summary>
-    /// Deserializes the Generative Adversarial Network from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the data format is invalid or unexpected.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method restores the state of the Generative Adversarial Network from a binary stream. It looks for
-    /// the labeled Generator and Discriminator sections and deserializes each network accordingly. This allows
-    /// a previously saved GAN to be restored from disk with all its trained parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This loads a previously saved GAN from a file.
-    /// 
-    /// When loading the GAN:
-    /// - It looks for the labeled sections for the generator and discriminator
-    /// - It loads each network with its saved weights and settings
-    /// - It verifies that the data is in the expected format
-    /// 
-    /// This lets you use a previously trained GAN without having to train it again.
-    /// It's like restoring the complete snapshot of both networks.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(BinaryReader reader)
-    {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
+        // Recent loss values
+        double recentLoss = _generatorLosses.Count > 0 ? 
+            Convert.ToDouble(_generatorLosses[_generatorLosses.Count - 1]) : 0.0;
 
-        // Deserialize Generator
-        string generatorLabel = reader.ReadString();
-        if (generatorLabel != "Generator")
-            throw new InvalidOperationException("Expected Generator data, but found: " + generatorLabel);
-        Generator.Deserialize(reader);
+        // Store metrics
+        metrics["AverageDiscriminatorScore"] = averageScore;
+        metrics["MinDiscriminatorScore"] = minScore;
+        metrics["MaxDiscriminatorScore"] = maxScore;
+        metrics["ScoreStandardDeviation"] = stdDevScore;
+        metrics["ScoreRange"] = maxScore - minScore;
+        metrics["RecentGeneratorLoss"] = recentLoss;
+        metrics["CurrentLearningRate"] = _currentLearningRate;
 
-        // Deserialize Discriminator
-        string discriminatorLabel = reader.ReadString();
-        if (discriminatorLabel != "Discriminator")
-            throw new InvalidOperationException("Expected Discriminator data, but found: " + discriminatorLabel);
-        Discriminator.Deserialize(reader);
+        // Advanced metrics for diagnosing GAN issues
+
+        // Mode collapse indicator (if very low standard deviation, might indicate mode collapse)
+        bool potentialModeCollapse = stdDevScore < 0.05;
+        metrics["PotentialModeCollapse"] = potentialModeCollapse ? 1.0 : 0.0;
+
+        // Training stability indicator
+        if (_generatorLosses.Count >= 20)
+        {
+            var recentLosses = _generatorLosses.Skip(_generatorLosses.Count - 20).Select(l => Convert.ToDouble(l)).ToList();
+            double lossVariance = StatisticsHelper<double>.CalculateVariance(recentLosses);
+            metrics["LossVariance"] = lossVariance;
+            metrics["TrainingStability"] = lossVariance < 0.01 ? 1.0 : 0.0; // 1 means stable
+        }
+
+        return metrics;
     }
 
     /// <summary>
@@ -920,5 +727,904 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     protected override void InitializeLayers()
     {
         // GAN doesn't use layers directly, so this method is empty
+    }
+
+    /// <summary>
+    /// Performs a forward pass through the generator network using a tensor input.
+    /// </summary>
+    /// <param name="input">The input tensor containing noise vectors to generate images from.</param>
+    /// <returns>A tensor containing the generated images.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method is part of the INeuralNetwork interface implementation. In the context of a GAN,
+    /// "prediction" means using the generator to create synthetic data from random noise input.
+    /// The method supports batch processing by handling tensor inputs that may contain multiple
+    /// noise vectors.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates synthetic images from random noise.
+    /// 
+    /// When you call Predict:
+    /// - The input tensor contains one or more random noise patterns
+    /// - These noise patterns are passed through the generator network
+    /// - The generator transforms the noise into synthetic images
+    /// - The output tensor contains the resulting synthetic images
+    /// 
+    /// This is the same underlying process as GenerateImage(), but works with tensors
+    /// instead of vectors, allowing for batch processing of multiple inputs at once.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        // For a GAN, prediction means generating data using the generator
+        // Check if the input is a batch of noise vectors or a single noise vector
+        if (input.Rank == 1)
+        {
+            // Single noise vector
+            return Generator.Predict(input);
+        }
+        else
+        {
+            // Batch of noise vectors
+            var batchSize = input.Shape[0];
+            var results = new List<Tensor<T>>(batchSize);
+        
+            for (int i = 0; i < batchSize; i++)
+            {
+                var noiseVector = results[i];
+                var generatedImage = Generator.Predict(noiseVector);
+                results.Add(generatedImage);
+            }
+        
+            return Tensor<T>.Stack([.. results]);
+        }
+    }
+
+    /// <summary>
+    /// Trains both the generator and discriminator using tensor-based operations throughout.
+    /// </summary>
+    /// <param name="input">The noise input for the generator (for batch training).</param>
+    /// <param name="expectedOutput">The real images used to train the discriminator.</param>
+    /// <remarks>
+    /// <para>
+    /// This tensor-native implementation trains both networks efficiently by processing
+    /// entire batches at once through tensor operations. It eliminates the vector conversion
+    /// overhead from the previous implementation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This trains both networks efficiently with multiple examples.
+    /// 
+    /// The fully tensor-based training process:
+    /// 1. Processes entire batches of data in parallel
+    /// 2. Trains the discriminator on both real and fake images
+    /// 3. Trains the generator to create more convincing fake images
+    /// 4. Updates the networks using batch operations for better performance
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Get batch size from the input tensor
+        int batchSize = input.Shape[0];
+    
+        // Set both networks to training mode
+        Generator.SetTrainingMode(true);
+        Discriminator.SetTrainingMode(true);
+    
+        // ------------ Train Discriminator ------------
+    
+        // Generate fake images with tensor operations
+        var fakeImages = Generator.Predict(input);
+    
+        // Create label tensors (1 for real, 0 for fake)
+        var realLabels = CreateLabelTensor(batchSize, NumOps.One);
+        var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
+    
+        // Train discriminator on real images using tensor operations
+        var realLoss = TrainDiscriminatorBatch(expectedOutput, realLabels);
+    
+        // Train discriminator on fake images using tensor operations
+        var fakeLoss = TrainDiscriminatorBatch(fakeImages, fakeLabels);
+    
+        // Compute average discriminator loss
+        var discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
+        discriminatorLoss = NumOps.Divide(discriminatorLoss, NumOps.FromDouble(2.0));
+    
+        // ------------ Train Generator ------------
+
+        // For generator training, we want discriminator to think fake images are real
+        var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
+    
+        // Train generator to fool discriminator using tensor operations
+        var generatorLoss = TrainGeneratorBatch(input, allRealLabels);
+    
+        // Track generator loss for monitoring
+        _generatorLosses.Add(generatorLoss);
+        if (_generatorLosses.Count > 100)
+        {
+            _generatorLosses.RemoveAt(0);
+        }
+    
+        // Adapt learning rate based on recent performance
+        if (_generatorLosses.Count >= 20)
+        {
+            var recentAverage = _generatorLosses.Skip(_generatorLosses.Count - 10).Average(l => Convert.ToDouble(l));
+            var previousAverage = _generatorLosses.Skip(_generatorLosses.Count - 20).Take(10).Average(l => Convert.ToDouble(l));
+        
+            // If loss is not improving or worsening, adjust learning rate
+            if (recentAverage > previousAverage * 0.95)
+            {
+                _currentLearningRate *= 0.95; // Reduce learning rate by 5%
+            }
+            else if (recentAverage < previousAverage * 0.8)
+            {
+                // Loss is improving significantly, we can potentially increase learning rate slightly
+                _currentLearningRate = Math.Min(_currentLearningRate * 1.05, 0.001); // Increase but cap
+            }
+        }
+    }
+
+    /// <summary>
+    /// Trains the discriminator on a batch of images using tensor operations.
+    /// </summary>
+    /// <param name="images">The tensor containing images to train on.</param>
+    /// <param name="labels">The tensor containing labels (real or fake).</param>
+    /// <returns>The loss value for this training step.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method trains the Discriminator network on a batch of images using tensor operations
+    /// throughout. It computes predictions, calculates loss, and updates weights using backpropagation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This teaches the discriminator to spot real vs. fake images.
+    /// 
+    /// The process:
+    /// - The discriminator examines a batch of images
+    /// - It tries to guess which ones are real and which are fake
+    /// - It calculates how wrong it was (the loss)
+    /// - It adjusts its internal parameters to make better predictions
+    /// 
+    /// The tensor-based implementation makes this much more efficient.
+    /// </para>
+    /// </remarks>
+    private T TrainDiscriminatorBatch(Tensor<T> images, Tensor<T> labels)
+    {
+        // Ensure discriminator is in training mode
+        Discriminator.SetTrainingMode(true);
+    
+        // Forward pass - get predictions for the batch
+        var predictions = Discriminator.Predict(images);
+    
+        // Calculate loss
+        var loss = CalculateBatchLoss(predictions, labels);
+    
+        // Calculate gradients for backpropagation
+        var outputGradients = CalculateBatchGradients(predictions, labels);
+    
+        // Backpropagate through the discriminator
+        Discriminator.Backpropagate(outputGradients);
+    
+        // Update discriminator parameters
+        UpdateNetworkParameters(Discriminator);
+    
+        return loss;
+    }
+
+    /// <summary>
+    /// Trains the generator to create images that can fool the discriminator.
+    /// </summary>
+    /// <param name="noise">The tensor containing noise vectors.</param>
+    /// <param name="targetLabels">The tensor containing target labels (1's for "real").</param>
+    /// <returns>The loss value for this training step.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method trains the Generator to create images that fool the Discriminator using tensor operations.
+    /// It passes generated images through the discriminator and trains the generator to maximize
+    /// the discriminator's "real" classification score.
+    /// </para>
+    /// <para><b>For Beginners:</b> This teaches the generator to create more convincing fake images.
+    /// 
+    /// The process:
+    /// - The generator creates fake images from noise
+    /// - The discriminator evaluates these images
+    /// - The generator's goal is to create images the discriminator thinks are real
+    /// - The generator adjusts its parameters to create more convincing images
+    /// 
+    /// The tensor-based implementation makes this training much more efficient.
+    /// </para>
+    /// </remarks>
+    private T TrainGeneratorBatch(Tensor<T> noise, Tensor<T> targetLabels)
+    {
+        // Ensure generator is in training mode
+        Generator.SetTrainingMode(true);
+    
+        // Temporarily freeze discriminator weights during generator training
+        Discriminator.SetTrainingMode(false);
+    
+        // Generate fake images
+        var generatedImages = Generator.Predict(noise);
+    
+        // Pass fake images through discriminator
+        var discriminatorOutput = Discriminator.Predict(generatedImages);
+    
+        // Calculate loss - we want the discriminator to classify fake images as real
+        var loss = CalculateBatchLoss(discriminatorOutput, targetLabels);
+    
+        // Calculate gradients for discriminator output
+        var outputGradients = CalculateBatchGradients(discriminatorOutput, targetLabels);
+    
+        // Backpropagate through discriminator (keeping its weights frozen)
+        var discriminatorInputGradients = Discriminator.Backpropagate(outputGradients);
+    
+        // Backpropagate through generator
+        Generator.Backpropagate(discriminatorInputGradients);
+    
+        // Update generator parameters
+        UpdateNetworkParameters(Generator);
+    
+        // Restore discriminator to training mode
+        Discriminator.SetTrainingMode(true);
+    
+        return loss;
+    }
+
+    /// <summary>
+    /// Calculates the loss for a batch of predictions and target values.
+    /// </summary>
+    /// <param name="predictions">The tensor containing predicted values.</param>
+    /// <param name="targets">The tensor containing target values.</param>
+    /// <returns>The batch loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates binary cross-entropy loss for the GAN, measuring how well
+    /// the discriminator is classifying real vs. fake images or how well the generator
+    /// is fooling the discriminator.
+    /// </para>
+    /// <para><b>For Beginners:</b> This measures how accurate the predictions are.
+    /// 
+    /// The calculation:
+    /// - Compares the predicted classifications with the expected ones
+    /// - Returns a single value representing the overall error
+    /// - Lower values mean more accurate predictions
+    /// - This handles all calculations efficiently across the batch
+    /// </para>
+    /// </remarks>
+    private T CalculateBatchLoss(Tensor<T> predictions, Tensor<T> targets)
+    {
+        // Implement binary cross-entropy loss for classification
+        int batchSize = predictions.Shape[0];
+        T totalLoss = NumOps.Zero;
+        T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent log(0)
+    
+        for (int i = 0; i < batchSize; i++)
+        {
+            T prediction = predictions[i, 0];
+            T target = targets[i, 0];
+        
+            // Binary cross-entropy: -target * log(prediction) - (1-target) * log(1-prediction)
+            T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
+            T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
+        
+            T termOne = NumOps.Multiply(target, logP);
+            T termTwo = NumOps.Multiply(NumOps.Subtract(NumOps.One, target), logOneMinusP);
+        
+            T sampleLoss = NumOps.Negate(NumOps.Add(termOne, termTwo));
+            totalLoss = NumOps.Add(totalLoss, sampleLoss);
+        }
+    
+        // Average the loss across the batch
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Calculates gradients for backpropagation from predictions and targets.
+    /// </summary>
+    /// <param name="predictions">The tensor containing predicted values.</param>
+    /// <param name="targets">The tensor containing target values.</param>
+    /// <returns>A tensor of gradients for backpropagation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates gradients for binary cross-entropy loss, which are used
+    /// during backpropagation to update the network weights in the direction that
+    /// reduces the loss.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how to adjust the network to improve.
+    /// 
+    /// The gradient calculation:
+    /// - Determines the direction and amount to adjust each parameter
+    /// - Is based on how wrong each prediction was
+    /// - Shows whether values should increase or decrease
+    /// - Handles all calculations efficiently across the batch
+    /// </para>
+    /// </remarks>
+    private Tensor<T> CalculateBatchGradients(Tensor<T> predictions, Tensor<T> targets)
+    {
+        // Calculate gradients for binary cross-entropy: (prediction - target)
+        int batchSize = predictions.Shape[0];
+        var gradients = new Tensor<T>(predictions.Shape);
+    
+        for (int i = 0; i < batchSize; i++)
+        {
+            // For binary cross-entropy, the gradient simplifies to (prediction - target)
+            gradients[i, 0] = NumOps.Subtract(predictions[i, 0], targets[i, 0]);
+        }
+    
+        return gradients;
+    }
+
+    /// <summary>
+    /// Generates synthetic images using tensor operations.
+    /// </summary>
+    /// <param name="noise">The tensor containing the noise input.</param>
+    /// <returns>A tensor containing generated images.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates synthetic images by passing noise through the generator network
+    /// using tensor operations. It supports both single inputs and batches.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates fake images from random noise patterns.
+    /// 
+    /// The process:
+    /// - Takes random noise as input (the creative inspiration)
+    /// - Passes it through the generator network
+    /// - Produces synthetic images as output
+    /// - Works efficiently with batches of inputs
+    /// </para>
+    /// </remarks>
+    public Tensor<T> GenerateImages(Tensor<T> noise)
+    {
+        // Set generator to inference mode
+        Generator.SetTrainingMode(false);
+    
+        // Generate images using tensor operations
+        return Generator.Predict(noise);
+    }
+
+    /// <summary>
+    /// Evaluates how real a batch of images appears to the discriminator.
+    /// </summary>
+    /// <param name="images">The tensor containing images to evaluate.</param>
+    /// <returns>A tensor containing discriminator scores for each image.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method evaluates how realistic a batch of images appears to the discriminator,
+    /// returning a score between 0 and 1 for each image where higher values indicate
+    /// more realistic images.
+    /// </para>
+    /// <para><b>For Beginners:</b> This checks how convincing the generated images are.
+    /// 
+    /// The discriminator's evaluation:
+    /// - Examines each image in the batch
+    /// - Scores each image between 0 and 1
+    /// - Higher scores mean more convincing/realistic images
+    /// - Provides feedback on the generator's performance
+    /// </para>
+    /// </remarks>
+    public Tensor<T> DiscriminateImages(Tensor<T> images)
+    {
+        // Set discriminator to inference mode
+        Discriminator.SetTrainingMode(false);
+    
+        // Discriminate images using tensor operations
+        return Discriminator.Predict(images);
+    }
+
+    /// <summary>
+    /// Generates a tensor of random noise for the generator.
+    /// </summary>
+    /// <param name="batchSize">The number of noise vectors to generate.</param>
+    /// <param name="noiseSize">The size of each noise vector.</param>
+    /// <returns>A tensor containing random noise from a normal distribution.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method efficiently generates a batch of noise vectors using a normal distribution,
+    /// which serves as input to the generator for creating synthetic images.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates random starting points for image generation.
+    /// 
+    /// The noise generation:
+    /// - Creates multiple random inputs in a single operation
+    /// - Uses a normal distribution (bell curve) for better results
+    /// - Each noise pattern will result in a different image
+    /// - Efficient batch processing for better performance
+    /// </para>
+    /// </remarks>
+    public Tensor<T> GenerateRandomNoiseTensor(int batchSize, int noiseSize)
+    {
+        var random = new Random();
+        var shape = new int[] { batchSize, noiseSize };
+        var noise = new Tensor<T>(shape);
+    
+        // Generate normally distributed random numbers using Box-Muller transform
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < noiseSize; i += 2)
+            {
+                double u1 = random.NextDouble(); // Uniform(0,1) random number
+                double u2 = random.NextDouble(); // Uniform(0,1) random number
+            
+                // Box-Muller transformation
+                double radius = Math.Sqrt(-2.0 * Math.Log(u1));
+                double theta = 2.0 * Math.PI * u2;
+            
+                double z1 = radius * Math.Cos(theta);
+                noise[b, i] = NumOps.FromDouble(z1);
+            
+                // If we're not at the last element, generate the second value
+                if (i + 1 < noiseSize)
+                {
+                    double z2 = radius * Math.Sin(theta);
+                    noise[b, i + 1] = NumOps.FromDouble(z2);
+                }
+            }
+        }
+    
+        return noise;
+    }
+
+    /// <summary>
+    /// Evaluates the GAN using tensor operations.
+    /// </summary>
+    /// <param name="sampleSize">The number of images to generate for evaluation.</param>
+    /// <returns>A dictionary containing evaluation metrics.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method evaluates GAN performance by generating images and calculating metrics
+    /// using tensor operations throughout. This provides a more efficient evaluation
+    /// compared to the previous vector-based approach.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tests how well the GAN is performing.
+    /// 
+    /// The tensor-based evaluation:
+    /// - Generates multiple images in a single batch operation
+    /// - Has the discriminator evaluate all images at once
+    /// - Calculates statistics on the quality and diversity of the outputs
+    /// - Provides metrics to track training progress
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, double> EvaluateModelWithTensors(int sampleSize = 100)
+    {
+        var metrics = new Dictionary<string, double>();
+    
+        // Generate sample images using tensor operations
+        var noise = GenerateRandomNoiseTensor(sampleSize, Generator.Architecture.InputSize);
+        var generatedImages = GenerateImages(noise);
+    
+        // Get discriminator scores for all images at once
+        var discriminatorScores = DiscriminateImages(generatedImages);
+    
+        // Extract scores for calculations
+        var scoresList = new List<double>(sampleSize);
+        for (int i = 0; i < sampleSize; i++)
+        {
+            scoresList.Add(Convert.ToDouble(discriminatorScores[i, 0]));
+        }
+    
+        // Calculate metrics
+        double averageScore = scoresList.Average();
+        double stdDevScore = StatisticsHelper<double>.CalculateStandardDeviation(scoresList);
+        double minScore = scoresList.Min();
+        double maxScore = scoresList.Max();
+    
+        // Recent loss values
+        double recentLoss = _generatorLosses.Count > 0 ? 
+            Convert.ToDouble(_generatorLosses[_generatorLosses.Count - 1]) : 0.0;
+    
+        // Store metrics
+        metrics["AverageDiscriminatorScore"] = averageScore;
+        metrics["MinDiscriminatorScore"] = minScore;
+        metrics["MaxDiscriminatorScore"] = maxScore;
+        metrics["ScoreStandardDeviation"] = stdDevScore;
+        metrics["ScoreRange"] = maxScore - minScore;
+        metrics["RecentGeneratorLoss"] = recentLoss;
+        metrics["CurrentLearningRate"] = _currentLearningRate;
+    
+        // Mode collapse indicator (if very low standard deviation, might indicate mode collapse)
+        metrics["PotentialModeCollapse"] = stdDevScore < 0.05 ? 1.0 : 0.0;
+    
+        return metrics;
+    }
+
+    /// <summary>
+    /// Generates high-quality images by filtering based on discriminator scores.
+    /// </summary>
+    /// <param name="count">The number of images to generate.</param>
+    /// <param name="minDiscriminatorScore">The minimum score threshold for quality images.</param>
+    /// <returns>A tensor of images that meet the quality threshold.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates multiple images and filters them based on discriminator scores.
+    /// Only images that exceed the specified quality threshold are returned, ensuring
+    /// better overall output quality.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates multiple high-quality fake images.
+    /// 
+    /// The process:
+    /// - Generates more images than requested
+    /// - Uses the discriminator to evaluate their quality
+    /// - Keeps only the most convincing/realistic ones
+    /// - Returns images that meet your quality standards
+    /// 
+    /// This is useful for applications where you want only the best outputs.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> GenerateQualityImages(int count, double minDiscriminatorScore = 0.7)
+    {
+        // Generate more images than needed to account for filtering
+        int oversampling = (int)(count * 1.5);
+
+        // Generate candidate images
+        var noise = GenerateRandomNoiseTensor(oversampling, Generator.Architecture.InputSize);
+        var candidateImages = GenerateImages(noise);
+
+        // Score all images with the discriminator
+        var scores = DiscriminateImages(candidateImages);
+
+        // Select images meeting the quality threshold
+        var threshold = NumOps.FromDouble(minDiscriminatorScore);
+        var qualityImages = new List<Tensor<T>>();
+
+        for (int i = 0; i < oversampling && qualityImages.Count < count; i++)
+        {
+            if (NumOps.GreaterThanOrEquals(scores[i, 0], threshold))
+            {
+                qualityImages.Add(candidateImages.GetSlice(i));
+            }
+        }
+
+        // If not enough quality images found, include the best ones available
+        if (qualityImages.Count < count)
+        {
+            // Create pairs of (index, score) and sort by score
+            var scoreIndexPairs = new List<(int index, double score)>();
+            for (int i = 0; i < oversampling; i++)
+            {
+                scoreIndexPairs.Add((i, Convert.ToDouble(scores[i, 0])));
+            }
+
+            // Sort by score descending
+            scoreIndexPairs.Sort((a, b) => b.score.CompareTo(a.score));
+
+            // Add the best remaining images
+            foreach (var pair in scoreIndexPairs)
+            {
+                if (qualityImages.Count >= count) break;
+    
+                // Check if this image is already included
+                bool alreadyIncluded = qualityImages.Any(img => img.TensorEquals(candidateImages.GetSlice(pair.index)));
+                if (!alreadyIncluded)
+                {
+                    qualityImages.Add(candidateImages.GetSlice(pair.index));
+                }
+            }
+        }
+
+        // Combine all quality images into a single tensor
+        return Tensor<T>.Stack(qualityImages.ToArray());
+    }
+
+    /// <summary>
+    /// Gets metadata about the GAN model, including information about both generator and discriminator components.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the GAN.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns comprehensive metadata about the GAN, including its architecture, training state,
+    /// and key parameters. This information is useful for model management, tracking experiments, and reporting.
+    /// The metadata includes details about both the generator and discriminator networks, as well as
+    /// optimization settings like the current learning rate.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides detailed information about the GAN's configuration and state.
+    /// 
+    /// The metadata includes:
+    /// - What this model is and what it does (generate synthetic data)
+    /// - The architecture details of both the generator and discriminator
+    /// - Current training parameters like learning rate
+    /// - The model's creation date and type
+    /// 
+    /// This information is useful for keeping track of different models,
+    /// comparing experimental results, and documenting your work.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.GenerativeAdversarialNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "GeneratorParameters", Generator.GetParameterCount() },
+                { "DiscriminatorParameters", Discriminator.GetParameterCount() },
+                { "TotalParameters", Generator.GetParameterCount() + Discriminator.GetParameterCount() },
+                { "GeneratorArchitecture", Generator.GetModelMetaData() },
+                { "DiscriminatorArchitecture", Discriminator.GetModelMetaData() },
+                { "OptimizationType", "Adam" }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes GAN-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method saves the state of the GAN to a binary stream. It serializes both the generator and discriminator
+    /// networks, as well as optimizer parameters like momentum and learning rate settings. This allows the GAN to be
+    /// restored later with its full state intact, including both networks and training parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This saves the complete state of the GAN to a file.
+    /// 
+    /// When saving the GAN:
+    /// - Both the generator and discriminator networks are saved
+    /// - The optimizer state (momentum, learning rates, etc.) is saved
+    /// - Recent training history is saved
+    /// - All the parameters needed to resume training are preserved
+    /// 
+    /// This allows you to save your progress and continue training later,
+    /// share trained models with others, or deploy them in applications.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Save learning rate parameters
+        writer.Write(_currentLearningRate);
+        writer.Write(_learningRateDecay);
+    
+        // Save optimizer state
+        writer.Write(_beta1Power != null ? Convert.ToDouble(_beta1Power) : 1.0);
+        writer.Write(_beta2Power != null ? Convert.ToDouble(_beta2Power) : 1.0);
+    
+        // Save momentum and second moment vectors
+        if (_momentum != null && _momentum.Length > 0)
+        {
+            writer.Write(true); // Flag indicating momentum exists
+            writer.Write(_momentum.Length);
+        
+            for (int i = 0; i < _momentum.Length; i++)
+            {
+                writer.Write(Convert.ToDouble(_momentum[i]));
+            }
+        }
+        else
+        {
+            writer.Write(false); // No momentum saved
+        }
+    
+        if (_secondMoment != null && _secondMoment.Length > 0)
+        {
+            writer.Write(true); // Flag indicating second moment exists
+            writer.Write(_secondMoment.Length);
+        
+            for (int i = 0; i < _secondMoment.Length; i++)
+            {
+                writer.Write(Convert.ToDouble(_secondMoment[i]));
+            }
+        }
+        else
+        {
+            writer.Write(false); // No second moment saved
+        }
+    
+        // Save recent loss history (last 20 entries at most)
+        int lossCount = Math.Min(_generatorLosses.Count, 20);
+        writer.Write(lossCount);
+    
+        for (int i = _generatorLosses.Count - lossCount; i < _generatorLosses.Count; i++)
+        {
+            writer.Write(Convert.ToDouble(_generatorLosses[i]));
+        }
+    
+        // Save Generator and Discriminator networks
+        var generatorBytes = Generator.Serialize();
+        writer.Write(generatorBytes.Length);
+        writer.Write(generatorBytes);
+
+        var discriminatorBytes = Discriminator.Serialize();
+        writer.Write(discriminatorBytes.Length);
+        writer.Write(discriminatorBytes);
+    }
+
+    /// <summary>
+    /// Deserializes GAN-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method loads the state of a previously saved GAN from a binary stream. It restores both the generator
+    /// and discriminator networks, as well as optimizer parameters like momentum and learning rate settings.
+    /// This allows training to resume from exactly where it left off, maintaining all networks and parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This loads a complete GAN from a saved file.
+    /// 
+    /// When loading the GAN:
+    /// - Both the generator and discriminator networks are restored
+    /// - The optimizer state (momentum, learning rates, etc.) is recovered
+    /// - Recent training history is loaded
+    /// - All parameters resume their previous values
+    /// 
+    /// This lets you continue working with a model exactly where you left off,
+    /// or use a model that someone else has trained.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Load learning rate parameters
+        _currentLearningRate = reader.ReadDouble();
+        _learningRateDecay = reader.ReadDouble();
+
+        // Load optimizer state
+        _beta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _beta2Power = NumOps.FromDouble(reader.ReadDouble());
+
+        // Load momentum if it exists
+        bool hasMomentum = reader.ReadBoolean();
+        if (hasMomentum)
+        {
+            int momentumLength = reader.ReadInt32();
+            _momentum = new Vector<T>(momentumLength);
+    
+            for (int i = 0; i < momentumLength; i++)
+            {
+                _momentum[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+        else
+        {
+            _momentum = new Vector<T>(0);
+        }
+
+        // Load second moment if it exists
+        bool hasSecondMoment = reader.ReadBoolean();
+        if (hasSecondMoment)
+        {
+            int secondMomentLength = reader.ReadInt32();
+            _secondMoment = new Vector<T>(secondMomentLength);
+    
+            for (int i = 0; i < secondMomentLength; i++)
+            {
+                _secondMoment[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+        else
+        {
+            _secondMoment = new Vector<T>(0);
+        }
+
+        // Load recent loss history
+        int lossCount = reader.ReadInt32();
+        _generatorLosses = new List<T>(lossCount);
+
+        for (int i = 0; i < lossCount; i++)
+        {
+            _generatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
+        }
+
+        // Load Generator and Discriminator networks
+        int generatorDataLength = reader.ReadInt32();
+        byte[] generatorData = reader.ReadBytes(generatorDataLength);
+        Generator.Deserialize(generatorData);
+
+        int discriminatorDataLength = reader.ReadInt32();
+        byte[] discriminatorData = reader.ReadBytes(discriminatorDataLength);
+        Discriminator.Deserialize(discriminatorData);
+    }
+
+    /// <summary>
+    /// Updates the parameters of both the Generator and Discriminator networks.
+    /// </summary>
+    /// <param name="parameters">A vector containing the combined parameters for both networks.</param>
+    /// <remarks>
+    /// <para>
+    /// This method splits the incoming parameter vector between the Generator and Discriminator,
+    /// updates each network accordingly, and adjusts the learning rate based on the magnitude
+    /// of parameter changes. It also includes a mechanism to reset the optimizer state if
+    /// exceptionally large changes are detected.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates both parts of the GAN at once.
+    /// 
+    /// The process:
+    /// - Splits the incoming parameters between Generator and Discriminator
+    /// - Updates each network with its respective parameters
+    /// - Adjusts the learning rate based on how big the changes are
+    /// - If changes are very large, it resets some internal values to stabilize training
+    /// 
+    /// This approach allows for efficient updating of the entire GAN structure.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        // Determine the split point between Generator and Discriminator parameters
+        int generatorParameterCount = Generator.GetParameterCount();
+        int discriminatorParameterCount = Discriminator.GetParameterCount();
+
+        if (parameters.Length != generatorParameterCount + discriminatorParameterCount)
+        {
+            throw new ArgumentException($"Invalid parameter vector length. Expected {generatorParameterCount + discriminatorParameterCount}, but got {parameters.Length}.");
+        }
+
+        // Split the parameters vector
+        var generatorParameters = new Vector<T>([.. parameters.Take(generatorParameterCount)]);
+        var discriminatorParameters = new Vector<T>([.. parameters.Skip(generatorParameterCount).Take(discriminatorParameterCount)]);
+
+        // Update Generator parameters
+        Generator.UpdateParameters(generatorParameters);
+
+        // Update Discriminator parameters
+        Discriminator.UpdateParameters(discriminatorParameters);
+
+        // Calculate the magnitude of parameter changes
+        T parameterChangeNorm = parameters.L2Norm();
+
+        // Adjust learning rate based on parameter change magnitude
+        if (NumOps.GreaterThan(parameterChangeNorm, NumOps.FromDouble(1.0)))
+        {
+            _currentLearningRate *= 0.95; // Reduce learning rate if changes are large
+        }
+        else if (NumOps.LessThan(parameterChangeNorm, NumOps.FromDouble(0.01)))
+        {
+            _currentLearningRate = Math.Min(_currentLearningRate * 1.05, _initialLearningRate); // Increase learning rate if changes are small, but cap it at initial rate
+        }
+
+        // Reset optimizer state if a very large change is detected
+        if (NumOps.GreaterThan(parameterChangeNorm, NumOps.FromDouble(10.0)))
+        {
+            ResetOptimizerState();
+        }
+    }
+
+    /// <summary>
+    /// Resets the optimizer state to its initial values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the Adam optimizer's state variables to their initial values.
+    /// It's called when exceptionally large parameter changes are detected, which might
+    /// indicate instability in the training process.
+    /// </para>
+    /// <para><b>For Beginners:</b> This resets some internal values to stabilize training.
+    /// 
+    /// When called:
+    /// - It resets momentum-related values to their starting points
+    /// - This can help recover from unstable training situations
+    /// - It's a way to "start fresh" with optimization without losing learned parameters
+    /// 
+    /// This reset can help the GAN recover if training becomes unstable.
+    /// </para>
+    /// </remarks>
+    private void ResetOptimizerState()
+    {
+        _beta1Power = NumOps.One;
+        _beta2Power = NumOps.One;
+        _momentum = new Vector<T>(Generator.GetParameterCount() + Discriminator.GetParameterCount());
+        _secondMoment = new Vector<T>(Generator.GetParameterCount() + Discriminator.GetParameterCount());
+    }
+
+    /// <summary>
+    /// Creates a new instance of the GenerativeAdversarialNetwork with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new GenerativeAdversarialNetwork instance with the same architecture as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the GenerativeAdversarialNetwork with the same generator and
+    /// discriminator architectures as the current instance. This is useful for model cloning, ensemble methods, or
+    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the GAN's blueprint.
+    /// 
+    /// When you need multiple versions of the same GAN with identical settings:
+    /// - This method creates a new, empty GAN with the same configuration
+    /// - It copies the architecture of both the generator and discriminator networks
+    /// - The new GAN has the same structure but no trained data
+    /// - This is useful for techniques that need multiple models, like ensemble methods
+    /// 
+    /// For example, when experimenting with different training approaches,
+    /// you'd want to start with identical model configurations.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new GenerativeAdversarialNetwork<T>(
+            Generator.Architecture,
+            Discriminator.Architecture,
+            Architecture.InputType,
+            _initialLearningRate);
     }
 }

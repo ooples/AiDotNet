@@ -74,7 +74,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// computational power. The default value of 2048 works well for many applications.
     /// </para>
     /// </remarks>
-    private int _columnCount { get; }
+    private int _columnCount { get; set; }
 
     /// <summary>
     /// Gets the number of cells per column in the temporal memory.
@@ -99,7 +99,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// where the same pattern can have different meanings based on context.
     /// </para>
     /// </remarks>
-    private int _cellsPerColumn { get; }
+    private int _cellsPerColumn { get; set; }
 
     /// <summary>
     /// Gets the target sparsity for the spatial pooler output.
@@ -127,7 +127,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// everything - it helps you focus on what really matters.
     /// </para>
     /// </remarks>
-    private double _sparsityThreshold { get; }
+    private double _sparsityThreshold { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HTMNetwork{T}"/> class with the specified architecture and parameters.
@@ -222,41 +222,6 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultHTMLayers(Architecture, _columnCount, _cellsPerColumn, _sparsityThreshold));
         }
-    }
-
-    /// <summary>
-    /// Performs a forward pass through the network to generate a prediction from an input vector.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector containing the prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method processes an input vector through all layers of the HTM network sequentially, transforming
-    /// it at each step according to the layer's function, and returns the final output vector. For HTM networks,
-    /// this typically means passing through the spatial pooler, temporal memory, and any additional layers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method takes your input data and passes it through 
-    /// the network to get a prediction without updating the network's knowledge.
-    /// 
-    /// The process works like this:
-    /// 1. Your input data enters the Spatial Pooler, which converts it to a sparse representation
-    /// 2. This representation enters the Temporal Memory, which interprets it based on previous patterns
-    /// 3. Any additional layers process the information further
-    /// 4. The final layer produces a prediction about what might come next
-    /// 
-    /// This method is used when you want the network to make a prediction
-    /// without learning from the new data (for example, when testing the network's performance).
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-
-        return current;
     }
 
     /// <summary>
@@ -374,110 +339,357 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the HTM network to a binary writer.
+    /// Makes a prediction using the current state of the HTM network.
     /// </summary>
-    /// <param name="writer">The binary writer to write the serialized network to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a null layer is encountered or when a layer type name cannot be determined.</exception>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>A tensor containing the network's prediction.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the HTM network's structure and parameters to a binary format that can be stored
-    /// and later loaded. It writes the number of layers and then serializes each layer individually,
-    /// preserving the network's learned knowledge and configuration.
+    /// This method processes the input through the HTM network without updating its internal state.
+    /// It returns a prediction tensor that typically includes information about active columns,
+    /// predicted columns, and anomaly detection results.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained HTM network to a file.
+    /// <para><b>For Beginners:</b> This method uses the network's current knowledge to make a prediction.
     /// 
-    /// After training an HTM network, which can take time and data, you'll want to save it
-    /// so you can use it later without training again. This method:
+    /// Unlike the Learn method, Predict:
+    /// - Does not update the network's memory or knowledge
+    /// - Processes the input and returns a result based on what it has learned so far
+    /// - Can be used to test the network's predictions on new data
     /// 
-    /// 1. Counts how many layers your network has
-    /// 2. Writes this count to the file
-    /// 3. For each layer:
-    ///    - Writes the type of layer
-    ///    - Saves all the learned patterns and parameters for that layer
-    /// 
-    /// This is like saving a document so you can open it again later without redoing all your work.
-    /// The saved file contains all the knowledge the network has accumulated through training.
+    /// The output typically contains information about:
+    /// - Which patterns were activated by the input
+    /// - Whether the network considers this input unusual (anomalous)
+    /// - The network's prediction of what might come next
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    private Vector<T> Predict(Vector<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
+        // Validate input
+        if (input.Length != _inputSize)
+            throw new ArgumentException($"Input size mismatch. Expected {_inputSize}, got {input.Length}.");
+            
+        // Flag to indicate we're in prediction mode (not learning)
+        bool originalTrainingMode = IsTrainingMode;
+        SetTrainingMode(false);
+        
+        try
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            // Forward pass through the Spatial Pooler
+            if (!(Layers[0] is SpatialPoolerLayer<T> spatialPoolerLayer))
+                throw new InvalidOperationException("The first layer is not a SpatialPoolerLayer.");
+                
+            var spatialPoolerOutput = spatialPoolerLayer.Forward(Tensor<T>.FromVector(input)).ToVector();
+            
+            // Forward pass through the Temporal Memory
+            if (!(Layers[1] is TemporalMemoryLayer<T> temporalMemoryLayer))
+                throw new InvalidOperationException("The second layer is not a TemporalMemoryLayer.");
+                
+            // Get predictions before processing input (what the network expected)
+            var predictedCells = temporalMemoryLayer.GetPredictions();
+            
+            // Process input to get current state
+            var temporalMemoryOutput = temporalMemoryLayer.Forward(Tensor<T>.FromVector(spatialPoolerOutput)).ToVector();
+            
+            // Calculate anomaly score (if supported)
+            T anomalyScore = NumOps.Zero;
+            if (Layers.Count > 2 && Layers[2] is AnomalyDetectorLayer<T> anomalyLayer)
+            {
+                var anomalyOutput = anomalyLayer.Forward(Tensor<T>.FromVector(temporalMemoryOutput)).ToVector();
+                if (anomalyOutput.Length > 0)
+                {
+                    anomalyScore = anomalyOutput[0];
+                }
+            }
+            
+            // Create output vector with prediction results
+            // Format depends on the specific implementation, but might include:
+            // - Active columns
+            // - Predicted columns
+            // - Anomaly score
+            
+            // Simple example format:
+            // [anomaly_score, active_columns..., predicted_columns...]
+            int outputSize = 1 + _columnCount * 2;
+            var result = new Vector<T>(outputSize);
+            
+            // Set anomaly score
+            result[0] = anomalyScore;
+            
+            // Set active columns (from spatial pooler output)
+            for (int i = 0; i < _columnCount && i < spatialPoolerOutput.Length; i++)
+            {
+                result[1 + i] = spatialPoolerOutput[i];
+            }
+            
+            // Set predicted columns (if available)
+            if (predictedCells != null && predictedCells.Length >= _columnCount)
+            {
+                for (int i = 0; i < _columnCount; i++)
+                {
+                    result[1 + _columnCount + i] = predictedCells[i];
+                }
+            }
+            
+            return result;
+        }
+        finally
+        {
+            // Restore original training mode
+            SetTrainingMode(originalTrainingMode);
         }
     }
 
     /// <summary>
-    /// Deserializes the HTM network from a binary reader.
+    /// Makes a prediction using the HTM network.
     /// </summary>
-    /// <param name="reader">The binary reader to read the serialized network from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when an empty layer type name is encountered, when a layer type cannot be found, when a type does not implement the required interface, or when a layer instance cannot be created.</exception>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>A tensor containing the network's prediction.</returns>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        // Ensure the input is a vector or can be converted to one
+        Vector<T> inputVector;
+        if (input.Rank == 1)
+        {
+            inputVector = input.ToVector();
+        }
+        else if (input.Rank == 2 && input.Shape[0] == 1)
+        {
+            // Handle single-row batch
+            inputVector = new Vector<T>(input.Shape[1]);
+            for (int i = 0; i < input.Shape[1]; i++)
+            {
+                inputVector[i] = input[0, i];
+            }
+        }
+        else
+        {
+            throw new ArgumentException("Input tensor must be a vector or a single-row batch.");
+        }
+        
+        // Use the vector prediction method
+        var predictionVector = Predict(inputVector);
+        
+        // Convert back to tensor
+        return Tensor<T>.FromVector(predictionVector);
+    }
+
+    /// <summary>
+    /// Trains the HTM network on a sequence of inputs.
+    /// </summary>
+    /// <param name="input">The input tensor, which may contain a batch of inputs or a single input.</param>
+    /// <param name="expectedOutput">Not used in HTM networks as they are self-supervised.</param>
     /// <remarks>
     /// <para>
-    /// This method loads a previously serialized HTM network from a binary format. It reads the number of layers
-    /// and then deserializes each layer individually, recreating the network's structure and learned parameters.
-    /// This allows the network to continue from its previously learned state.
+    /// HTM networks are self-supervised and learn to predict future inputs based on past patterns.
+    /// This method processes inputs sequentially through the network, allowing it to build a model
+    /// of the temporal patterns in the data.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved HTM network from a file.
+    /// <para><b>For Beginners:</b> This method teaches the network to recognize patterns in sequential data.
     /// 
-    /// When you want to use a network that was trained earlier, this method:
+    /// Unlike traditional neural networks, HTMs:
+    /// - Don't need labels or expected outputs
+    /// - Learn by trying to predict what comes next in a sequence
+    /// - Build their own understanding of the patterns in your data
     /// 
-    /// 1. Reads how many layers the network should have
-    /// 2. Creates a new, empty network
-    /// 3. For each layer:
-    ///    - Reads what type of layer it should be
-    ///    - Creates that type of layer
-    ///    - Loads all the learned patterns and parameters for that layer
-    /// 
-    /// This is like opening a saved document to continue working where you left off.
-    /// 
-    /// For example, if you trained an HTM network to detect anomalies in server performance,
-    /// you could save it after training on historical data and then load it later to
-    /// monitor live systems without having to retrain.
+    /// This method processes each input in sequence, helping the network learn
+    /// temporal patterns and relationships in your data over time.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
+        // HTM networks don't use supervised learning with expected outputs
+        // They learn by observing sequences of inputs
+        
+        // Process input based on its shape
+        if (input.Rank == 1)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+            // Single input vector
+            Learn(input.ToVector());
         }
+        else if (input.Rank == 2)
+        {
+            // Batch of inputs - process them sequentially
+            int batchSize = input.Shape[0];
+            
+            for (int i = 0; i < batchSize; i++)
+            {
+                // Extract the i-th input from the batch
+                var singleInput = new Vector<T>(input.Shape[1]);
+                for (int j = 0; j < input.Shape[1]; j++)
+                {
+                    singleInput[j] = input[i, j];
+                }
+                
+                // Learn from this input
+                Learn(singleInput);
+            }
+        }
+        else
+        {
+            throw new ArgumentException("Input tensor must be either a vector or a batch of vectors.");
+        }
+    }
+
+    /// <summary>
+    /// Gets metadata about the HTM network.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the HTM network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns comprehensive metadata about the HTM network, including its architecture,
+    /// layer configuration, and HTM-specific parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides detailed information about your HTM network.
+    /// 
+    /// The metadata includes:
+    /// - What kind of network this is (HTM)
+    /// - Details about its structure (columns, cells, etc.)
+    /// - Configuration settings
+    /// - Basic statistics about the network
+    /// 
+    /// This is useful for documentation, comparison with other models,
+    /// and keeping track of different network configurations.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.HTMNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputSize", _inputSize },
+                { "ColumnCount", _columnCount },
+                { "CellsPerColumn", _cellsPerColumn },
+                { "SparsityThreshold", _sparsityThreshold },
+                { "LayerCount", Layers.Count },
+                { "TotalParameters", GetParameterCount() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes HTM-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write HTM-specific parameters
+        writer.Write(_columnCount);
+        writer.Write(_cellsPerColumn);
+        writer.Write(_sparsityThreshold);
+        
+        // Serialize any additional HTM state
+        
+        // Look for the temporal memory layer
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i] is TemporalMemoryLayer<T> temporalMemoryLayer)
+            {
+                // Mark that we found a temporal memory layer
+                writer.Write(true);
+                
+                // Serialize the temporal memory's state
+                if (temporalMemoryLayer.PreviousState != null)
+                {
+                    writer.Write(true); // Has previous state
+                    writer.Write(temporalMemoryLayer.PreviousState.Length);
+                    
+                    // Write each element of the previous state
+                    for (int j = 0; j < temporalMemoryLayer.PreviousState.Length; j++)
+                    {
+                        writer.Write(Convert.ToDouble(temporalMemoryLayer.PreviousState[j]));
+                    }
+                }
+                else
+                {
+                    writer.Write(false); // No previous state
+                }
+                
+                break; // Stop after finding the first temporal memory layer
+            }
+        }
+        
+        // If no temporal memory layer was found
+        writer.Write(false);
+    }
+
+    /// <summary>
+    /// Deserializes HTM-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Read HTM-specific parameters
+        _columnCount = reader.ReadInt32();
+        _cellsPerColumn = reader.ReadInt32();
+        _sparsityThreshold = reader.ReadDouble();
+        
+        // Deserialize additional HTM state
+        
+        // Check if there was a temporal memory layer
+        bool hasTemporalMemoryLayer = reader.ReadBoolean();
+        if (hasTemporalMemoryLayer)
+        {
+            // Look for the temporal memory layer in the current network
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                if (Layers[i] is TemporalMemoryLayer<T> temporalMemoryLayer)
+                {
+                    // Check if there was a previous state
+                    bool hasPreviousState = reader.ReadBoolean();
+                    if (hasPreviousState)
+                    {
+                        int stateLength = reader.ReadInt32();
+                        var previousState = new Vector<T>(stateLength);
+                        
+                        // Read each element of the previous state
+                        for (int j = 0; j < stateLength; j++)
+                        {
+                            previousState[j] = NumOps.FromDouble(reader.ReadDouble());
+                        }
+                        
+                        // Set the previous state
+                        temporalMemoryLayer.PreviousState = previousState;
+                    }
+                    
+                    break; // Stop after restoring the first temporal memory layer
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the HTM Network with the same architecture and configuration.
+    /// </summary>
+    /// <returns>A new HTM Network instance with the same architecture and configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the HTM Network with the same architecture and HTM-specific
+    /// parameters as the current instance. It's used in scenarios where a fresh copy of the model is needed
+    /// while maintaining the same configuration.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a brand new copy of the HTM network with the same setup.
+    /// 
+    /// Think of it like creating a clone of the network:
+    /// - The new network has the same architecture (structure)
+    /// - It has the same number of columns, cells per column, and sparsity threshold
+    /// - But it's a completely separate instance with its own state
+    /// - It starts with clean internal memory and connections
+    /// 
+    /// This is useful when you want to:
+    /// - Train the same network design on different datasets
+    /// - Compare how the same network structure learns from different sequences
+    /// - Start with a fresh network that has the same configuration but no learned patterns
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new HTMNetwork<T>(
+            this.Architecture,
+            _columnCount,
+            _cellsPerColumn,
+            _sparsityThreshold);
     }
 }

@@ -88,7 +88,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     /// The model will adjust the dispersion parameter during training based on the actual variation in your data.
     /// </para>
     /// </remarks>
-    public NegativeBinomialRegression(NegativeBinomialRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public NegativeBinomialRegression(NegativeBinomialRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new NegativeBinomialRegressionOptions<T>();
@@ -131,7 +131,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
-            var oldCoefficients = Coefficients.Copy();
+            var oldCoefficients = Coefficients.Clone();
 
             // Calculate linear predictors and means
             var linearPredictors = X.Multiply(Coefficients).Add(Intercept);
@@ -146,13 +146,13 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
             var weightedY = workingResponse.PointwiseMultiply(weights.Transform(NumOps.Sqrt));
 
             // Apply regularization to the design matrix
-            var regularizedX = Regularization.RegularizeMatrix(weightedX);
+            var regularizedX = Regularization.Regularize(weightedX);
 
             // Solve the regularized system
             var newCoefficients = MatrixSolutionHelper.SolveLinearSystem(regularizedX, weightedY, MatrixDecompositionFactory.GetDecompositionType(_options.DecompositionMethod));
 
             // Apply regularization to the coefficients
-            newCoefficients = Regularization.RegularizeCoefficients(newCoefficients);
+            newCoefficients = Regularization.Regularize(newCoefficients);
 
             Coefficients = newCoefficients.Slice(1, newCoefficients.Length - 1);
             Intercept = newCoefficients[0];
@@ -406,5 +406,49 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     protected override ModelType GetModelType()
     {
         return ModelType.NegativeBinomialRegression;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Negative Binomial Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Negative Binomial Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Negative Binomial Regression model, including its options,
+    /// coefficients, intercept, dispersion parameter, and regularization settings. The new instance is completely 
+    /// independent of the original, allowing modifications without affecting the original model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact copy of your trained model.
+    /// 
+    /// Think of it like making a perfect duplicate:
+    /// - It copies all the configuration settings (like maximum iterations and tolerance)
+    /// - It preserves the coefficients (the importance values for each feature)
+    /// - It maintains the intercept (the starting point or base value)
+    /// - It keeps the dispersion parameter (the "extra randomness adjuster")
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before further modifying the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        var newModel = new NegativeBinomialRegression<T>(_options, Regularization);
+        
+        // Copy coefficients if they exist
+        if (Coefficients != null)
+        {
+            newModel.Coefficients = Coefficients.Clone();
+        }
+        
+        // Copy the intercept
+        newModel.Intercept = Intercept;
+        
+        // Copy the dispersion parameter
+        newModel._dispersion = _dispersion;
+        
+        return newModel;
     }
 }

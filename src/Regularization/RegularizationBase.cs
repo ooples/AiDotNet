@@ -4,6 +4,8 @@ namespace AiDotNet.Regularization;
 /// Provides a base implementation for regularization techniques used to prevent overfitting in machine learning models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
 /// <remarks>
 /// <para>
 /// RegularizationBase serves as an abstract foundation for implementing various regularization strategies.
@@ -29,7 +31,7 @@ namespace AiDotNet.Regularization;
 /// All of these approaches inherit from this base class, which provides the common structure they all share.
 /// </para>
 /// </remarks>
-public abstract class RegularizationBase<T> : IRegularization<T>
+public abstract class RegularizationBase<T, TInput, TOutput> : IRegularization<T, TInput, TOutput>
 {
     /// <summary>
     /// Provides numeric operations appropriate for the generic type T.
@@ -105,7 +107,7 @@ public abstract class RegularizationBase<T> : IRegularization<T>
     /// <summary>
     /// Applies regularization to a matrix of input features.
     /// </summary>
-    /// <param name="featuresMatrix">The input feature matrix to regularize.</param>
+    /// <param name="data">The input feature matrix to regularize.</param>
     /// <returns>The regularized matrix.</returns>
     /// <remarks>
     /// <para>
@@ -125,12 +127,12 @@ public abstract class RegularizationBase<T> : IRegularization<T>
     /// but this method is included to support regularization techniques that might need to.
     /// </para>
     /// </remarks>
-    public abstract Matrix<T> RegularizeMatrix(Matrix<T> featuresMatrix);
+    public abstract Matrix<T> Regularize(Matrix<T> data);
 
     /// <summary>
     /// Applies regularization to model coefficients.
     /// </summary>
-    /// <param name="coefficients">The coefficient vector to regularize.</param>
+    /// <param name="data">The coefficient vector to regularize.</param>
     /// <returns>The regularized coefficient vector.</returns>
     /// <remarks>
     /// <para>
@@ -149,7 +151,7 @@ public abstract class RegularizationBase<T> : IRegularization<T>
     /// has learned to create a more balanced, generalizable model.
     /// </para>
     /// </remarks>
-    public abstract Vector<T> RegularizeCoefficients(Vector<T> coefficients);
+    public abstract Vector<T> Regularize(Vector<T> data);
 
     /// <summary>
     /// Adjusts the gradient vector to account for regularization during optimization.
@@ -175,7 +177,7 @@ public abstract class RegularizationBase<T> : IRegularization<T>
     /// with good form (simpler model).
     /// </para>
     /// </remarks>
-    public abstract Vector<T> RegularizeGradient(Vector<T> gradient, Vector<T> coefficients);
+    public abstract TOutput Regularize(TOutput gradient, TOutput coefficients);
 
     /// <summary>
     /// Gets the configuration options for this regularization technique.

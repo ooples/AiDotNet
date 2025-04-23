@@ -20,7 +20,39 @@
 /// </remarks>
 public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether this network processes temporal data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set to true, the network will consider historical data in its predictions,
+    /// allowing it to detect patterns over time.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like telling the network whether to consider how sensor
+    /// readings change over time. If set to true, the network can spot trends, like gradual
+    /// increases in CO2 levels as people enter a room. If false, it only looks at the current
+    /// moment's readings.
+    /// </para>
+    /// </remarks>
     private bool _includeTemporalData { get; set; }
+
+    /// <summary>
+    /// Gets or sets the size of the time window used for temporal data processing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how many previous time steps of data the network considers
+    /// when temporal processing is enabled. A larger window allows the network to detect
+    /// longer-term patterns but requires more memory and processing power.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like deciding how far back in time the network should
+    /// "remember" when analyzing sensor data. If set to 5, for example, the network will
+    /// consider the current reading plus the 4 previous readings when making its prediction.
+    /// This helps in detecting gradual changes or recurring patterns in occupancy.
+    /// </para>
+    /// </remarks>
     private int _historyWindowSize { get; set; }
     
     /// <summary>
@@ -32,6 +64,22 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// Gets the size of the time window used for temporal data.
     /// </summary>
     public int HistoryWindowSize => _historyWindowSize;
+
+    /// <summary>
+    /// Buffer to store historical sensor readings for temporal processing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This internal buffer maintains the recent history of sensor readings when temporal
+    /// processing is enabled, allowing the network to detect patterns over time.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Think of this as the network's short-term memory.
+    /// It stores the most recent sensor readings so the network can analyze
+    /// how values have changed over time rather than just looking at the current moment.
+    /// </para>
+    /// </remarks>
+    private Queue<Vector<T>> _internalSensorHistory;
 
     /// <summary>
     /// Initializes a new instance of the OccupancyNeuralNetwork class.
@@ -60,6 +108,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         _includeTemporalData = includeTemporalData;
         _historyWindowSize = includeTemporalData ? Math.Max(1, historyWindowSize) : 0;
+        _internalSensorHistory = new Queue<Vector<T>>(_historyWindowSize);
         
         if (includeTemporalData)
         {
@@ -69,6 +118,8 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             ArchitectureValidator.ValidateInputType(architecture, InputType.OneDimensional, nameof(OccupancyNeuralNetwork<T>));
         }
+
+        InitializeLayers();
     }
 
     /// <summary>
@@ -111,73 +162,11 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Makes a prediction using the neural network based on the provided input vector.
-    /// </summary>
-    /// <param name="input">The input vector containing the sensor data to process.</param>
-    /// <returns>A vector containing the network's occupancy prediction.</returns>
-    /// <exception cref="VectorLengthMismatchException">Thrown when the input vector length doesn't match the expected input dimensions.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method processes the input sensor data through the network and returns an occupancy prediction.
-    /// The interpretation of the output depends on the specific task (binary occupancy detection,
-    /// occupant counting, etc.) and how the network was trained.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is the main method you'll use to get occupancy predictions from your network.
-    /// You provide your sensor data (temperature, humidity, CO2, etc.) as a list of numbers, and this
-    /// method processes it through the neural network and returns the prediction results.
-    /// 
-    /// The output could be a simple yes/no for occupancy, a count of people in the space, or probabilities
-    /// for different occupancy levels, depending on how you trained your network. Before processing,
-    /// the method checks that your input has the correct number of values for the network to use.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        if (input.Length != Architecture.InputSize)
-        {
-            throw new VectorLengthMismatchException(
-                Architecture.InputSize, 
-                input.Length,
-                nameof(OccupancyNeuralNetwork<T>),
-                nameof(Predict)
-            );
-        }
-
-        var currentInput = new Tensor<T>([1, input.Length]);
-        currentInput.SetRow(0, input);
-
-        foreach (var layer in Layers)
-        {
-            currentInput = layer.Forward(currentInput);
-        }
-
-        return currentInput.GetRow(0);
-    }
-
-    /// <summary>
     /// Performs a forward pass through the network for temporal data.
     /// </summary>
     /// <param name="input">The input tensor to process with shape [batchSize, timeSteps, features].</param>
     /// <returns>The output tensor after processing through all layers.</returns>
     /// <exception cref="TensorShapeMismatchException">Thrown when the input shape doesn't match the expected shape.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method handles the processing of temporal (time-series) data through the network.
-    /// It ensures the input has the correct time dimension and sequences the data appropriately
-    /// through the temporal-aware layers.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method processes time-sequence sensor data through your network.
-    /// It takes your sensor readings over time (already in the right format) and passes them through
-    /// each layer in sequence. The network can detect patterns in how the readings change over time,
-    /// which is often crucial for accurate occupancy detection.
-    /// 
-    /// For example, CO2 levels might rise gradually when people enter a room, and this method enables
-    /// the network to recognize such temporal patterns. Think of it like analyzing a short video clip
-    /// instead of just a single snapshot to determine occupancy.
-    /// </para>
-    /// </remarks>
     public Tensor<T> ForwardTemporal(Tensor<T> input)
     {
         if (!_includeTemporalData)
@@ -212,24 +201,12 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="sensorHistory">Optional buffer of previous readings for temporal processing.</param>
     /// <returns>The updated occupancy prediction.</returns>
     /// <exception cref="InvalidOperationException">Thrown when temporal data is required but no history is provided.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method is optimized for real-time occupancy detection where new sensor readings arrive
-    /// continuously. It can use a provided history buffer or maintain an internal one for temporal processing.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method is like a continuous room monitor. Each time you get a new
-    /// sensor reading (like temperature or CO2 level), you feed it into this method. It combines this
-    /// new information with recent past readings to give you an up-to-date prediction of room occupancy.
-    /// It's particularly useful for systems that need to adjust in real-time, like smart thermostats
-    /// or adaptive lighting systems.
-    /// </para>
-    /// </remarks>
     public Vector<T> UpdatePrediction(Vector<T> currentReading, Queue<Vector<T>>? sensorHistory = null)
     {
         if (_includeTemporalData && sensorHistory == null)
         {
-            throw new InvalidOperationException("Sensor history is required for temporal processing.");
+            // Use internal history if no external history is provided
+            sensorHistory = _internalSensorHistory;
         }
 
         if (_includeTemporalData)
@@ -252,7 +229,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            return Predict(currentReading);
+            return Predict(Tensor<T>.FromVector(currentReading)).ToVector();
         }
     }
 
@@ -260,18 +237,6 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// Updates the parameters of the neural network based on computed gradients.
     /// </summary>
     /// <param name="gradients">The gradients to apply to the network parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// This method applies the provided gradients to update the network's parameters,
-    /// typically as part of the training process.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the network "learns" from its mistakes. After making
-    /// predictions and calculating how far off they were, this method adjusts the network's
-    /// internal settings to try and make better predictions next time. It's like fine-tuning
-    /// an instrument based on feedback from a tuner.
-    /// </para>
-    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int index = 0;
@@ -285,86 +250,457 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the neural network to a binary stream.
+    /// Makes a prediction using the occupancy neural network.
     /// </summary>
-    /// <param name="writer">The binary writer to write the network state to.</param>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after processing through all layers.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the entire state of the neural network, including its architecture
-    /// and learned parameters, to a binary stream for later retrieval.
+    /// This method processes input data through the network to predict occupancy. If temporal
+    /// data is enabled, it will ensure the input has the appropriate format before processing.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> Think of this as saving your network's "brain" to a file. After
-    /// training your network to recognize occupancy patterns, you can save all that learned
-    /// knowledge so you can use it later without having to retrain. It's like taking a snapshot
-    /// of the network's current state of understanding about occupancy detection.
+    /// <b>For Beginners:</b> This method takes your sensor data and produces an occupancy prediction.
+    /// Depending on how your network is configured, it will either:
+    /// 
+    /// 1. Process a single moment's sensor readings (like current temperature, CO2, etc.)
+    /// 2. Process a sequence of readings over time to detect temporal patterns
+    /// 
+    /// The output typically indicates how many people are in the space or the probability
+    /// of the space being occupied. This method handles all the complex mathematical
+    /// transformations needed to convert raw sensor data into meaningful occupancy information.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        SerializationValidator.ValidateWriter(writer, nameof(OccupancyNeuralNetwork<T>));
-
-        writer.Write(_includeTemporalData);
-        writer.Write(_historyWindowSize);
-
-        writer.Write(Layers.Count);
+        // Set network to inference mode
+        bool originalTrainingMode = IsTrainingMode;
+        SetTrainingMode(false);
+        
+        try
+        {
+            // Handle different input formats based on temporal configuration
+            if (_includeTemporalData)
+            {
+                // Check if input is properly shaped for temporal processing
+                if (input.Rank == 3 && input.Shape[1] == _historyWindowSize)
+                {
+                    // Input is already in correct temporal format
+                    return ForwardTemporal(input);
+                }
+                else if (input.Rank == 2 && input.Shape[0] == _historyWindowSize)
+                {
+                    // Input is a sequence of feature vectors, reshape to [1, timeSteps, features]
+                    var reshapedInput = new Tensor<T>([1, _historyWindowSize, input.Shape[1]]);
+                    for (int t = 0; t < _historyWindowSize; t++)
+                    {
+                        for (int f = 0; f < input.Shape[1]; f++)
+                        {
+                            reshapedInput[0, t, f] = input[t, f];
+                        }
+                    }
+                    return ForwardTemporal(reshapedInput);
+                }
+                else
+                {
+                    throw new TensorShapeMismatchException(
+                        new[] { -1, _historyWindowSize, Architecture.InputSize },
+                        input.Shape,
+                        nameof(OccupancyNeuralNetwork<T>),
+                        nameof(Predict)
+                    );
+                }
+            }
+            else
+            {
+                // Handle non-temporal input
+                if (input.Rank > 1)
+                {
+                    // If input is multi-dimensional but network is not temporal,
+                    // assume batch processing and process each vector separately
+                    int batchSize = input.Shape[0];
+                    int features = input.Rank > 1 ? input.Shape[1] : input.Shape[0];
+                    
+                    // Create output tensor for batch results
+                    var output = new Tensor<T>([batchSize, Architecture.OutputSize]);
+                    
+                    // Process each input in the batch
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        // Extract single vector from batch
+                        var singleInput = new Vector<T>(features);
+                        for (int f = 0; f < features; f++)
+                        {
+                            singleInput[f] = input[b, f];
+                        }
+                        
+                        // Process through layers
+                        var result = ProcessSingleInput(singleInput);
+                        
+                        // Store in output tensor
+                        for (int o = 0; o < result.Length; o++)
+                        {
+                            output[b, o] = result[o];
+                        }
+                    }
+                    
+                    return output;
+                }
+                else
+                {
+                    // Single vector input
+                    var result = ProcessSingleInput(input.ToVector());
+                    return Tensor<T>.FromVector(result);
+                }
+            }
+        }
+        finally
+        {
+            // Restore original training mode
+            SetTrainingMode(originalTrainingMode);
+        }
+    }
+    
+    /// <summary>
+    /// Processes a single input vector through the network.
+    /// </summary>
+    /// <param name="input">The input vector to process.</param>
+    /// <returns>The output vector after processing through all layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// This helper method processes a single input vector through all layers of the network.
+    /// It converts the vector to a tensor, passes it through each layer, and returns the result.
+    /// </para>
+    /// </remarks>
+    private Vector<T> ProcessSingleInput(Vector<T> input)
+    {
+        // Validate input size
+        if (input.Length != Architecture.InputSize)
+        {
+            throw new ArgumentException($"Input size mismatch. Expected {Architecture.InputSize}, got {input.Length}.");
+        }
+        
+        // Forward pass through all layers
+        var current = Tensor<T>.FromVector(input);
+        
         foreach (var layer in Layers)
         {
-            string? layerTypeName = layer.GetType().FullName;
-            SerializationValidator.ValidateLayerTypeName(layerTypeName);
-            writer.Write(layerTypeName!);
-            layer.Serialize(writer);
+            current = layer.Forward(current);
+        }
+        
+        return current.ToVector();
+    }
+
+    /// <summary>
+    /// Trains the neural network on sensor data and occupancy labels.
+    /// </summary>
+    /// <param name="input">The input tensor containing sensor data.</param>
+    /// <param name="expectedOutput">The expected output tensor containing occupancy information.</param>
+    /// <remarks>
+    /// <para>
+    /// This method trains the occupancy neural network by comparing its predictions with expected
+    /// occupancy values. It handles both temporal and non-temporal training data formats.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method teaches the network to accurately detect occupancy 
+    /// by showing it examples of sensor readings and the correct occupancy levels.
+    /// 
+    /// The training process follows these steps:
+    /// 1. The network processes the sensor readings
+    /// 2. Its prediction is compared to the actual occupancy value
+    /// 3. The difference (error) is used to adjust the network's internal settings
+    /// 4. This process repeats with many examples until the network becomes accurate
+    /// 
+    /// The network automatically handles different data formats depending on whether it's
+    /// configured to analyze patterns over time (temporal) or just current readings.
+    /// Over time, the network becomes better at recognizing the subtle patterns in
+    /// sensor data that indicate human presence.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Ensure we're in training mode
+        SetTrainingMode(true);
+        
+        // Process based on temporal configuration
+        if (_includeTemporalData)
+        {
+            TrainTemporal(input, expectedOutput);
+        }
+        else
+        {
+            TrainNonTemporal(input, expectedOutput);
+        }
+    }
+    
+    /// <summary>
+    /// Trains the network on temporal (sequence) data.
+    /// </summary>
+    /// <param name="input">The input tensor with shape [batchSize, timeSteps, features].</param>
+    /// <param name="expectedOutput">The expected output tensor.</param>
+    private void TrainTemporal(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Validate input shape
+        var expectedShape = new[] { input.Shape[0], _historyWindowSize, Architecture.InputSize };
+        if (input.Shape.Length != 3 || !input.Shape.SequenceEqual(expectedShape))
+        {
+            throw new TensorShapeMismatchException(
+                expectedShape,
+                input.Shape,
+                nameof(OccupancyNeuralNetwork<T>),
+                nameof(TrainTemporal)
+            );
+        }
+        
+        // Forward pass
+        var output = ForwardTemporal(input);
+        
+        // Calculate error/loss
+        var error = CalculateError(output, expectedOutput);
+        
+        // Backpropagation
+        var flatError = error.ToVector();
+        Backpropagate(flatError);
+        
+        // Update parameters with optimizer
+        T learningRate = NumOps.FromDouble(0.01);
+        foreach (var layer in Layers)
+        {
+            if (layer.SupportsTraining)
+            {
+                layer.UpdateParameters(learningRate);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Trains the network on non-temporal (single time step) data.
+    /// </summary>
+    /// <param name="input">The input tensor with shape [batchSize, features].</param>
+    /// <param name="expectedOutput">The expected output tensor.</param>
+    private void TrainNonTemporal(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Forward pass
+        var output = Predict(input);
+        
+        // Calculate error/loss
+        var error = CalculateError(output, expectedOutput);
+        
+        // Backpropagation
+        var flatError = error.ToVector();
+        Backpropagate(flatError);
+        
+        // Update parameters with optimizer
+        T learningRate = NumOps.FromDouble(0.01);
+        foreach (var layer in Layers)
+        {
+            if (layer.SupportsTraining)
+            {
+                layer.UpdateParameters(learningRate);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Calculates the error between predicted and expected outputs.
+    /// </summary>
+    /// <param name="predicted">The predicted output tensor.</param>
+    /// <param name="expected">The expected output tensor.</param>
+    /// <returns>A tensor containing the errors.</returns>
+    private Tensor<T> CalculateError(Tensor<T> predicted, Tensor<T> expected)
+    {
+        // Ensure tensors have the same shape
+        if (!predicted.Shape.SequenceEqual(expected.Shape))
+        {
+            throw new TensorShapeMismatchException(
+                expected.Shape,
+                predicted.Shape,
+                nameof(OccupancyNeuralNetwork<T>),
+                nameof(CalculateError)
+            );
+        }
+    
+        // Calculate error (expected - predicted)
+        var error = new Tensor<T>(predicted.Shape);
+    
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            var predictedValue = predicted.GetFlatIndexValue(i);
+            var expectedValue = expected.GetFlatIndexValue(i);
+            error.SetFlatIndex(i, NumOps.Subtract(expectedValue, predictedValue));
+        }
+    
+        return error;
+    }
+
+    /// <summary>
+    /// Gets metadata about the occupancy neural network.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns comprehensive metadata about the occupancy neural network, including
+    /// its architecture, temporal configuration, and other relevant parameters.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This provides detailed information about your occupancy detection network.
+    /// It includes data like:
+    /// - The network's structure (layers, neurons, etc.)
+    /// - Whether it analyzes patterns over time
+    /// - How many past readings it considers for temporal analysis
+    /// - The total number of internal parameters
+    /// 
+    /// This information is useful for documentation, comparing different network configurations,
+    /// or debugging issues with the network's performance.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        // Count layer types
+        var layerTypeCount = new Dictionary<string, int>();
+        foreach (var layer in Layers)
+        {
+            string layerType = layer.GetType().Name;
+            if (layerTypeCount.ContainsKey(layerType))
+            {
+                layerTypeCount[layerType]++;
+            }
+            else
+            {
+                layerTypeCount[layerType] = 1;
+            }
+        }
+        
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.OccupancyNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputSize", Architecture.InputSize },
+                { "OutputSize", Architecture.OutputSize },
+                { "IncludesTemporalData", _includeTemporalData },
+                { "HistoryWindowSize", _historyWindowSize },
+                { "LayerCount", Layers.Count },
+                { "LayerTypes", layerTypeCount },
+                { "TotalParameters", GetParameterCount() },
+                { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+    
+    /// <summary>
+    /// Serializes network-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method saves occupancy network-specific data to the binary stream,
+    /// such as temporal configuration settings.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method saves special information about your
+    /// occupancy detection network to a file. This includes settings like whether
+    /// it analyzes patterns over time and how many past readings it considers.
+    /// Saving this information allows you to later reload the network exactly
+    /// as it was configured.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Save temporal configuration
+        writer.Write(_includeTemporalData);
+        writer.Write(_historyWindowSize);
+        
+        // Save any internal sensor history if present
+        writer.Write(_internalSensorHistory.Count);
+        
+        foreach (var reading in _internalSensorHistory)
+        {
+            writer.Write(reading.Length);
+            for (int i = 0; i < reading.Length; i++)
+            {
+                writer.Write(Convert.ToDouble(reading[i]));
+            }
         }
     }
 
     /// <summary>
-    /// Deserializes the neural network from a binary stream.
+    /// Deserializes network-specific data from a binary reader.
     /// </summary>
-    /// <param name="reader">The binary reader to read the network state from.</param>
+    /// <param name="reader">The binary reader to read from.</param>
     /// <remarks>
     /// <para>
-    /// This method reconstructs the entire state of the neural network, including its architecture
-    /// and learned parameters, from a binary stream.
+    /// This method loads occupancy network-specific data from the binary stream,
+    /// such as temporal configuration settings.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> This is like loading a saved "brain" back into your network. If you've
-    /// previously trained and saved an occupancy detection network, you can use this method to
-    /// recreate that network exactly as it was, complete with all its learned knowledge about
-    /// occupancy patterns. It's like giving the network back its memories and experience.
+    /// <b>For Beginners:</b> This method loads the previously saved special information
+    /// about your occupancy detection network from a file. It restores settings like
+    /// whether the network analyzes patterns over time and how many past readings it 
+    /// considers. This allows you to continue using a network exactly where you left off,
+    /// with all its settings and internal state intact.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        SerializationValidator.ValidateReader(reader, nameof(OccupancyNeuralNetwork<T>));
-
+        // Load temporal configuration
         _includeTemporalData = reader.ReadBoolean();
         _historyWindowSize = reader.ReadInt32();
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
+        
+        // Initialize sensor history queue
+        _internalSensorHistory = new Queue<Vector<T>>(_historyWindowSize);
+        
+        // Load any saved sensor history
+        int historyCount = reader.ReadInt32();
+        
+        for (int h = 0; h < historyCount; h++)
         {
-            string layerTypeName = reader.ReadString();
-            SerializationValidator.ValidateLayerTypeName(layerTypeName);
-
-            Type? layerType = Type.GetType(layerTypeName);
-            SerializationValidator.ValidateLayerTypeExists(layerTypeName, layerType, nameof(OccupancyNeuralNetwork<T>));
-
-            try
+            int readingLength = reader.ReadInt32();
+            var reading = new Vector<T>(readingLength);
+            
+            for (int i = 0; i < readingLength; i++)
             {
-                ILayer<T> layer = (ILayer<T>)Activator.CreateInstance(layerType!)!;
-                layer.Deserialize(reader);
-                Layers.Add(layer);
+                reading[i] = NumOps.FromDouble(reader.ReadDouble());
             }
-            catch (Exception ex) when (ex is not SerializationException)
-            {
-                throw new SerializationException(
-                    $"Failed to instantiate or deserialize layer of type {layerTypeName}",
-                    nameof(OccupancyNeuralNetwork<T>),
-                    "Deserialize",
-                    ex);
-            }
+            
+            _internalSensorHistory.Enqueue(reading);
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the OccupancyNeuralNetwork with the same architecture and temporal configuration.
+    /// </summary>
+    /// <returns>A new instance of the occupancy neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new occupancy neural network with the same architecture and temporal
+    /// data processing configuration as the current instance. The new instance starts with fresh layers
+    /// and an empty sensor history buffer, making it useful for creating multiple networks with identical
+    /// configurations or for resetting a network while preserving its structure.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This creates a brand new occupancy detection network with the same settings.
+    /// 
+    /// Think of it like creating a copy of your current network's blueprint:
+    /// - It has the same structure (layers and neurons)
+    /// - It uses the same approach to time-based analysis (if enabled)
+    /// - It looks at the same number of past readings when analyzing patterns
+    /// 
+    /// However, the new network starts fresh with:
+    /// - Newly initialized weights and parameters
+    /// - An empty history buffer (no past sensor readings)
+    /// 
+    /// This is useful when you want to start over with a clean network that has
+    /// the same design but hasn't learned anything yet, or when you need multiple
+    /// identical networks for different spaces or comparison purposes.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new OccupancyNeuralNetwork<T>(
+            Architecture, 
+            _includeTemporalData, 
+            _historyWindowSize);
     }
 }

@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// affect performance.
 /// </para>
 /// </remarks>
-public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
+public class ConfusionMatrixFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the confusion matrix fit detector.
@@ -27,6 +27,8 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// different levels of model fit.
     /// </remarks>
     private readonly ConfusionMatrixFitDetectorOptions _options;
+
+    private ConfusionMatrix<T> _confusionMatrix;
 
     /// <summary>
     /// Initializes a new instance of the ConfusionMatrixFitDetector class.
@@ -50,6 +52,7 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     public ConfusionMatrixFitDetector(ConfusionMatrixFitDetectorOptions options)
     {
         _options = options ?? new ConfusionMatrixFitDetectorOptions();
+        _confusionMatrix = new ConfusionMatrix<T>(NumOps.Zero, NumOps.Zero, NumOps.Zero, NumOps.Zero);
     }
 
     /// <summary>
@@ -71,7 +74,7 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -105,16 +108,18 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var confusionMatrix = CalculateConfusionMatrix(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
-        var metric = CalculatePrimaryMetric(confusionMatrix);
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
+        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
+        _confusionMatrix = CalculateConfusionMatrix(actual, predicted);
+        var metric = CalculatePrimaryMetric(_confusionMatrix);
 
-        if (_numOps.GreaterThanOrEquals(metric, _numOps.FromDouble(_options.GoodFitThreshold)))
+        if (NumOps.GreaterThanOrEquals(metric, NumOps.FromDouble(_options.GoodFitThreshold)))
         {
             return FitType.GoodFit;
         }
-        else if (_numOps.GreaterThanOrEquals(metric, _numOps.FromDouble(_options.ModerateFitThreshold)))
+        else if (NumOps.GreaterThanOrEquals(metric, NumOps.FromDouble(_options.ModerateFitThreshold)))
         {
             return FitType.Moderate;
         }
@@ -141,19 +146,18 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// to a value between 0 and 1, with higher values indicating greater confidence.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var confusionMatrix = CalculateConfusionMatrix(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
-        var metric = CalculatePrimaryMetric(confusionMatrix);
+        var metric = CalculatePrimaryMetric(_confusionMatrix);
 
         // Normalize the metric to a 0-1 range
-        var normalizedMetric = _numOps.Divide(
-            _numOps.Subtract(metric, _numOps.FromDouble(_options.ModerateFitThreshold)),
-            _numOps.FromDouble(_options.GoodFitThreshold - _options.ModerateFitThreshold)
+        var normalizedMetric = NumOps.Divide(
+            NumOps.Subtract(metric, NumOps.FromDouble(_options.ModerateFitThreshold)),
+            NumOps.FromDouble(_options.GoodFitThreshold - _options.ModerateFitThreshold)
         );
 
-        var lessThan = _numOps.LessThan(normalizedMetric, _numOps.One) ? normalizedMetric : _numOps.One;
-        return _numOps.GreaterThan(lessThan, _numOps.Zero) ? lessThan : _numOps.Zero;
+        var lessThan = NumOps.LessThan(normalizedMetric, NumOps.One) ? normalizedMetric : NumOps.One;
+        return NumOps.GreaterThan(lessThan, NumOps.Zero) ? lessThan : NumOps.Zero;
     }
 
     /// <summary>
@@ -180,10 +184,9 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// the other in your dataset. If detected, it provides specific recommendations for addressing this issue.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
-        var confusionMatrix = CalculateConfusionMatrix(evaluationData.ModelStats.Actual, evaluationData.ModelStats.Predicted);
 
         switch (fitType)
         {
@@ -203,7 +206,7 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
                 break;
         }
 
-        if (IsClassImbalanced(confusionMatrix))
+        if (IsClassImbalanced(_confusionMatrix))
         {
             recommendations.Add("The dataset appears to be imbalanced. Consider using techniques like oversampling, undersampling, or SMOTE to address this issue.");
         }
@@ -235,7 +238,7 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// </remarks>
     private ConfusionMatrix<T> CalculateConfusionMatrix(Vector<T> actual, Vector<T> predicted)
     {
-        return StatisticsHelper<T>.CalculateConfusionMatrix(actual, predicted, _numOps.FromDouble(_options.ConfidenceThreshold));
+        return StatisticsHelper<T>.CalculateConfusionMatrix(actual, predicted, NumOps.FromDouble(_options.ConfidenceThreshold));
     }
 
     /// <summary>
@@ -296,12 +299,12 @@ public class ConfusionMatrixFitDetector<T> : FitDetectorBase<T>
     /// </remarks>
     private bool IsClassImbalanced(ConfusionMatrix<T> confusionMatrix)
     {
-        T totalSamples = _numOps.Add(_numOps.Add(confusionMatrix.TruePositives, confusionMatrix.FalsePositives),
-                                     _numOps.Add(confusionMatrix.TrueNegatives, confusionMatrix.FalseNegatives));
-        T positiveRatio = _numOps.Divide(_numOps.Add(confusionMatrix.TruePositives, confusionMatrix.FalseNegatives), totalSamples);
-        T negativeRatio = _numOps.Divide(_numOps.Add(confusionMatrix.TrueNegatives, confusionMatrix.FalsePositives), totalSamples);
+        T totalSamples = NumOps.Add(NumOps.Add(confusionMatrix.TruePositives, confusionMatrix.FalsePositives),
+                                     NumOps.Add(confusionMatrix.TrueNegatives, confusionMatrix.FalseNegatives));
+        T positiveRatio = NumOps.Divide(NumOps.Add(confusionMatrix.TruePositives, confusionMatrix.FalseNegatives), totalSamples);
+        T negativeRatio = NumOps.Divide(NumOps.Add(confusionMatrix.TrueNegatives, confusionMatrix.FalsePositives), totalSamples);
 
-        return _numOps.LessThan(positiveRatio, _numOps.FromDouble(_options.ClassImbalanceThreshold)) ||
-               _numOps.LessThan(negativeRatio, _numOps.FromDouble(_options.ClassImbalanceThreshold));
+        return NumOps.LessThan(positiveRatio, NumOps.FromDouble(_options.ClassImbalanceThreshold)) ||
+               NumOps.LessThan(negativeRatio, NumOps.FromDouble(_options.ClassImbalanceThreshold));
     }
 }

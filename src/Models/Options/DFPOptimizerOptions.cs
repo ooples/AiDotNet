@@ -17,7 +17,7 @@ namespace AiDotNet.Models.Options;
 /// to plan a more efficient route to the top of the mountain. This typically means your model can learn
 /// faster and more accurately, especially for complex problems.</para>
 /// </remarks>
-public class DFPOptimizerOptions : GradientBasedOptimizerOptions
+public class DFPOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the initial learning rate for the optimization process.

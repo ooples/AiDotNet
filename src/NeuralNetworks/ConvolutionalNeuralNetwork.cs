@@ -23,6 +23,34 @@ namespace AiDotNet.NeuralNetworks;
 public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     /// <summary>
+    /// The loss function used to calculate the error between predicted and expected outputs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This function measures how well the network is performing and guides the learning process.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Think of this as the scorekeeper for the network. It tells the network
+    /// how far off its predictions are from the correct answers.
+    /// </para>
+    /// </remarks>
+    private ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// The optimization algorithm used to update the network's parameters during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer determines how the network's internal values are adjusted based on the calculated error.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like the network's learning strategy. It decides how to adjust
+    /// the network's settings to improve its performance over time.
+    /// </para>
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
     /// Initializes a new instance of the ConvolutionalNeuralNetwork class.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
@@ -39,9 +67,18 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// constructor will raise an error to let you know.
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public ConvolutionalNeuralNetwork(
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0) : base(architecture, maxGradNorm)
     {
         ArchitectureValidator.ValidateInputType(architecture, InputType.ThreeDimensional, nameof(ConvolutionalNeuralNetwork<T>));
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        InitializeLayers();
     }
 
     /// <summary>
@@ -73,42 +110,6 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultCNNLayers(Architecture));
         }
-    }
-
-    /// <summary>
-    /// Makes a prediction using the neural network based on the provided input vector.
-    /// </summary>
-    /// <param name="input">The input vector containing the data to process.</param>
-    /// <returns>A vector containing the network's prediction.</returns>
-    /// <exception cref="VectorLengthMismatchException">Thrown when the input vector length doesn't match the expected input dimensions.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method converts the input vector to a tensor with the appropriate shape,
-    /// processes it through the network, and returns the result as a vector.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is the main method you'll use to get predictions from your CNN. 
-    /// You provide your input data (like an image) as a flat list of numbers (a vector), and this 
-    /// method reshapes it into the proper 3D format, runs it through the neural network, and gives 
-    /// you back the prediction results (also as a flat list). The method checks that your input 
-    /// has the correct number of values before processing.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        // Convert the input Vector to a Tensor with the correct shape
-        var inputShape = Architecture.GetInputShape();
-    
-        // Validate that the input vector length matches the expected shape
-        VectorValidator.ValidateLengthForShape(input, inputShape, nameof(ConvolutionalNeuralNetwork<T>), "Predict");
-
-        var inputTensor = new Tensor<T>(inputShape, input);
-
-        // Perform forward pass
-        var output = Forward(inputTensor);
-
-        // Flatten the output Tensor to a Vector
-        return new Vector<T>([.. output]);
     }
 
     /// <summary>
@@ -205,111 +206,203 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Saves the neural network's state to a binary stream.
+    /// Makes a prediction using the convolutional neural network for the given input.
     /// </summary>
-    /// <param name="writer">The binary writer to write the network state to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
+    /// <param name="input">The input tensor to make a prediction for.</param>
+    /// <returns>The predicted output tensor.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the number of layers and the state of each layer.
-    /// It allows you to save a trained model for later use without retraining.
+    /// This method performs a forward pass through the network to generate a prediction.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> Training a neural network can take a lot of time and computing power. 
-    /// This method allows you to save your trained network to a file so you can use it later 
-    /// without having to train it again. It's like saving your progress in a video game - you 
-    /// don't want to start from the beginning every time you play. The method saves all the 
-    /// network's learned knowledge and structure.
+    /// <b>For Beginners:</b> This is like asking the network to recognize an image. You give it 
+    /// the image data, and it processes it through all its layers to give you its best guess 
+    /// about what's in the image.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        SerializationValidator.ValidateWriter(writer, nameof(ConvolutionalNeuralNetwork<T>));
-
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
-        {
-            string? layerTypeName = layer.GetType().FullName;
-            SerializationValidator.ValidateLayerTypeName(layerTypeName);
-            writer.Write(layerTypeName!);
-            layer.Serialize(writer);
-        }
+        return Forward(input);
     }
 
     /// <summary>
-    /// Loads the neural network's state from a binary stream.
+    /// Trains the convolutional neural network using the provided input and expected output.
     /// </summary>
-    /// <param name="reader">The binary reader to read the network state from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when there's an issue with layer type information.</exception>
-    /// <exception cref="SerializationException">Thrown when there's an error instantiating or deserializing a layer.</exception>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
     /// <remarks>
     /// <para>
-    /// This method loads the number of layers and reconstructs each layer from the saved state.
-    /// It allows you to load a previously trained model without retraining.
+    /// This method performs one training iteration, including forward pass, loss calculation,
+    /// backward pass, and parameter update.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> This method is like opening a saved file in a program. It reads a file 
-    /// containing your previously trained neural network and rebuilds it exactly as it was when you 
-    /// saved it. This is extremely useful because training neural networks can take hours or even days. 
-    /// With this method, you can save a trained network and reload it whenever you need to use it, 
-    /// without having to train it again from scratch. Think of it like loading a saved game instead 
-    /// of starting a new one.
+    /// <b>For Beginners:</b> This is how the network learns. You show it an image (input) and 
+    /// tell it what should be in that image (expected output). The network makes a guess, 
+    /// compares it to the correct answer, and then adjusts its internal settings to do better next time.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        SerializationValidator.ValidateReader(reader, nameof(ConvolutionalNeuralNetwork<T>));
+        // Forward pass
+        var prediction = Predict(input);
 
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
+        // Calculate output gradient
+        var outputGradient = CalculateOutputGradient(prediction, expectedOutput);
 
-        for (int i = 0; i < layerCount; i++)
+        // Convert output gradient back to a tensor
+        var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+
+        // Backpropagation
+        var gradients = new List<Tensor<T>>();
+        var currentGradient = outputGradientTensor;
+        for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            string layerTypeName = reader.ReadString();
-            SerializationValidator.ValidateLayerTypeName(layerTypeName);
-
-            Type? layerType = Type.GetType(layerTypeName);
-            SerializationValidator.ValidateLayerTypeExists(layerTypeName, layerType, nameof(ConvolutionalNeuralNetwork<T>));
-
-            try
-            {
-                ILayer<T> layer = (ILayer<T>)Activator.CreateInstance(layerType!)!;
-                layer.Deserialize(reader);
-                Layers.Add(layer);
-            }
-            catch (Exception ex) when (ex is not SerializationException)
-            {
-                throw new SerializationException(
-                    $"Failed to instantiate or deserialize layer of type {layerTypeName}",
-                    nameof(ConvolutionalNeuralNetwork<T>),
-                    "Deserialize",
-                    ex);
-            }
+            currentGradient = Layers[i].Backward(currentGradient);
+            gradients.Insert(0, currentGradient);
         }
+
+        // Update parameters
+        UpdateParameters(gradients);
     }
 
     /// <summary>
-    /// Gets the total number of trainable parameters in the network.
+    /// Updates the parameters of the network based on the calculated gradients.
     /// </summary>
-    /// <returns>The total number of parameters across all layers.</returns>
+    /// <param name="gradients">A list of tensors containing the gradients for each layer.</param>
     /// <remarks>
     /// <para>
-    /// This count includes weights and biases from all layers in the network.
-    /// The parameter count is useful for understanding the complexity of the model.
+    /// This method applies gradient clipping to prevent exploding gradients and then uses the optimizer
+    /// to update the parameters of each layer in the network.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> Neural networks learn by adjusting thousands or even millions of internal 
-    /// values called "parameters." This method tells you how many parameters your network has in total. 
-    /// Think of parameters like the individual knobs and dials that the network can adjust to improve 
-    /// its predictions. More parameters generally mean the network can learn more complex patterns, 
-    /// but also requires more data to train effectively and more memory to store. For example, a simple 
-    /// network might have a few thousand parameters, while advanced image recognition networks can have 
-    /// millions or billions of parameters.
+    /// <b>For Beginners:</b> This is where the network actually learns. After calculating how wrong
+    /// the network was (the gradients), this method carefully adjusts the network's internal settings.
+    /// It first makes sure the adjustments aren't too big (gradient clipping), then uses a smart
+    /// adjustment strategy (the optimizer) to make the network a little bit better at its job.
     /// </para>
     /// </remarks>
-    public override int GetParameterCount()
+    private void UpdateParameters(List<Tensor<T>> gradients)
     {
-        return Layers.Sum(layer => layer.ParameterCount);
+        // Apply gradient clipping
+        ClipGradients(gradients);
+
+        // Use the optimizer to update parameters
+        _optimizer.UpdateParameters(Layers);
+    }
+
+    /// <summary>
+    /// Calculates the gradient of the loss with respect to the network's output.
+    /// </summary>
+    /// <param name="prediction">The predicted output tensor from the network.</param>
+    /// <param name="expectedOutput">The expected output tensor.</param>
+    /// <returns>A vector representing the gradient of the loss with respect to the network's output.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the loss function to compute the derivative of the loss with respect to the
+    /// network's output. It flattens the tensors to vectors before calculation.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is how the network figures out how wrong its guess was. It compares
+    /// the network's prediction to the correct answer and calculates how much it needs to change to
+    /// get closer to the right answer. This "how much to change" is called the gradient, and it's
+    /// used to guide the learning process.
+    /// </para>
+    /// </remarks>
+    private Vector<T> CalculateOutputGradient(Tensor<T> prediction, Tensor<T> expectedOutput)
+    {
+        return _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+    }
+
+    /// <summary>
+    /// Retrieves metadata about the convolutional neural network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method collects and returns various pieces of information about the network's structure and configuration.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like getting a summary of the network's blueprint. It tells you 
+    /// how many layers it has, what types of layers they are, and other important details about how 
+    /// the network is set up.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.ConvolutionalNeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputShape", Architecture.GetInputShape() },
+                { "OutputShape", Layers[Layers.Count - 1].GetOutputShape() },
+                { "LayerCount", Layers.Count },
+                { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes convolutional neural network-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the specific parameters and state of the convolutional neural network to a binary stream.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like saving the network's current state to a file. It records all 
+    /// the important information about the network so you can reload it later exactly as it is now.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+    }
+
+    /// <summary>
+    /// Deserializes convolutional neural network-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the specific parameters and state of the convolutional neural network from a binary stream.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like loading a saved network state from a file. It rebuilds the 
+    /// network exactly as it was when you saved it, including all its learned information.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new instance of the convolutional neural network model.
+    /// </summary>
+    /// <returns>A new instance of the convolutional neural network model with the same configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the convolutional neural network model with the same 
+    /// configuration as the current instance. It is used internally during serialization/deserialization 
+    /// processes to create a fresh instance that can be populated with the serialized data.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method creates a copy of the network structure without copying 
+    /// the learned data. Think of it like making a blank copy of the original network's blueprint - 
+    /// it has the same structure, same learning strategy, and same error measurement, but none of 
+    /// the knowledge that the original network has gained through training. This is primarily 
+    /// used when saving or loading models, creating an empty framework that can later be filled 
+    /// with the saved knowledge from the original network.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new ConvolutionalNeuralNetwork<T>(
+            Architecture,
+            _optimizer,
+            _lossFunction,
+            Convert.ToDouble(MaxGradNorm)
+        );
     }
 }

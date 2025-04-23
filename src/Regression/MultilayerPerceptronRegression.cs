@@ -49,7 +49,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// to get better performance for your specific problem.
     /// </para>
     /// </remarks>
-    private readonly MultilayerPerceptronOptions<T> _options;
+    private readonly MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>> _options;
 
     /// <summary>
     /// The weights connecting the layers of the neural network.
@@ -114,7 +114,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// instead of following a fixed plan regardless of results.
     /// </para>
     /// </remarks>
-    private IOptimizer<T> _optimizer;
+    private IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultilayerPerceptronRegression{T}"/> class with optional custom options and regularization.
@@ -138,11 +138,11 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// but not yet trained on any data.
     /// </para>
     /// </remarks>
-    public MultilayerPerceptronRegression(MultilayerPerceptronOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public MultilayerPerceptronRegression(MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
-        _options = options ?? new MultilayerPerceptronOptions<T>();
-        _optimizer = _options.Optimizer ?? new AdamOptimizer<T>();
+        _options = options ?? new MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>>();
+        _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>();
         _weights = [];
         _biases = [];
 
@@ -287,8 +287,8 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     private (T loss, List<Matrix<T>> weightGradients, List<Vector<T>> biasGradients) ComputeGradients(Matrix<T> X, Vector<T> y)
     {
         int numLayers = _weights.Count;
-        List<Vector<T>> activations = new List<Vector<T>>(numLayers + 1);
-        List<Vector<T>> zs = new List<Vector<T>>(numLayers);
+        var activations = new List<Vector<T>>(numLayers + 1);
+        var zs = new List<Vector<T>>(numLayers);
 
         // Forward pass
         activations.Add(X.Transpose().GetColumn(0));  // Input layer
@@ -357,10 +357,10 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
             Matrix<T> avgWeightGradient = weightGradients[i].Transform((g, _, _) => NumOps.Multiply(g, scaleFactor));
             Vector<T> avgBiasGradient = biasGradients[i].Transform(g => NumOps.Multiply(g, scaleFactor));
 
-            if (_optimizer is IGradientBasedOptimizer<T> gradientOptimizer)
+            if (_optimizer is IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> gradientOptimizer)
             {
-                _weights[i] = gradientOptimizer.UpdateMatrix(_weights[i], avgWeightGradient);
-                _biases[i] = gradientOptimizer.UpdateVector(_biases[i], avgBiasGradient);
+                _weights[i] = gradientOptimizer.UpdateParameters(_weights[i], avgWeightGradient);
+                _biases[i] = gradientOptimizer.UpdateParameters(_biases[i], avgBiasGradient);
             }
             else
             {
@@ -369,8 +369,8 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
             }
 
             // Apply regularization
-            _weights[i] = Regularization.RegularizeMatrix(_weights[i]);
-            _biases[i] = Regularization.RegularizeCoefficients(_biases[i]);
+            _weights[i] = Regularization.Regularize(_weights[i]);
+            _biases[i] = Regularization.Regularize(_biases[i]);
         }
     }
 
@@ -449,28 +449,23 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// <param name="input">The input vector before activation.</param>
     /// <param name="isOutputLayer">Whether the input is for the output layer.</param>
     /// <returns>The vector after applying the activation function.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies either the output layer activation function or the hidden layer activation function to each element
-    /// of the input vector, depending on whether the layer is the output layer or a hidden layer. Activation functions introduce
-    /// non-linearity into the network, enabling it to learn complex patterns.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms the raw calculations using a special function.
-    /// 
-    /// Activation functions:
-    /// - Add non-linearity to the network, allowing it to learn complex patterns
-    /// - Different functions are often used for hidden layers vs. the output layer
-    /// - Common functions include ReLU, sigmoid, and tanh for hidden layers
-    /// - For regression, the output layer often uses a linear function
-    /// 
-    /// It's like applying a filter to the raw calculations, which helps the network
-    /// model relationships that aren't simply straight lines.
-    /// </para>
-    /// </remarks>
     private Vector<T> ApplyActivation(Vector<T> input, bool isOutputLayer)
     {
-        var activationFunc = isOutputLayer ? _options.OutputActivationFunction : _options.HiddenActivationFunction;
-        return input.Transform(x => activationFunc(x));
+        // First check if vector activation is available
+        var vectorActivation = isOutputLayer ? _options.OutputVectorActivation : _options.HiddenVectorActivation;
+        if (vectorActivation != null)
+        {
+            return vectorActivation.Activate(input);
+        }
+
+        // Fall back to scalar activation
+        var activation = isOutputLayer ? _options.OutputActivation : _options.HiddenActivation;
+
+        // Use the existing IdentityActivation if no activation is specified
+        activation ??= new IdentityActivation<T>();
+
+        // Apply scalar activation element-wise to the vector
+        return input.Transform(x => activation.Activate(x));
     }
 
     /// <summary>
@@ -479,27 +474,24 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// <param name="input">The input vector before activation.</param>
     /// <param name="isOutputLayer">Whether the input is for the output layer.</param>
     /// <returns>The vector containing the derivatives of the activation function.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the derivative of either the output layer activation function or the hidden layer activation
-    /// function to each element of the input vector. These derivatives are used during backpropagation to compute how
-    /// changes in the pre-activation values affect the final output.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how sensitive the activation function is to changes.
-    /// 
-    /// The activation derivative:
-    /// - Measures how much the output changes when the input changes slightly
-    /// - Is used during backpropagation to determine how to adjust weights
-    /// - Different activation functions have different derivative patterns
-    /// 
-    /// It's like measuring the slope of the activation function at each point,
-    /// which helps determine how changes to weights will affect the output.
-    /// </para>
-    /// </remarks>
     private Vector<T> ApplyActivationDerivative(Vector<T> input, bool isOutputLayer)
     {
-        var activationFuncDerivative = isOutputLayer ? _options.OutputActivationFunctionDerivative : _options.HiddenActivationFunctionDerivative;
-        return input.Transform(x => activationFuncDerivative(x));
+        // First check if vector activation is available
+        var vectorActivation = isOutputLayer ? _options.OutputVectorActivation : _options.HiddenVectorActivation;
+        if (vectorActivation != null)
+        {
+            // Vector activation derivative returns a vector for the input vector
+            return vectorActivation.Derivative(input).ToVector();
+        }
+
+        // Fall back to scalar activation
+        var activation = isOutputLayer ? _options.OutputActivation : _options.HiddenActivation;
+
+        // Use the existing IdentityActivation if no activation is specified
+        activation ??= new IdentityActivation<T>();
+
+        // Apply scalar activation derivative element-wise to the vector
+        return input.Transform(x => activation.Derivative(x));
     }
 
     /// <summary>
@@ -528,6 +520,12 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private T ComputeLoss(Vector<T> predictions, Vector<T> targets)
     {
+        if (_options.LossFunction != null)
+        {
+            return _options.LossFunction.CalculateLoss(predictions, targets);
+        }
+
+        // Default to MSE if no loss function is specified
         T sumSquaredErrors = predictions.Subtract(targets).Transform(x => NumOps.Multiply(x, x)).Sum();
         return NumOps.Divide(sumSquaredErrors, NumOps.FromDouble(predictions.Length));
     }
@@ -558,7 +556,18 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Vector<T> ComputeOutputLayerDelta(Vector<T> predictions, Vector<T> targets, Vector<T> outputLayerZ)
     {
-        Vector<T> error = predictions.Subtract(targets);
+        Vector<T> error;
+
+        if (_options.LossFunction != null)
+        {
+            error = _options.LossFunction.CalculateDerivative(predictions, targets);
+        }
+        else
+        {
+            // Default to MSE derivative if no loss function is specified
+            error = predictions.Subtract(targets);
+        }
+
         Vector<T> activationDerivative = ApplyActivationDerivative(outputLayerZ, true);
 
         return error.Transform((e, i) => NumOps.Multiply(e, activationDerivative[i]));
@@ -672,7 +681,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         }
 
         // Serialize optimizer
-        writer.Write((int)OptimizerFactory.GetOptimizerType(_optimizer));
+        writer.Write((int)OptimizerFactory<T, Matrix<T>, Vector<T>>.GetOptimizerType(_optimizer));
         byte[] optimizerData = _optimizer.Serialize();
         writer.Write(optimizerData.Length);
         writer.Write(optimizerData);
@@ -756,7 +765,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
         // Deserialize optimizer options
         string optionsJson = reader.ReadString();
-        var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions>(optionsJson);
+        var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions<T, Matrix<T>, Vector<T>>>(optionsJson);
 
         if (options == null)
         {
@@ -764,7 +773,33 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         }
 
         // Create optimizer using factory
-        _optimizer = OptimizerFactory.CreateOptimizer<T>(optimizerType, options);
+        _optimizer = OptimizerFactory<T, Matrix<T>, Vector<T>>.CreateOptimizer(optimizerType, options);
         _optimizer.Deserialize(optimizerData);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the <see cref="MultilayerPerceptronRegression{T}"/> class with the same options and regularization as this instance.
+    /// </summary>
+    /// <returns>A new instance of the <see cref="MultilayerPerceptronRegression{T}"/> class.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new, uninitialized instance of the multilayer perceptron regression model with the same configuration
+    /// as the current instance. It is used for creating copies or clones of the model without copying the learned parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a brand new neural network with the same architecture as this one.
+    /// 
+    /// The new network:
+    /// - Uses the same layer sizes and structure
+    /// - Uses the same activation functions and learning parameters
+    /// - Uses the same regularization approach to prevent overfitting
+    /// - Is uninitialized (not trained yet) with fresh random weights
+    /// 
+    /// It's like creating a duplicate blueprint of the current network structure without copying
+    /// any of the learned knowledge, which is useful for ensemble methods or cross-validation.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new MultilayerPerceptronRegression<T>(_options, Regularization);
     }
 }

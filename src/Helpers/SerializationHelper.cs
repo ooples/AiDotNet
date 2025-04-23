@@ -555,4 +555,29 @@ public static class SerializationHelper<T>
 
         return new Vector<T>(array);
     }
+
+    /// <summary>
+    /// Serializes an interface instance by writing its type name to a BinaryWriter.
+    /// </summary>
+    /// <typeparam name="TInterface">The interface type to serialize.</typeparam>
+    /// <param name="writer">The BinaryWriter to write the type name to.</param>
+    /// <param name="instance">The interface instance to serialize.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the full name of the concrete type implementing the interface.
+    /// If the instance is null, it writes an empty string.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves information about a specific part of your network.
+    /// 
+    /// It writes:
+    /// - The name of the actual type used (if there is one)
+    /// - An empty string if no specific type is used
+    /// 
+    /// This allows you to recreate the exact same setup when you load the network later.
+    /// </para>
+    /// </remarks>
+    public static void SerializeInterface<TInterface>(BinaryWriter writer, TInterface? instance) where TInterface : class
+    {
+        writer.Write(instance?.GetType().FullName ?? string.Empty);
+    }
 }

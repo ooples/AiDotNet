@@ -24,7 +24,7 @@ namespace AiDotNet.FitnessCalculators;
 /// while students working on different projects should sit at least a certain distance apart.
 /// </para>
 /// </remarks>
-public class ContrastiveLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class ContrastiveLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The margin value that defines the minimum distance between dissimilar pairs.
@@ -90,16 +90,16 @@ public class ContrastiveLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// typically won't need to call it directly.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        var (output1, output2) = SplitOutputs(dataSet.Predicted);
-        var (actual1, actual2) = SplitOutputs(dataSet.Actual);
+        var (output1, output2) = SplitOutputs(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted));
+        var (actual1, actual2) = SplitOutputs(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
         T totalLoss = _numOps.Zero;
 
         for (int i = 0; i < output1.Length; i++)
         {
             T similarityLabel = CalculateSimilarityLabel(actual1[i], actual2[i]);
-            T pairLoss = NeuralNetworkHelper<T>.ContrastiveLoss(output1, output2, similarityLabel, _margin);
+            T pairLoss = new ContrastiveLoss<T>(Convert.ToDouble(_margin)).CalculateLoss(output1, output2, similarityLabel);
             totalLoss = _numOps.Add(totalLoss, pairLoss);
         }
 

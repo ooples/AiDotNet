@@ -29,7 +29,7 @@ namespace AiDotNet.Models
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-    public class ModelEvaluationData<T>
+    public class ModelEvaluationData<T, TInput, TOutput>
     {
         /// <summary>
         /// Gets or sets the statistics for the training dataset.
@@ -60,7 +60,7 @@ namespace AiDotNet.Models
         /// generalizable patterns.
         /// </para>
         /// </remarks>
-        public DataSetStats<T> TrainingSet { get; set; } = new();
+        public DataSetStats<T, TInput, TOutput> TrainingSet { get; set; } = new();
         
         /// <summary>
         /// Gets or sets the statistics for the validation dataset.
@@ -91,7 +91,7 @@ namespace AiDotNet.Models
         /// their performance on the validation set to decide which one to use.
         /// </para>
         /// </remarks>
-        public DataSetStats<T> ValidationSet { get; set; } = new();
+        public DataSetStats<T, TInput, TOutput> ValidationSet { get; set; } = new();
         
         /// <summary>
         /// Gets or sets the statistics for the test dataset.
@@ -121,7 +121,7 @@ namespace AiDotNet.Models
         /// to get a true measure of performance without any bias from the development process.
         /// </para>
         /// </remarks>
-        public DataSetStats<T> TestSet { get; set; } = new();
+        public DataSetStats<T, TInput, TOutput> TestSet { get; set; } = new();
         
         /// <summary>
         /// Gets or sets the overall statistics for the model.
@@ -153,6 +153,6 @@ namespace AiDotNet.Models
         /// - Overall complexity measures
         /// </para>
         /// </remarks>
-        public ModelStats<T> ModelStats { get; set; } = ModelStats<T>.Empty();
+        public ModelStats<T, TInput, TOutput> ModelStats { get; set; } = ModelStats<T, TInput, TOutput>.Empty();
     }
 }

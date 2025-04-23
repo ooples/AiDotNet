@@ -26,6 +26,8 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class CapsuleNetwork<T> : NeuralNetworkBase<T>
 {
+    private ILossFunction<T> _lossFunction { get; set; }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="CapsuleNetwork{T}"/> class with the specified architecture.
     /// </summary>
@@ -48,8 +50,11 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
     /// you're just getting everything ready to use.
     /// </para>
     /// </remarks>
-    public CapsuleNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public CapsuleNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : base(architecture)
     {
+        _lossFunction = lossFunction ?? new MarginLoss<T>();
+
+        InitializeLayers();
     }
 
     /// <summary>
@@ -85,39 +90,6 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultCapsuleNetworkLayers(Architecture));
         }
-    }
-
-    /// <summary>
-    /// Makes a prediction using the current state of the Capsule Network.
-    /// </summary>
-    /// <param name="input">The input vector to make a prediction for.</param>
-    /// <returns>The predicted output vector after passing through all layers of the network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method generates a prediction by passing the input vector through each layer of the Capsule Network
-    /// in sequence. Each layer processes the output of the previous layer, transforming the data until it reaches
-    /// the final output layer. The result is a vector representing the network's prediction.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method uses the network to make a prediction based on input data.
-    /// 
-    /// The prediction process works like this:
-    /// - The input data enters the first layer of the network
-    /// - Each layer processes the data and passes it to the next layer
-    /// - The data is transformed as it flows through the network
-    /// - The final layer produces the prediction result
-    /// 
-    /// It's like an assembly line where each station modifies the product until it emerges
-    /// as the finished item at the end.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-        return current;
     }
 
     /// <summary>
@@ -158,103 +130,201 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the Capsule Network to a binary stream.
+    /// Performs a forward pass through the Capsule Network to make a prediction.
     /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a null layer is encountered or a layer type name cannot be determined.</exception>
+    /// <param name="input">The input tensor to the network.</param>
+    /// <returns>The output tensor (prediction) from the network.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the state of the Capsule Network to a binary stream. It writes the number of layers,
-    /// followed by the type name and serialized state of each layer. This allows the Capsule Network
-    /// to be saved to disk and later restored with its trained parameters intact.
+    /// This method passes the input tensor through each layer of the network in sequence.
+    /// Each layer processes the output from the previous layer (or the input for the first layer)
+    /// and produces an output that becomes the input for the next layer.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the network to a file.
+    /// <para><b>For Beginners:</b> This is like passing a piece of information through a series of processing stations.
     /// 
-    /// When saving the Capsule Network:
-    /// - First, it saves how many layers the network has
-    /// - Then, for each layer, it saves:
-    ///   - What type of layer it is (like "Convolution" or "Capsule")
-    ///   - All the values and settings for that layer
+    /// Imagine an assembly line:
+    /// - The input is the raw material
+    /// - Each layer is a workstation that modifies or processes the material
+    /// - The output is the final product after it has passed through all stations
     /// 
-    /// This is like taking a complete snapshot of the network so you can reload it later
-    /// without having to train it all over again.
+    /// In a Capsule Network, this process preserves and processes spatial relationships,
+    /// allowing the network to understand complex structures in the input data.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(Layers.Count);
+        Tensor<T> current = input;
         foreach (var layer in Layers)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
-
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
-
-            writer.Write(fullName);
-            layer.Serialize(writer);
+            current = layer.Forward(current);
         }
+
+        return current;
     }
 
     /// <summary>
-    /// Deserializes the Capsule Network from a binary stream.
+    /// Trains the Capsule Network using the provided input and expected output.
     /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer type information is invalid or instance creation fails.</exception>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
     /// <remarks>
     /// <para>
-    /// This method restores the state of the Capsule Network from a binary stream. It reads the number of layers,
-    /// followed by the type name and serialized state of each layer. This allows a previously saved
-    /// Capsule Network to be restored from disk with all its trained parameters.
+    /// This method performs one training iteration:
+    /// 1. It makes a prediction using the current network parameters.
+    /// 2. Calculates the loss between the prediction and the expected output.
+    /// 3. Computes the gradient of the loss with respect to the network parameters.
+    /// 4. Updates the network parameters based on the computed gradient.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved network from a file.
+    /// <para><b>For Beginners:</b> This is like a practice session where the network learns from its mistakes.
     /// 
-    /// When loading the Capsule Network:
-    /// - First, it reads how many layers the network had
-    /// - Then, for each layer, it:
-    ///   - Reads what type of layer it was
-    ///   - Creates a new layer of that type
-    ///   - Loads all the values and settings for that layer
-    ///   - Adds the layer to the network
+    /// The process is similar to learning a new skill:
+    /// 1. You try to perform the task (make a prediction)
+    /// 2. You see how far off you were (calculate the loss)
+    /// 3. You figure out what you need to change to do better (compute the gradient)
+    /// 4. You adjust your approach based on what you learned (update parameters)
     /// 
-    /// This is like restoring a complete snapshot of your network, bringing back
-    /// all the patterns it had learned before.
+    /// This process is repeated many times with different inputs to improve the network's performance.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
+        // Forward pass
+        var prediction = Predict(input);
 
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
+        // Calculate loss
+        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
-        for (int i = 0; i < layerCount; i++)
+        // Backward pass
+        var gradient = CalculateGradient(loss);
+
+        // Update parameters
+        UpdateParameters(gradient);
+    }
+
+    /// <summary>
+    /// Retrieves metadata about the Capsule Network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method collects and returns various pieces of information about the network's structure and configuration.
+    /// It includes details such as the input and output dimensions, the number of layers, and the types of layers used.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a summary or overview of the network's structure.
+    /// 
+    /// Think of it as a quick reference guide that tells you:
+    /// - What kind of network it is (a Capsule Network)
+    /// - How big the input and output are
+    /// - How many layers the network has
+    /// - What types of layers are used
+    /// 
+    /// This information is useful for understanding the network's capabilities and for saving/loading the network.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
+            ModelType = ModelType.CapsuleNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputDimension", Layers[0].GetInputShape()[0] },
+                { "OutputDimension", Layers[Layers.Count - 1].GetOutputShape()[0] },
+                { "LayerCount", Layers.Count },
+                { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
 
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
+    /// <summary>
+    /// Serializes Capsule Network-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// This method saves the loss function used by the network, allowing it to be reconstructed when the network is deserialized.
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
+    }
 
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
+    /// <summary>
+    /// Deserializes Capsule Network-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// This method loads the loss function used by the network. If deserialization fails, it defaults to using a MarginLoss.
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ?? new MarginLoss<T>();
+    }
 
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
+    /// <summary>
+    /// Calculates the gradient of the loss with respect to the network parameters.
+    /// </summary>
+    /// <param name="loss">The scalar loss value.</param>
+    /// <returns>A vector containing the gradients for all network parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs a backward pass through the network, computing gradients for each layer.
+    /// It starts from the output layer and moves backwards, accumulating gradients along the way.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like tracing back through the network to see how each part contributed to the final result.
+    /// 
+    /// Imagine you're trying to improve a recipe:
+    /// - You start with how the final dish turned out (the loss)
+    /// - You work backwards through each step of the recipe
+    /// - At each step, you figure out how changing that step would affect the final result
+    /// - You collect all these potential changes (gradients) to know how to improve the recipe
+    /// 
+    /// In a neural network, this process helps determine how to adjust each parameter to reduce the loss.
+    /// </para>
+    /// </remarks>
+    private Vector<T> CalculateGradient(T loss)
+    {
+        List<Tensor<T>> gradients = new List<Tensor<T>>();
 
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+        // Backward pass through all layers
+        Tensor<T> currentGradient = new Tensor<T>([1], new Vector<T>(Enumerable.Repeat(loss, 1)));
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            currentGradient = Layers[i].Backward(currentGradient);
+            gradients.Insert(0, currentGradient);
         }
+
+        // Flatten all gradients into a single vector
+        return new Vector<T>([.. gradients.SelectMany(g => g.ToVector())]);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the capsule network model.
+    /// </summary>
+    /// <returns>A new instance of the capsule network model with the same configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the capsule network model with the same configuration as the current instance.
+    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
+    /// with the serialized data. The new instance will have the same architecture and loss function as the original.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a copy of the network structure without copying the learned data.
+    /// 
+    /// Think of it like creating a blueprint of the capsule network:
+    /// - It copies the same overall design (architecture)
+    /// - It uses the same loss function to measure performance
+    /// - But it doesn't copy any of the learned values or weights
+    /// 
+    /// This is primarily used when saving or loading models, creating a framework that the saved parameters
+    /// can be loaded into later. It's like creating an empty duplicate of the network's structure
+    /// that can later be filled with the knowledge from the original network.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new CapsuleNetwork<T>(
+            Architecture,
+            _lossFunction
+        );
     }
 }

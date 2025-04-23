@@ -16,7 +16,7 @@ namespace AiDotNet.Models.Options;
 /// ("mutations"), and repeat this process over multiple "generations" until you find an excellent solution.
 /// It's a way to solve problems by mimicking how nature evolves species over time.</para>
 /// </remarks>
-public class GeneticAlgorithmOptimizerOptions : OptimizationAlgorithmOptions
+public class GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the maximum number of generations (iterations) the genetic algorithm will run.

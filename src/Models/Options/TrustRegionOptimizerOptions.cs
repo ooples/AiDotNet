@@ -37,7 +37,7 @@ namespace AiDotNet.Models.Options;
 /// This class lets you configure how the Trust Region algorithm behaves.
 /// </para>
 /// </remarks>
-public class TrustRegionOptimizerOptions : GradientBasedOptimizerOptions
+public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the initial radius of the trust region.

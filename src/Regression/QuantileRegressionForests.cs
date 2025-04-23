@@ -82,7 +82,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    public QuantileRegressionForests(QuantileRegressionForestsOptions options, IRegularization<T>? regularization = null)
+    public QuantileRegressionForests(QuantileRegressionForestsOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options;
@@ -170,7 +170,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
             throw new ArgumentException("Quantile must be between 0 and 1", nameof(quantile));
         }
 
-        var regularizedInput = Regularization.RegularizeMatrix(input);
+        var regularizedInput = Regularization.Regularize(input);
         var predictionTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.Predict(regularizedInput)));
         var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks, _options.MaxDegreeOfParallelism);
 
@@ -183,7 +183,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         var quantilePredictions = new Vector<T>(result);
-        return Regularization.RegularizeCoefficients(quantilePredictions);
+        return Regularization.Regularize(quantilePredictions);
     }
 
     /// <summary>
@@ -285,9 +285,9 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
     /// variables are most influential in making predictions.
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        var metadata = new ModelMetadata<T>
+        var metadata = new ModelMetaData<T>
         {
             ModelType = ModelType.QuantileRegressionForests,
             AdditionalInfo = new Dictionary<string, object>
@@ -405,5 +405,61 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Quantile Regression Forests model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Quantile Regression Forests model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current model, including its configuration options, 
+    /// trained trees, feature importances, and regularization settings. The new instance is completely 
+    /// independent of the original, allowing modifications without affecting the original model.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method creates an exact copy of your trained model.
+    /// 
+    /// Think of it like making a perfect clone of your forest model:
+    /// - It copies all the configuration settings (number of trees, max depth, etc.)
+    /// - It duplicates all the individual decision trees that make up the forest
+    /// - It preserves the feature importance values that show which inputs matter most
+    /// - It maintains all regularization settings that help prevent overfitting
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before further modifying the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        var newModel = new QuantileRegressionForests<T>(_options, Regularization);
+        
+        // Copy feature importances if they exist
+        if (FeatureImportances != null)
+        {
+            newModel.FeatureImportances = new Vector<T>([.. FeatureImportances]);
+        }
+        
+        // Deep copy all the trees
+        newModel._trees = new List<DecisionTreeRegression<T>>(_trees.Count);
+        foreach (var tree in _trees)
+        {
+            // Create a deep copy of each tree by serializing and deserializing
+            var treeData = tree.Serialize();
+            var treeCopy = new DecisionTreeRegression<T>(new DecisionTreeOptions(), Regularization);
+            treeCopy.Deserialize(treeData);
+            newModel._trees.Add(treeCopy);
+        }
+        
+        // Initialize the random number generator with the same seed if available
+        if (_options.Seed.HasValue)
+        {
+            newModel._random = new Random(_options.Seed.Value);
+        }
+        
+        return newModel;
     }
 }

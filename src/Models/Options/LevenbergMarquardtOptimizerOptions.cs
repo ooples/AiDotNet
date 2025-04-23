@@ -31,7 +31,7 @@
 /// This class allows you to configure how this damping behaves during training.
 /// </para>
 /// </remarks>
-public class LevenbergMarquardtOptimizerOptions<T> : GradientBasedOptimizerOptions
+public class LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the starting value for the damping factor used in the algorithm.

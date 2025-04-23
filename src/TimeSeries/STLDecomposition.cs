@@ -60,61 +60,6 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the STL decomposition model using the provided input data and target values.
-    /// </summary>
-    /// <param name="x">The input features matrix (not used in STL decomposition).</param>
-    /// <param name="y">The time series data to decompose.</param>
-    /// <exception cref="ArgumentException">Thrown when the time series is too short for the specified seasonal period.</exception>
-    /// <remarks>
-    /// <para>
-    /// The training process decomposes the time series into trend, seasonal, and residual components
-    /// using one of three algorithms: standard, robust, or fast.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Training this model means breaking down your time series into three parts:
-    /// 
-    /// 1. Trend: The long-term direction of your data (going up, down, or staying flat)
-    /// 2. Seasonal: Regular patterns that repeat at fixed intervals
-    /// 3. Residual: What's left after removing trend and seasonal components
-    /// 
-    /// The model offers three different methods to do this:
-    /// - Standard: The classic STL algorithm that works well for most data
-    /// - Robust: Better handles outliers (unusual data points) but takes longer
-    /// - Fast: A quicker version that may be less precise but works well for large datasets
-    /// 
-    /// After training, you can access each component separately to better understand your data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        if (y.Length < _stlOptions.SeasonalPeriod * 2)
-        {
-            throw new ArgumentException("Time series is too short for the specified seasonal period.");
-        }
-
-        int n = y.Length;
-        _trend = new Vector<T>(n);
-        _seasonal = new Vector<T>(n);
-        _residual = new Vector<T>(n);
-
-        switch (_stlOptions.AlgorithmType)
-        {
-            case STLAlgorithmType.Standard:
-                PerformStandardSTL(y);
-                break;
-            case STLAlgorithmType.Robust:
-                PerformRobustSTL(y);
-                break;
-            case STLAlgorithmType.Fast:
-                PerformFastSTL(y);
-                break;
-            default:
-                throw new ArgumentException("Invalid STL algorithm type.");
-        }
-    }
-
-    /// <summary>
     /// Performs the standard STL decomposition algorithm.
     /// </summary>
     /// <param name="y">The time series data to decompose.</param>
@@ -1022,5 +967,784 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         _trend = SerializationHelper<T>.DeserializeVector(reader);
         _seasonal = SerializationHelper<T>.DeserializeVector(reader);
         _residual = SerializationHelper<T>.DeserializeVector(reader);
+    }
+
+    /// <summary>
+    /// Resets the model to its initial state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears all decomposed components and returns the model to its initial state,
+    /// as if it had just been created with the same options but not yet trained.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Resetting a model is like erasing the results of your analysis while keeping the settings.
+    /// 
+    /// This is useful when you want to:
+    /// - Reapply the decomposition to different data
+    /// - Try different algorithm types on the same data
+    /// - Compare results with different settings
+    /// - Start fresh after experimenting
+    /// 
+    /// For example, you might reset the model after analyzing monthly data to then analyze
+    /// daily data with the same settings, or to compare the results of standard versus robust
+    /// decomposition approaches on the same dataset.
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        _trend = Vector<T>.Empty();
+        _seasonal = Vector<T>.Empty();
+        _residual = Vector<T>.Empty();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the STL decomposition model with the same options.
+    /// </summary>
+    /// <returns>A new STL decomposition model instance with the same configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the STL decomposition model with the same configuration options
+    /// as the current instance. The new instance is not trained and will need to be trained on data.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method creates a fresh copy of your model with the same settings but no results.
+    /// 
+    /// It's useful when you want to:
+    /// - Apply the same decomposition approach to multiple datasets
+    /// - Create multiple variations of the model with slight modifications
+    /// - Share your model configuration with others
+    /// - Preserve your original settings while experimenting with new options
+    /// 
+    /// Think of it like copying a recipe before making modifications - you keep the original
+    /// intact while creating a new version that you can change.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a new instance with the same options
+        return new STLDecomposition<T>(_stlOptions);
+    }
+
+    /// <summary>
+    /// Gets metadata about the model, including its type, configuration, and information about the decomposed components.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed metadata about the model, including its type, configuration options,
+    /// and information about the decomposed components. This metadata can be used for model selection,
+    /// comparison, and documentation.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method provides a summary of your model's configuration and what it has learned.
+    /// 
+    /// It includes information like:
+    /// - The type of model (STL Decomposition)
+    /// - The algorithm used (Standard, Robust, or Fast)
+    /// - The seasonal period and window sizes
+    /// - Details about the decomposed components (sizes, statistics)
+    /// 
+    /// This metadata is useful for:
+    /// - Comparing different decomposition approaches
+    /// - Documenting your analysis process
+    /// - Understanding what the model has extracted from your data
+    /// - Sharing model information with others
+    /// 
+    /// Think of it like getting a detailed report card for your decomposition analysis.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.STLDecomposition,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include configuration options
+                { "AlgorithmType", _stlOptions.AlgorithmType },
+                { "SeasonalPeriod", _stlOptions.SeasonalPeriod },
+                { "TrendWindowSize", _stlOptions.TrendWindowSize },
+                { "SeasonalLoessWindow", _stlOptions.SeasonalLoessWindow },
+                { "TrendLoessWindow", _stlOptions.TrendLoessWindow },
+                { "LowPassFilterWindowSize", _stlOptions.LowPassFilterWindowSize },
+                { "RobustIterations", _stlOptions.RobustIterations },
+            
+                // Include information about decomposed components
+                { "ComponentsAvailable", _trend != null && _seasonal != null && _residual != null },
+                { "ComponentsLength", _trend?.Length ?? 0 },
+                { "SeasonalStrength", Convert.ToDouble(CalculateSeasonalStrength()) },
+                { "TrendStrength", Convert.ToDouble(CalculateTrendStrength()) }
+            },
+            ModelData = this.Serialize()
+        };
+    
+        return metadata;
+    }
+
+    /// <summary>
+    /// Calculates the seasonal strength of the time series.
+    /// </summary>
+    /// <returns>A measure of how strong the seasonal pattern is (between 0 and 1).</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Seasonal strength measures how much of the variation in your data is explained by
+    /// seasonal patterns. A value close to 1 means seasonality is very important, while
+    /// a value close to 0 means seasonality contributes little to the overall pattern.
+    /// 
+    /// For example:
+    /// - Retail sales data might have high seasonal strength (0.8+) due to holiday patterns
+    /// - Stock market data might have low seasonal strength (0.2-) as it's influenced more by other factors
+    /// 
+    /// This metric helps you understand how important the seasonal component is in your data.
+    /// </para>
+    /// </remarks>
+    private T CalculateSeasonalStrength()
+    {
+        if (_seasonal == null || _residual == null)
+            return NumOps.Zero;
+        
+        Vector<T> seasonalPlusResidual = new Vector<T>(_seasonal.Length);
+        for (int i = 0; i < _seasonal.Length; i++)
+        {
+            seasonalPlusResidual[i] = NumOps.Add(_seasonal[i], _residual[i]);
+        }
+    
+        T varSeasonal = StatisticsHelper<T>.CalculateVariance(_seasonal);
+        T varSeasonalPlusResidual = StatisticsHelper<T>.CalculateVariance(seasonalPlusResidual);
+    
+        if (NumOps.LessThanOrEquals(varSeasonalPlusResidual, NumOps.Zero))
+            return NumOps.Zero;
+        
+        T strength = NumOps.Subtract(NumOps.One, NumOps.Divide(StatisticsHelper<T>.CalculateVariance(_residual), varSeasonalPlusResidual));
+    
+        // Ensure the value is between 0 and 1
+        if (NumOps.LessThan(strength, NumOps.Zero))
+            return NumOps.Zero;
+        if (NumOps.GreaterThan(strength, NumOps.One))
+            return NumOps.One;
+        
+        return strength;
+    }
+
+    /// <summary>
+    /// Calculates the trend strength of the time series.
+    /// </summary>
+    /// <returns>A measure of how strong the trend pattern is (between 0 and 1).</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Trend strength measures how much of the variation in your data is explained by
+    /// the long-term trend. A value close to 1 means the trend is very important, while
+    /// a value close to 0 means the trend contributes little to the overall pattern.
+    /// 
+    /// For example:
+    /// - Data showing population growth might have high trend strength (0.9+)
+    /// - Data with random fluctuations around a constant value would have low trend strength (0.1-)
+    /// 
+    /// This metric helps you understand how important the trend component is in your data.
+    /// </para>
+    /// </remarks>
+    private T CalculateTrendStrength()
+    {
+        if (_trend == null || _residual == null)
+            return NumOps.Zero;
+        
+        Vector<T> detrended = new Vector<T>(_trend.Length);
+        for (int i = 0; i < _trend.Length; i++)
+        {
+            T seasonalValue = _seasonal != null ? _seasonal[i] : NumOps.Zero;
+            detrended[i] = NumOps.Add(seasonalValue, _residual[i]);
+        }
+    
+        T varDetrended = StatisticsHelper<T>.CalculateVariance(detrended);
+        T varResidual = StatisticsHelper<T>.CalculateVariance(_residual);
+    
+        if (NumOps.LessThanOrEquals(varDetrended, NumOps.Zero))
+            return NumOps.One;
+        
+        T strength = NumOps.Subtract(NumOps.One, NumOps.Divide(varResidual, varDetrended));
+    
+        // Ensure the value is between 0 and 1
+        if (NumOps.LessThan(strength, NumOps.Zero))
+            return NumOps.Zero;
+        if (NumOps.GreaterThan(strength, NumOps.One))
+            return NumOps.One;
+        
+        return strength;
+    }
+
+    /// <summary>
+    /// Implements the model-specific training logic for STL decomposition.
+    /// </summary>
+    /// <param name="x">The input features matrix (not used in STL decomposition).</param>
+    /// <param name="y">The time series data to decompose.</param>
+    /// <exception cref="ArgumentException">Thrown when the time series is too short for the specified seasonal period.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method handles the STL-specific training logic. It validates inputs and delegates to the
+    /// appropriate algorithm implementation based on the configured algorithm type.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This is the core method that actually performs the decomposition of your time series into
+    /// trend, seasonal, and residual components. It works behind the scenes to:
+    ///
+    /// 1. Check that your data meets the required conditions (like having enough points)
+    /// 2. Choose the right algorithm based on your settings
+    /// 3. Break down your data into its components using that algorithm
+    ///
+    /// The method is called automatically when you train the model, so you don't need to
+    /// call it directly. Instead, you interact with the higher-level `Train` method
+    /// that handles validation and preparation before calling this method.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Validate that we have enough data for the seasonal period
+        if (y.Length < _stlOptions.SeasonalPeriod * 2)
+        {
+            throw new ArgumentException($"Time series is too short for the specified seasonal period. Need at least {_stlOptions.SeasonalPeriod * 2} observations for seasonal period {_stlOptions.SeasonalPeriod}, but got {y.Length}.", nameof(y));
+        }
+
+        int n = y.Length;
+    
+        // Initialize component vectors
+        _trend = new Vector<T>(n);
+        _seasonal = new Vector<T>(n);
+        _residual = new Vector<T>(n);
+
+        try
+        {
+            // Delegate to the appropriate algorithm implementation
+            switch (_stlOptions.AlgorithmType)
+            {
+                case STLAlgorithmType.Standard:
+                    PerformStandardSTL(y);
+                    break;
+                case STLAlgorithmType.Robust:
+                    PerformRobustSTL(y);
+                    break;
+                case STLAlgorithmType.Fast:
+                    PerformFastSTL(y);
+                    break;
+                default:
+                    throw new ArgumentException($"Unsupported STL algorithm type: {_stlOptions.AlgorithmType}.", nameof(_stlOptions.AlgorithmType));
+            }
+        
+            // Ensure seasonal component sums to zero within each period
+            NormalizeSeasonal();
+        
+            // Recalculate residuals to ensure consistency
+            _residual = CalculateResiduals(y, _trend, _seasonal);
+        
+            // Perform validation of decomposition results
+            ValidateDecomposition(y);
+        }
+        catch (Exception ex)
+        {
+            // Reset component vectors on failure
+            _trend = Vector<T>.Empty();
+            _seasonal = Vector<T>.Empty();
+            _residual = Vector<T>.Empty();
+        
+            // Re-throw with more context
+            throw new InvalidOperationException($"STL decomposition failed: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Validates the decomposition results to ensure they are reasonable.
+    /// </summary>
+    /// <param name="originalSeries">The original time series data.</param>
+    /// <exception cref="InvalidOperationException">Thrown when decomposition results are invalid.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method performs quality checks on the decomposition results to make sure they're valid.
+    /// It verifies that:
+    /// - The trend component isn't all zeros or NaNs
+    /// - The seasonal component shows a regular pattern
+    /// - The components add up to the original data (within a small margin of error)
+    /// 
+    /// These checks help ensure that the decomposition was successful and meaningful.
+    /// </para>
+    /// </remarks>
+    private void ValidateDecomposition(Vector<T> originalSeries)
+    {
+        // Check for NaN or Infinity values in components
+        if (_trend.Any(IsInvalidValue) || _seasonal.Any(IsInvalidValue) || _residual.Any(IsInvalidValue))
+        {
+            throw new InvalidOperationException("Decomposition produced invalid values (NaN or Infinity).");
+        }
+    
+        // Check that the sum of components equals original series
+        Vector<T> reconstructed = new Vector<T>(_trend.Length);
+        for (int i = 0; i < _trend.Length; i++)
+        {
+            reconstructed[i] = NumOps.Add(_trend[i], NumOps.Add(_seasonal[i], _residual[i]));
+        }
+    
+        T maxError = NumOps.Zero;
+        for (int i = 0; i < originalSeries.Length; i++)
+        {
+            T error = NumOps.Abs(NumOps.Subtract(originalSeries[i], reconstructed[i]));
+            if (NumOps.GreaterThan(error, maxError))
+            {
+                maxError = error;
+            }
+        }
+    
+        // Allow a small numerical error due to floating-point arithmetic
+        T tolerance = NumOps.FromDouble(1e-5);
+        if (NumOps.GreaterThan(maxError, tolerance))
+        {
+            throw new InvalidOperationException($"Decomposition components don't sum to original series. Maximum error: {Convert.ToDouble(maxError)}.");
+        }
+    
+        // Check for unreasonable trend (all zeros or constant)
+        T trendVariance = StatisticsHelper<T>.CalculateVariance(_trend);
+        if (NumOps.LessThan(trendVariance, NumOps.FromDouble(1e-10)))
+        {
+            // Not throwing here, just logging a warning since a flat trend could be valid
+            System.Diagnostics.Debug.WriteLine("Warning: Trend component has very low variance. The series might be dominated by seasonality or noise.");
+        }
+    
+        // Check that seasonal component has the expected pattern (repeating every period)
+        // This is a simple check that looks at autocorrelation at the seasonal lag
+        T seasonalAutocorrelation = CalculateSeasonalAutocorrelation();
+        if (NumOps.LessThan(seasonalAutocorrelation, NumOps.FromDouble(0.5)))
+        {
+            System.Diagnostics.Debug.WriteLine($"Warning: Seasonal component has low autocorrelation ({Convert.ToDouble(seasonalAutocorrelation)}) at the seasonal lag. The detected seasonal pattern may be weak or inconsistent.");
+        }
+    }
+
+    /// <summary>
+    /// Checks if a value is invalid (NaN or Infinity).
+    /// </summary>
+    /// <param name="value">The value to check.</param>
+    /// <returns>True if the value is NaN or Infinity, false otherwise.</returns>
+    private bool IsInvalidValue(T value)
+    {
+        try
+        {
+            double doubleValue = Convert.ToDouble(value);
+            return double.IsNaN(doubleValue) || double.IsInfinity(doubleValue);
+        }
+        catch
+        {
+            // If conversion fails, assume it's valid
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Calculates the autocorrelation of the seasonal component at the seasonal lag.
+    /// </summary>
+    /// <returns>The autocorrelation value.</returns>
+    private T CalculateSeasonalAutocorrelation()
+    {
+        int n = _seasonal.Length;
+        int lag = _stlOptions.SeasonalPeriod;
+    
+        if (n <= lag)
+        {
+            return NumOps.One; // Not enough data to calculate
+        }
+    
+        T mean = _seasonal.Average();
+        T numerator = NumOps.Zero;
+        T denominator = NumOps.Zero;
+    
+        for (int i = 0; i < n - lag; i++)
+        {
+            T dev1 = NumOps.Subtract(_seasonal[i], mean);
+            T dev2 = NumOps.Subtract(_seasonal[i + lag], mean);
+            numerator = NumOps.Add(numerator, NumOps.Multiply(dev1, dev2));
+        }
+    
+        for (int i = 0; i < n; i++)
+        {
+            T dev = NumOps.Subtract(_seasonal[i], mean);
+            denominator = NumOps.Add(denominator, NumOps.Square(dev));
+        }
+    
+        if (NumOps.LessThanOrEquals(denominator, NumOps.Zero))
+        {
+            return NumOps.One; // No variance, treat as perfect correlation
+        }
+    
+        return NumOps.Divide(numerator, denominator);
+    }
+
+    /// <summary>
+    /// Predicts a single value based on the decomposed components.
+    /// </summary>
+    /// <param name="input">The input vector containing time information.</param>
+    /// <returns>The predicted value.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method generates a prediction for a single future time point by combining
+    /// the trend and seasonal components from the decomposition.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method predicts a value for a single future time point by:
+    /// 
+    /// 1. Using the last known trend value (assuming the trend continues)
+    /// 2. Adding the appropriate seasonal pattern for that time point
+    /// 
+    /// For example, if you're forecasting sales for next January based on historical
+    /// monthly data, it would:
+    /// - Use the most recent trend level (overall sales level)
+    /// - Add the January seasonal effect (how much January typically differs from average)
+    /// 
+    /// The input vector should contain the forecast horizon (how many steps ahead)
+    /// and any other relevant information.
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        if (_trend == null || _seasonal == null)
+        {
+            throw new InvalidOperationException("Model has not been trained. Call Train before making predictions.");
+        }
+    
+        // Extract the forecast horizon from the input
+        int horizon;
+        if (input.Length == 0)
+        {
+            // Default to one-step-ahead forecast if no horizon specified
+            horizon = 1;
+        }
+        else
+        {
+            // Use the first element as the forecast horizon
+            horizon = Math.Max(1, Convert.ToInt32(input[0]));
+        }
+    
+        // Use the last trend value (assuming trend persists)
+        T trendComponent = _trend[_trend.Length - 1];
+    
+        // Add the appropriate seasonal component
+        int seasonalIndex = (_seasonal.Length - 1 + horizon) % _stlOptions.SeasonalPeriod;
+        int seasonStart = _seasonal.Length - _stlOptions.SeasonalPeriod;
+        T seasonalComponent = _seasonal[seasonStart + seasonalIndex];
+    
+        // Return the sum (residual component is assumed to be zero for forecasting)
+        return NumOps.Add(trendComponent, seasonalComponent);
+    }
+
+    /// <summary>
+    /// Improves the standard STL algorithm by attempting to detect and adapt to changing seasonality.
+    /// </summary>
+    /// <param name="y">The original time series data.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This enhanced version of the standard STL algorithm is designed to better handle time series
+    /// where the seasonal pattern might be changing over time.
+    /// 
+    /// It works by:
+    /// 1. First performing a regular STL decomposition
+    /// 2. Then analyzing how the seasonal pattern changes through the series
+    /// 3. If changes are detected, adapting the decomposition to account for evolving seasonality
+    /// 
+    /// This approach is especially valuable for longer time series where seasonal patterns might
+    /// evolve due to changing behaviors, climate shifts, or other factors.
+    /// </para>
+    /// </remarks>
+    private void PerformAdaptiveSTL(Vector<T> y)
+    {
+        // First, perform standard STL decomposition
+        PerformStandardSTL(y);
+    
+        int n = y.Length;
+        int period = _stlOptions.SeasonalPeriod;
+    
+        // For time series with enough seasonal cycles, check for evolving seasonality
+        if (n >= period * 4)
+        {
+            // Analyze sequential seasons to detect changes
+            Vector<T> seasonalityChange = AnalyzeSeasonalEvolution();
+        
+            // If significant seasonal evolution is detected, adapt the decomposition
+            if (HasSignificantSeasonalEvolution(seasonalityChange))
+            {
+                // Perform enhanced decomposition that accounts for changing seasonality
+                PerformEvolvingSeasonalitySTL(y);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Analyzes how the seasonal pattern evolves over time.
+    /// </summary>
+    /// <returns>A vector measuring seasonal pattern changes between consecutive cycles.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method examines how the seasonal pattern changes from one cycle to the next.
+    /// For example, in retail data, it might check if the holiday shopping peak is
+    /// getting stronger or weaker over the years.
+    /// 
+    /// A high change score indicates the seasonal pattern is evolving significantly.
+    /// </para>
+    /// </remarks>
+    private Vector<T> AnalyzeSeasonalEvolution()
+    {
+        int period = _stlOptions.SeasonalPeriod;
+        int cycles = _seasonal.Length / period;
+    
+        var changes = new Vector<T>(cycles - 1);
+    
+        for (int cycle = 0; cycle < cycles - 1; cycle++)
+        {
+            T sum = NumOps.Zero;
+        
+            for (int i = 0; i < period; i++)
+            {
+                int idx1 = cycle * period + i;
+                int idx2 = (cycle + 1) * period + i;
+            
+                if (idx2 < _seasonal.Length)
+                {
+                    T diff = NumOps.Subtract(_seasonal[idx2], _seasonal[idx1]);
+                    sum = NumOps.Add(sum, NumOps.Square(diff));
+                }
+            }
+        
+            changes[cycle] = NumOps.Sqrt(sum);
+        }
+    
+        return changes;
+    }
+
+    /// <summary>
+    /// Determines if the seasonal pattern is evolving significantly over time.
+    /// </summary>
+    /// <param name="seasonalityChange">Vector of seasonal change measurements.</param>
+    /// <returns>True if significant evolution is detected, false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method decides whether the seasonal pattern is changing enough to warrant
+    /// special handling. It looks at how much change occurs between consecutive seasonal
+    /// cycles and determines if it exceeds a threshold that indicates meaningful evolution.
+    /// </para>
+    /// </remarks>
+    private bool HasSignificantSeasonalEvolution(Vector<T> seasonalityChange)
+    {
+        if (seasonalityChange.Length < 2)
+        {
+            return false;
+        }
+    
+        // Calculate the mean change
+        T meanChange = seasonalityChange.Average();
+    
+        // Calculate seasonal standard deviation for comparison
+        T seasonalStdDev = _seasonal.StandardDeviation();
+    
+        // If mean change is greater than 20% of the seasonal standard deviation,
+        // consider it significant evolution
+        T threshold = NumOps.Multiply(seasonalStdDev, NumOps.FromDouble(0.2));
+    
+        return NumOps.GreaterThan(meanChange, threshold);
+    }
+
+    /// <summary>
+    /// Performs STL decomposition adapted for time series with evolving seasonality.
+    /// </summary>
+    /// <param name="y">The original time series data.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This specialized decomposition method handles time series where the seasonal pattern
+    /// changes over time. Instead of assuming a fixed seasonal pattern, it allows the
+    /// pattern to evolve gradually.
+    /// 
+    /// For example, if the summer sales peak is getting stronger each year, or the
+    /// winter dip is shifting earlier, this method will capture those changes.
+    /// </para>
+    /// </remarks>
+    private void PerformEvolvingSeasonalitySTL(Vector<T> y)
+    {
+        int n = y.Length;
+        int period = _stlOptions.SeasonalPeriod;
+    
+        // Use a smaller seasonal smoother window to allow more flexibility in the seasonal pattern
+        int adaptiveSeasonalWindow = Math.Max(7, period / 2);
+    
+        // Detrend the series
+        Vector<T> detrended = SubtractVectors(y, _trend);
+    
+        // Use a moving window approach for seasonal extraction
+        _seasonal = new Vector<T>(n);
+        int windowSize = period * 3; // Use 3 periods for each seasonal estimation
+    
+        for (int center = windowSize / 2; center < n - windowSize / 2; center += period)
+        {
+            // Extract local window
+            int start = Math.Max(0, center - windowSize / 2);
+            int end = Math.Min(n, center + windowSize / 2);
+        
+            // Create vector from the window
+            Vector<T> localWindow = new Vector<T>(end - start);
+            for (int i = 0; i < localWindow.Length; i++)
+            {
+                localWindow[i] = detrended[start + i];
+            }
+        
+            // Extract seasonal pattern from this window
+            Vector<T> localSeasonal = ExtractLocalSeasonalPattern(localWindow, period, adaptiveSeasonalWindow);
+        
+            // Apply the pattern to the center period
+            for (int i = 0; i < period && center - period / 2 + i < n; i++)
+            {
+                int targetIdx = center - period / 2 + i;
+                if (targetIdx >= 0 && targetIdx < n)
+                {
+                    _seasonal[targetIdx] = localSeasonal[i % localSeasonal.Length];
+                }
+            }
+        }
+    
+        // Handle edge cases (beginning and end of series)
+        // For beginning, use the first estimated seasonal pattern
+        for (int i = 0; i < period / 2; i++)
+        {
+            if (i < n)
+            {
+                _seasonal[i] = _seasonal[i + period];
+            }
+        }
+    
+        // For end, use the last estimated seasonal pattern
+        for (int i = n - period / 2; i < n; i++)
+        {
+            if (i >= 0 && i < n)
+            {
+                _seasonal[i] = _seasonal[i - period];
+            }
+        }
+    
+        // Smooth transitions between adjacent seasonal patterns
+        _seasonal = SmoothSeasonalTransitions(_seasonal, period);
+    
+        // Re-extract trend after seasonal component is determined
+        Vector<T> deseasonalized = SubtractVectors(y, _seasonal);
+        _trend = LoessSmoothing(deseasonalized, _stlOptions.TrendLoessWindow);
+    
+        // Calculate residuals
+        _residual = CalculateResiduals(y, _trend, _seasonal);
+    }
+
+    /// <summary>
+    /// Extracts a seasonal pattern from a local window of the time series.
+    /// </summary>
+    /// <param name="window">The local window of detrended data.</param>
+    /// <param name="period">The seasonal period.</param>
+    /// <param name="loessWindow">The window size for LOESS smoothing.</param>
+    /// <returns>The extracted seasonal pattern (one full period).</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method finds the seasonal pattern within a specific section of your data.
+    /// It's like looking at just a few years of monthly data to find the pattern for those
+    /// specific years, rather than assuming the pattern is the same across the entire dataset.
+    /// </para>
+    /// </remarks>
+    private Vector<T> ExtractLocalSeasonalPattern(Vector<T> window, int period, int loessWindow)
+    {
+        // Get the seasonal pattern by averaging values at the same phase in the cycle
+        Vector<T> pattern = new Vector<T>(period);
+        Vector<T> counts = new Vector<T>(period);
+    
+        for (int i = 0; i < window.Length; i++)
+        {
+            int phase = i % period;
+            pattern[phase] = NumOps.Add(pattern[phase], window[i]);
+            counts[phase] = NumOps.Add(counts[phase], NumOps.One);
+        }
+    
+        // Average the values for each phase
+        for (int i = 0; i < period; i++)
+        {
+            if (NumOps.GreaterThan(counts[i], NumOps.Zero))
+            {
+                pattern[i] = NumOps.Divide(pattern[i], counts[i]);
+            }
+        }
+    
+        // Smooth the pattern
+        pattern = SmoothSeasonal(pattern, period, loessWindow);
+    
+        // Ensure the pattern sums to zero
+        T mean = pattern.Average();
+        for (int i = 0; i < pattern.Length; i++)
+        {
+            pattern[i] = NumOps.Subtract(pattern[i], mean);
+        }
+    
+        return pattern;
+    }
+
+    /// <summary>
+    /// Smooths transitions between adjacent seasonal patterns.
+    /// </summary>
+    /// <param name="seasonal">The seasonal component with potentially abrupt transitions.</param>
+    /// <param name="period">The seasonal period.</param>
+    /// <returns>The smoothed seasonal component.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method ensures that the seasonal pattern changes gradually over time rather
+    /// than having sudden jumps. It's like blending between different seasonal patterns
+    /// to create smooth transitions, which is usually more realistic for real-world data.
+    /// </para>
+    /// </remarks>
+    private Vector<T> SmoothSeasonalTransitions(Vector<T> seasonal, int period)
+    {
+        int n = seasonal.Length;
+        Vector<T> smoothed = new Vector<T>(n);
+    
+        // Use a moving average to smooth transitions between seasonal cycles
+        int halfWindow = period / 2;
+    
+        for (int i = 0; i < n; i++)
+        {
+            int start = Math.Max(0, i - halfWindow);
+            int end = Math.Min(n, i + halfWindow + 1);
+        
+            T sum = NumOps.Zero;
+            int count = 0;
+        
+            // Only average points with the same phase in the cycle
+            for (int j = start; j < end; j++)
+            {
+                if (j % period == i % period)
+                {
+                    sum = NumOps.Add(sum, seasonal[j]);
+                    count++;
+                }
+            }
+        
+            if (count > 0)
+            {
+                smoothed[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
+            }
+            else
+            {
+                smoothed[i] = seasonal[i];
+            }
+        }
+    
+        return smoothed;
     }
 }

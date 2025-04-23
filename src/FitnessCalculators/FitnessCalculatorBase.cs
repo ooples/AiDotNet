@@ -20,7 +20,7 @@
 /// This base class provides the common functionality that all these different "judges" share.
 /// </para>
 /// </remarks>
-public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
+public abstract class FitnessCalculatorBase<T, TInput, TOutput> : IFitnessCalculator<T, TInput, TOutput>
 {
     /// <summary>
     /// Indicates whether higher fitness scores represent better performance.
@@ -121,12 +121,12 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// in each calculator that extends this base class.
     /// </para>
     /// </remarks>
-    public T CalculateFitnessScore(ModelEvaluationData<T> evaluationData)
+    public T CalculateFitnessScore(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
 
-        DataSetStats<T> dataSet = _dataSetType switch
+        DataSetStats<T, TInput, TOutput> dataSet = _dataSetType switch
         {
             DataSetType.Training => evaluationData.TrainingSet,
             DataSetType.Validation => evaluationData.ValidationSet,
@@ -159,7 +159,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     /// - Evaluate a model on data that wasn't part of the original training/validation/testing split
     /// </para>
     /// </remarks>
-    public T CalculateFitnessScore(DataSetStats<T> dataSet)
+    public T CalculateFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         if (dataSet == null)
             throw new ArgumentNullException(nameof(dataSet));
@@ -186,7 +186,7 @@ public abstract class FitnessCalculatorBase<T> : IFitnessCalculator<T>
     ///   between predictions and actual values
     /// </para>
     /// </remarks>
-    protected abstract T GetFitnessScore(DataSetStats<T> dataSet);
+    protected abstract T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet);
 
     /// <summary>
     /// Gets a value indicating whether higher fitness scores represent better performance.

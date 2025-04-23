@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// how to improve your model.
 /// </para>
 /// </remarks>
-public abstract class FitDetectorBase<T> : IFitDetector<T>
+public abstract class FitDetectorBase<T, TInput, TOutput> : IFitDetector<T, TInput, TOutput>
 {
     /// <summary>
     /// Provides numeric operations for the specific type T.
@@ -26,7 +26,16 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
     /// (like addition, multiplication, etc.) on the generic type T, which could be float, double, or 
     /// another numeric type.
     /// </remarks>
-    protected readonly INumericOperations<T> _numOps;
+    protected readonly INumericOperations<T> NumOps;
+
+    /// <summary>
+    /// Random number generator used for feature permutation.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is used to randomly shuffle feature values when calculating 
+    /// permutation importance. Using a fixed seed ensures reproducible results.
+    /// </remarks>
+    protected readonly Random Random;
 
     /// <summary>
     /// Initializes a new instance of the FitDetectorBase class.
@@ -42,7 +51,8 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
     /// </remarks>
     protected FitDetectorBase()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
+        Random = new();
     }
 
     /// <summary>
@@ -60,7 +70,7 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
     /// to assess model fit.
     /// </para>
     /// </remarks>
-    public abstract FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData);
+    public abstract FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData);
 
     /// <summary>
     /// Determines the type of fit based on model performance metrics.
@@ -82,7 +92,7 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected abstract FitType DetermineFitType(ModelEvaluationData<T> evaluationData);
+    protected abstract FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData);
 
     /// <summary>
     /// Calculates the confidence level in the fit type determination.
@@ -99,7 +109,7 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
     /// confidence in the fit assessment.
     /// </para>
     /// </remarks>
-    protected abstract T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData);
+    protected abstract T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData);
 
     /// <summary>
     /// Generates recommendations for improving the model based on the detected fit type.
@@ -129,7 +139,7 @@ public abstract class FitDetectorBase<T> : IFitDetector<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected virtual List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected virtual List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

@@ -113,7 +113,7 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// perform better on new, unseen data.
     /// </para>
     /// </remarks>
-    public MultinomialLogisticRegression(MultinomialLogisticRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public MultinomialLogisticRegression(MultinomialLogisticRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new MultinomialLogisticRegressionOptions<T>();
@@ -162,8 +162,8 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
 
             if (Regularization != null)
             {
-                gradient = Regularization.RegularizeMatrix(gradient);
-                hessian = Regularization.RegularizeMatrix(hessian);
+                gradient = Regularization.Regularize(gradient);
+                hessian = Regularization.Regularize(hessian);
             }
 
             Vector<T> flattenedGradient = gradient.Flatten();
@@ -557,5 +557,53 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     protected override ModelType GetModelType()
     {
         return ModelType.MultinomialLogisticRegression;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Multinomial Logistic Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Multinomial Logistic Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Multinomial Logistic Regression model, including its options,
+    /// coefficients matrix, number of classes, and regularization settings. The new instance is completely independent 
+    /// of the original, allowing modifications without affecting the original model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact copy of your trained model.
+    /// 
+    /// Think of it like making a perfect duplicate:
+    /// - It copies all the configuration settings (like maximum iterations and tolerance)
+    /// - It preserves the coefficient weights for all classes (the voting system for each category)
+    /// - It maintains information about how many categories the model can predict
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before further modifying the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        var newModel = new MultinomialLogisticRegression<T>(_options, Regularization);
+        
+        // Copy the number of classes
+        newModel._numClasses = _numClasses;
+        
+        // Deep copy the coefficients matrix if it exists
+        if (_coefficients != null)
+        {
+            newModel._coefficients = _coefficients.Clone();
+        }
+        
+        // Copy coefficients and intercept from base class
+        if (Coefficients != null)
+        {
+            newModel.Coefficients = Coefficients.Clone();
+        }
+        
+        newModel.Intercept = Intercept;
+        
+        return newModel;
     }
 }

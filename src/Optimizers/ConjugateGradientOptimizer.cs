@@ -15,12 +15,12 @@ namespace AiDotNet.Optimizers;
 /// allowing it to find the lowest point (optimal solution) more efficiently than simpler methods.
 /// </para>
 /// </remarks>
-public class ConjugateGradientOptimizer<T> : GradientBasedOptimizerBase<T>
+public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Conjugate Gradient optimization algorithm.
     /// </summary>
-    private ConjugateGradientOptimizerOptions _options;
+    private ConjugateGradientOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The direction vector from the previous iteration.
@@ -54,17 +54,10 @@ public class ConjugateGradientOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     public ConjugateGradientOptimizer(
-        ConjugateGradientOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        ConjugateGradientOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new ConjugateGradientOptimizerOptions();
+        _options = options ?? new ConjugateGradientOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();
         InitializeAdaptiveParameters();
     }
@@ -95,13 +88,13 @@ public class ConjugateGradientOptimizer<T> : GradientBasedOptimizerBase<T>
     /// the maximum number of iterations or meets the stopping criteria.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         _previousDirection = null;
         InitializeAdaptiveParameters();
@@ -189,63 +182,14 @@ public class ConjugateGradientOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It uses line search to determine how big of a step to take.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T> inputData)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, 
+        OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var step = LineSearch(currentSolution, direction, gradient, inputData);
         var scaledDirection = direction.Transform(x => NumOps.Multiply(x, step));
-        var newCoefficients = currentSolution.Coefficients.Add(scaledDirection);
+        var newCoefficients = currentSolution.GetParameters().Add(scaledDirection);
 
-        return new VectorModel<T>(newCoefficients);
-    }
-
-    /// <summary>
-    /// Performs a line search to find the optimal step size in the given direction.
-    /// </summary>
-    /// <param name="currentSolution">The current solution.</param>
-    /// <param name="direction">The search direction.</param>
-    /// <param name="gradient">The current gradient.</param>
-    /// <param name="inputData">The input data for the optimization process.</param>
-    /// <returns>The optimal step size.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method is like looking ahead along the chosen direction to find out
-    /// how far to step to get the best improvement in the solution.
-    /// </para>
-    /// </remarks>
-    private T LineSearch(ISymbolicModel<T> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T> inputData)
-    {
-        var alpha = CurrentLearningRate;
-        var c1 = NumOps.FromDouble(1e-4);
-        var c2 = NumOps.FromDouble(0.9);
-        var xTrain = inputData.XTrain;
-        var yTrain = inputData.YTrain;
-
-        var initialValue = CalculateLoss(currentSolution, inputData);
-        var initialSlope = gradient.DotProduct(direction);
-
-        while (true)
-        {
-            var newCoefficients = currentSolution.Coefficients.Add(direction.Multiply(alpha));
-            var newSolution = new VectorModel<T>(newCoefficients);
-            var newValue = CalculateLoss(newSolution, inputData);
-
-            if (NumOps.LessThanOrEquals(newValue, NumOps.Add(initialValue, NumOps.Multiply(NumOps.Multiply(c1, alpha), initialSlope))))
-            {
-                var newGradient = CalculateGradient(newSolution, xTrain, yTrain);
-                var newSlope = newGradient.DotProduct(direction);
-
-                if (NumOps.GreaterThanOrEquals(NumOps.Abs(newSlope), NumOps.Multiply(c2, NumOps.Abs(initialSlope))))
-                {
-                    return alpha;
-                }
-            }
-
-            alpha = NumOps.Multiply(alpha, NumOps.FromDouble(0.5));
-
-            if (NumOps.LessThan(alpha, NumOps.FromDouble(1e-10)))
-            {
-                return NumOps.FromDouble(1e-10);
-            }
-        }
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -259,7 +203,7 @@ public class ConjugateGradientOptimizer<T> : GradientBasedOptimizerBase<T>
     /// If not, it decreases the learning rate to be more cautious.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -290,9 +234,9 @@ public class ConjugateGradientOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It checks to make sure you're providing the right kind of options specific to this algorithm.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is ConjugateGradientOptimizerOptions cgOptions)
+        if (options is ConjugateGradientOptimizerOptions<T, TInput, TOutput> cgOptions)
         {
             _options = cgOptions;
         }
@@ -311,7 +255,7 @@ public class ConjugateGradientOptimizer<T> : GradientBasedOptimizerBase<T>
     /// You can use this to check or save the current configuration.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -363,7 +307,7 @@ public class ConjugateGradientOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<ConjugateGradientOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<ConjugateGradientOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();
@@ -382,7 +326,7 @@ public class ConjugateGradientOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It helps avoid recalculating gradients unnecessarily, which can save a lot of computation time.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_CG_{_options.InitialLearningRate}_{_options.Tolerance}_{_iteration}";

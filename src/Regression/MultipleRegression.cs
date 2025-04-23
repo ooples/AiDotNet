@@ -46,7 +46,7 @@ public class MultipleRegression<T> : RegressionBase<T>
     /// smaller, which typically results in a more general model that performs better on new data.
     /// </para>
     /// </remarks>
-    public MultipleRegression(RegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public MultipleRegression(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
     }
@@ -84,7 +84,7 @@ public class MultipleRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
             x = x.AddConstantColumn(NumOps.One);
         var xTx = x.Transpose().Multiply(x);
-        var regularizedXTx = xTx.Add(Regularization.RegularizeMatrix(xTx));
+        var regularizedXTx = xTx.Add(Regularization.Regularize(xTx));
         var xTy = x.Transpose().Multiply(y);
         var solution = SolveSystem(regularizedXTx, xTy);
         if (Options.UseIntercept)
@@ -96,6 +96,48 @@ public class MultipleRegression<T> : RegressionBase<T>
         {
             Coefficients = new Vector<T>(solution);
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Multiple Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Multiple Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Multiple Regression model, including its coefficients,
+    /// intercept, options, and regularization. The new instance is completely independent of the original,
+    /// allowing modifications without affecting the original model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact copy of the current regression model.
+    /// 
+    /// The copy includes:
+    /// - The same coefficients (the importance values for each feature)
+    /// - The same intercept (the starting point value)
+    /// - The same options (settings like whether to use an intercept)
+    /// - The same regularization (settings that help prevent overfitting)
+    /// 
+    /// This is useful when you want to:
+    /// - Create a backup before modifying the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create a new MultipleRegression with the same options and regularization
+        var newModel = new MultipleRegression<T>(Options, Regularization);
+        
+        // Copy the coefficients
+        if (Coefficients != null)
+        {
+            newModel.Coefficients = Coefficients.Clone();
+        }
+        
+        // Copy the intercept
+        newModel.Intercept = Intercept;
+        
+        return newModel;
     }
 
     /// <summary>

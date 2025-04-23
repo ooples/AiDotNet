@@ -31,38 +31,9 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public struct ModelResult<T>
+public struct ModelResult<T, TInput, TOutput>
 {
-    /// <summary>
-    /// Gets or sets the symbolic model solution.
-    /// </summary>
-    /// <value>An implementation of ISymbolicModel&lt;T&gt; representing the model solution.</value>
-    /// <remarks>
-    /// <para>
-    /// This property represents the actual model solution, which is an implementation of the ISymbolicModel&lt;T&gt; 
-    /// interface. A symbolic model is a mathematical expression or algorithm that can be evaluated with different 
-    /// inputs to produce predictions. Unlike black-box models like neural networks, symbolic models are typically 
-    /// human-readable and interpretable, such as polynomial equations, decision trees, or other mathematical 
-    /// expressions. The model encapsulates the relationship discovered between the input features and the target 
-    /// variable during the model-building process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the actual model or equation that was discovered.
-    /// 
-    /// The solution:
-    /// - Contains the actual mathematical formula or algorithm
-    /// - Can be used to make predictions with new data
-    /// - Is typically human-readable (unlike black-box models)
-    /// 
-    /// For example, in symbolic regression, this might be an equation like:
-    /// y = 3.2x₁² + 1.7x₂ - 0.5
-    /// 
-    /// This property is important because:
-    /// - It's the primary output of the model-building process
-    /// - It can be used to understand the relationships in your data
-    /// - It can be deployed to make predictions on new data
-    /// </para>
-    /// </remarks>
-    public ISymbolicModel<T> Solution { get; set; }
+    public IFullModel<T, TInput, TOutput> Solution { get; set; }
     
     /// <summary>
     /// Gets or sets the fitness score of the model.
@@ -160,7 +131,7 @@ public struct ModelResult<T>
     /// - Assess how well the model will generalize to new data
     /// </para>
     /// </remarks>
-    public ModelEvaluationData<T> EvaluationData { get; set; }
+    public ModelEvaluationData<T, TInput, TOutput> EvaluationData { get; set; }
     
     /// <summary>
     /// Gets or sets the list of feature vectors selected for the model.

@@ -30,7 +30,7 @@ namespace AiDotNet.Interfaces;
 ///   poorly on new data)
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface IModelEvaluator<T>
+public interface IModelEvaluator<T, TInput, TOutput>
 {
     /// <summary>
     /// Evaluates a machine learning model using the provided input data and returns detailed performance metrics.
@@ -75,5 +75,5 @@ public interface IModelEvaluator<T>
     /// - Comparison between predictions and actual values
     /// - Additional insights about model performance
     /// </returns>
-    ModelEvaluationData<T> EvaluateModel(ModelEvaluationInput<T> input);
+    ModelEvaluationData<T, TInput, TOutput> EvaluateModel(ModelEvaluationInput<T, TInput, TOutput> input);
 }

@@ -99,7 +99,7 @@ public static class MatrixSolutionHelper
         var numOps = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < b.Length; i++)
         {
-            var Ai = A.Copy();
+            var Ai = A.Clone();
             for (int j = 0; j < b.Length; j++)
             {
                 Ai[j, i] = b[j];

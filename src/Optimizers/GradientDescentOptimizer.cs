@@ -19,17 +19,17 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
+public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Options specific to the Gradient Descent optimizer.
     /// </summary>
-    private GradientDescentOptimizerOptions _gdOptions;
+    private GradientDescentOptimizerOptions<T, TInput, TOutput> _gdOptions;
 
     /// <summary>
     /// The regularization technique used to prevent overfitting.
     /// </summary>
-    private readonly IRegularization<T> _regularization;
+    private readonly IRegularization<T, TInput, TOutput> _regularization;
 
     /// <summary>
     /// Initializes a new instance of the GradientDescentOptimizer class.
@@ -41,40 +41,12 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <param name="options">Options for the Gradient Descent optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
-    public GradientDescentOptimizer(GradientDescentOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+    public GradientDescentOptimizer(
+        GradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
     {
-        _gdOptions = options ?? new GradientDescentOptimizerOptions();
-        _regularization = CreateRegularization(_gdOptions);
-    }
-
-    /// <summary>
-    /// Creates a regularization technique based on the provided options.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method sets up a way to prevent the model from becoming too complex.
-    /// It's like adding rules to your hiking strategy to avoid taking unnecessarily complicated paths.
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The options specifying the regularization technique to use.</param>
-    /// <returns>An instance of the specified regularization technique.</returns>
-    private static IRegularization<T> CreateRegularization(GradientDescentOptimizerOptions options)
-    {
-        return RegularizationFactory.CreateRegularization<T>(options.RegularizationOptions);
+        _gdOptions = options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>();
+        _regularization = _gdOptions.Regularization ?? CreateRegularization(_gdOptions);
     }
 
     /// <summary>
@@ -92,11 +64,11 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = EvaluateSolution(currentSolution, inputData);
         var previousStepData = bestStepData;
         InitializeAdaptiveParameters();
@@ -136,55 +108,14 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="currentSolution">The current solution.</param>
     /// <param name="gradient">The calculated gradient.</param>
     /// <returns>The updated solution.</returns>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(
+        IFullModel<T, TInput, TOutput> currentSolution, 
+        Vector<T> gradient)
     {
-        Vector<T> updatedCoefficients = currentSolution.Coefficients.Subtract(gradient.Multiply(CurrentLearningRate));
-        return currentSolution.UpdateCoefficients(updatedCoefficients);
-    }
+        Vector<T> currentParams = currentSolution.GetParameters();
+        Vector<T> updatedParams = currentParams.Subtract(gradient.Multiply(CurrentLearningRate));
 
-    /// <summary>
-    /// Calculates the gradient for the given solution and input data.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method calculates how steep the hill is and in which direction.
-    /// It helps determine which way the optimizer should step to improve the model.
-    /// This implementation uses numerical differentiation for flexibility with different model types.
-    /// </para>
-    /// </remarks>
-    /// <param name="solution">The current solution.</param>
-    /// <param name="X">The input features.</param>
-    /// <param name="y">The target values.</param>
-    /// <returns>The calculated gradient.</returns>
-    protected new Vector<T> CalculateGradient(ISymbolicModel<T> solution, Matrix<T> X, Vector<T> y)
-    {
-        string cacheKey = GenerateGradientCacheKey(solution, X, y);
-        var cachedGradient = GradientCache.GetCachedGradient(cacheKey);
-        if (cachedGradient != null)
-        {
-            return cachedGradient.Coefficients;
-        }
-
-        Vector<T> gradient = new(solution.Coefficients.Length);
-        T epsilon = NumOps.FromDouble(1e-8);
-
-        for (int i = 0; i < solution.Coefficients.Length; i++)
-        {
-            Vector<T> perturbedCoefficientsPlus = solution.Coefficients.Copy();
-            perturbedCoefficientsPlus[i] = NumOps.Add(perturbedCoefficientsPlus[i], epsilon);
-
-            Vector<T> perturbedCoefficientsMinus = solution.Coefficients.Copy();
-            perturbedCoefficientsMinus[i] = NumOps.Subtract(perturbedCoefficientsMinus[i], epsilon);
-
-            T lossPlus = CalculateLoss(solution.UpdateCoefficients(perturbedCoefficientsPlus), X, y);
-            T lossMinus = CalculateLoss(solution.UpdateCoefficients(perturbedCoefficientsMinus), X, y);
-
-            gradient[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), NumOps.Multiply(NumOps.FromDouble(2.0), epsilon));
-        }
-
-        var gradientModel = gradient.ToSymbolicModel();
-        GradientCache.CacheGradient(cacheKey, gradientModel);
-
-        return gradient;
+        return currentSolution.WithParameters(updatedParams);
     }
 
     /// <summary>
@@ -200,19 +131,29 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="X">The input features.</param>
     /// <param name="y">The target values.</param>
     /// <returns>The calculated loss value.</returns>
-    private T CalculateLoss(ISymbolicModel<T> solution, Matrix<T> X, Vector<T> y)
+    private T CalculateLoss(IFullModel<T, TInput, TOutput> solution, TInput X, TOutput y)
     {
-        Vector<T> predictions = new Vector<T>(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
+        TOutput predictions = solution.Predict(X);
+        var parameters = solution.GetParameters();
+        T loss;
+
+        if (predictions is Tensor<T> tensorPredictions && y is Tensor<T> tensorY)
         {
-            predictions[i] = solution.Evaluate(X.GetRow(i));
+            loss = LossFunction.CalculateLoss(tensorPredictions.ToVector(), tensorY.ToVector());
+        }
+        else if (predictions is Vector<T> vectorPredictions && y is Vector<T> vectorY)
+        {
+            loss = LossFunction.CalculateLoss(vectorPredictions, vectorY);
+        }
+        else
+        {
+            throw new ArgumentException("Unsupported prediction or target type");
         }
 
-        T mse = StatisticsHelper<T>.CalculateMeanSquaredError(predictions, y);
-        Vector<T> regularizedCoefficients = _regularization.RegularizeCoefficients(solution.Coefficients);
-        T regularizationTerm = regularizedCoefficients.Subtract(solution.Coefficients).Transform(NumOps.Abs).Sum();
+        Vector<T> regularizedCoefficients = _regularization.Regularize(parameters);
+        T regularizationTerm = regularizedCoefficients.Subtract(parameters).Transform(NumOps.Abs).Sum();
 
-        return NumOps.Add(mse, regularizationTerm);
+        return NumOps.Add(loss, regularizationTerm);
     }
 
     /// <summary>
@@ -225,9 +166,9 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="options">The new options to apply to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is GradientDescentOptimizerOptions gdOptions)
+        if (options is GradientDescentOptimizerOptions<T, TInput, TOutput> gdOptions)
         {
             _gdOptions = gdOptions;
         }
@@ -256,7 +197,7 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <returns>The current Gradient Descent optimizer options.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _gdOptions;
     }
@@ -330,7 +271,7 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
 
         // Deserialize GradientDescentOptions
         string optionsJson = reader.ReadString();
-        _gdOptions = JsonConvert.DeserializeObject<GradientDescentOptimizerOptions>(optionsJson)
+        _gdOptions = JsonConvert.DeserializeObject<GradientDescentOptimizerOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
     }
 
@@ -359,7 +300,7 @@ public class GradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="X">The input features used for gradient calculation.</param>
     /// <param name="y">The target values used for gradient calculation.</param>
     /// <returns>A string that uniquely identifies the current gradient calculation scenario.</returns>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_GD_{CurrentLearningRate}_{_gdOptions.MaxIterations}";

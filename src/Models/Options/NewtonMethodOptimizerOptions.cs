@@ -38,7 +38,7 @@
 /// balancing between speed and stability.
 /// </para>
 /// </remarks>
-public class NewtonMethodOptimizerOptions : GradientBasedOptimizerOptions
+public class NewtonMethodOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the initial learning rate used by the Newton's Method optimizer.

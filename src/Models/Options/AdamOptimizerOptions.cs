@@ -12,7 +12,7 @@ namespace AiDotNet.Models.Options;
 /// size of previous steps. It automatically adjusts how big each step should be for each parameter, making it easier to train
 /// models without having to manually tune the learning rate. Adam is often a good default choice for many machine learning problems.</para>
 /// </remarks>
-public class AdamOptimizerOptions : GradientBasedOptimizerOptions
+public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the learning rate for the Adam optimizer.

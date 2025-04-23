@@ -24,13 +24,176 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 {
+    /// <summary>
+    /// Configuration options for the Neural Network ARIMA model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stores all configuration parameters for the model, including the AR order, MA order, 
+    /// differencing order, and neural network specifications.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the blueprint or recipe for your model.
+    /// 
+    /// It contains all the settings that define how your model works:
+    /// - How many past values to consider (AR order)
+    /// - How many past errors to consider (MA order)
+    /// - How to prepare the data (differencing)
+    /// - How to configure the neural network
+    /// 
+    /// Think of it as the instruction manual that tells the model how it should be built and operate.
+    /// </para>
+    /// </remarks>
     private readonly NeuralNetworkARIMAOptions<T> _nnarimaOptions;
+
+    /// <summary>
+    /// Coefficients for the Autoregressive (AR) component of the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These parameters determine how much influence each past value has on the prediction.
+    /// They are optimized during the training process to minimize prediction errors.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are weights that determine how much each past value matters.
+    /// 
+    /// Imagine you're predicting tomorrow's temperature:
+    /// - If yesterday's temperature is very important, its AR parameter will be high
+    /// - If temperatures from a week ago don't matter much, their AR parameters will be low
+    /// 
+    /// These values are learned from the data during training, so the model figures out 
+    /// which past values are most important for making accurate predictions.
+    /// </para>
+    /// </remarks>
     private Vector<T> _arParameters;
+
+    /// <summary>
+    /// Coefficients for the Moving Average (MA) component of the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These parameters determine how much influence each past prediction error has on the current prediction.
+    /// They help the model correct for systematic errors in its forecasts.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are weights that determine how much each past mistake matters.
+    /// 
+    /// If your model has been consistently underestimating temperatures:
+    /// - The MA parameters help recognize this pattern
+    /// - They make adjustments to correct for these systematic errors
+    /// 
+    /// For example, if the model has been off by +2 degrees for the past three days,
+    /// the MA component might suggest adding some correction to today's prediction.
+    /// </para>
+    /// </remarks>
     private Vector<T> _maParameters;
+
+    /// <summary>
+    /// The prediction errors (residuals) for each training example.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the differences between the actual values and the model's predictions during training.
+    /// They are used in the MA component of the model and help assess prediction quality.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are your model's mistakes during training.
+    /// 
+    /// For each data point in your training set:
+    /// - The residual is how far off your prediction was
+    /// - Positive values mean you predicted too low
+    /// - Negative values mean you predicted too high
+    /// 
+    /// These errors are important because:
+    /// 1. They help measure how good your model is
+    /// 2. The Moving Average part uses them to improve future predictions
+    /// 
+    /// It's like keeping a record of how much you overshot or undershot the target
+    /// so you can adjust your aim next time.
+    /// </para>
+    /// </remarks>
     private Vector<T> _residuals;
+
+    /// <summary>
+    /// The predicted values for the training data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the values predicted by the model for each input in the training dataset.
+    /// They are compared to the actual values to calculate residuals and evaluate model performance.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are the predictions your model made during training.
+    /// 
+    /// After training, this contains what your model would have predicted for each point in your training data.
+    /// By comparing these to the actual values:
+    /// - You can see how well your model learned from the data
+    /// - You can calculate how big the errors were
+    /// - You can identify where your model struggles most
+    /// 
+    /// It's like looking back at your practice test results to see which questions you got right and wrong.
+    /// </para>
+    /// </remarks>
     private Vector<T> _fitted;
-    private readonly IOptimizer<T> _optimizer;
+
+    /// <summary>
+    /// The optimization algorithm used to find the best parameter values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This component searches for the optimal values of the model parameters during training.
+    /// It tries to minimize the prediction error by adjusting the parameters systematically.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the "learner" that finds the best settings for your model.
+    /// 
+    /// Imagine you're adjusting the volume and bass on a speaker to get the best sound:
+    /// - The optimizer tries different combinations of settings
+    /// - It measures how good each combination is
+    /// - It gradually homes in on the best possible settings
+    /// 
+    /// Instead of you having to try thousands of different combinations manually,
+    /// the optimizer does this automatically and efficiently finds the best parameters.
+    /// </para>
+    /// </remarks>
+    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+
+    /// <summary>
+    /// The target values used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the actual values that the model is trained to predict.
+    /// They are compared to the model's predictions to calculate errors and update parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are the correct answers that your model is trying to learn.
+    /// 
+    /// If you're predicting daily temperatures:
+    /// - This would contain the actual recorded temperatures
+    /// - Your model tries to predict these values
+    /// - The difference between predictions and these values shows how well your model is doing
+    /// 
+    /// Think of it as the answer key for a test that your model is taking.
+    /// </para>
+    /// </remarks>
     private Vector<T> _y;
+
+    /// <summary>
+    /// The neural network component of the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the non-linear component of the Neural Network ARIMA model.
+    /// It captures complex patterns in the data that the linear ARIMA components cannot model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the "brain" of your model that finds complex patterns.
+    /// 
+    /// While the ARIMA parts (AR and MA) are good at finding simple trends and patterns:
+    /// - The neural network can detect complex relationships
+    /// - It can learn patterns that don't follow simple rules
+    /// - It can combine multiple factors in sophisticated ways
+    /// 
+    /// For example, if temperature depends on a complex interaction between humidity, wind speed,
+    /// and the day of the week, the neural network can capture these relationships.
+    /// 
+    /// Think of it as having a creative expert working alongside a methodical analyst - together
+    /// they can solve problems neither could handle alone.
+    /// </para>
+    /// </remarks>
     private readonly INeuralNetwork<T> _neuralNetwork;
 
     /// <summary>
@@ -55,7 +218,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     public NeuralNetworkARIMAModel(NeuralNetworkARIMAOptions<T>? options = null) : base(options ?? new())
     {
         _nnarimaOptions = options ?? new NeuralNetworkARIMAOptions<T>();
-        _optimizer = _nnarimaOptions.Optimizer ?? new LBFGSOptimizer<T>();
+        _optimizer = _nnarimaOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
         _arParameters = Vector<T>.Empty();
         _maParameters = Vector<T>.Empty();
         _residuals = Vector<T>.Empty();
@@ -120,45 +283,6 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the Neural Network ARIMA model using the provided input data and target values.
-    /// </summary>
-    /// <param name="x">The input matrix containing features or past values.</param>
-    /// <param name="y">The target vector containing the values to be predicted.</param>
-    /// <exception cref="ArgumentException">Thrown when the number of rows in x doesn't match the length of y.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method performs the following steps:
-    /// 1. Validates the input data
-    /// 2. Initializes model parameters
-    /// 3. Optimizes the parameters using the provided optimizer
-    /// 4. Computes residuals to assess model performance
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where your model learns from the data you provide.
-    /// 
-    /// Imagine teaching a student:
-    /// 1. You give them study materials (x) and test answers (y)
-    /// 2. They start with some basic knowledge (initializing parameters)
-    /// 3. They study and improve their understanding (optimizing parameters)
-    /// 4. They take a practice test to see how well they've learned (computing residuals)
-    /// 
-    /// After this process, your model is ready to make predictions on new data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        if (x.Rows != y.Length)
-        {
-            throw new ArgumentException("Input matrix rows must match output vector length.");
-        }
-
-        _y = y;
-
-        InitializeParameters();
-        OptimizeParameters(x, _y);
-        ComputeResiduals(x, _y);
-    }
-
-    /// <summary>
     /// Initializes the AR and MA parameters of the model with small random values.
     /// </summary>
     /// <remarks>
@@ -217,17 +341,17 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void OptimizeParameters(Matrix<T> x, Vector<T> y)
     {
-        var inputData = new OptimizationInputData<T>
+        var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>
         {
             XTrain = x,
             YTrain = y
         };
 
-        OptimizationResult<T> result = _optimizer.Optimize(inputData);
-        UpdateModelParameters(result.BestSolution.Coefficients);
+        OptimizationResult<T, Matrix<T>, Vector<T>> result = _optimizer.Optimize(inputData);
+        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
     }
 
-        /// <summary>
+    /// <summary>
     /// Updates the model parameters with the optimized values.
     /// </summary>
     /// <param name="optimizedParameters">A vector containing the optimized parameter values.</param>
@@ -382,8 +506,8 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         // Add neural network prediction
-        Vector<T> nnInput = CreateNeuralNetworkInput(predictions, inputRow, index);
-        T nnPrediction = _neuralNetwork.Predict(nnInput)[0];
+        var nnInput = CreateNeuralNetworkInput(predictions, inputRow, index);
+        T nnPrediction = _neuralNetwork.Predict(Tensor<T>.FromVector(nnInput))[0];
         prediction = NumOps.Add(prediction, nnPrediction);
 
         return prediction;
@@ -512,7 +636,9 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         SerializationHelper<T>.SerializeVector(writer, _maParameters);
 
         // Write neural network parameters
-        _neuralNetwork.Serialize(writer);
+        var serializedModel = _neuralNetwork.Serialize();
+        writer.Write(serializedModel.Length);
+        writer.Write(serializedModel);
 
         // Write options
         writer.Write(_nnarimaOptions.AROrder);
@@ -549,11 +675,156 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         _maParameters = SerializationHelper<T>.DeserializeVector(reader);
 
         // Read neural network parameters
-        _neuralNetwork.Deserialize(reader);
+        var serializedModelLength = reader.ReadInt32();
+        var serializedModel = reader.ReadBytes(serializedModelLength);
 
         // Read options
         _nnarimaOptions.AROrder = reader.ReadInt32();
         _nnarimaOptions.MAOrder = reader.ReadInt32();
         _nnarimaOptions.LaggedPredictions = reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// Core implementation of the training process for the Neural Network ARIMA model.
+    /// </summary>
+    /// <param name="x">The input matrix containing features or past values.</param>
+    /// <param name="y">The target vector containing the values to be predicted.</param>
+    /// <remarks>
+    /// <para>
+    /// This is the internal implementation of the model training process, handling the details of
+    /// parameter initialization, optimization, and residual computation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the engine room of the training process.
+    /// 
+    /// While the public Train method handles validation and setup, this method does the actual work:
+    /// 1. It saves the target values for later use
+    /// 2. It sets up the initial parameters
+    /// 3. It runs the optimization process to find the best parameters
+    /// 4. It computes how much error the model still has after training
+    /// 
+    /// It's like the detailed instruction manual for building a complex model, while the public Train
+    /// method is the simplified overview.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        _y = y;
+
+        InitializeParameters();
+        OptimizeParameters(x, _y);
+        ComputeResiduals(x, _y);
+    }
+
+    /// <summary>
+    /// Predicts a single value for the given input vector.
+    /// </summary>
+    /// <param name="input">The input vector containing features or past values.</param>
+    /// <returns>A single predicted value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates a single prediction based on the input vector.
+    /// It uses both the ARIMA components and the neural network to make the prediction.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a simplified way to get just one prediction.
+    /// 
+    /// Instead of providing a whole table of inputs and getting many predictions back,
+    /// you provide just one row of inputs and get back a single prediction.
+    /// 
+    /// It's like asking the weather forecaster for just tomorrow's forecast
+    /// instead of the whole week's weather outlook.
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Create a temporary matrix with a single row
+        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            singleRowMatrix[0, i] = input[i];
+        }
+    
+        // Use the existing Predict method and return the first (and only) prediction
+        Vector<T> prediction = Predict(singleRowMatrix);
+        return prediction[0];
+    }
+
+    /// <summary>
+    /// Gets metadata about the model, including type, parameters, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides information about the model's configuration and state.
+    /// It includes details such as the model type, parameters, and training status.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides a summary or "fact sheet" about your model.
+    /// 
+    /// It tells you important information about your model, such as:
+    /// - What type of model it is
+    /// - What parameters it's using
+    /// - Whether it's been trained yet
+    /// - How it's configured
+    /// 
+    /// It's like getting a specification sheet for a car, telling you its make, model,
+    /// engine size, and features.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var metaData = new ModelMetaData<T>
+        {
+            ModelType = ModelType.NeuralNetworkARIMA,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "AR Order", _nnarimaOptions.AROrder },
+                { "MA Order", _nnarimaOptions.MAOrder },
+                { "Differencing", _nnarimaOptions.DifferencingOrder },
+                { "Lagged Predictions", _nnarimaOptions.LaggedPredictions },
+                { "Exogenous Variables", _nnarimaOptions.ExogenousVariables },
+                { "AR Parameters", _arParameters },
+                { "MA Parameters", _maParameters }
+            },
+            ModelData = this.Serialize()
+        };
+    
+        return metaData;
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Neural Network ARIMA model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Neural Network ARIMA model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a clone of the model with the same configuration but without any trained parameters.
+    /// It's useful for creating multiple models with the same structure for ensembling or cross-validation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a fresh copy of your model.
+    /// 
+    /// Think of it like making a photocopy of a blank form:
+    /// - It has the same structure and fields as your original
+    /// - But it doesn't have any of the information filled in
+    /// 
+    /// This is useful when you want to train several similar models with different data,
+    /// or when you want to start over without changing your model's basic setup.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        // Create a copy of the options
+        var optionsCopy = new NeuralNetworkARIMAOptions<T>
+        {
+            AROrder = _nnarimaOptions.AROrder,
+            MAOrder = _nnarimaOptions.MAOrder,
+            DifferencingOrder = _nnarimaOptions.DifferencingOrder,
+            LaggedPredictions = _nnarimaOptions.LaggedPredictions,
+            ExogenousVariables = _nnarimaOptions.ExogenousVariables,
+            Optimizer = _nnarimaOptions.Optimizer,
+            // Clone the neural network if possible, otherwise use null to let constructor create a default
+            NeuralNetwork = _nnarimaOptions.NeuralNetwork?.Clone() as INeuralNetwork<T>
+        };
+    
+        // Return a new instance with the copied options
+        return new NeuralNetworkARIMAModel<T>(optionsCopy);
     }
 }

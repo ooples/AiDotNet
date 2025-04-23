@@ -9,7 +9,7 @@
 /// metrics across training, validation, and test datasets. It can detect common issues like
 /// overfitting and underfitting, and provide appropriate recommendations.
 /// </remarks>
-public class DefaultFitDetector<T> : FitDetectorBase<T>
+public class DefaultFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the DefaultFitDetector class.
@@ -43,7 +43,7 @@ public class DefaultFitDetector<T> : FitDetectorBase<T>
     /// 
     /// Based on this analysis, it provides practical recommendations to improve your model.
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -74,25 +74,25 @@ public class DefaultFitDetector<T> : FitDetectorBase<T>
     /// R² is a statistical measure that represents how well the model explains the variance in the data,
     /// with values closer to 1 indicating better fit.
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        T threshold09 = _numOps.FromDouble(0.9);
-        T threshold07 = _numOps.FromDouble(0.7);
-        T threshold05 = _numOps.FromDouble(0.5);
-        T threshold02 = _numOps.FromDouble(0.2);
+        T threshold09 = NumOps.FromDouble(0.9);
+        T threshold07 = NumOps.FromDouble(0.7);
+        T threshold05 = NumOps.FromDouble(0.5);
+        T threshold02 = NumOps.FromDouble(0.2);
         var training = evaluationData.TrainingSet.PredictionStats;
         var validation = evaluationData.ValidationSet.PredictionStats;
         var test = evaluationData.TestSet.PredictionStats;
 
-        if (_numOps.GreaterThan(training.R2, threshold09) && _numOps.GreaterThan(validation.R2, threshold09) && _numOps.GreaterThan(test.R2, threshold09))
+        if (NumOps.GreaterThan(training.R2, threshold09) && NumOps.GreaterThan(validation.R2, threshold09) && NumOps.GreaterThan(test.R2, threshold09))
             return FitType.GoodFit;
-        if (_numOps.GreaterThan(training.R2, threshold09) && _numOps.LessThan(validation.R2, threshold07))
+        if (NumOps.GreaterThan(training.R2, threshold09) && NumOps.LessThan(validation.R2, threshold07))
             return FitType.Overfit;
-        if (_numOps.LessThan(training.R2, threshold07) && _numOps.LessThan(validation.R2, threshold07))
+        if (NumOps.LessThan(training.R2, threshold07) && NumOps.LessThan(validation.R2, threshold07))
             return FitType.Underfit;
-        if (_numOps.GreaterThan(_numOps.Abs(_numOps.Subtract(training.R2, validation.R2)), threshold02))
+        if (NumOps.GreaterThan(NumOps.Abs(NumOps.Subtract(training.R2, validation.R2)), threshold02))
             return FitType.HighVariance;
-        if (_numOps.LessThan(training.R2, threshold05) && _numOps.LessThan(validation.R2, threshold05) && _numOps.LessThan(test.R2, threshold05))
+        if (NumOps.LessThan(training.R2, threshold05) && NumOps.LessThan(validation.R2, threshold05) && NumOps.LessThan(test.R2, threshold05))
             return FitType.HighBias;
         
         return FitType.Unstable;
@@ -112,10 +112,10 @@ public class DefaultFitDetector<T> : FitDetectorBase<T>
     /// This average helps balance the performance across different datasets, ensuring the model
     /// works well on both seen and unseen data.
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        return _numOps.Divide(_numOps.Add(_numOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), 
-            evaluationData.TestSet.PredictionStats.R2), _numOps.FromDouble(3));
+        return NumOps.Divide(NumOps.Add(NumOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), 
+            evaluationData.TestSet.PredictionStats.R2), NumOps.FromDouble(3));
     }
 
     /// <summary>

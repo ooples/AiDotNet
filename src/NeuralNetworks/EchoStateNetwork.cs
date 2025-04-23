@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks;
+﻿namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents an Echo State Network (ESN), a type of recurrent neural network with a sparsely connected hidden layer called a reservoir.
@@ -50,7 +50,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// that collectively form the network's dynamic memory.
     /// </para>
     /// </remarks>
-    private readonly int _reservoirSize;
+    private int _reservoirSize;
 
     /// <summary>
     /// Gets the spectral radius that controls the dynamics of the reservoir.
@@ -75,7 +75,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// while still being responsive to new inputs.
     /// </para>
     /// </remarks>
-    private readonly double _spectralRadius;
+    private double _spectralRadius;
 
     /// <summary>
     /// Gets the sparsity level of connections in the reservoir.
@@ -100,7 +100,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// to create complex dynamics while keeping computation manageable.
     /// </para>
     /// </remarks>
-    private readonly double _sparsity;
+    private double _sparsity;
 
     /// <summary>
     /// Gets or sets the current state of the reservoir.
@@ -315,6 +315,82 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     private IActivationFunction<T>? _outputScalarActivation { get; set; }
 
     /// <summary>
+    /// The weight matrix for input-to-reservoir connections.
+    /// </summary>
+    private Matrix<T> _inputWeights;
+        
+    /// <summary>
+    /// The weight matrix for reservoir-to-reservoir connections.
+    /// </summary>
+    private Matrix<T> _reservoirWeights;
+        
+    /// <summary>
+    /// The weight matrix for reservoir-to-output connections.
+    /// </summary>
+    private Matrix<T> _outputWeights;
+        
+    /// <summary>
+    /// The bias vector for the reservoir.
+    /// </summary>
+    private Vector<T> _reservoirBias;
+        
+    /// <summary>
+    /// The bias vector for the output layer.
+    /// </summary>
+    private Vector<T> _outputBias;
+        
+    /// <summary>
+    /// The current state of the reservoir.
+    /// </summary>
+    private Vector<T> _currentState;
+        
+    /// <summary>
+    /// Indicates whether the network is being trained.
+    /// </summary>
+    private bool _isTraining = false;
+        
+    /// <summary>
+    /// Leaking rate for controlling the update speed of reservoir neurons.
+    /// Value between 0 and 1, default is 1.0 (no leaking).
+    /// </summary>
+    private T _leakingRate;
+        
+    /// <summary>
+    /// Regularization parameter for ridge regression during training.
+    /// </summary>
+    private T _regularization;
+        
+    /// <summary>
+    /// Random number generator for initialization.
+    /// </summary>
+    private Random _random = new Random();
+        
+    /// <summary>
+    /// Input dimension size.
+    /// </summary>
+    private int _inputSize;
+        
+    /// <summary>
+    /// Output dimension size.
+    /// </summary>
+    private int _outputSize;
+        
+    /// <summary>
+    /// Collected states during training for regression.
+    /// </summary>
+    private List<Vector<T>> _collectedStates;
+        
+    /// <summary>
+    /// Collected targets during training for regression.
+    /// </summary>
+    private List<Vector<T>> _collectedTargets;
+        
+    /// <summary>
+    /// Warmup period for discarding initial transient reservoir states during training.
+    /// </summary>
+    private int _warmupPeriod;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="EchoStateNetwork{T}"/> class with vector activation functions.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -343,20 +419,53 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// ripples interact, rather than simple rules for individual ripples.
     /// </para>
     /// </remarks>
-    public EchoStateNetwork(NeuralNetworkArchitecture<T> architecture, int reservoirSize, double spectralRadius = 0.9, double sparsity = 0.1, 
-        IVectorActivationFunction<T>? reservoirInputVectorActivation = null, IVectorActivationFunction<T>? reservoirOutputVectorActivation = null, 
-        IVectorActivationFunction<T>? reservoirVectorActivation = null, IVectorActivationFunction<T>? outputVectorActivation = null) 
+    public EchoStateNetwork(
+        NeuralNetworkArchitecture<T> architecture, 
+        int reservoirSize, 
+        double spectralRadius = 0.9, 
+        double sparsity = 0.1,
+        double leakingRate = 1.0,
+        double regularization = 1e-4,
+        int warmupPeriod = 10,
+        IVectorActivationFunction<T>? reservoirInputVectorActivation = null, 
+        IVectorActivationFunction<T>? reservoirOutputVectorActivation = null, 
+        IVectorActivationFunction<T>? reservoirVectorActivation = null, 
+        IVectorActivationFunction<T>? outputVectorActivation = null) 
         : base(architecture)
     {
         _reservoirSize = reservoirSize;
         _spectralRadius = spectralRadius;
         _sparsity = sparsity;
+        _inputSize = architecture.InputSize;
+        _outputSize = architecture.OutputSize;
+        _leakingRate = NumOps.FromDouble(leakingRate);
+        _regularization = NumOps.FromDouble(regularization);
+        _warmupPeriod = warmupPeriod;
+        _isTraining = false;
+    
+        // Initialize the reservoir state and other vectors/matrices
         _reservoirState = new Vector<T>(_reservoirSize);
+        _inputWeights = new Matrix<T>(_inputSize, _reservoirSize);
+        _reservoirWeights = new Matrix<T>(_reservoirSize, _reservoirSize);
+        _outputWeights = new Matrix<T>(_reservoirSize, _outputSize);
+        _reservoirBias = new Vector<T>(_reservoirSize);
+        _outputBias = new Vector<T>(_outputSize);
+        _currentState = new Vector<T>(_inputSize);
+
+        // Initialize activation functions
         _reservoirInputVectorActivation = reservoirInputVectorActivation;
         _reservoirOutputVectorActivation = reservoirOutputVectorActivation;
         _reservoirVectorActivation = reservoirVectorActivation;
         _outputVectorActivation = outputVectorActivation;
-
+    
+        // Initialize collections for training
+        _collectedStates = [];
+        _collectedTargets = [];
+    
+        // Initialize weights with random values
+        InitializeWeights();
+    
+        // Initialize layers
         InitializeLayers();
     }
 
@@ -389,21 +498,383 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// water molecules behave, which collectively create complex ripple patterns.
     /// </para>
     /// </remarks>
-    public EchoStateNetwork(NeuralNetworkArchitecture<T> architecture, int reservoirSize, double spectralRadius = 0.9, double sparsity = 0.1, 
-        IActivationFunction<T>? reservoirInputScalarActivation = null, IActivationFunction<T>? reservoirOutputScalarActivation = null, 
-        IActivationFunction<T>? reservoirScalarActivation = null, IActivationFunction<T>? outputScalarActivation = null) 
+    public EchoStateNetwork(
+        NeuralNetworkArchitecture<T> architecture, 
+        int reservoirSize, 
+        double spectralRadius = 0.9, 
+        double sparsity = 0.1,
+        double leakingRate = 1.0,
+        double regularization = 1e-4,
+        int warmupPeriod = 10,
+        IActivationFunction<T>? reservoirInputScalarActivation = null, 
+        IActivationFunction<T>? reservoirOutputScalarActivation = null, 
+        IActivationFunction<T>? reservoirScalarActivation = null, 
+        IActivationFunction<T>? outputScalarActivation = null) 
         : base(architecture)
     {
         _reservoirSize = reservoirSize;
         _spectralRadius = spectralRadius;
         _sparsity = sparsity;
+        _inputSize = architecture.InputSize;
+        _outputSize = architecture.OutputSize;
+        _leakingRate = NumOps.FromDouble(leakingRate);
+        _regularization = NumOps.FromDouble(regularization);
+        _warmupPeriod = warmupPeriod;
+        _isTraining = false;
+    
+        // Initialize the reservoir state and other vectors/matrices
         _reservoirState = new Vector<T>(_reservoirSize);
+        _inputWeights = new Matrix<T>(_inputSize, _reservoirSize);
+        _reservoirWeights = new Matrix<T>(_reservoirSize, _reservoirSize);
+        _outputWeights = new Matrix<T>(_reservoirSize, _outputSize);
+        _reservoirBias = new Vector<T>(_reservoirSize);
+        _outputBias = new Vector<T>(_outputSize);
+        _currentState = new Vector<T>(_inputSize);
+
+        // Initialize activation functions
         _reservoirInputScalarActivation = reservoirInputScalarActivation;
         _reservoirOutputScalarActivation = reservoirOutputScalarActivation;
         _reservoirScalarActivation = reservoirScalarActivation;
         _outputScalarActivation = outputScalarActivation;
-
+    
+        // Initialize collections for training
+        _collectedStates = [];
+        _collectedTargets = [];
+    
+        // Initialize weights with random values
+        InitializeWeights();
+    
+        // Initialize layers
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Initializes the weights and reservoir state.
+    /// </summary>
+    private void InitializeWeights()
+    {
+        // Initialize weights with small random values
+        _inputWeights = new Matrix<T>(_inputSize, _reservoirSize);
+        _reservoirWeights = new Matrix<T>(_reservoirSize, _reservoirSize);
+        _outputWeights = new Matrix<T>(_reservoirSize, _outputSize);
+        _reservoirBias = new Vector<T>(_reservoirSize);
+        _outputBias = new Vector<T>(_outputSize);
+        _currentState = new Vector<T>(_reservoirSize); // Start with zero state
+        _leakingRate = NumOps.FromDouble(1.0); // Default to no leaking
+        _regularization = NumOps.FromDouble(1e-4); // Default regularization
+        _warmupPeriod = 10; // Default warmup period
+            
+        // Initialize input weights and reservoir bias
+        for (int i = 0; i < _inputSize; i++)
+        {
+            for (int j = 0; j < _reservoirSize; j++)
+            {
+                _inputWeights[i, j] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * 0.1);
+            }
+        }
+            
+        // Initialize reservoir weights with sparse connections based on sparsity
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            for (int j = 0; j < _reservoirSize; j++)
+            {
+                if (_random.NextDouble() < _sparsity)
+                {
+                    _reservoirWeights[i, j] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * 0.1);
+                }
+                else
+                {
+                    _reservoirWeights[i, j] = NumOps.Zero;
+                }
+            }
+                
+            _reservoirBias[i] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * 0.1);
+        }
+            
+        // Scale reservoir weights to achieve desired spectral radius
+        _reservoirWeights = ScaleToSpectralRadius(_reservoirWeights, _spectralRadius);
+            
+        // Initialize output weights and bias to zero
+        // (These will be learned during training)
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            for (int j = 0; j < _outputSize; j++)
+            {
+                _outputWeights[i, j] = NumOps.Zero;
+            }
+        }
+            
+        for (int i = 0; i < _outputSize; i++)
+        {
+            _outputBias[i] = NumOps.Zero;
+        }
+            
+        // Initialize collection lists for training
+        _collectedStates = new List<Vector<T>>();
+        _collectedTargets = new List<Vector<T>>();
+    }
+        
+    /// <summary>
+    /// Scales a matrix to achieve the desired spectral radius.
+    /// </summary>
+    /// <param name="matrix">The matrix to scale.</param>
+    /// <param name="targetRadius">The target spectral radius.</param>
+    /// <returns>The scaled matrix.</returns>
+    private Matrix<T> ScaleToSpectralRadius(Matrix<T> matrix, double targetRadius)
+    {
+        // Calculate the current spectral radius using the power method
+        double currentRadius = CalculateSpectralRadius(matrix);
+            
+        // Scale the matrix to achieve the target radius
+        double scaleFactor = targetRadius / currentRadius;
+            
+        // Create a new scaled matrix
+        Matrix<T> scaledMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                scaledMatrix[i, j] = NumOps.Multiply(matrix[i, j], NumOps.FromDouble(scaleFactor));
+            }
+        }
+            
+        return scaledMatrix;
+    }
+        
+    /// <summary>
+    /// Calculates the spectral radius of a matrix using the power method.
+    /// </summary>
+    /// <param name="matrix">The matrix to calculate the spectral radius for.</param>
+    /// <returns>The spectral radius.</returns>
+    private double CalculateSpectralRadius(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        Vector<T> x = new Vector<T>(n);
+            
+        // Initialize with a random vector
+        for (int i = 0; i < n; i++)
+        {
+            x[i] = NumOps.FromDouble(_random.NextDouble());
+        }
+            
+        // Normalize
+        x = NormalizeVector(x);
+            
+        // Iterate using power method (typically 100 iterations is sufficient)
+        for (int iter = 0; iter < 100; iter++)
+        {
+            Vector<T> y = matrix.Multiply(x);
+            x = NormalizeVector(y);
+        }
+            
+        // Calculate Rayleigh quotient
+        Vector<T> Ax = matrix.Multiply(x);
+        T rayleighQuotient = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            rayleighQuotient = NumOps.Add(rayleighQuotient, NumOps.Multiply(Ax[i], x[i]));
+        }
+            
+        return Math.Abs(Convert.ToDouble(rayleighQuotient));
+    }
+        
+    /// <summary>
+    /// Normalizes a vector to unit length.
+    /// </summary>
+    /// <param name="vector">The vector to normalize.</param>
+    /// <returns>The normalized vector.</returns>
+    private Vector<T> NormalizeVector(Vector<T> vector)
+    {
+        T norm = NumOps.Zero;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            norm = NumOps.Add(norm, NumOps.Multiply(vector[i], vector[i]));
+        }
+            
+        norm = NumOps.Sqrt(norm);
+            
+        // Avoid division by zero
+        if (MathHelper.AlmostEqual(norm, NumOps.Zero))
+        {
+            return new Vector<T>(vector.Length); // Return zero vector
+        }
+            
+        Vector<T> normalized = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            normalized[i] = NumOps.Divide(vector[i], norm);
+        }
+            
+        return normalized;
+    }
+        
+    /// <summary>
+    /// Updates the reservoir state based on the input.
+    /// </summary>
+    /// <param name="input">The input vector.</param>
+    private void UpdateReservoirState(Vector<T> input)
+    {
+        // Calculate input contribution: input_weights * input
+        Vector<T> inputContribution = new Vector<T>(_reservoirSize);
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < _inputSize; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(_inputWeights[j, i], input[j]));
+            }
+            inputContribution[i] = sum;
+        }
+            
+        // Calculate reservoir contribution: reservoir_weights * current_state
+        Vector<T> reservoirContribution = new Vector<T>(_reservoirSize);
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < _reservoirSize; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(_reservoirWeights[j, i], _currentState[j]));
+            }
+            reservoirContribution[i] = sum;
+        }
+            
+        // Calculate new state: input_contribution + reservoir_contribution + bias
+        Vector<T> newState = new Vector<T>(_reservoirSize);
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            T sum = NumOps.Add(NumOps.Add(inputContribution[i], reservoirContribution[i]), _reservoirBias[i]);
+                
+            // Apply activation function
+            T activated;
+            if (_reservoirScalarActivation != null)
+            {
+                activated = _reservoirScalarActivation.Activate(sum);
+            }
+            else if (_reservoirVectorActivation != null)
+            {
+                // For simplicity, we'll just compute this element-wise
+                // A proper implementation would apply the vector activation to the whole vector
+                Vector<T> temp = new Vector<T>(1);
+                temp[0] = sum;
+                activated = _reservoirVectorActivation.Activate(temp)[0];
+            }
+            else
+            {
+                // Default to tanh if no activation is specified
+                double val = Math.Tanh(Convert.ToDouble(sum));
+                activated = NumOps.FromDouble(val);
+            }
+                
+            // Apply leaking rate
+            if (MathHelper.AlmostEqual(_leakingRate, NumOps.One))
+            {
+                // No leaking
+                newState[i] = activated;
+            }
+            else
+            {
+                // Leaky integration: (1-a)*previous_state + a*new_state
+                T oneMinusAlpha = NumOps.Subtract(NumOps.One, _leakingRate);
+                newState[i] = NumOps.Add(
+                    NumOps.Multiply(oneMinusAlpha, _currentState[i]),
+                    NumOps.Multiply(_leakingRate, activated)
+                );
+            }
+        }
+            
+        // Update the current state
+        _currentState = newState;
+    }
+        
+    /// <summary>
+    /// Computes the output based on the current reservoir state.
+    /// </summary>
+    /// <returns>The output vector.</returns>
+    private Vector<T> ComputeOutput()
+    {
+        // Calculate output: output_weights^T * reservoir_state + output_bias
+        Vector<T> output = new Vector<T>(_outputSize);
+        for (int i = 0; i < _outputSize; i++)
+        {
+            T sum = _outputBias[i];
+            for (int j = 0; j < _reservoirSize; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(_outputWeights[j, i], _currentState[j]));
+            }
+                
+            // Apply output activation if specified
+            if (_outputScalarActivation != null)
+            {
+                output[i] = _outputScalarActivation.Activate(sum);
+            }
+            else if (_outputVectorActivation != null)
+            {
+                // For simplicity, element-wise application
+                Vector<T> temp = new Vector<T>(1);
+                temp[0] = sum;
+                output[i] = _outputVectorActivation.Activate(temp)[0];
+            }
+            else
+            {
+                // No activation, linear output
+                output[i] = sum;
+            }
+        }
+            
+        return output;
+    }
+        
+    /// <summary>
+    /// Resets the reservoir state to zeros.
+    /// </summary>
+    public void ResetReservoirState()
+    {
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            _currentState[i] = NumOps.Zero;
+        }
+    }
+        
+    /// <summary>
+    /// Sets the leaking rate for the reservoir.
+    /// </summary>
+    /// <param name="leakingRate">The leaking rate (between 0 and 1).</param>
+    public void SetLeakingRate(double leakingRate)
+    {
+        if (leakingRate < 0 || leakingRate > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(leakingRate), "Leaking rate must be between 0 and 1.");
+        }
+            
+        _leakingRate = NumOps.FromDouble(leakingRate);
+    }
+        
+    /// <summary>
+    /// Sets the regularization parameter for ridge regression.
+    /// </summary>
+    /// <param name="regularization">The regularization parameter.</param>
+    public void SetRegularization(double regularization)
+    {
+        if (regularization < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(regularization), "Regularization must be non-negative.");
+        }
+            
+        _regularization = NumOps.FromDouble(regularization);
+    }
+        
+    /// <summary>
+    /// Sets the warmup period for discarding initial transient reservoir states.
+    /// </summary>
+    /// <param name="warmupPeriod">The warmup period.</param>
+    public void SetWarmupPeriod(int warmupPeriod)
+    {
+        if (warmupPeriod < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(warmupPeriod), "Warmup period must be non-negative.");
+        }
+            
+        _warmupPeriod = warmupPeriod;
     }
 
     /// <summary>
@@ -541,108 +1012,6 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Makes a prediction using the current state of the Echo State Network.
-    /// </summary>
-    /// <param name="input">The input vector to make a prediction for.</param>
-    /// <returns>The predicted output vector after passing through the network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method processes an input through the Echo State Network to produce a prediction. The input first
-    /// passes through the input layer, then the reservoir layer (which updates the reservoir state), and finally
-    /// the output layer. The reservoir state is maintained between predictions, allowing the network to exhibit
-    /// memory of past inputs, which is essential for processing sequential data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This processes input through the network to make a prediction.
-    /// 
-    /// The prediction process works like this:
-    /// - The input enters the network through the input layer
-    /// - The reservoir layer combines this input with its current state to create a new state
-    /// - This update creates complex "ripples" in the reservoir that depend on both current and past inputs
-    /// - The output layer reads these ripples and produces a prediction
-    /// - The new reservoir state is preserved for the next prediction
-    /// 
-    /// This preservation of state between predictions is what gives the ESN its ability to
-    /// process sequences and remember patterns over time.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            if (i == 1) // Reservoir layer
-            {
-                var reservoirLayer = (ReservoirLayer<T>)Layers[i];
-                _reservoirState = reservoirLayer.Forward(Tensor<T>.FromVector(current), Tensor<T>.FromVector(_reservoirState)).ToVector();
-                current = _reservoirState;
-            }
-            else
-            {
-                current = Layers[i].Forward(Tensor<T>.FromVector(current)).ToVector();
-            }
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Trains the Echo State Network using the provided input and target output data.
-    /// </summary>
-    /// <param name="X">The matrix of input vectors, with each row representing one input sample.</param>
-    /// <param name="Y">The matrix of target output vectors, with each row representing one target sample.</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the Echo State Network using the provided input and target output data. Unlike traditional
-    /// neural networks, ESNs only train the output layer weights while keeping the reservoir weights fixed. This is
-    /// done using ridge regression, which efficiently computes the optimal output weights to map the reservoir states
-    /// to the target outputs. This approach is much faster than backpropagation and is a key advantage of ESNs.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the network to make predictions from the reservoir patterns.
-    /// 
-    /// The training process works like this:
-    /// - For each input sample, run it through the network to get a reservoir state
-    /// - Collect all these reservoir states
-    /// - Use a mathematical technique called ridge regression to find the best weights
-    ///   for the output layer to turn reservoir states into correct predictions
-    /// - Only the output layer weights are trained - the reservoir itself remains fixed
-    /// 
-    /// This approach is much faster than traditional neural network training and is one
-    /// of the main advantages of Echo State Networks. It's like training someone to
-    /// interpret ripple patterns without changing how the water ripples.
-    /// </para>
-    /// </remarks>
-    public void Train(Matrix<T> X, Matrix<T> Y)
-    {
-        // Collect reservoir states
-        var states = new List<Vector<T>>();
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var input = X.GetRow(i);
-            Predict(input); // This updates the ReservoirState
-            states.Add(_reservoirState);
-        }
-
-        // Concatenate states into a matrix
-        var stateMatrix = new Matrix<T>(states.Count, _reservoirSize);
-        for (int i = 0; i < states.Count; i++)
-        {
-            stateMatrix.SetRow(i, states[i]);
-        }
-
-        // Calculate output weights using ridge regression
-        var regularization = NumOps.FromDouble(1e-8); // Small regularization term
-        var stateTranspose = stateMatrix.Transpose();
-        var outputWeights = stateTranspose.Multiply(stateMatrix)
-            .Add(Matrix<T>.CreateIdentity(_reservoirSize).Multiply(regularization))
-            .Inverse()
-            .Multiply(stateTranspose)
-            .Multiply(Y);
-
-        // Set the calculated weights to the output layer
-        ((DenseLayer<T>)Layers[3]).UpdateParameters(outputWeights.Flatten());
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the Echo State Network.
     /// </summary>
     /// <param name="parameters">A vector containing the parameters to update all layers with.</param>
@@ -669,110 +1038,734 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     public override void UpdateParameters(Vector<T> parameters)
     {
         // ESN doesn't update parameters in the traditional sense
-        throw new NotImplementedException("ESN does not support traditional parameter updates.");
     }
 
     /// <summary>
-    /// Serializes the Echo State Network to a binary stream.
+    /// Makes a prediction using the Echo State Network.
     /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a null layer is encountered or a layer type name cannot be determined.</exception>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after processing.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the state of the Echo State Network to a binary stream. It writes the number of layers,
-    /// followed by the type name and serialized state of each layer. This allows the ESN to be saved to disk
-    /// and later restored with its trained parameters intact.
+    /// This method processes the input through the Echo State Network to make a prediction.
+    /// It first flattens the input to a vector, then updates the reservoir state based on
+    /// this input, and finally computes the output based on the updated reservoir state.
     /// </para>
-    /// <para><b>For Beginners:</b> This saves the network to a file so you can use it later.
+    /// <para><b>For Beginners:</b> This is how the ESN processes new information and makes predictions.
     /// 
-    /// When saving the Echo State Network:
-    /// - It records how many layers the network has
-    /// - For each layer, it saves:
-    ///   - What type of layer it is
-    ///   - All the weights and settings for that layer
+    /// The prediction process works like this:
+    /// 1. The input is prepared and flattened to a vector
+    /// 2. The reservoir state is updated based on the input
+    /// 3. The output is computed from the current reservoir state
     /// 
-    /// This is like taking a snapshot of the entire network - including both the reservoir
-    /// (which doesn't change during training) and the output weights (which do change).
-    /// You can later load this snapshot to use the trained network without having to
-    /// train it again.
+    /// The key difference from traditional neural networks is that the ESN's internal connections
+    /// (the reservoir) aren't trained - only the output connections are adjusted during training.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
+        // Extract input as vector
+        Vector<T> inputVector = input.ToVector();
+            
+        // Check if input size matches expected size
+        if (inputVector.Length != _inputSize)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
+            throw new ArgumentException($"Input vector length ({inputVector.Length}) does not match expected input size ({_inputSize}).");
+        }
+            
+        // Update reservoir state
+        UpdateReservoirState(inputVector);
+            
+        // Compute output
+        Vector<T> outputVector = ComputeOutput();
+            
+        // Create and return output tensor
+        return new Tensor<T>(new[] { 1, _outputSize }, outputVector);
+    }
 
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
+    /// <summary>
+    /// Processes a sequence of inputs through the Echo State Network.
+    /// </summary>
+    /// <param name="inputSequence">The sequence of input tensors.</param>
+    /// <param name="resetState">Whether to reset the reservoir state before processing.</param>
+    /// <returns>The sequence of output tensors.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method processes a sequence of inputs through the Echo State Network, maintaining the
+    /// reservoir state between time steps. This is particularly useful for time series prediction
+    /// and sequence processing tasks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This processes a sequence of inputs one after another.
+    /// 
+    /// When processing a sequence:
+    /// 1. The reservoir state can be reset (optional) to start fresh
+    /// 2. Each input in the sequence is processed in order
+    /// 3. The state of the reservoir carries information between steps
+    /// 4. A sequence of outputs is produced corresponding to each input
+    /// 
+    /// This maintains the "memory" of the network across the sequence, making ESNs
+    /// particularly good for time series and sequential data.
+    /// </para>
+    /// </remarks>
+    public List<Tensor<T>> PredictSequence(List<Tensor<T>> inputSequence, bool resetState = true)
+    {
+        if (resetState)
+        {
+            ResetReservoirState();
+        }
+            
+        List<Tensor<T>> outputs = new List<Tensor<T>>();
+            
+        foreach (var input in inputSequence)
+        {
+            outputs.Add(Predict(input));
+        }
+            
+        return outputs;
+    }
 
-            writer.Write(fullName);
-            layer.Serialize(writer);
+    /// <summary>
+    /// Trains the Echo State Network on a single batch of data.
+    /// </summary>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
+    /// <remarks>
+    /// <para>
+    /// This method trains the Echo State Network on a single batch of data. For ESNs, training
+    /// is different from traditional neural networks. Instead of using backpropagation to update
+    /// all weights, only the output weights are trained, typically using ridge regression.
+    /// During the training phase, the method collects reservoir states and corresponding target
+    /// outputs to be used in the regression.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how the ESN learns from examples.
+    /// 
+    /// The training process works like this:
+    /// 1. If this is the first training call, start collecting reservoir states and targets
+    /// 2. Update the reservoir state based on the input
+    /// 3. Collect the current reservoir state and the expected output
+    /// 4. When training is complete, solve for the optimal output weights using ridge regression
+    /// 
+    /// Unlike traditional neural networks where all weights are adjusted gradually,
+    /// ESNs learn by mathematically solving for the optimal output weights in one step.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Mark that we're training
+        if (!_isTraining)
+        {
+            _isTraining = true;
+            _collectedStates.Clear();
+            _collectedTargets.Clear();
+        }
+            
+        // Flatten input and output
+        Vector<T> inputVector = input.ToVector();
+        Vector<T> targetVector = expectedOutput.ToVector();
+            
+        // Check input and output sizes
+        if (inputVector.Length != _inputSize)
+        {
+            throw new ArgumentException($"Input vector length ({inputVector.Length}) does not match expected input size ({_inputSize}).");
+        }
+            
+        if (targetVector.Length != _outputSize)
+        {
+            throw new ArgumentException($"Target vector length ({targetVector.Length}) does not match expected output size ({_outputSize}).");
+        }
+            
+        // Update reservoir state
+        UpdateReservoirState(inputVector);
+            
+        // Collect state and target (skip if we're still in warmup period)
+        if (_collectedStates.Count >= _warmupPeriod)
+        {
+            _collectedStates.Add(_currentState.Clone());
+            _collectedTargets.Add(targetVector.Clone());
+        }
+    }
+        
+    /// <summary>
+    /// Finalizes training by computing the optimal output weights.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method finalizes the training of the Echo State Network by computing the optimal
+    /// output weights using ridge regression. It solves the equation (X^T X + λI)^(-1) X^T Y,
+    /// where X is the matrix of collected reservoir states, Y is the matrix of target outputs,
+    /// and λ is the regularization parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b> This completes the training by solving for the best output weights.
+    /// 
+    /// After collecting all training examples:
+    /// 1. We create matrices from all collected states and targets
+    /// 2. We solve a mathematical equation (ridge regression) to find the weights
+    /// 3. These weights will minimize the error between predictions and targets
+    /// 4. The regularization parameter helps prevent overfitting
+    /// 
+    /// This one-shot learning approach is more efficient than the iterative
+    /// approach used in traditional neural networks.
+    /// </para>
+    /// </remarks>
+    public void FinalizeTraining()
+    {
+        if (!_isTraining || _collectedStates.Count == 0)
+        {
+            throw new InvalidOperationException("No training data collected. Call Train first.");
+        }
+            
+        // Prepare matrices for ridge regression
+        // X: Matrix of reservoir states
+        // Y: Matrix of target outputs
+        int numSamples = _collectedStates.Count;
+            
+        Matrix<T> X = new Matrix<T>(numSamples, _reservoirSize);
+        Matrix<T> Y = new Matrix<T>(numSamples, _outputSize);
+            
+        for (int i = 0; i < numSamples; i++)
+        {
+            for (int j = 0; j < _reservoirSize; j++)
+            {
+                X[i, j] = _collectedStates[i][j];
+            }
+                
+            for (int j = 0; j < _outputSize; j++)
+            {
+                Y[i, j] = _collectedTargets[i][j];
+            }
+        }
+            
+        // Perform ridge regression: (X^T X + λI)^(-1) X^T Y
+        // Step 1: Compute X^T X
+        Matrix<T> XtX = X.Transpose().Multiply(X);
+            
+        // Step 2: Add regularization (X^T X + λI)
+        Matrix<T> regularized = XtX.Clone();
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            regularized[i, i] = NumOps.Add(regularized[i, i], _regularization);
+        }
+            
+        // Step 3: Compute (X^T X + λI)^(-1)
+        Matrix<T> inverse = ComputeInverse(regularized);
+            
+        // Step 4: Compute X^T Y
+        Matrix<T> XtY = X.Transpose().Multiply(Y);
+            
+        // Step 5: Compute (X^T X + λI)^(-1) X^T Y
+        Matrix<T> weights = inverse.Multiply(XtY);
+            
+        // Update output weights
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            for (int j = 0; j < _outputSize; j++)
+            {
+                _outputWeights[i, j] = weights[i, j];
+            }
+        }
+            
+        // Compute bias terms (mean of target - mean of prediction)
+        // For each output dimension, we need to compute:
+        // bias = mean(targets) - mean(weights * states)
+        for (int j = 0; j < _outputSize; j++)
+        {
+            T targetSum = NumOps.Zero;
+            for (int i = 0; i < numSamples; i++)
+            {
+                targetSum = NumOps.Add(targetSum, Y[i, j]);
+            }
+            T targetMean = NumOps.Divide(targetSum, NumOps.FromDouble(numSamples));
+                
+            // For each sample, compute the output without bias
+            T outputSum = NumOps.Zero;
+            for (int i = 0; i < numSamples; i++)
+            {
+                T output = NumOps.Zero;
+                for (int k = 0; k < _reservoirSize; k++)
+                {
+                    output = NumOps.Add(output, NumOps.Multiply(_outputWeights[k, j], X[i, k]));
+                }
+                outputSum = NumOps.Add(outputSum, output);
+            }
+            T outputMean = NumOps.Divide(outputSum, NumOps.FromDouble(numSamples));
+                
+            // Bias is target mean - output mean
+            _outputBias[j] = NumOps.Subtract(targetMean, outputMean);
+        }
+            
+        // Reset training state
+        _isTraining = false;
+        _collectedStates.Clear();
+        _collectedTargets.Clear();
+    }
+        
+    /// <summary>
+    /// Computes the inverse of a matrix using Gaussian elimination.
+    /// </summary>
+    /// <param name="matrix">The matrix to invert.</param>
+    /// <returns>The inverse of the matrix.</returns>
+    private Matrix<T> ComputeInverse(Matrix<T> matrix)
+    {
+        // For simplicity, we'll assume the matrix is invertible and not ill-conditioned
+        // A more robust implementation would use SVD or other techniques
+            
+        int n = matrix.Rows;
+        if (n != matrix.Columns)
+        {
+            throw new ArgumentException("Matrix must be square.");
+        }
+            
+        // Create augmented matrix [A|I]
+        Matrix<T> augmented = new Matrix<T>(n, 2 * n);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                augmented[i, j] = matrix[i, j];
+            }
+                
+            // Identity matrix on the right
+            augmented[i, i + n] = NumOps.One;
+        }
+            
+        // Gaussian elimination
+        for (int i = 0; i < n; i++)
+        {
+            // Find pivot
+            T pivot = augmented[i, i];
+            int pivotRow = i;
+                
+            // Find the row with the largest absolute value in this column
+            for (int j = i + 1; j < n; j++)
+            {
+                if (Math.Abs(Convert.ToDouble(augmented[j, i])) > Math.Abs(Convert.ToDouble(pivot)))
+                {
+                    pivot = augmented[j, i];
+                    pivotRow = j;
+                }
+            }
+                
+            // Swap rows if needed
+            if (pivotRow != i)
+            {
+                for (int j = 0; j < 2 * n; j++)
+                {
+                    T temp = augmented[i, j];
+                    augmented[i, j] = augmented[pivotRow, j];
+                    augmented[pivotRow, j] = temp;
+                }
+            }
+                
+            // Scale the pivot row
+            for (int j = 0; j < 2 * n; j++)
+            {
+                augmented[i, j] = NumOps.Divide(augmented[i, j], pivot);
+            }
+                
+            // Eliminate other rows
+            for (int j = 0; j < n; j++)
+            {
+                if (j != i)
+                {
+                    T factor = augmented[j, i];
+                    for (int k = 0; k < 2 * n; k++)
+                    {
+                        augmented[j, k] = NumOps.Subtract(
+                            augmented[j, k],
+                            NumOps.Multiply(factor, augmented[i, k])
+                        );
+                    }
+                }
+            }
+        }
+            
+        // Extract the inverse
+        Matrix<T> inverse = new Matrix<T>(n, n);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                inverse[i, j] = augmented[i, j + n];
+            }
+        }
+            
+        return inverse;
+    }
+
+    /// <summary>
+    /// Gets metadata about the Echo State Network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the Echo State Network, including its model type,
+    /// reservoir size, spectral radius, sparsity, and other configuration parameters.
+    /// This information is useful for model management and serialization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides a summary of your ESN's configuration.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Echo State Network)
+    /// - Details about reservoir size and connectivity
+    /// - Information about activation functions
+    /// - Serialized data that can be used to save and reload the model
+    /// 
+    /// This information is useful for tracking different model configurations
+    /// and for saving/loading models for later use.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.EchoStateNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ReservoirSize", _reservoirSize },
+                { "SpectralRadius", _spectralRadius },
+                { "Sparsity", _sparsity },
+                { "InputSize", _inputSize },
+                { "OutputSize", _outputSize },
+                { "LeakingRate", Convert.ToDouble(_leakingRate) },
+                { "Regularization", Convert.ToDouble(_regularization) },
+                { "WarmupPeriod", _warmupPeriod }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes Echo State Network-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the specific parameters and state of the Echo State Network to a binary stream.
+    /// It includes the reservoir size, spectral radius, sparsity, weight matrices, activation functions,
+    /// and other configuration parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This saves the special configuration and current state of your ESN.
+    /// 
+    /// It's like taking a snapshot of the network that includes:
+    /// - Its structural configuration (reservoir size, connectivity, etc.)
+    /// - The weight matrices that determine how signals flow
+    /// - The activation functions that process signals
+    /// - The current state of the reservoir
+    /// 
+    /// This allows you to save the network and reload it later exactly as it was.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write basic configuration
+        writer.Write(_reservoirSize);
+        writer.Write(_spectralRadius);
+        writer.Write(_sparsity);
+        writer.Write(_inputSize);
+        writer.Write(_outputSize);
+        writer.Write(Convert.ToDouble(_leakingRate));
+        writer.Write(Convert.ToDouble(_regularization));
+        writer.Write(_warmupPeriod);
+            
+        // Write activation function information
+        // Write scalar activation function flags
+        writer.Write(_reservoirInputScalarActivation != null);
+        writer.Write(_reservoirOutputScalarActivation != null);
+        writer.Write(_reservoirScalarActivation != null);
+        writer.Write(_outputScalarActivation != null);
+            
+        // Write vector activation function flags
+        writer.Write(_reservoirInputVectorActivation != null);
+        writer.Write(_reservoirOutputVectorActivation != null);
+        writer.Write(_reservoirVectorActivation != null);
+        writer.Write(_outputVectorActivation != null);
+            
+        // Serialize activation functions if present
+        if (_reservoirInputScalarActivation != null)
+        {
+            SerializationHelper<T>.SerializeInterface(writer, _reservoirInputScalarActivation);
+        }
+            
+        if (_reservoirOutputScalarActivation != null)
+        {
+            SerializationHelper<T>.SerializeInterface(writer, _reservoirOutputScalarActivation);
+        }
+            
+        if (_reservoirScalarActivation != null)
+        {
+            SerializationHelper<T>.SerializeInterface(writer, _reservoirScalarActivation);
+        }
+            
+        if (_outputScalarActivation != null)
+        {
+            SerializationHelper<T>.SerializeInterface(writer, _outputScalarActivation);
+        }
+            
+        if (_reservoirInputVectorActivation != null)
+        {
+            SerializationHelper<T>.SerializeInterface(writer, _reservoirInputVectorActivation);
+        }
+            
+        if (_reservoirOutputVectorActivation != null)
+        {
+            SerializationHelper<T>.SerializeInterface(writer, _reservoirOutputVectorActivation);
+        }
+            
+        if (_reservoirVectorActivation != null)
+        {
+            SerializationHelper<T>.SerializeInterface(writer, _reservoirVectorActivation);
+        }
+            
+        if (_outputVectorActivation != null)
+        {
+            SerializationHelper<T>.SerializeInterface(writer, _outputVectorActivation);
+        }
+            
+        // Write weight matrices and bias vectors
+        SerializeMatrix(writer, _inputWeights);
+        SerializeMatrix(writer, _reservoirWeights);
+        SerializeMatrix(writer, _outputWeights);
+        SerializeVector(writer, _reservoirBias);
+        SerializeVector(writer, _outputBias);
+            
+        // Write current state
+        SerializeVector(writer, _currentState);
+    }
+        
+    /// <summary>
+    /// Serializes a matrix to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer.</param>
+    /// <param name="matrix">The matrix to serialize.</param>
+    private void SerializeMatrix(BinaryWriter writer, Matrix<T> matrix)
+    {
+        writer.Write(matrix.Rows);
+        writer.Write(matrix.Columns);
+            
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                writer.Write(Convert.ToDouble(matrix[i, j]));
+            }
+        }
+    }
+        
+    /// <summary>
+    /// Serializes a vector to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer.</param>
+    /// <param name="vector">The vector to serialize.</param>
+    private void SerializeVector(BinaryWriter writer, Vector<T> vector)
+    {
+        writer.Write(vector.Length);
+            
+        for (int i = 0; i < vector.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(vector[i]));
         }
     }
 
     /// <summary>
-    /// Deserializes the Echo State Network from a binary stream.
+    /// Deserializes Echo State Network-specific data from a binary reader.
     /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer type information is invalid or instance creation fails.</exception>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
     /// <remarks>
     /// <para>
-    /// This method restores the state of the Echo State Network from a binary stream. It reads the number of layers,
-    /// followed by the type name and serialized state of each layer. This allows a previously saved ESN to be
-    /// restored from disk with all its trained parameters.
+    /// This method reads the specific parameters and state of the Echo State Network from a binary stream.
+    /// It reconstructs the reservoir size, spectral radius, sparsity, weight matrices, activation functions,
+    /// and other configuration parameters from the serialized data.
     /// </para>
-    /// <para><b>For Beginners:</b> This loads a previously saved network from a file.
+    /// <para><b>For Beginners:</b> This rebuilds the ESN from saved data.
     /// 
-    /// When loading the Echo State Network:
-    /// - First, it reads how many layers the network had
-    /// - Then, for each layer, it:
-    ///   - Reads what type of layer it was
-    ///   - Creates a new layer of that type
-    ///   - Loads all the weights and settings for that layer
-    ///   - Adds the layer to the network
+    /// It's like restoring the network from a snapshot, including:
+    /// - Its structural configuration (reservoir size, connectivity, etc.)
+    /// - The weight matrices that determine how signals flow
+    /// - The activation functions that process signals
+    /// - The state of the reservoir at the time it was saved
     /// 
-    /// This lets you use a previously trained network without having to train it again.
-    /// It's like restoring a complete snapshot of your network, bringing back
-    /// both the reservoir and the trained output weights.
+    /// This allows you to continue using the network exactly where you left off.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
+        // Read basic configuration
+        _reservoirSize = reader.ReadInt32();
+        _spectralRadius = reader.ReadDouble();
+        _sparsity = reader.ReadDouble();
+        _inputSize = reader.ReadInt32();
+        _outputSize = reader.ReadInt32();
+        _leakingRate = NumOps.FromDouble(reader.ReadDouble());
+        _regularization = NumOps.FromDouble(reader.ReadDouble());
+        _warmupPeriod = reader.ReadInt32();
+            
+        // Read activation function flags
+        bool hasReservoirInputScalarActivation = reader.ReadBoolean();
+        bool hasReservoirOutputScalarActivation = reader.ReadBoolean();
+        bool hasReservoirScalarActivation = reader.ReadBoolean();
+        bool hasOutputScalarActivation = reader.ReadBoolean();
+            
+        bool hasReservoirInputVectorActivation = reader.ReadBoolean();
+        bool hasReservoirOutputVectorActivation = reader.ReadBoolean();
+        bool hasReservoirVectorActivation = reader.ReadBoolean();
+        bool hasOutputVectorActivation = reader.ReadBoolean();
+            
+        // Deserialize activation functions if present
+        if (hasReservoirInputScalarActivation)
         {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
+            _reservoirInputScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
+        }
+            
+        if (hasReservoirOutputScalarActivation)
+        {
+            _reservoirOutputScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
+        }
+            
+        if (hasReservoirScalarActivation)
+        {
+            _reservoirScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
+        }
+            
+        if (hasOutputScalarActivation)
+        {
+            _outputScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
+        }
+            
+        if (hasReservoirInputVectorActivation)
+        {
+            _reservoirInputVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
+        }
+            
+        if (hasReservoirOutputVectorActivation)
+        {
+            _reservoirOutputVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
+        }
+            
+        if (hasReservoirVectorActivation)
+        {
+            _reservoirVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
+        }
+            
+        if (hasOutputVectorActivation)
+        {
+            _outputVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
+        }
+            
+        // Read weight matrices and bias vectors
+        _inputWeights = DeserializeMatrix(reader);
+        _reservoirWeights = DeserializeMatrix(reader);
+        _outputWeights = DeserializeMatrix(reader);
+        _reservoirBias = DeserializeVector(reader);
+        _outputBias = DeserializeVector(reader);
+            
+        // Read current state
+        _currentState = DeserializeVector(reader);
+            
+        // Initialize training collections
+        _collectedStates = new List<Vector<T>>();
+        _collectedTargets = new List<Vector<T>>();
+        _isTraining = false;
+    }
+        
+    /// <summary>
+    /// Deserializes a matrix from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader.</param>
+    /// <returns>The deserialized matrix.</returns>
+    private Matrix<T> DeserializeMatrix(BinaryReader reader)
+    {
+        int rows = reader.ReadInt32();
+        int columns = reader.ReadInt32();
+            
+        Matrix<T> matrix = new Matrix<T>(rows, columns);
+            
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                matrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+            
+        return matrix;
+    }
+        
+    /// <summary>
+    /// Deserializes a vector from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader.</param>
+    /// <returns>The deserialized vector.</returns>
+    private Vector<T> DeserializeVector(BinaryReader reader)
+    {
+        int length = reader.ReadInt32();
+            
+        Vector<T> vector = new Vector<T>(length);
+            
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+            
+        return vector;
+    }
 
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
+    /// <summary>
+    /// Creates a new instance of the EchoStateNetwork with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new EchoStateNetwork instance with the same architecture and configuration as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the EchoStateNetwork with the same architecture, reservoir size,
+    /// spectral radius, sparsity, and activation functions as the current instance. This is useful for model cloning,
+    /// ensemble methods, or cross-validation scenarios where multiple instances of the same model with identical
+    /// configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the ESN's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of ESN with identical settings:
+    /// - This method creates a new, empty ESN with the same configuration
+    /// - It's like making a copy of your pool design before building it
+    /// - The new ESN has the same structure but no trained data
+    /// - This is useful for techniques that need multiple models, like ensemble methods
+    /// 
+    /// For example, when training on different data streams,
+    /// you'd want each ESN to have the same architecture and reservoir properties.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (_reservoirInputVectorActivation != null || _reservoirOutputVectorActivation != null || 
+            _reservoirVectorActivation != null || _outputVectorActivation != null)
+        {
+            // If using vector activations
+            return new EchoStateNetwork<T>(
+                Architecture, 
+                _reservoirSize, 
+                _spectralRadius, 
+                _sparsity,
+                Convert.ToDouble(_leakingRate),
+                Convert.ToDouble(_regularization),
+                _warmupPeriod,
+                _reservoirInputVectorActivation, 
+                _reservoirOutputVectorActivation, 
+                _reservoirVectorActivation, 
+                _outputVectorActivation);
+        }
+        else
+        {
+            // If using scalar activations
+            return new EchoStateNetwork<T>(
+                Architecture, 
+                _reservoirSize, 
+                _spectralRadius, 
+                _sparsity,
+                Convert.ToDouble(_leakingRate),
+                Convert.ToDouble(_regularization),
+                _warmupPeriod,
+                _reservoirInputScalarActivation, 
+                _reservoirOutputScalarActivation, 
+                _reservoirScalarActivation, 
+                _outputScalarActivation);
         }
     }
 }

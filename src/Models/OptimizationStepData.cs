@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Models;
 
 /// <summary>
@@ -32,37 +34,14 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class OptimizationStepData<T>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix<T> for regression, Tensor<T> for neural networks).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector<T> for regression, Tensor<T> for neural networks).</typeparam>
+public class OptimizationStepData<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the current solution (model) for this optimization step.
     /// </summary>
-    /// <value>An ISymbolicModel&lt;T&gt; representing the current solution.</value>
-    /// <remarks>
-    /// <para>
-    /// This property contains the current solution or model for this optimization step. The solution is an implementation 
-    /// of the ISymbolicModel interface, which represents a model that can make predictions based on input features. 
-    /// Different optimization steps might have different solutions with varying structures, complexities, and performance 
-    /// characteristics. The solution is the central object of interest in the optimization process, as the goal is typically 
-    /// to find the solution with the best performance according to some criteria.
-    /// </para>
-    /// <para><b>For Beginners:</b> This contains the actual model that was evaluated in this optimization step.
-    /// 
-    /// The solution:
-    /// - Is the machine learning model being evaluated
-    /// - Implements the ISymbolicModel interface
-    /// - Can make predictions based on input features
-    /// 
-    /// For example, it might be a linear regression model, a decision tree,
-    /// or another type of predictive model.
-    /// 
-    /// This property is important because:
-    /// - It's the main object being optimized
-    /// - It contains the structure and parameters of the model
-    /// - It can be used to make predictions on new data
-    /// </para>
-    /// </remarks>
-    public ISymbolicModel<T> Solution { get; set; }
+    public IFullModel<T, TInput, TOutput> Solution { get; set; }
     
     /// <summary>
     /// Gets or sets the list of selected feature vectors for this optimization step.
@@ -96,20 +75,20 @@ public class OptimizationStepData<T>
     /// <summary>
     /// Gets or sets the subset of the training data used for this optimization step.
     /// </summary>
-    /// <value>A Matrix&lt;T&gt; containing the subset of training data.</value>
+    /// <value>A TInput object containing the subset of training data.</value>
     /// <remarks>
     /// <para>
     /// This property contains a subset of the training data used for this optimization step. The training data is used to 
-    /// train the model and adjust its parameters. The matrix is organized with each row representing an observation (data point) 
-    /// and each column representing a feature (input variable). This subset might be created through techniques like random 
-    /// sampling, stratified sampling, or other data selection methods to focus on specific aspects of the data or to reduce 
-    /// computational requirements.
+    /// train the model and adjust its parameters. The structure of this data depends on the TInput type, which could be a 
+    /// Matrix<T> for traditional machine learning models or a Tensor<T> for neural networks. This subset might be created 
+    /// through techniques like random sampling, stratified sampling, or other data selection methods to focus on specific 
+    /// aspects of the data or to reduce computational requirements.
     /// </para>
     /// <para><b>For Beginners:</b> This contains the data used to train the model in this optimization step.
     /// 
     /// The training subset:
     /// - Contains the data used to train the model
-    /// - Is organized as a matrix where each row is a data point and each column is a feature
+    /// - Its structure depends on the type of model you're using (e.g., matrix for simple models, tensor for neural networks)
     /// - May be a subset of the full training data
     /// 
     /// This data is important because:
@@ -121,25 +100,25 @@ public class OptimizationStepData<T>
     /// a subset of 8,000 records used to train this specific model.
     /// </para>
     /// </remarks>
-    public Matrix<T> XTrainSubset { get; set; } = Matrix<T>.Empty();
+    public TInput XTrainSubset { get; set; }
     
     /// <summary>
     /// Gets or sets the subset of the validation data used for this optimization step.
     /// </summary>
-    /// <value>A Matrix&lt;T&gt; containing the subset of validation data.</value>
+    /// <value>A TInput object containing the subset of validation data.</value>
     /// <remarks>
     /// <para>
     /// This property contains a subset of the validation data used for this optimization step. The validation data is used to 
-    /// evaluate the model during training and make decisions about hyperparameters or early stopping. The matrix is organized 
-    /// with each row representing an observation (data point) and each column representing a feature (input variable). This 
-    /// subset might be created through techniques like random sampling, stratified sampling, or other data selection methods 
-    /// to focus on specific aspects of the data or to reduce computational requirements.
+    /// evaluate the model during training and make decisions about hyperparameters or early stopping. The structure of this 
+    /// data depends on the TInput type, which could be a Matrix<T> for traditional machine learning models or a Tensor<T> for 
+    /// neural networks. This subset might be created through techniques like random sampling, stratified sampling, or other 
+    /// data selection methods to focus on specific aspects of the data or to reduce computational requirements.
     /// </para>
     /// <para><b>For Beginners:</b> This contains the data used to validate the model during optimization.
     /// 
     /// The validation subset:
     /// - Contains data used to evaluate the model during training
-    /// - Is organized as a matrix where each row is a data point and each column is a feature
+    /// - Its structure depends on the type of model you're using (e.g., matrix for simple models, tensor for neural networks)
     /// - Is separate from the training data to provide an unbiased evaluation
     /// 
     /// This data is important because:
@@ -151,25 +130,25 @@ public class OptimizationStepData<T>
     /// a subset of 1,000 records used to validate this specific model.
     /// </para>
     /// </remarks>
-    public Matrix<T> XValSubset { get; set; } = Matrix<T>.Empty();
+    public TInput XValSubset { get; set; }
     
     /// <summary>
     /// Gets or sets the subset of the test data used for this optimization step.
     /// </summary>
-    /// <value>A Matrix&lt;T&gt; containing the subset of test data.</value>
+    /// <value>A TInput object containing the subset of test data.</value>
     /// <remarks>
     /// <para>
     /// This property contains a subset of the test data used for this optimization step. The test data is used to provide a 
-    /// final, unbiased evaluation of the model after training and validation are complete. The matrix is organized with each 
-    /// row representing an observation (data point) and each column representing a feature (input variable). This subset might 
-    /// be created through techniques like random sampling, stratified sampling, or other data selection methods to focus on 
-    /// specific aspects of the data or to reduce computational requirements.
+    /// final, unbiased evaluation of the model after training and validation are complete. The structure of this data depends 
+    /// on the TInput type, which could be a Matrix<T> for traditional machine learning models or a Tensor<T> for neural networks. 
+    /// This subset might be created through techniques like random sampling, stratified sampling, or other data selection methods 
+    /// to focus on specific aspects of the data or to reduce computational requirements.
     /// </para>
     /// <para><b>For Beginners:</b> This contains the data used for the final evaluation of the model.
     /// 
     /// The test subset:
     /// - Contains data used for the final evaluation of the model
-    /// - Is organized as a matrix where each row is a data point and each column is a feature
+    /// - Its structure depends on the type of model you're using (e.g., matrix for simple models, tensor for neural networks)
     /// - Is completely separate from training and validation data
     /// 
     /// This data is important because:
@@ -181,7 +160,7 @@ public class OptimizationStepData<T>
     /// a subset of 1,000 records used for the final test of this specific model.
     /// </para>
     /// </remarks>
-    public Matrix<T> XTestSubset { get; set; } = Matrix<T>.Empty();
+    public TInput XTestSubset { get; set; }
     
     /// <summary>
     /// Gets or sets the fitness score for this optimization step.
@@ -270,7 +249,7 @@ public class OptimizationStepData<T>
     /// performs poorly on certain types of cases, revealing areas for improvement.
     /// </para>
     /// </remarks>
-    public ModelEvaluationData<T> EvaluationData { get; set; } = new();
+    public ModelEvaluationData<T, TInput, TOutput> EvaluationData { get; set; } = new();
 
     /// <summary>
     /// Initializes a new instance of the OptimizationStepData class with default values.
@@ -278,30 +257,33 @@ public class OptimizationStepData<T>
     /// <remarks>
     /// <para>
     /// This constructor creates a new OptimizationStepData instance with default values. It initializes the FitnessScore to 
-    /// zero using the appropriate numeric operations for type T and sets the Solution to a new VectorModel with an empty vector. 
-    /// Other properties are initialized to their default values as specified in their declarations. This constructor is useful 
-    /// when creating a new optimization step data object before the actual optimization step is performed.
+    /// zero and creates an appropriate model based on the generic type parameters. For Vector models, it uses an empty vector.
+    /// For Neural Network models, it creates a minimal network architecture. This constructor is useful when creating a new 
+    /// optimization step data object before the actual optimization step is performed.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new optimization step data object with default values.
     /// 
-    /// When using this constructor:
+    /// When creating a new optimization step data:
     /// - The fitness score is set to zero
-    /// - The solution is initialized as an empty vector model
+    /// - An appropriate empty model is created based on your data types
     /// - Other properties are set to empty collections or default objects
     /// 
-    /// This constructor is typically used when:
-    /// - Creating a new step data object before performing the optimization
-    /// - Initializing a collection of step data objects
-    /// - Setting up the framework for recording optimization results
-    /// 
-    /// After creating the object, you would typically populate its properties
-    /// with actual data from an optimization step.
+    /// This constructor intelligently chooses the right model type based on what
+    /// kind of input and output data you're working with.
     /// </para>
     /// </remarks>
     public OptimizationStepData()
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         FitnessScore = numOps.Zero;
-        Solution = new VectorModel<T>(Vector<T>.Empty());
+
+         // Create default model data
+        var (x, y, _) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
+        
+        // Initialize properties with default values
+        XTrainSubset = x;
+        XValSubset = x;
+        XTestSubset = x;
+        Solution = ModelHelper<T, TInput, TOutput>.CreateDefaultModel();
     }
 }

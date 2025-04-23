@@ -30,7 +30,7 @@ namespace AiDotNet.Models.Options;
 /// whether progress is being made.
 /// </para>
 /// </remarks>
-public class MomentumOptimizerOptions : GradientBasedOptimizerOptions
+public class MomentumOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the maximum allowed learning rate for the optimization process.

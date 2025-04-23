@@ -13,12 +13,12 @@ namespace AiDotNet.Optimizers;
 /// It helps your model learn efficiently by adjusting how it learns based on past experiences.
 /// </para>
 /// </remarks>
-public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
+public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Adam optimizer.
     /// </summary>
-    private AdamOptimizerOptions _options;
+    private AdamOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The first moment vector (moving average of gradients).
@@ -54,26 +54,14 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// Initializes a new instance of the AdamOptimizer class.
     /// </summary>
     /// <param name="options">The options for configuring the Adam optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the Adam optimizer with its initial configuration.
     /// You can customize various aspects of how it learns, or use default settings that work well for many problems.
     /// </para>
     /// </remarks>
     public AdamOptimizer(
-        AdamOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
+        AdamOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
@@ -111,13 +99,13 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// the model's parameters, using the Adam algorithm to decide how to change them.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-
-        _m = new Vector<T>(currentSolution.Coefficients.Length);
-        _v = new Vector<T>(currentSolution.Coefficients.Length);
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var parameters = currentSolution.GetParameters();
+        _m = new Vector<T>(parameters.Length);
+        _v = new Vector<T>(parameters.Length);
         _t = 0;
 
         InitializeAdaptiveParameters();
@@ -161,7 +149,7 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It can change the learning rate and momentum factors to help the optimizer learn more effectively.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -192,8 +180,9 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It uses the current gradient and past information to decide how to change each parameter.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        var parameters = currentSolution.GetParameters();
         for (int i = 0; i < gradient.Length; i++)
         {
             _m[i] = NumOps.Add(NumOps.Multiply(_currentBeta1, _m[i]), NumOps.Multiply(NumOps.Subtract(NumOps.One, _currentBeta1), gradient[i]));
@@ -204,7 +193,7 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
 
             var update = NumOps.Divide(NumOps.Multiply(_currentLearningRate, mHat), NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon)));
 
-            currentSolution.Coefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], update);
+            parameters[i] = NumOps.Subtract(parameters[i], update);
         }
 
         return currentSolution;
@@ -222,7 +211,7 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// The method decides how much to turn each knob based on past adjustments and the current gradient.
     /// </para>
     /// </remarks>
-    public override Vector<T> UpdateVector(Vector<T> parameters, Vector<T> gradient)
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
         if (_m == null || _v == null || _m.Length != parameters.Length)
         {
@@ -273,7 +262,7 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's like adjusting a whole panel of knobs, where each knob is positioned in a grid.
     /// </para>
     /// </remarks>
-    public override Matrix<T> UpdateMatrix(Matrix<T> parameters, Matrix<T> gradient)
+    public override Matrix<T> UpdateParameters(Matrix<T> parameters, Matrix<T> gradient)
     {
         if (_m == null || _v == null || _m.Length != parameters.Rows * parameters.Columns)
         {
@@ -348,9 +337,9 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's like adjusting the personal trainer's approach based on new instructions.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is AdamOptimizerOptions adamOptions)
+        if (options is AdamOptimizerOptions<T, TInput, TOutput> adamOptions)
         {
             _options = adamOptions;
         }
@@ -369,7 +358,7 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's like asking your personal trainer about their current training plan for you.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -435,7 +424,7 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
 
             // Deserialize AdamOptimizerOptions
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<AdamOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<AdamOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             // Deserialize Adam-specific data
@@ -467,7 +456,7 @@ public class AdamOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's like creating a label for a particular training session, which helps in efficiently storing and retrieving calculated gradients.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_Adam_{_options.LearningRate}_{_options.MaxIterations}";

@@ -93,7 +93,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
         : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), activationFunction ?? new ReLUActivation<T>())
     {
         _forwardLayer = innerLayer;
-        _backwardLayer = innerLayer.Copy();
+        _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;
     }
 
@@ -128,7 +128,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
         : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), vectorActivationFunction ?? new IdentityActivation<T>())
     {
         _forwardLayer = innerLayer;
-        _backwardLayer = innerLayer.Copy();
+        _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;
     }
 

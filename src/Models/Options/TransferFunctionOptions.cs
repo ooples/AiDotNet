@@ -37,7 +37,7 @@
 /// This class lets you configure the structure of the Transfer Function model.
 /// </para>
 /// </remarks>
-public class TransferFunctionOptions<T> : TimeSeriesRegressionOptions<T>
+public class TransferFunctionOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
 {
     /// <summary>
     /// Gets or sets the order of the AutoRegressive (AR) component.
@@ -241,5 +241,5 @@ public class TransferFunctionOptions<T> : TimeSeriesRegressionOptions<T>
     /// stuck in local optima.
     /// </para>
     /// </remarks>
-    public IOptimizer<T>? Optimizer { get; set; }
+    public IOptimizer<T, TInput, TOutput>? Optimizer { get; set; }
 }

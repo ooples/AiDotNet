@@ -31,7 +31,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - Any binary classification problem where you want a clear separation between classes
 /// </para>
 /// </remarks>
-public class HingeLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class HingeLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the HingeLossFitnessCalculator class.
@@ -87,8 +87,9 @@ public class HingeLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// passing in your model's predictions and the actual values.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.HingeLoss(dataSet.Predicted, dataSet.Actual);
+        return new HingeLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

@@ -1,3 +1,5 @@
+namespace AiDotNet.Optimizers;
+
 /// <summary>
 /// Represents a Tabu Search optimizer for machine learning models.
 /// </summary>
@@ -17,17 +19,13 @@
 /// This method is particularly effective for problems with many local optima.
 /// </para>
 /// </remarks>
-public class TabuSearchOptimizer<T> : OptimizerBase<T>
+public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+    where T : struct, IEquatable<T>, IFormattable
 {
-    /// <summary>
-    /// A random number generator used for stochastic operations in the optimizer.
-    /// </summary>
-    private readonly Random _random;
-
     /// <summary>
     /// The options specific to the Tabu Search algorithm.
     /// </summary>
-    private TabuSearchOptions _tabuOptions;
+    private TabuSearchOptions<T, TInput, TOutput> _tabuOptions;
 
     /// <summary>
     /// The current mutation rate used in generating neighboring solutions.
@@ -45,27 +43,43 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     private int _currentNeighborhoodSize;
 
     /// <summary>
+    /// The genetic algorithm used to handle mutations and generate neighboring solutions.
+    /// </summary>
+    private GeneticBase<T, TInput, TOutput> _geneticAlgorithm;
+
+    /// <summary>
     /// Initializes a new instance of the TabuSearchOptimizer class.
     /// </summary>
     /// <param name="options">Options specific to the Tabu Search algorithm.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="geneticAlgorithm">The genetic algorithm to use for mutations. If null, a StandardGeneticAlgorithm will be used.</param>
     public TabuSearchOptimizer(
-        TabuSearchOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
+        TabuSearchOptions<T, TInput, TOutput>? options = null,
+        GeneticBase<T, TInput, TOutput>? geneticAlgorithm = null,
+        IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,
+        IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null)
+        : base(options ?? new())
     {
-        _random = new Random();
-        _tabuOptions = options ?? new TabuSearchOptions();
+        _tabuOptions = options ?? new TabuSearchOptions<T, TInput, TOutput>();
+
+        // If no genetic algorithm is provided, create a default StandardGeneticAlgorithm
+        if (geneticAlgorithm == null)
+        {
+            // Need to provide a model factory - use a simple model as default
+            static IFullModel<T, TInput, TOutput> modelFactory()
+            {
+                return (IFullModel<T, TInput, TOutput>)new SimpleRegression<T>();
+            }
+
+            _geneticAlgorithm = new StandardGeneticAlgorithm<T, TInput, TOutput>(
+                modelFactory,
+                fitnessCalculator ?? new MeanSquaredErrorFitnessCalculator<T, TInput, TOutput>(),
+                modelEvaluator ?? new DefaultModelEvaluator<T, TInput, TOutput>());
+        }
+        else
+        {
+            _geneticAlgorithm = geneticAlgorithm;
+        }
+
         InitializeAdaptiveParameters();
     }
 
@@ -105,26 +119,69 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// This process helps find a good solution efficiently, even in complex landscapes.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var tabuList = new Queue<ISymbolicModel<T>>(_tabuOptions.TabuListSize);
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+
+        // Use a HashSet for faster tabu list lookups, with a custom comparer
+        var tabuList = new HashSet<string>();
 
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
-            var neighbors = GenerateNeighbors(currentSolution);
-            var bestNeighbor = neighbors
-                .Where(n => !IsTabu(n, tabuList))
-                .OrderByDescending(n => EvaluateSolution(n, inputData).FitnessScore)
-                .FirstOrDefault() ?? neighbors.First();
+            var neighbors = GenerateNeighbors(currentSolution, inputData);
 
-            currentSolution = bestNeighbor;
+            // Find the best non-tabu neighbor
+            IFullModel<T, TInput, TOutput>? bestNeighbor = null;
+            OptimizationStepData<T, TInput, TOutput> bestNeighborStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-            var currentStepData = EvaluateSolution(currentSolution, inputData);
-            UpdateBestSolution(currentStepData, ref bestStepData);
+            foreach (var neighbor in neighbors)
+            {
+                // Create a hash representation of this solution
+                string solutionHash = GetSolutionHash(neighbor);
 
-            UpdateTabuList(tabuList, currentSolution);
+                if (!tabuList.Contains(solutionHash))
+                {
+                    var neighborStepData = EvaluateSolution(neighbor, inputData);
+
+                    if (bestNeighbor == null ||
+                        _fitnessCalculator.IsBetterFitness(neighborStepData.FitnessScore, bestNeighborStepData.FitnessScore))
+                    {
+                        bestNeighbor = neighbor;
+                        bestNeighborStepData = neighborStepData;
+                    }
+                }
+            }
+
+            // If all neighbors are tabu, pick the best one anyway (aspiration criteria)
+            if (bestNeighbor == null && neighbors.Count > 0)
+            {
+                foreach (var neighbor in neighbors)
+                {
+                    var neighborStepData = EvaluateSolution(neighbor, inputData);
+
+                    if (bestNeighbor == null ||
+                        _fitnessCalculator.IsBetterFitness(neighborStepData.FitnessScore, bestNeighborStepData.FitnessScore))
+                    {
+                        bestNeighbor = neighbor;
+                        bestNeighborStepData = neighborStepData;
+                    }
+                }
+            }
+
+            // If we found a neighbor, update current solution
+            if (bestNeighbor != null)
+            {
+                currentSolution = bestNeighbor;
+
+                // Add current solution to tabu list
+                string solutionHash = GetSolutionHash(currentSolution);
+                UpdateTabuList(tabuList, solutionHash);
+
+                // Update best solution if needed
+                UpdateBestSolution(bestNeighborStepData, ref bestStepData);
+            }
+
             UpdateAdaptiveParameters(iteration);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
@@ -134,6 +191,31 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
+    }
+
+    /// <summary>
+    /// Creates a hash representation of a solution for the tabu list.
+    /// </summary>
+    /// <param name="solution">The solution to hash.</param>
+    /// <returns>A string hash representation of the solution.</returns>
+    private string GetSolutionHash(IFullModel<T, TInput, TOutput> solution)
+    {
+        var parameters = solution.GetParameters();
+
+        // Create a MD5 hash of the parameters
+        using System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
+
+        byte[] data = new byte[parameters.Length * sizeof(double)];
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            double value = Convert.ToDouble(parameters[i]);
+            byte[] bytes = BitConverter.GetBytes(value);
+            Array.Copy(bytes, 0, data, i * sizeof(double), sizeof(double));
+        }
+
+        byte[] hashBytes = md5.ComputeHash(data);
+        return Convert.ToBase64String(hashBytes);
     }
 
     /// <summary>
@@ -148,15 +230,15 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     private void UpdateAdaptiveParameters(int iteration)
     {
         // Update mutation rate
-        _currentMutationRate *= (iteration % 2 == 0) ? _tabuOptions.MutationRateDecay : _tabuOptions.MutationRateIncrease;
+        _currentMutationRate *= iteration % 2 == 0 ? _tabuOptions.MutationRateDecay : _tabuOptions.MutationRateIncrease;
         _currentMutationRate = MathHelper.Clamp(_currentMutationRate, _tabuOptions.MinMutationRate, _tabuOptions.MaxMutationRate);
 
         // Update tabu list size
-        _currentTabuListSize = (int)(_currentTabuListSize * ((iteration % 2 == 0) ? _tabuOptions.TabuListSizeDecay : _tabuOptions.TabuListSizeIncrease));
+        _currentTabuListSize = (int)(_currentTabuListSize * (iteration % 2 == 0 ? _tabuOptions.TabuListSizeDecay : _tabuOptions.TabuListSizeIncrease));
         _currentTabuListSize = MathHelper.Clamp(_currentTabuListSize, _tabuOptions.MinTabuListSize, _tabuOptions.MaxTabuListSize);
 
         // Update neighborhood size
-        _currentNeighborhoodSize = (int)(_currentNeighborhoodSize * ((iteration % 2 == 0) ? _tabuOptions.NeighborhoodSizeDecay : _tabuOptions.NeighborhoodSizeIncrease));
+        _currentNeighborhoodSize = (int)(_currentNeighborhoodSize * (iteration % 2 == 0 ? _tabuOptions.NeighborhoodSizeDecay : _tabuOptions.NeighborhoodSizeIncrease));
         _currentNeighborhoodSize = MathHelper.Clamp(_currentNeighborhoodSize, _tabuOptions.MinNeighborhoodSize, _tabuOptions.MaxNeighborhoodSize);
     }
 
@@ -164,42 +246,70 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// Generates a list of neighboring solutions from the current solution.
     /// </summary>
     /// <param name="currentSolution">The current solution to generate neighbors from.</param>
+    /// <param name="inputData">The input data used for evaluating solutions.</param>
     /// <returns>A list of neighboring solutions.</returns>
-    private List<ISymbolicModel<T>> GenerateNeighbors(ISymbolicModel<T> currentSolution)
+    private List<IFullModel<T, TInput, TOutput>> GenerateNeighbors(
+        IFullModel<T, TInput, TOutput> currentSolution,
+        OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var neighbors = new List<ISymbolicModel<T>>();
+        var neighbors = new List<IFullModel<T, TInput, TOutput>>();
+
+        // Convert the current solution to a ModelIndividual
+        var parameters = currentSolution.GetParameters();
+        var genes = new List<ModelParameterGene<T>>();
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            genes.Add(new ModelParameterGene<T>(i, parameters[i]));
+        }
+
+        // Create an individual from the current solution
+        Func<ICollection<ModelParameterGene<T>>, IFullModel<T, TInput, TOutput>> modelFactory =
+            g => {
+                var model = currentSolution.DeepCopy();
+
+                var newParams = new Vector<T>(g.Count);
+                foreach (var gene in g.OrderBy(gene => gene.Index))
+                {
+                    newParams[gene.Index] = gene.Value;
+                }
+
+                return model.WithParameters(newParams);
+            };
+
+        var individual = new ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>(
+            genes, modelFactory);
+
+        // Configure genetic algorithm parameters for generating neighbors
+        var geneticParams = _geneticAlgorithm.GetGeneticParameters();
+        geneticParams.MutationRate = _currentMutationRate;
+        _geneticAlgorithm.ConfigureGeneticParameters(geneticParams);
+
+        // Generate neighbors using the genetic algorithm's mutation operator
         for (int i = 0; i < _currentNeighborhoodSize; i++)
         {
-            neighbors.Add(currentSolution.Mutate(_currentMutationRate));
+            var mutated = _geneticAlgorithm.Mutate(individual, _currentMutationRate);
+            var model = _geneticAlgorithm.IndividualToModel(mutated);
+            neighbors.Add(model);
         }
 
         return neighbors;
     }
 
     /// <summary>
-    /// Checks if a given solution is in the tabu list.
-    /// </summary>
-    /// <param name="solution">The solution to check.</param>
-    /// <param name="tabuList">The current tabu list.</param>
-    /// <returns>True if the solution is in the tabu list, false otherwise.</returns>
-    private bool IsTabu(ISymbolicModel<T> solution, Queue<ISymbolicModel<T>> tabuList)
-    {
-        return tabuList.Any(tabuSolution => tabuSolution.Equals(solution));
-    }
-
-    /// <summary>
-    /// Updates the tabu list with a new solution.
+    /// Updates the tabu list with a new solution hash.
     /// </summary>
     /// <param name="tabuList">The current tabu list to update.</param>
-    /// <param name="solution">The solution to add to the tabu list.</param>
-    private void UpdateTabuList(Queue<ISymbolicModel<T>> tabuList, ISymbolicModel<T> solution)
+    /// <param name="solutionHash">The solution hash to add to the tabu list.</param>
+    private void UpdateTabuList(HashSet<string> tabuList, string solutionHash)
     {
+        // If the tabu list is at capacity, remove a random item
         if (tabuList.Count >= _currentTabuListSize)
         {
-            tabuList.Dequeue();
+            tabuList.Remove(tabuList.First());
         }
 
-        tabuList.Enqueue(solution);
+        tabuList.Add(solutionHash);
     }
 
     /// <summary>
@@ -207,9 +317,9 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// </summary>
     /// <param name="options">The new options to set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type TabuSearchOptions.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is TabuSearchOptions tabuOptions)
+        if (options is TabuSearchOptions<T, TInput, TOutput> tabuOptions)
         {
             _tabuOptions = tabuOptions;
         }
@@ -223,7 +333,7 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
     /// Gets the current options for the Tabu Search algorithm.
     /// </summary>
     /// <returns>The current TabuSearchOptions.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _tabuOptions;
     }
@@ -245,6 +355,11 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
         // Serialize Tabu Search-specific options
         string optionsJson = JsonConvert.SerializeObject(_tabuOptions);
         writer.Write(optionsJson);
+
+        // Serialize the genetic algorithm
+        byte[] geneticAlgorithmData = _geneticAlgorithm.Serialize();
+        writer.Write(geneticAlgorithmData.Length);
+        writer.Write(geneticAlgorithmData);
 
         return ms.ToArray();
     }
@@ -283,8 +398,16 @@ public class TabuSearchOptimizer<T> : OptimizerBase<T>
 
         // Deserialize Tabu Search-specific options
         string optionsJson = reader.ReadString();
-        _tabuOptions = JsonConvert.DeserializeObject<TabuSearchOptions>(optionsJson)
+        _tabuOptions = JsonConvert.DeserializeObject<TabuSearchOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+
+        // Deserialize the genetic algorithm if available
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int geneticAlgorithmDataLength = reader.ReadInt32();
+            byte[] geneticAlgorithmData = reader.ReadBytes(geneticAlgorithmDataLength);
+            _geneticAlgorithm.Deserialize(geneticAlgorithmData);
+        }
 
         // Initialize adaptive parameters after deserialization
         InitializeAdaptiveParameters();

@@ -23,7 +23,7 @@ namespace AiDotNet.FitDetectors;
 /// This detector helps you identify these issues and suggests ways to fix them.
 /// </para>
 /// </remarks>
-public class VIFFitDetector<T> : FitDetectorBase<T>
+public class VIFFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the VIF fit detector.
@@ -70,7 +70,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
     /// your model's health and how to make it better.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -105,23 +105,23 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
     /// what kind of improvements you should make.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var vifValues = StatisticsHelper<T>.CalculateVIF(evaluationData.ModelStats.CorrelationMatrix, _modelStatsOptions);
-        var maxVIF = vifValues.Max() ?? _numOps.Zero;
+        var maxVIF = vifValues.Max() ?? NumOps.Zero;
 
-        if (_numOps.GreaterThan(maxVIF, _numOps.FromDouble(_options.SevereMulticollinearityThreshold)))
+        if (NumOps.GreaterThan(maxVIF, NumOps.FromDouble(_options.SevereMulticollinearityThreshold)))
         {
             return FitType.SevereMulticollinearity;
         }
-        else if (_numOps.GreaterThan(maxVIF, _numOps.FromDouble(_options.ModerateMulticollinearityThreshold)))
+        else if (NumOps.GreaterThan(maxVIF, NumOps.FromDouble(_options.ModerateMulticollinearityThreshold)))
         {
             return FitType.ModerateMulticollinearity;
         }
         else
         {
             var primaryMetric = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
-            if (_numOps.GreaterThan(primaryMetric, _numOps.FromDouble(_options.GoodFitThreshold)))
+            if (NumOps.GreaterThan(primaryMetric, NumOps.FromDouble(_options.GoodFitThreshold)))
             {
                 return FitType.GoodFit;
             }
@@ -150,16 +150,16 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
     /// A lower score (closer to 0) means there's more uncertainty, and you might want to investigate further.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var vifValues = StatisticsHelper<T>.CalculateVIF(evaluationData.ModelStats.CorrelationMatrix, _modelStatsOptions);
-        var maxVIF = vifValues.Max() ?? _numOps.Zero;
-        var avgVIF = _numOps.Divide(vifValues.Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(vifValues.Count));
+        var maxVIF = vifValues.Max() ?? NumOps.Zero;
+        var avgVIF = NumOps.Divide(vifValues.Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(vifValues.Count));
 
-        var vifConfidence = _numOps.Subtract(_numOps.One, _numOps.Divide(avgVIF, maxVIF));
+        var vifConfidence = NumOps.Subtract(NumOps.One, NumOps.Divide(avgVIF, maxVIF));
         var metricConfidence = evaluationData.ValidationSet.PredictionStats.GetMetric(_options.PrimaryMetric);
 
-        return _numOps.Multiply(vifConfidence, metricConfidence);
+        return NumOps.Multiply(vifConfidence, metricConfidence);
     }
 
     /// <summary>
@@ -188,7 +188,7 @@ public class VIFFitDetector<T> : FitDetectorBase<T>
     /// </para>
     /// </remarks>
     protected override List<string> GenerateRecommendations(
-        FitType fitType, ModelEvaluationData<T> evaluationData)
+        FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

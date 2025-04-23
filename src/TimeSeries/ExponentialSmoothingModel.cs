@@ -28,9 +28,106 @@ namespace AiDotNet.TimeSeries;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 {
+    /// <summary>
+    /// The smoothing factor for the level component (alpha).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Alpha controls how much weight is given to recent observations versus historical level values.
+    /// Values range from 0 to 1, where higher values give more weight to recent observations.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of alpha as a "sensitivity dial" for your forecast.
+    /// 
+    /// - A high alpha (close to 1) means the model responds quickly to changes in your data.
+    ///   It's like saying "what happened yesterday matters a lot more than what happened last month."
+    /// 
+    /// - A low alpha (close to 0) makes the model more stable and less reactive to sudden changes.
+    ///   It's like saying "let's look at the long-term average and not overreact to yesterday's data."
+    /// 
+    /// For example, if you're forecasting ice cream sales:
+    /// - High alpha (0.9): If yesterday was unusually hot and sales spiked, your forecast will predict high sales today too
+    /// - Low alpha (0.1): Even if yesterday was unusually hot, your forecast will only adjust slightly upward
+    /// </para>
+    /// </remarks>
     private T _alpha; // Smoothing factor for level
+
+    /// <summary>
+    /// The smoothing factor for the trend component (beta).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Beta controls how much weight is given to recent trend changes versus historical trend values.
+    /// This is only used when trend analysis is enabled in the model options.
+    /// Values range from 0 to 1, where higher values make the trend more responsive to recent changes.
+    /// </para>
+    /// <para><b>For Beginners:</b> Beta controls how quickly your model adapts to changing trends.
+    /// 
+    /// - A high beta (close to 1) means the model quickly adjusts its trend estimates when the data direction changes.
+    ///   For example, if sales have been growing by 5 units per day but suddenly start growing by 10 units per day,
+    ///   the model will quickly adjust to the new growth rate.
+    /// 
+    /// - A low beta (close to 0) means the model is slower to adjust its trend estimates.
+    ///   It will hold onto the established trend and only gradually change if new data consistently shows a different trend.
+    /// 
+    /// Think of it like steering a ship:
+    /// - High beta: Responsive steering that quickly changes direction
+    /// - Low beta: Steady steering that maintains course with only gradual adjustments
+    /// </para>
+    /// </remarks>
     private T _beta;  // Smoothing factor for trend (if applicable)
+
+    /// <summary>
+    /// The smoothing factor for the seasonal component (gamma).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Gamma controls how much weight is given to recent seasonal observations versus historical seasonal patterns.
+    /// This is only used when seasonal analysis is enabled in the model options.
+    /// Values range from 0 to 1, where higher values make the seasonal pattern more responsive to recent observations.
+    /// </para>
+    /// <para><b>For Beginners:</b> Gamma determines how quickly your model updates its understanding of seasonal patterns.
+    /// 
+    /// - A high gamma (close to 1) means the model quickly adjusts its seasonal estimates based on recent observations.
+    ///   If this December's holiday sales are much higher than previous Decembers, the model will quickly adapt.
+    /// 
+    /// - A low gamma (close to 0) means the model sticks more closely to established seasonal patterns.
+    ///   It assumes that this December will be similar to previous Decembers, even if early sales figures suggest otherwise.
+    /// 
+    /// For example, in retail sales forecasting:
+    /// - High gamma: "This holiday season seems different from past years, let's adjust our expectations"
+    /// - Low gamma: "Holiday patterns are pretty consistent year to year, let's not overreact to early signals"
+    /// </para>
+    /// </remarks>
     private T _gamma; // Smoothing factor for seasonality (if applicable)
+
+    /// <summary>
+    /// The initial values for level, trend, and seasonal components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector stores the starting values for the exponential smoothing algorithm:
+    /// - Index 0: Initial level value
+    /// - Index 1: Initial trend value (if trend is enabled)
+    /// - Index 2 and above: Initial seasonal factors (if seasonality is enabled)
+    /// 
+    /// These values are estimated from the training data and provide the foundation for the forecasting process.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are the starting points for your forecasting model.
+    /// 
+    /// Think of these as the "first day" values that the model needs to get started:
+    /// 
+    /// - Initial level: The baseline value of your time series (like average daily sales)
+    /// - Initial trend: How much your values are typically increasing or decreasing per period
+    /// - Initial seasonal factors: How each season typically differs from the average
+    /// 
+    /// For example, if forecasting monthly ice cream sales, your initial values might include:
+    /// - A base level of 1000 sales per month
+    /// - An upward trend of +50 sales per month
+    /// - Seasonal factors showing summer months at 150% of average and winter months at 50% of average
+    /// 
+    /// The model uses these as starting points and then updates them as it processes more data.
+    /// </para>
+    /// </remarks>
     private Vector<T> _initialValues;
 
     /// <summary>
@@ -62,35 +159,6 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         _beta = options.UseTrend ? NumOps.FromDouble(options.InitialBeta) : NumOps.Zero;
         _gamma = options.UseSeasonal ? NumOps.FromDouble(options.InitialGamma) : NumOps.Zero;
         _initialValues = Vector<T>.Empty();
-    }
-
-    /// <summary>
-    /// Trains the exponential smoothing model on the provided input and output data.
-    /// </summary>
-    /// <param name="x">The input features matrix (typically time indicators or related variables).</param>
-    /// <param name="y">The target values vector (the time series data to forecast).</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the exponential smoothing model by finding optimal values for the smoothing
-    /// parameters (alpha, beta, gamma) using a grid search approach. It also estimates initial values
-    /// for the level, trend, and seasonal components based on the training data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the model patterns in your data.
-    /// 
-    /// When training the model:
-    /// - It tries different combinations of alpha, beta, and gamma values
-    /// - It keeps the combination that gives the most accurate predictions
-    /// - It sets up initial estimates for level, trend, and seasonality
-    /// 
-    /// Think of it like adjusting the dials on a radio until you get the clearest signal.
-    /// The model tests many different settings automatically and picks the best ones.
-    /// </para>
-    /// </remarks>
-    public override void Train(Matrix<T> x, Vector<T> y)
-    {
-        // Implement Exponential Smoothing training logic
-        (_alpha, _beta, _gamma) = EstimateParametersGridSearch(y);
-        _initialValues = EstimateInitialValues(y);
     }
 
     /// <summary>
@@ -211,15 +279,15 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     {
         Vector<T> forecasts = new(y.Length);
         T level = y[0];
-        T trend = _options.IncludeTrend ? NumOps.Subtract(y[1], y[0]) : NumOps.Zero;
-        Vector<T> seasonalFactors = _options.SeasonalPeriod > 0 ? EstimateInitialSeasonalFactors(y) : Vector<T>.Empty();
+        T trend = Options.IncludeTrend ? NumOps.Subtract(y[1], y[0]) : NumOps.Zero;
+        Vector<T> seasonalFactors = Options.SeasonalPeriod > 0 ? EstimateInitialSeasonalFactors(y) : Vector<T>.Empty();
 
         for (int i = 0; i < y.Length; i++)
         {
             T forecast;
-            if (_options.SeasonalPeriod > 0)
+            if (Options.SeasonalPeriod > 0)
             {
-                forecast = NumOps.Multiply(NumOps.Add(level, trend), seasonalFactors[i % _options.SeasonalPeriod]);
+                forecast = NumOps.Multiply(NumOps.Add(level, trend), seasonalFactors[i % Options.SeasonalPeriod]);
             }
             else
             {
@@ -235,12 +303,12 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 
                 // Update level
                 level = NumOps.Add(
-                    NumOps.Multiply(alpha, NumOps.Divide(observation, _options.SeasonalPeriod > 0 ? seasonalFactors[i % _options.SeasonalPeriod] : NumOps.One)),
+                    NumOps.Multiply(alpha, NumOps.Divide(observation, Options.SeasonalPeriod > 0 ? seasonalFactors[i % Options.SeasonalPeriod] : NumOps.One)),
                     NumOps.Multiply(NumOps.Subtract(NumOps.One, alpha), NumOps.Add(oldLevel, trend))
                 );
 
                 // Update trend
-                if (_options.IncludeTrend)
+                if (Options.IncludeTrend)
                 {
                     trend = NumOps.Add(
                         NumOps.Multiply(beta, NumOps.Subtract(level, oldLevel)),
@@ -249,9 +317,9 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
                 }
 
                 // Update seasonal factors
-                if (_options.SeasonalPeriod > 0)
+                if (Options.SeasonalPeriod > 0)
                 {
-                    int seasonIndex = i % _options.SeasonalPeriod;
+                    int seasonIndex = i % Options.SeasonalPeriod;
                     seasonalFactors[seasonIndex] = NumOps.Add(
                         NumOps.Multiply(gamma, NumOps.Divide(observation, level)),
                         NumOps.Multiply(NumOps.Subtract(NumOps.One, gamma), seasonalFactors[seasonIndex])
@@ -290,13 +358,13 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> EstimateInitialValues(Vector<T> y)
     {
-        Vector<T> initialValues = new Vector<T>(_options.SeasonalPeriod > 0 ? _options.SeasonalPeriod + 2 : 2);
+        Vector<T> initialValues = new Vector<T>(Options.SeasonalPeriod > 0 ? Options.SeasonalPeriod + 2 : 2);
         
         // Initial level
         initialValues[0] = y[0];
 
         // Initial trend
-        if (_options.IncludeTrend)
+        if (Options.IncludeTrend)
         {
             initialValues[1] = NumOps.Subtract(y[1], y[0]);
         }
@@ -306,10 +374,10 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         }
 
         // Initial seasonal factors
-        if (_options.SeasonalPeriod > 0)
+        if (Options.SeasonalPeriod > 0)
         {
             Vector<T> seasonalFactors = EstimateInitialSeasonalFactors(y);
-            for (int i = 0; i < _options.SeasonalPeriod; i++)
+            for (int i = 0; i < Options.SeasonalPeriod; i++)
             {
                 initialValues[i + 2] = seasonalFactors[i];
             }
@@ -344,24 +412,24 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> EstimateInitialSeasonalFactors(Vector<T> y)
     {
-        Vector<T> seasonalFactors = new Vector<T>(_options.SeasonalPeriod);
-        int seasons = y.Length / _options.SeasonalPeriod;
+        Vector<T> seasonalFactors = new Vector<T>(Options.SeasonalPeriod);
+        int seasons = y.Length / Options.SeasonalPeriod;
 
-        for (int i = 0; i < _options.SeasonalPeriod; i++)
+        for (int i = 0; i < Options.SeasonalPeriod; i++)
         {
             T sum = NumOps.Zero;
             for (int j = 0; j < seasons; j++)
             {
-                sum = NumOps.Add(sum, y[i + j * _options.SeasonalPeriod]);
+                sum = NumOps.Add(sum, y[i + j * Options.SeasonalPeriod]);
             }
             seasonalFactors[i] = NumOps.Divide(sum, NumOps.FromDouble(seasons));
         }
 
         // Normalize seasonal factors
         T seasonalSum = seasonalFactors.Sum();
-        for (int i = 0; i < _options.SeasonalPeriod; i++)
+        for (int i = 0; i < Options.SeasonalPeriod; i++)
         {
-            seasonalFactors[i] = NumOps.Divide(NumOps.Multiply(seasonalFactors[i], NumOps.FromDouble(_options.SeasonalPeriod)), seasonalSum);
+            seasonalFactors[i] = NumOps.Divide(NumOps.Multiply(seasonalFactors[i], NumOps.FromDouble(Options.SeasonalPeriod)), seasonalSum);
         }
 
         return seasonalFactors;
@@ -394,15 +462,15 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     {
         Vector<T> predictions = new Vector<T>(input.Rows);
         T level = _initialValues[0];
-        T trend = _options.IncludeTrend ? _initialValues[1] : NumOps.Zero;
-        Vector<T> seasonalFactors = _options.SeasonalPeriod > 0 ? new Vector<T>([.. _initialValues.Skip(2)]) : Vector<T>.Empty();
+        T trend = Options.IncludeTrend ? _initialValues[1] : NumOps.Zero;
+        Vector<T> seasonalFactors = Options.SeasonalPeriod > 0 ? new Vector<T>([.. _initialValues.Skip(2)]) : Vector<T>.Empty();
 
         for (int i = 0; i < predictions.Length; i++)
         {
             T prediction;
-            if (_options.SeasonalPeriod > 0)
+            if (Options.SeasonalPeriod > 0)
             {
-                prediction = NumOps.Multiply(NumOps.Add(level, trend), seasonalFactors[i % _options.SeasonalPeriod]);
+                prediction = NumOps.Multiply(NumOps.Add(level, trend), seasonalFactors[i % Options.SeasonalPeriod]);
             }
             else
             {
@@ -415,14 +483,14 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
             T oldLevel = level;
             level = NumOps.Add(NumOps.Multiply(_alpha, prediction), NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend)));
 
-            if (_options.IncludeTrend)
+            if (Options.IncludeTrend)
             {
                 trend = NumOps.Add(NumOps.Multiply(_beta, NumOps.Subtract(level, oldLevel)), NumOps.Multiply(NumOps.Subtract(NumOps.One, _beta), trend));
             }
 
-            if (_options.SeasonalPeriod > 0)
+            if (Options.SeasonalPeriod > 0)
             {
-                int seasonIndex = i % _options.SeasonalPeriod;
+                int seasonIndex = i % Options.SeasonalPeriod;
                 seasonalFactors[seasonIndex] = NumOps.Add(
                     NumOps.Multiply(_gamma, NumOps.Divide(prediction, NumOps.Add(oldLevel, trend))),
                     NumOps.Multiply(NumOps.Subtract(NumOps.One, _gamma), seasonalFactors[seasonIndex])
@@ -546,5 +614,202 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         {
             _initialValues[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <summary>
+    /// Resets the model to its initial state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the exponential smoothing model to its initial state, clearing any learned
+    /// parameters and returning to the initial smoothing factors provided in the options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This resets the model to start fresh.
+    /// 
+    /// Resetting the model:
+    /// - Clears any learning that has happened
+    /// - Returns to the initial settings you provided
+    /// - Allows you to train the model again from scratch
+    /// 
+    /// This is useful if you want to re-train the model with different data
+    /// or if you want to compare different training approaches.
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        _alpha = NumOps.Zero;
+        _beta = NumOps.Zero;
+        _gamma = NumOps.Zero;
+        _initialValues = Vector<T>.Empty();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the exponential smoothing model with the same options.
+    /// </summary>
+    /// <returns>A new instance of the exponential smoothing model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the exponential smoothing model with the same configuration
+    /// options as the current instance. This is useful for creating copies or clones of the model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new copy of the model with the same settings.
+    /// 
+    /// Creating a new instance:
+    /// - Makes a fresh copy of the model with the same configuration
+    /// - The new copy hasn't been trained yet
+    /// - You can train and use the copy independently from the original
+    /// 
+    /// This is helpful when you want to experiment with different training data
+    /// while preserving your original model.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new ExponentialSmoothingModel<T>((ExponentialSmoothingOptions<T>)Options);
+    }
+
+    /// <summary>
+    /// Returns metadata about the model, including its type, parameters, and configuration.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed metadata about the exponential smoothing model, including its type,
+    /// current parameters (alpha, beta, gamma, initial values), and configuration options. This metadata
+    /// can be used for model selection, comparison, and documentation purposes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about your model's settings and state.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Exponential Smoothing)
+    /// - Current smoothing parameters (alpha, beta, gamma)
+    /// - Initial values for level, trend, and seasonal components
+    /// - Configuration settings from when you created the model
+    /// - A serialized version of the entire model
+    /// 
+    /// This information is useful for:
+    /// - Keeping track of different models you've created
+    /// - Comparing model configurations
+    /// - Documenting which settings worked best
+    /// - Sharing model information with others
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        var esOptions = (ExponentialSmoothingOptions<T>)Options;
+        var metadata = new ModelMetaData<T>
+        {
+            ModelType = ModelType.ExponentialSmoothingModel,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Include the actual model state variables
+                { "Alpha", Convert.ToDouble(_alpha) },
+                { "Beta", Convert.ToDouble(_beta) },
+                { "Gamma", Convert.ToDouble(_gamma) },
+                { "InitialValues", _initialValues },
+            
+                // Include model configuration as well
+                { "InitialAlpha", esOptions.InitialAlpha },
+                { "InitialBeta", esOptions.InitialBeta },
+                { "InitialGamma", esOptions.InitialGamma },
+                { "UseTrend", esOptions.UseTrend },
+                { "UseSeasonal", esOptions.UseSeasonal },
+                { "SeasonalPeriod", esOptions.SeasonalPeriod }
+            },
+            ModelData = this.Serialize()
+        };
+
+        return metadata;
+    }
+
+    /// <summary>
+    /// Implements the core training logic for the exponential smoothing model.
+    /// </summary>
+    /// <param name="x">The input features matrix (typically time indicators or related variables).</param>
+    /// <param name="y">The target values vector (the time series data to forecast).</param>
+    /// <remarks>
+    /// <para>
+    /// This method contains the implementation details of the training process for the exponential
+    /// smoothing model. It estimates the optimal smoothing parameters and initial values using the
+    /// provided time series data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the engine that powers the training process.
+    /// 
+    /// While the public Train method handles input validation and high-level logic,
+    /// this method does the actual work of:
+    /// - Finding the best alpha, beta, and gamma values through grid search
+    /// - Calculating the initial level, trend, and seasonal components
+    /// 
+    /// It's like the detailed work that happens in a car engine when you press
+    /// the accelerator pedal.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Estimate optimal alpha, beta, and gamma parameters
+        (_alpha, _beta, _gamma) = EstimateParametersGridSearch(y);
+    
+        // Estimate initial values for level, trend, and seasonal components
+        _initialValues = EstimateInitialValues(y);
+    
+        // If we're using the triple exponential smoothing model with seasonality,
+        // validate and prepare the seasonal factors
+        if (Options.SeasonalPeriod > 0 && y.Length >= Options.SeasonalPeriod)
+        {
+            // Make sure we have enough data for at least one full seasonal cycle
+            Vector<T> seasonalFactors = EstimateInitialSeasonalFactors(y);
+        
+            // Ensure the seasonal factors are properly included in the initial values
+            for (int i = 0; i < Options.SeasonalPeriod && i + 2 < _initialValues.Length; i++)
+            {
+                _initialValues[i + 2] = seasonalFactors[i];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Predicts a single value based on the input features vector.
+    /// </summary>
+    /// <param name="input">The input features vector.</param>
+    /// <returns>The predicted value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates a single forecast value based on the provided input features.
+    /// It uses the trained model parameters (alpha, beta, gamma) and the established level,
+    /// trend, and seasonal components to make the prediction.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a shortcut for getting just one prediction.
+    /// 
+    /// Instead of making multiple predictions at once, this method:
+    /// - Takes a single set of input features
+    /// - Uses the model's learned patterns
+    /// - Returns a single predicted value
+    /// 
+    /// It's like asking for tomorrow's forecast specifically, rather than
+    /// getting the forecast for the whole week ahead.
+    /// </para>
+    /// </remarks>
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Create a single-row matrix from the input vector
+        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            singleRowMatrix[0, i] = input[i];
+        }
+    
+        // Use the existing Predict method to get a vector of predictions
+        // (in this case, a vector with just one value)
+        Vector<T> predictions = Predict(singleRowMatrix);
+    
+        // Return the single prediction value
+        if (predictions.Length > 0)
+        {
+            return predictions[0];
+        }
+    
+        // If for some reason we couldn't make a prediction, return a default value
+        // This should never happen in normal operation, but provides a fallback
+        return NumOps.Zero;
     }
 }

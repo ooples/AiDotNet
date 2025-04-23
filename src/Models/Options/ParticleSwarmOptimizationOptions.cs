@@ -36,7 +36,7 @@
 /// allowing you to customize the algorithm for different types of optimization problems.
 /// </para>
 /// </remarks>
-public class ParticleSwarmOptimizationOptions : OptimizationAlgorithmOptions
+public class ParticleSwarmOptimizationOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the number of particles in the swarm.

@@ -1,9 +1,12 @@
-﻿namespace AiDotNet.Regularization;
+﻿
+namespace AiDotNet.Regularization;
 
 /// <summary>
 /// Implements a no-op regularization class that applies no regularization penalty to the model.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
 /// <remarks>
 /// <para>
 /// NoRegularization serves as a baseline implementation that passes through all values unchanged.
@@ -28,7 +31,7 @@
 /// - You're using other techniques to prevent overfitting (like early stopping)
 /// </para>
 /// </remarks>
-public class NoRegularization<T> : RegularizationBase<T>
+public class NoRegularization<T, TInput, TOutput> : RegularizationBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the NoRegularization class.
@@ -54,40 +57,40 @@ public class NoRegularization<T> : RegularizationBase<T>
     }
     
     /// <summary>
-    /// Returns the input matrix unchanged, applying no regularization.
+    /// Returns the input data unchanged, applying no regularization.
     /// </summary>
-    /// <param name="matrix">The input matrix.</param>
-    /// <returns>The same input matrix, unchanged.</returns>
+    /// <param name="data">The input data.</param>
+    /// <returns>The same input data, unchanged.</returns>
     /// <remarks>
     /// <para>
-    /// This method simply returns the input matrix without any modification, effectively applying
-    /// no regularization to the data matrix during model training or prediction.
+    /// This method simply returns the input data without any modification, effectively applying
+    /// no regularization to the data during model training or prediction.
     /// </para>
     /// <para><b>For Beginners:</b> This method passes your data through unchanged.
     /// 
     /// When called:
-    /// - The input data matrix goes in
-    /// - The exact same data matrix comes out
+    /// - The input data goes in
+    /// - The exact same data comes out
     /// - No transformations, adjustments, or modifications are applied
     /// 
     /// Think of it like having a "bypass" switch that lets data flow through
     /// without being processed.
     /// </para>
     /// </remarks>
-    public override Matrix<T> RegularizeMatrix(Matrix<T> matrix)
+    public override Matrix<T> Regularize(Matrix<T> data)
     {
-        return matrix;
+        return data;
     }
 
     /// <summary>
-    /// Returns the coefficients vector unchanged, applying no regularization.
+    /// Returns the output data or coefficients unchanged, applying no regularization.
     /// </summary>
-    /// <param name="coefficients">The coefficient vector.</param>
-    /// <returns>The same coefficient vector, unchanged.</returns>
+    /// <param name="data">The output data or coefficient vector.</param>
+    /// <returns>The same output data or coefficient vector, unchanged.</returns>
     /// <remarks>
     /// <para>
-    /// This method simply returns the coefficient vector without any modification, effectively applying
-    /// no regularization to the model coefficients.
+    /// This method simply returns the output data or coefficient vector without any modification, 
+    /// effectively applying no regularization to the model coefficients.
     /// </para>
     /// <para><b>For Beginners:</b> This method keeps your model's coefficients exactly as they are.
     /// 
@@ -101,9 +104,9 @@ public class NoRegularization<T> : RegularizationBase<T>
     /// from the training data.
     /// </para>
     /// </remarks>
-    public override Vector<T> RegularizeCoefficients(Vector<T> coefficients)
+    public override Vector<T> Regularize(Vector<T> data)
     {
-        return coefficients;
+        return data;
     }
 
     /// <summary>
@@ -129,7 +132,7 @@ public class NoRegularization<T> : RegularizationBase<T>
     /// the training data as closely as possible.
     /// </para>
     /// </remarks>
-    public override Vector<T> RegularizeGradient(Vector<T> gradient, Vector<T> coefficients)
+    public override TOutput Regularize(TOutput gradient, TOutput coefficients)
     {
         return gradient;
     }

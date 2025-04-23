@@ -16,12 +16,12 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class LBFGSOptimizer<T> : GradientBasedOptimizerBase<T>
+public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Options specific to the L-BFGS optimizer.
     /// </summary>
-    private LBFGSOptimizerOptions _options;
+    private LBFGSOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// List of position (solution) differences used in the L-BFGS update.
@@ -59,27 +59,14 @@ public class LBFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// Initializes a new instance of the LBFGSOptimizer class.
     /// </summary>
     /// <param name="options">Options for the L-BFGS optimizer. If null, default options are used.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     public LBFGSOptimizer(
-        LBFGSOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        LBFGSOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new LBFGSOptimizerOptions();
-        _s = new List<Vector<T>>();
-        _y = new List<Vector<T>>();
+        _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
+        _s = [];
+        _y = [];
+
         InitializeAdaptiveParameters();
     }
 
@@ -89,6 +76,7 @@ public class LBFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
+
         CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
         _iteration = 0;
     }
@@ -98,13 +86,13 @@ public class LBFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </summary>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         _s.Clear();
         _y.Clear();
@@ -134,7 +122,7 @@ public class LBFGSOptimizer<T> : GradientBasedOptimizerBase<T>
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            UpdateLBFGSMemory(currentSolution.Coefficients, newSolution.Coefficients, gradient, previousGradient);
+            UpdateLBFGSMemory(currentSolution.GetParameters(), newSolution.GetParameters(), gradient, previousGradient);
 
             previousGradient = gradient;
             currentSolution = newSolution;
@@ -217,67 +205,13 @@ public class LBFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="gradient">The current gradient.</param>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The updated solution.</returns>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T> inputData)
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var step = LineSearch(currentSolution, direction, gradient, inputData);
         var scaledDirection = direction.Transform(x => NumOps.Multiply(x, step));
-        var newCoefficients = currentSolution.Coefficients.Add(scaledDirection);
+        var newCoefficients = currentSolution.GetParameters().Add(scaledDirection);
 
-        return new VectorModel<T>(newCoefficients);
-    }
-
-    /// <summary>
-    /// Performs a line search to determine the optimal step size in the given direction.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method implements a backtracking line search using the Armijo condition to find a suitable step size.
-    /// </para>
-    /// <para><b>For Beginners:</b> 
-    /// This is like carefully deciding how big a step to take in the chosen direction, ensuring we don't overshoot 
-    /// the minimum we're looking for.
-    /// </para>
-    /// </remarks>
-    /// <param name="currentSolution">The current solution.</param>
-    /// <param name="direction">The search direction.</param>
-    /// <param name="gradient">The current gradient.</param>
-    /// <param name="inputData">The input data for the optimization process.</param>
-    /// <returns>The optimal step size.</returns>
-    private T LineSearch(ISymbolicModel<T> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T> inputData)
-    {
-        var alpha = CurrentLearningRate;
-        var c1 = NumOps.FromDouble(1e-4);
-        var c2 = NumOps.FromDouble(0.9);
-        var xTrain = inputData.XTrain;
-        var yTrain = inputData.YTrain;
-
-        var initialValue = CalculateLoss(currentSolution, inputData);
-        var initialSlope = gradient.DotProduct(direction);
-
-        while (true)
-        {
-            var newCoefficients = currentSolution.Coefficients.Add(direction.Multiply(alpha));
-            var newSolution = new VectorModel<T>(newCoefficients);
-            var newValue = CalculateLoss(newSolution, inputData);
-
-            if (NumOps.LessThanOrEquals(newValue, NumOps.Add(initialValue, NumOps.Multiply(NumOps.Multiply(c1, alpha), initialSlope))))
-            {
-                var newGradient = CalculateGradient(newSolution, xTrain, yTrain);
-                var newSlope = newGradient.DotProduct(direction);
-
-                if (NumOps.GreaterThanOrEquals(NumOps.Abs(newSlope), NumOps.Multiply(c2, NumOps.Abs(initialSlope))))
-                {
-                    return alpha;
-                }
-            }
-
-            alpha = NumOps.Multiply(alpha, NumOps.FromDouble(0.5));
-
-            if (NumOps.LessThan(alpha, NumOps.FromDouble(1e-10)))
-            {
-                return NumOps.FromDouble(1e-10);
-            }
-        }
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -296,7 +230,7 @@ public class LBFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -332,9 +266,9 @@ public class LBFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="options">The new options to apply to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type LBFGSOptimizerOptions.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is LBFGSOptimizerOptions lbfgsOptions)
+        if (options is LBFGSOptimizerOptions<T, TInput, TOutput> lbfgsOptions)
         {
             _options = lbfgsOptions;
         }
@@ -356,7 +290,7 @@ public class LBFGSOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <returns>The current options of the optimizer.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -428,7 +362,7 @@ public class LBFGSOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<LBFGSOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<LBFGSOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();

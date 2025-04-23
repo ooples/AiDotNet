@@ -14,7 +14,7 @@ namespace AiDotNet.FitDetectors;
 /// - Learning too much from the training data and not generalizing well (overfit)
 /// </para>
 /// </remarks>
-public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
+public class GradientBoostingFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options that control how the detector evaluates model fit.
@@ -50,7 +50,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// to improve your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
@@ -87,21 +87,21 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// - Lower MSE values indicate better performance.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainError = evaluationData.TrainingSet.ErrorStats.MSE;
         var validationError = evaluationData.ValidationSet.ErrorStats.MSE;
-        var errorDifference = _numOps.Subtract(validationError, trainError);
+        var errorDifference = NumOps.Subtract(validationError, trainError);
 
-        if (_numOps.LessThan(errorDifference, _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.LessThan(errorDifference, NumOps.FromDouble(_options.OverfitThreshold)))
         {
-            return _numOps.LessThan(validationError, _numOps.FromDouble(_options.GoodFitThreshold)) 
+            return NumOps.LessThan(validationError, NumOps.FromDouble(_options.GoodFitThreshold)) 
                 ? FitType.GoodFit 
                 : FitType.Moderate;
         }
         else
         {
-            return _numOps.GreaterThan(errorDifference, _numOps.FromDouble(_options.SevereOverfitThreshold)) 
+            return NumOps.GreaterThan(errorDifference, NumOps.FromDouble(_options.SevereOverfitThreshold)) 
                 ? FitType.VeryPoorFit 
                 : FitType.PoorFit;
         }
@@ -124,19 +124,19 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// overfitting or have other issues.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var trainError = evaluationData.TrainingSet.ErrorStats.MSE;
         var validationError = evaluationData.ValidationSet.ErrorStats.MSE;
-        var errorDifference = _numOps.Subtract(validationError, trainError);
+        var errorDifference = NumOps.Subtract(validationError, trainError);
 
         // Calculate confidence based on how close the validation error is to the train error
-        var relativeErrorDifference = _numOps.Divide(errorDifference, trainError);
+        var relativeErrorDifference = NumOps.Divide(errorDifference, trainError);
 
         // Use an exponential decay function to map the relative error difference to a confidence level
-        var confidence = _numOps.Exp(_numOps.Multiply(_numOps.FromDouble(-5), relativeErrorDifference));
+        var confidence = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-5), relativeErrorDifference));
 
-        return MathHelper.Clamp(confidence, _numOps.Zero, _numOps.One);
+        return MathHelper.Clamp(confidence, NumOps.Zero, NumOps.One);
     }
 
     /// <summary>
@@ -165,7 +165,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// - Data leakage: When information from validation data accidentally influences training
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -188,7 +188,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
                 break;
         }
 
-        if (_numOps.LessThan(evaluationData.TrainingSet.ErrorStats.MSE, _numOps.FromDouble(0.01)))
+        if (NumOps.LessThan(evaluationData.TrainingSet.ErrorStats.MSE, NumOps.FromDouble(0.01)))
         {
             recommendations.Add("The training error is suspiciously low. Verify that there's no data leakage in your preprocessing pipeline.");
         }
@@ -212,7 +212,7 @@ public class GradientBoostingFitDetector<T> : FitDetectorBase<T>
     /// (training) versus data it hasn't seen (validation).
     /// </para>
     /// </remarks>
-    private Dictionary<string, T> GetPerformanceMetrics(ModelEvaluationData<T> evaluationData)
+    private Dictionary<string, T> GetPerformanceMetrics(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         return new Dictionary<string, T>
         {

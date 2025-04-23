@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// "mental map" of the landscape as it explores, helping it make smarter decisions about where to go next. 
 /// This makes it faster and more reliable for complex problems.</para>
 /// </remarks>
-public class BFGSOptimizerOptions : GradientBasedOptimizerOptions
+public class BFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the initial learning rate for the optimization process.

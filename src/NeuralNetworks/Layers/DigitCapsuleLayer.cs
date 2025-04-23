@@ -338,7 +338,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         _lastInput = input;
         int batchSize = input.Shape[0];
 
-        var predictions = new Tensor<T>(new[] { batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension });
+        var predictions = new Tensor<T>([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < _inputCapsules; i++)
@@ -348,15 +348,15 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
                     var inputCapsule = input.SubTensor(b, i);
                     var weightMatrix = _weights.SubTensor(i, j);
                     var result = inputCapsule.MatrixMultiply(weightMatrix);
-                    predictions.SetSubTensor(new[] { b, i, j }, result);
+                    predictions.SetSubTensor([b, i, j], result);
                 }
             }
         }
 
-        var couplings = new Tensor<T>(new[] { batchSize, _inputCapsules, _numClasses });
+        var couplings = new Tensor<T>([batchSize, _inputCapsules, _numClasses]);
         couplings.Fill(NumOps.Zero);
 
-        var output = new Tensor<T>(new[] { batchSize, _numClasses, _outputCapsuleDimension });
+        var output = new Tensor<T>([batchSize, _numClasses, _outputCapsuleDimension]);
 
         for (int iteration = 0; iteration < _routingIterations; iteration++)
         {

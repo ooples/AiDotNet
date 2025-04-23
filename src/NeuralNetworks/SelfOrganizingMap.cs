@@ -121,6 +121,9 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// </remarks>
     private int _inputDimension { get; set; }
 
+    private int _totalEpochs;
+    private int _currentEpoch;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SelfOrganizingMap{T}"/> class with the specified architecture.
     /// </summary>
@@ -145,7 +148,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// These weights are initially random and will be adjusted during training.
     /// </para>
     /// </remarks>
-    public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture, int totalEpochs = 1000) : base(architecture)
     {
         // Get input dimension from the architecture
         _inputDimension = architecture.InputSize;
@@ -163,31 +166,39 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
             throw new ArgumentException("Map size (output size) must be greater than zero for SOM.");
         }
     
-        // Calculate map dimensions - try to make it as square as possible
-        _mapWidth = (int)Math.Sqrt(mapSize);
-        _mapHeight = (int)Math.Ceiling(mapSize / (double)_mapWidth);
-    
-        // Adjust if not a perfect square
-        if (_mapWidth * _mapHeight != mapSize)
+        // Calculate map dimensions - allow for rectangular maps
+        int totalNeurons = mapSize;
+        double aspectRatio = 1.6; // Golden ratio, but this could be adjustable
+
+        _mapWidth = (int)Math.Round(Math.Sqrt(totalNeurons * aspectRatio));
+        _mapHeight = (int)Math.Round(totalNeurons / (double)_mapWidth);
+
+        // Adjust to ensure we have exactly the right number of neurons
+        while (_mapWidth * _mapHeight < totalNeurons)
         {
-            // We'll use the closest perfect square for simplicity
-            int perfectSquare = _mapWidth * _mapWidth;
-            if (Math.Abs(perfectSquare - mapSize) < Math.Abs((_mapWidth + 1) * (_mapWidth + 1) - mapSize))
-            {
-                _mapWidth = _mapWidth;
-                _mapHeight = _mapWidth; // Make it a perfect square
-            }
+            if (_mapWidth / (double)_mapHeight < aspectRatio)
+                _mapWidth++;
             else
-            {
-                _mapWidth = _mapWidth + 1;
-                _mapHeight = _mapWidth; // Make it a perfect square
-            }
-        
-            // Log a warning that we're adjusting the map size
-            Console.WriteLine($"Warning: Adjusting map size from {mapSize} to {_mapWidth * _mapHeight} to make it a perfect square.");
+                _mapHeight++;
+        }
+
+        while (_mapWidth * _mapHeight > totalNeurons)
+        {
+            if (_mapWidth / (double)_mapHeight > aspectRatio)
+                _mapWidth--;
+            else
+                _mapHeight--;
+        }
+
+        if (_mapWidth * _mapHeight != totalNeurons)
+        {
+            // Use a logger instead of Console.WriteLine
+            Console.WriteLine($"Adjusted map size from {totalNeurons} to {_mapWidth * _mapHeight} to maintain aspect ratio.");
         }
     
         _weights = new Matrix<T>(_mapWidth * _mapHeight, _inputDimension);
+        _totalEpochs = totalEpochs;
+        _currentEpoch = 0;
     
         InitializeWeights();
         InitializeLayers();
@@ -251,37 +262,6 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
                 _weights[i, j] = NumOps.FromDouble(Random.NextDouble());
             }
         }
-    }
-
-    /// <summary>
-    /// Processes the input through the SOM to find the best matching neuron and returns its weights.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The weight vector of the best matching neuron.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the prediction process of the SOM. It finds the neuron in the map that
-    /// best matches the input vector (the one with the smallest Euclidean distance to the input), and
-    /// returns the weight vector of that neuron. This represents the SOM's "response" to the input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method finds which position on the map best matches your input data.
-    /// 
-    /// The prediction process has two steps:
-    /// 1. Compare the input data to every position on the map
-    /// 2. Return the weights of the position that most closely matches the input
-    /// 
-    /// For example, if you input data about a science fiction book:
-    /// - The SOM would check which position on the map is most similar to sci-fi books
-    /// - It would return the characteristics of that position
-    /// 
-    /// This is how you can use a trained SOM to categorize new data or find similarities
-    /// between items. Similar inputs will be mapped to the same or nearby positions.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        int bmu = FindBestMatchingUnit(input);
-        return _weights.GetRow(bmu);
     }
 
     /// <summary>
@@ -365,54 +345,6 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
         }
 
         return NumOps.Sqrt(sum);
-    }
-
-    /// <summary>
-    /// Trains the SOM on the provided input data.
-    /// </summary>
-    /// <param name="input">The input vector to train on.</param>
-    /// <param name="epochs">The number of training epochs.</param>
-    /// <param name="initialLearningRate">The initial learning rate.</param>
-    /// <param name="initialRadius">The initial radius of the neighborhood function.</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the SOM using the provided input vector. For each epoch, it finds the Best Matching Unit (BMU),
-    /// calculates the current learning rate and neighborhood radius, and updates the weights of neurons within the radius
-    /// of the BMU. The learning rate and radius decrease over time, allowing the SOM to first organize broadly and then
-    /// fine-tune the representation. This implementation uses batch training with a single input vector, but in practice,
-    /// SOMs are often trained with multiple input vectors.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method teaches the SOM to organize data based on similarities.
-    /// 
-    /// The training process:
-    /// 1. Find which position on the map (BMU) best matches the input
-    /// 2. Update that position to better match the input
-    /// 3. Also update nearby positions, but less strongly (based on radius)
-    /// 4. Repeat for multiple epochs, gradually reducing learning rate and radius
-    /// 
-    /// Parameters:
-    /// - initialLearningRate: How quickly positions adapt (starts high, decreases over time)
-    /// - initialRadius: How far the influence spreads (starts large, shrinks over time)
-    /// - epochs: How many times to repeat the process
-    /// 
-    /// Over time, this creates a map where:
-    /// - Similar inputs activate the same or nearby positions
-    /// - Different regions specialize in different types of input
-    /// - The overall structure preserves relationships in the original data
-    /// </para>
-    /// </remarks>
-    public void Train(Vector<T> input, int epochs, T initialLearningRate, T initialRadius)
-    {
-        T timeConstant = NumOps.FromDouble(epochs / Math.Log(Convert.ToDouble(initialRadius)));
-
-        for (int epoch = 0; epoch < epochs; epoch++)
-        {
-            int bmu = FindBestMatchingUnit(input);
-            T learningRate = CalculateLearningRate(initialLearningRate, epoch, epochs);
-            T radius = CalculateRadius(initialRadius, epoch, timeConstant);
-
-            UpdateWeights(input, bmu, learningRate, radius);
-        }
     }
 
     /// <summary>
@@ -648,43 +580,164 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Saves the state of the Self-Organizing Map to a binary writer.
+    /// Predicts the output for a given input using the trained Self-Organizing Map.
     /// </summary>
-    /// <param name="writer">The binary writer to save the state to.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the writer is null.</exception>
+    /// <param name="input">The input tensor to predict.</param>
+    /// <returns>A tensor representing the prediction result.</returns>
+    /// <exception cref="ArgumentException">Thrown when the input shape doesn't match the expected input dimension.</exception>
     /// <remarks>
     /// <para>
-    /// This method serializes the entire state of the SOM, including the map dimensions, input dimension,
-    /// and all neuron weights. It writes these values to the provided binary writer, allowing the SOM
-    /// to be saved to a file or other storage medium and later restored.
+    /// This method finds the Best Matching Unit (BMU) for the given input and returns a one-hot encoded
+    /// tensor representing the BMU's position in the map. The output tensor has a size equal to the
+    /// total number of neurons in the map (_mapWidth * _mapHeight).
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the entire state of the SOM to a file.
+    /// <para><b>For Beginners:</b> This method finds the best matching position on the map for new input data.
     /// 
-    /// When serializing:
-    /// - The map dimensions (width and height) are saved
-    /// - The input dimension is saved
-    /// - All weight values for all positions on the map are saved
+    /// When predicting:
+    /// - It checks if the input data has the correct number of attributes
+    /// - It finds the position on the map that best matches the input (the BMU)
+    /// - It creates an output where only the BMU position is marked as active (1), and all others are inactive (0)
     /// 
-    /// This is useful for:
-    /// - Saving a trained SOM to use later
-    /// - Sharing a trained SOM with others
-    /// - Creating backups during long training processes
-    /// 
-    /// Think of it like taking a complete snapshot of the SOM that can be restored later.
+    /// This output tells you which part of the map best represents the input data,
+    /// which can be used for classification, clustering, or visualization.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
+        if (input.Shape != new[] { _inputDimension })
+        {
+            throw new ArgumentException($"Input shape must be [{_inputDimension}], but got {string.Join(", ", input.Shape)}");
+        }
 
+        int bmu = FindBestMatchingUnit(input.ToVector());
+
+        // Create a one-hot encoded output tensor
+        var output = new Tensor<T>(new[] { _mapWidth * _mapHeight });
+        for (int i = 0; i < output.Length; i++)
+        {
+            output[i] = i == bmu ? NumOps.One : NumOps.Zero;
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Trains the Self-Organizing Map using the provided input.
+    /// </summary>
+    /// <param name="input">The input tensor to train on.</param>
+    /// <param name="expectedOutput">The expected output tensor (not used in SOM training).</param>
+    /// <exception cref="ArgumentException">Thrown when the input shape doesn't match the expected input dimension.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs one training step for the SOM. It finds the Best Matching Unit (BMU) for the input,
+    /// calculates the current learning rate and neighborhood radius, and updates the weights of the neurons
+    /// in the BMU's neighborhood. The learning rate and radius decrease over time to refine the map's organization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts the map based on new input data.
+    /// 
+    /// During training:
+    /// - It checks if the input data has the correct number of attributes
+    /// - It finds the best matching position (BMU) for the input
+    /// - It calculates how much the map should change (learning rate) and how far the change should spread (radius)
+    /// - It updates the map, with the BMU and nearby positions becoming more like the input data
+    /// - It keeps track of how many times the map has been trained (epochs)
+    /// 
+    /// Over time, this process organizes the map so that similar inputs activate nearby positions.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input.Shape != new[] { _inputDimension })
+        {
+            throw new ArgumentException($"Input shape must be [{_inputDimension}], but got {string.Join(", ", input.Shape)}");
+        }
+
+        // SOM training doesn't use expectedOutput, so we ignore it
+
+        int bmu = FindBestMatchingUnit(input.ToVector());
+
+        // Calculate current learning rate and radius
+        T learningRate = CalculateLearningRate(NumOps.FromDouble(0.1), _currentEpoch, _totalEpochs);
+        T radius = CalculateRadius(NumOps.FromDouble(Math.Max(_mapWidth, _mapHeight) / 2.0), _currentEpoch, NumOps.FromDouble(_totalEpochs / Math.Log(_mapWidth * _mapHeight)));
+
+        // Update weights
+        UpdateWeights(input.ToVector(), bmu, learningRate, radius);
+
+        _currentEpoch++;
+    }
+
+    /// <summary>
+    /// Gets the metadata of the Self-Organizing Map model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the SOM.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the SOM, including its type, dimensions, and training progress.
+    /// It also includes serialized model data, which can be used to save or transfer the model state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides a summary of the SOM's current state.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Self-Organizing Map)
+    /// - The number of input dimensions
+    /// - The width and height of the map
+    /// - The total number of training epochs planned
+    /// - The current number of training epochs completed
+    /// - A serialized version of the entire model (useful for saving or sharing the model)
+    /// 
+    /// This information is useful for keeping track of the model's configuration and training progress.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.SelfOrganizingMap,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "InputDimension", _inputDimension },
+                { "MapWidth", _mapWidth },
+                { "MapHeight", _mapHeight },
+                { "TotalEpochs", _totalEpochs },
+                { "CurrentEpoch", _currentEpoch }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes the specific data of the Self-Organizing Map.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the SOM-specific data to a binary stream. It includes the map dimensions,
+    /// training parameters, and the weights of all neurons in the map.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves all the important information about the SOM.
+    /// 
+    /// It saves:
+    /// - The number of input dimensions
+    /// - The width and height of the map
+    /// - The total number of training epochs
+    /// - The current training epoch
+    /// - All the weights for every position on the map
+    /// 
+    /// This allows the entire state of the SOM to be saved and later restored exactly as it was.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_inputDimension);
         writer.Write(_mapWidth);
         writer.Write(_mapHeight);
-        writer.Write(_inputDimension);
+        writer.Write(_totalEpochs);
+        writer.Write(_currentEpoch);
 
-        for (int i = 0; i < _mapWidth * _mapHeight; i++)
+        // Serialize weights
+        for (int i = 0; i < _weights.Rows; i++)
         {
-            for (int j = 0; j < _inputDimension; j++)
+            for (int j = 0; j < _weights.Columns; j++)
             {
                 writer.Write(Convert.ToDouble(_weights[i, j]));
             }
@@ -692,49 +745,84 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Loads the state of the Self-Organizing Map from a binary reader.
+    /// Deserializes the specific data of the Self-Organizing Map.
     /// </summary>
-    /// <param name="reader">The binary reader to load the state from.</param>
-    /// <exception cref="ArgumentNullException">Thrown if the reader is null.</exception>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
     /// <remarks>
     /// <para>
-    /// This method deserializes the state of the SOM from a binary reader. It reads the map dimensions,
-    /// input dimension, and all neuron weights, and reconstructs the SOM from these values. This allows
-    /// a previously saved SOM to be restored and used for prediction or further training.
+    /// This method reads SOM-specific data from a binary stream and reconstructs the map's state.
+    /// It restores the map dimensions, training parameters, and the weights of all neurons in the map.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved SOM state from a file.
+    /// <para><b>For Beginners:</b> This method loads all the important information about a previously saved SOM.
     /// 
-    /// When deserializing:
-    /// - The map dimensions (width and height) are read first
-    /// - The input dimension is read
-    /// - A new weights matrix is created with these dimensions
-    /// - All weight values are read and restored to their saved values
+    /// It loads:
+    /// - The number of input dimensions
+    /// - The width and height of the map
+    /// - The total number of training epochs
+    /// - The current training epoch
+    /// - All the weights for every position on the map
     /// 
-    /// This allows you to:
-    /// - Load a previously trained SOM
-    /// - Continue using or training a SOM from where you left off
-    /// - Use SOMs created by others
-    /// 
-    /// Think of it like restoring a complete snapshot of a SOM that was saved earlier.
+    /// This allows a previously saved SOM to be fully restored to continue training or make predictions.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
+        _inputDimension = reader.ReadInt32();
         _mapWidth = reader.ReadInt32();
         _mapHeight = reader.ReadInt32();
-        _inputDimension = reader.ReadInt32();
+        _totalEpochs = reader.ReadInt32();
+        _currentEpoch = reader.ReadInt32();
 
+        // Deserialize weights
         _weights = new Matrix<T>(_mapWidth * _mapHeight, _inputDimension);
-
-        for (int i = 0; i < _mapWidth * _mapHeight; i++)
+        for (int i = 0; i < _weights.Rows; i++)
         {
-            for (int j = 0; j < _inputDimension; j++)
+            for (int j = 0; j < _weights.Columns; j++)
             {
                 _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Self-Organizing Map with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Self-Organizing Map.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Self-Organizing Map, including its architecture,
+    /// weights, and training progress. The new instance is completely independent of the original,
+    /// allowing modifications without affecting the original.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact copy of the current SOM.
+    /// 
+    /// The copy includes:
+    /// - The same map dimensions (width and height)
+    /// - The same input dimension
+    /// - The same weights for all positions on the map
+    /// - The same training progress (current epoch)
+    /// 
+    /// This is useful when you want to:
+    /// - Create a backup before continuing training
+    /// - Create variations of the same map for different purposes
+    /// - Share the map while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        // Create a new SOM with the same architecture
+        var newSom = new SelfOrganizingMap<T>(Architecture, _totalEpochs);
+        
+        // Copy the weights matrix
+        newSom._weights = _weights?.Clone() ?? throw new InvalidOperationException("Weights matrix is null");
+        
+        // Copy the dimensions and training progress
+        newSom._mapWidth = _mapWidth;
+        newSom._mapHeight = _mapHeight;
+        newSom._inputDimension = _inputDimension;
+        newSom._currentEpoch = _currentEpoch;
+        
+        return newSom;
     }
 }

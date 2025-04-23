@@ -17,7 +17,7 @@ namespace AiDotNet.Models.Options;
 /// can eventually reach the bottom of the valley. This approach can be simpler than trying to move in
 /// all directions at once.</para>
 /// </remarks>
-public class CoordinateDescentOptimizerOptions : GradientBasedOptimizerOptions
+public class CoordinateDescentOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the rate at which the learning rate increases when performance improves.

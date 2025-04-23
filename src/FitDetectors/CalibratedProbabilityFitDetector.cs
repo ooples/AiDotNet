@@ -16,7 +16,7 @@ namespace AiDotNet.FitDetectors;
 /// model's probability predictions match the actual outcomes.
 /// </para>
 /// </remarks>
-public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
+public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the calibrated probability fit detector.
@@ -70,7 +70,7 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -104,17 +104,17 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var (expectedCalibration, observedCalibration) = CalculateCalibration(evaluationData);
 
         var calibrationError = CalculateCalibrationError(expectedCalibration, observedCalibration);
 
-        if (_numOps.LessThan(calibrationError, _numOps.FromDouble(_options.GoodFitThreshold)))
+        if (NumOps.LessThan(calibrationError, NumOps.FromDouble(_options.GoodFitThreshold)))
         {
             return FitType.GoodFit;
         }
-        else if (_numOps.GreaterThan(calibrationError, _numOps.FromDouble(_options.OverfitThreshold)))
+        else if (NumOps.GreaterThan(calibrationError, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
@@ -141,14 +141,14 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
     /// between 0 and 1, where higher values indicate greater confidence.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var (expectedCalibration, observedCalibration) = CalculateCalibration(evaluationData);
 
         var calibrationError = CalculateCalibrationError(expectedCalibration, observedCalibration);
 
         // Normalize confidence level to [0, 1]
-        return _numOps.Subtract(_numOps.One, _numOps.Divide(calibrationError, _numOps.FromDouble(_options.MaxCalibrationError)));
+        return NumOps.Subtract(NumOps.One, NumOps.Divide(calibrationError, NumOps.FromDouble(_options.MaxCalibrationError)));
     }
 
     /// <summary>
@@ -171,7 +171,7 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 
@@ -221,44 +221,44 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
     /// In a well-calibrated model, these values should be close to each other across all bins.
     /// </para>
     /// </remarks>
-    private (Vector<T>, Vector<T>) CalculateCalibration(ModelEvaluationData<T> evaluationData)
+    private (Vector<T>, Vector<T>) CalculateCalibration(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var predicted = evaluationData.ModelStats.Predicted;
-        var actual = evaluationData.ModelStats.Actual;
+        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
+        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
 
         var numBins = _options.NumCalibrationBins;
-        var binSize = _numOps.Divide(_numOps.One, _numOps.FromDouble(numBins));
+        var binSize = NumOps.Divide(NumOps.One, NumOps.FromDouble(numBins));
 
         var expectedCalibration = new Vector<T>(numBins);
         var observedCalibration = new Vector<T>(numBins);
 
         for (int i = 0; i < numBins; i++)
         {
-            var lowerBound = _numOps.Multiply(_numOps.FromDouble(i), binSize);
-            var upperBound = _numOps.Multiply(_numOps.FromDouble(i + 1), binSize);
+            var lowerBound = NumOps.Multiply(NumOps.FromDouble(i), binSize);
+            var upperBound = NumOps.Multiply(NumOps.FromDouble(i + 1), binSize);
 
             var binIndices = predicted.Select((p, idx) => new { Prob = p, Index = idx })
-                                      .Where(x => _numOps.GreaterThanOrEquals(x.Prob, lowerBound) && _numOps.LessThan(x.Prob, upperBound))
-                                      .Select(x => _numOps.FromDouble(x.Index))
+                                      .Where(x => NumOps.GreaterThanOrEquals(x.Prob, lowerBound) && NumOps.LessThan(x.Prob, upperBound))
+                                      .Select(x => NumOps.FromDouble(x.Index))
                                       .ToList();
 
             if (binIndices.Count > 0)
             {
-                expectedCalibration[i] = _numOps.Divide(_numOps.Add(lowerBound, upperBound), _numOps.FromDouble(2));
+                expectedCalibration[i] = NumOps.Divide(NumOps.Add(lowerBound, upperBound), NumOps.FromDouble(2));
     
-                var sum = binIndices.Aggregate(_numOps.Zero, (acc, idx) => 
-                    _numOps.Add(acc, actual[_numOps.ToInt32(idx)])
+                var sum = binIndices.Aggregate(NumOps.Zero, (acc, idx) => 
+                    NumOps.Add(acc, actual[NumOps.ToInt32(idx)])
                 );
     
-                observedCalibration[i] = _numOps.Divide(
+                observedCalibration[i] = NumOps.Divide(
                     sum,
-                    _numOps.FromDouble(binIndices.Count)
+                    NumOps.FromDouble(binIndices.Count)
                 );
             }
             else
             {
-                expectedCalibration[i] = _numOps.Zero;
-                observedCalibration[i] = _numOps.Zero;
+                expectedCalibration[i] = NumOps.Zero;
+                observedCalibration[i] = NumOps.Zero;
             }
         }
 
@@ -287,10 +287,10 @@ public class CalibratedProbabilityFitDetector<T> : FitDetectorBase<T>
         var squaredErrors = new Vector<T>(expected.Length);
         for (int i = 0; i < expected.Length; i++)
         {
-            var diff = _numOps.Subtract(expected[i], observed[i]);
-            squaredErrors[i] = _numOps.Multiply(diff, diff);
+            var diff = NumOps.Subtract(expected[i], observed[i]);
+            squaredErrors[i] = NumOps.Multiply(diff, diff);
         }
 
-        return _numOps.Sqrt(_numOps.Divide(squaredErrors.Sum(), _numOps.FromDouble(expected.Length)));
+        return NumOps.Sqrt(NumOps.Divide(squaredErrors.Sum(), NumOps.FromDouble(expected.Length)));
     }
 }

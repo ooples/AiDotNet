@@ -24,7 +24,7 @@ namespace AiDotNet.FitnessCalculators;
 /// your model was in its predictions.
 /// </para>
 /// </remarks>
-public class BinaryCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class BinaryCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the BinaryCrossEntropyLossFitnessCalculator class.
@@ -72,8 +72,9 @@ public class BinaryCrossEntropyLossFitnessCalculator<T> : FitnessCalculatorBase<
     /// - The maximum value can be very large if predictions are completely wrong
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.BinaryCrossEntropyLoss(dataSet.Predicted, dataSet.Actual);
+        return new BinaryCrossEntropyLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

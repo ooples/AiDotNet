@@ -41,7 +41,7 @@ namespace AiDotNet.Models.Options;
 /// This class lets you configure how this specialized optimization process works.
 /// </para>
 /// </remarks>
-public class ProximalGradientDescentOptimizerOptions : GradientBasedOptimizerOptions
+public class ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the strength of the regularization term in the objective function.

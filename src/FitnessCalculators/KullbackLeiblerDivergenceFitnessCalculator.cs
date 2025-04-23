@@ -35,7 +35,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - Any task where your model outputs probabilities across multiple categories
 /// </para>
 /// </remarks>
-public class KullbackLeiblerDivergenceFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class KullbackLeiblerDivergenceFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the KullbackLeiblerDivergenceFitnessCalculator class.
@@ -95,8 +95,9 @@ public class KullbackLeiblerDivergenceFitnessCalculator<T> : FitnessCalculatorBa
     /// which category has the highest probability.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.KullbackLeiblerDivergence(dataSet.Predicted, dataSet.Actual);
+        return new KullbackLeiblerDivergence<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

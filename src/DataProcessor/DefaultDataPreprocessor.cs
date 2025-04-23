@@ -17,22 +17,22 @@
 /// These steps help machine learning algorithms work better and learn more efficiently from your data.
 /// </para>
 /// </remarks>
-public class DefaultDataPreprocessor<T> : IDataPreprocessor<T>
+public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, TInput, TOutput>
 {
     /// <summary>
     /// Component responsible for scaling data to a standard range.
     /// </summary>
-    private readonly INormalizer<T> _normalizer;
+    private readonly INormalizer<T, TInput, TOutput> _normalizer;
     
     /// <summary>
     /// Component responsible for selecting the most relevant features from the dataset.
     /// </summary>
-    private readonly IFeatureSelector<T> _featureSelector;
+    private readonly IFeatureSelector<T, TInput> _featureSelector;
     
     /// <summary>
     /// Component responsible for identifying and removing outliers from the dataset.
     /// </summary>
-    private readonly IOutlierRemoval<T> _outlierRemoval;
+    private readonly IOutlierRemoval<T, TInput, TOutput> _outlierRemoval;
     
     /// <summary>
     /// Configuration options for the data preprocessing operations.
@@ -56,7 +56,8 @@ public class DefaultDataPreprocessor<T> : IDataPreprocessor<T>
     /// - The options parameter lets you customize how these tools work together
     /// </para>
     /// </remarks>
-    public DefaultDataPreprocessor(INormalizer<T> normalizer, IFeatureSelector<T> featureSelector, IOutlierRemoval<T> outlierRemoval, DataProcessorOptions? options = null)
+    public DefaultDataPreprocessor(INormalizer<T, TInput, TOutput> normalizer, IFeatureSelector<T, TInput> featureSelector, 
+        IOutlierRemoval<T, TInput, TOutput> outlierRemoval, DataProcessorOptions? options = null)
     {
         _normalizer = normalizer;
         _featureSelector = featureSelector;
@@ -87,23 +88,23 @@ public class DefaultDataPreprocessor<T> : IDataPreprocessor<T>
     /// while the "y" vector contains what you're trying to predict (like house prices).
     /// </para>
     /// </remarks>
-    public (Matrix<T> X, Vector<T> y, NormalizationInfo<T> normInfo) PreprocessData(Matrix<T> X, Vector<T> y)
+    public (TInput X, TOutput y, NormalizationInfo<T, TInput, TOutput> normInfo) PreprocessData(TInput X, TOutput y)
     {
-        NormalizationInfo<T> normInfo = new();
+        NormalizationInfo<T, TInput, TOutput> normInfo = new();
 
         (X, y) = _outlierRemoval.RemoveOutliers(X, y);
 
         if (_options.NormalizeBeforeFeatureSelection)
         {
-            (X, normInfo.XParams) = _normalizer.NormalizeMatrix(X);
-            (y, normInfo.YParams) = _normalizer.NormalizeVector(y);
+            (X, normInfo.XParams) = _normalizer.NormalizeInput(X);
+            (y, normInfo.YParams) = _normalizer.NormalizeOutput(y);
             X = _featureSelector.SelectFeatures(X);
         }
         else
         {
             X = _featureSelector.SelectFeatures(X);
-            (X, normInfo.XParams) = _normalizer.NormalizeMatrix(X);
-            (y, normInfo.YParams) = _normalizer.NormalizeVector(y);
+            (X, normInfo.XParams) = _normalizer.NormalizeInput(X);
+            (y, normInfo.YParams) = _normalizer.NormalizeOutput(y);
         }
 
         return (X, y, normInfo);
@@ -112,8 +113,8 @@ public class DefaultDataPreprocessor<T> : IDataPreprocessor<T>
     /// <summary>
     /// Splits the dataset into training, validation, and test sets.
     /// </summary>
-    /// <param name="X">The feature matrix where rows represent samples and columns represent features.</param>
-    /// <param name="y">The target vector containing the values to predict.</param>
+    /// <param name="X">The features where rows represent samples and columns represent features.</param>
+    /// <param name="y">The target values to predict.</param>
     /// <returns>A tuple containing the training, validation, and test datasets.</returns>
     /// <remarks>
     /// <para>
@@ -134,44 +135,236 @@ public class DefaultDataPreprocessor<T> : IDataPreprocessor<T>
     /// This separation is crucial because it helps ensure your model can work well with new data it hasn't seen before.
     /// </para>
     /// </remarks>
-    public (Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XValidation, Vector<T> yValidation, Matrix<T> XTest, Vector<T> yTest) SplitData(Matrix<T> X, Vector<T> y)
+    public (TInput XTrain, TOutput yTrain, TInput XValidation, TOutput yValidation, TInput XTest, TOutput yTest) 
+        SplitData(TInput X, TOutput y)
     {
-        int totalSamples = X.Rows;
-        int trainSize = (int)(totalSamples * _options.TrainingSplitPercentage);
-        int validationSize = (int)(totalSamples * _options.ValidationSplitPercentage);
-        int testSize = totalSamples - trainSize - validationSize;
-
-        // Shuffle the data
-        var random = new Random(_options.RandomSeed);
-        var indices = Enumerable.Range(0, totalSamples).ToList();
-        indices = [.. indices.OrderBy(x => random.Next())];
-
-        // Split the data
-        var XTrain = new Matrix<T>(trainSize, X.Columns);
-        var yTrain = new Vector<T>(trainSize);
-        var XValidation = new Matrix<T>(validationSize, X.Columns);
-        var yValidation = new Vector<T>(validationSize);
-        var XTest = new Matrix<T>(testSize, X.Columns);
-        var yTest = new Vector<T>(testSize);
-
-        for (int i = 0; i < trainSize; i++)
+        int totalSamples = 0;
+    
+        // Handle different input types appropriately
+        if (X is Matrix<T> xMatrix && y is Vector<T> yVector)
         {
-            XTrain.SetRow(i, X.GetRow(indices[i]));
-            yTrain[i] = y[indices[i]];
+            totalSamples = xMatrix.Rows;
+            int trainSize = (int)(totalSamples * _options.TrainingSplitPercentage);
+            int validationSize = (int)(totalSamples * _options.ValidationSplitPercentage);
+            int testSize = totalSamples - trainSize - validationSize;
+
+            // Shuffle the data
+            var random = new Random(_options.RandomSeed);
+            var indices = Enumerable.Range(0, totalSamples).ToList();
+            indices = [.. indices.OrderBy(x => random.Next())];
+
+            // Create matrices and vectors for the split data
+            var XTrain = new Matrix<T>(trainSize, xMatrix.Columns);
+            var yTrain = new Vector<T>(trainSize);
+            var XValidation = new Matrix<T>(validationSize, xMatrix.Columns);
+            var yValidation = new Vector<T>(validationSize);
+            var XTest = new Matrix<T>(testSize, xMatrix.Columns);
+            var yTest = new Vector<T>(testSize);
+
+            // Copy data to the training sets
+            for (int i = 0; i < trainSize; i++)
+            {
+                XTrain.SetRow(i, xMatrix.GetRow(indices[i]));
+                yTrain[i] = yVector[indices[i]];
+            }
+
+            // Copy data to the validation sets
+            for (int i = 0; i < validationSize; i++)
+            {
+                XValidation.SetRow(i, xMatrix.GetRow(indices[i + trainSize]));
+                yValidation[i] = yVector[indices[i + trainSize]];
+            }
+
+            // Copy data to the test sets
+            for (int i = 0; i < testSize; i++)
+            {
+                XTest.SetRow(i, xMatrix.GetRow(indices[i + trainSize + validationSize]));
+                yTest[i] = yVector[indices[i + trainSize + validationSize]];
+            }
+
+            return ((TInput)(object)XTrain, (TOutput)(object)yTrain, 
+                    (TInput)(object)XValidation, (TOutput)(object)yValidation, 
+                    (TInput)(object)XTest, (TOutput)(object)yTest);
+        }
+        else if (X is Tensor<T> xTensor && y is Tensor<T> yTensor)
+        {
+            totalSamples = xTensor.Shape[0];
+            int trainSize = (int)(totalSamples * _options.TrainingSplitPercentage);
+            int validationSize = (int)(totalSamples * _options.ValidationSplitPercentage);
+            int testSize = totalSamples - trainSize - validationSize;
+
+            // Shuffle the data
+            var random = new Random(_options.RandomSeed);
+            var indices = Enumerable.Range(0, totalSamples).ToList();
+            indices = [.. indices.OrderBy(x => random.Next())];
+
+            // Create new tensors for the split data
+            // Clone the shape for X but change the first dimension (sample count)
+            int[] xTrainShape = (int[])xTensor.Shape.Clone();
+            xTrainShape[0] = trainSize;
+            var XTrain = new Tensor<T>(xTrainShape);
+
+            int[] xValidationShape = (int[])xTensor.Shape.Clone();
+            xValidationShape[0] = validationSize;
+            var XValidation = new Tensor<T>(xValidationShape);
+
+            int[] xTestShape = (int[])xTensor.Shape.Clone();
+            xTestShape[0] = testSize;
+            var XTest = new Tensor<T>(xTestShape);
+
+            // Similarly for y
+            int[] yTrainShape = (int[])yTensor.Shape.Clone();
+            yTrainShape[0] = trainSize;
+            var yTrain = new Tensor<T>(yTrainShape);
+
+            int[] yValidationShape = (int[])yTensor.Shape.Clone();
+            yValidationShape[0] = validationSize;
+            var yValidation = new Tensor<T>(yValidationShape);
+
+            int[] yTestShape = (int[])yTensor.Shape.Clone();
+            yTestShape[0] = testSize;
+            var yTest = new Tensor<T>(yTestShape);
+
+            // Copy data to training sets
+            for (int i = 0; i < trainSize; i++)
+            {
+                CopySample(xTensor, XTrain, indices[i], i);
+                CopySample(yTensor, yTrain, indices[i], i);
+            }
+
+            // Copy data to validation sets
+            for (int i = 0; i < validationSize; i++)
+            {
+                CopySample(xTensor, XValidation, indices[i + trainSize], i);
+                CopySample(yTensor, yValidation, indices[i + trainSize], i);
+            }
+
+            // Copy data to test sets
+            for (int i = 0; i < testSize; i++)
+            {
+                CopySample(xTensor, XTest, indices[i + trainSize + validationSize], i);
+                CopySample(yTensor, yTest, indices[i + trainSize + validationSize], i);
+            }
+
+            return ((TInput)(object)XTrain, (TOutput)(object)yTrain, 
+                    (TInput)(object)XValidation, (TOutput)(object)yValidation, 
+                    (TInput)(object)XTest, (TOutput)(object)yTest);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Unsupported combination of input type {typeof(TInput).Name} and output type {typeof(TOutput).Name}. " +
+                "Currently supported combinations are: " +
+                $"(Matrix<{typeof(T).Name}>, Vector<{typeof(T).Name}>) and " +
+                $"(Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>).");
+        }
+    }
+
+    /// <summary>
+    /// Copies a single sample from a source tensor to a destination tensor.
+    /// </summary>
+    /// <param name="source">The source tensor containing the data to copy.</param>
+    /// <param name="destination">The destination tensor where the data will be copied to.</param>
+    /// <param name="sourceIndex">The index of the sample in the source tensor.</param>
+    /// <param name="destIndex">The index where the sample should be placed in the destination tensor.</param>
+    /// <remarks>
+    /// <para>
+    /// This method efficiently copies a sample (the first dimension of a tensor) from one tensor to another,
+    /// handling tensors of arbitrary rank. It uses recursive traversal of tensor dimensions to copy all values
+    /// associated with the specified sample index.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this method as copying a complete "record" from one dataset to another.
+    /// 
+    /// In machine learning, data is often organized where:
+    /// - The first dimension represents different examples or samples (like different patients, houses, or images)
+    /// - The remaining dimensions contain the features or characteristics of each sample
+    /// 
+    /// This method copies one complete sample with all its features from the source to the destination,
+    /// preserving the structure of the data. It works regardless of how complex the data structure is
+    /// (whether it's a simple table or a complex multi-dimensional array like a color image).
+    /// </para>
+    /// </remarks>
+    private void CopySample(Tensor<T> source, Tensor<T> destination, int sourceIndex, int destIndex)
+    {
+        // Validate parameters
+        if (source.Rank != destination.Rank)
+        {
+            throw new ArgumentException("Source and destination tensors must have the same rank");
         }
 
-        for (int i = 0; i < validationSize; i++)
+        for (int i = 1; i < source.Shape.Length; i++)
         {
-            XValidation.SetRow(i, X.GetRow(indices[i + trainSize]));
-            yValidation[i] = y[indices[i + trainSize]];
+            if (source.Shape[i] != destination.Shape[i])
+            {
+                throw new ArgumentException(
+                    $"Source and destination tensors must have the same shape in all dimensions except the first. " +
+                    $"Mismatch at dimension {i}: source={source.Shape[i]}, destination={destination.Shape[i]}");
+            }
         }
 
-        for (int i = 0; i < testSize; i++)
+        if (sourceIndex < 0 || sourceIndex >= source.Shape[0])
         {
-            XTest.SetRow(i, X.GetRow(indices[i + trainSize + validationSize]));
-            yTest[i] = y[indices[i + trainSize + validationSize]];
+            throw new ArgumentOutOfRangeException(nameof(sourceIndex), 
+                $"Source index {sourceIndex} is out of range [0, {source.Shape[0] - 1}]");
         }
 
-        return (XTrain, yTrain, XValidation, yValidation, XTest, yTest);
+        if (destIndex < 0 || destIndex >= destination.Shape[0])
+        {
+            throw new ArgumentOutOfRangeException(nameof(destIndex), 
+                $"Destination index {destIndex} is out of range [0, {destination.Shape[0] - 1}]");
+        }
+
+        // Recursive copy function to handle tensors of any dimension
+        CopySampleRecursive(source, destination, sourceIndex, destIndex, 1, new int[source.Rank]);
+    }
+
+    /// <summary>
+    /// Recursively copies tensor values across multiple dimensions.
+    /// </summary>
+    /// <param name="source">The source tensor.</param>
+    /// <param name="destination">The destination tensor.</param>
+    /// <param name="sourceIndex">The sample index in the source tensor.</param>
+    /// <param name="destIndex">The sample index in the destination tensor.</param>
+    /// <param name="currentDim">The current dimension being processed.</param>
+    /// <param name="indices">Array of indices for tracking position in the tensor.</param>
+    /// <remarks>
+    /// <para>
+    /// This recursive helper method traverses all dimensions of the tensor, building up the
+    /// multi-dimensional indices needed to copy values from the source to the destination tensor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method works like a specialized GPS that navigates through
+    /// all points in a multi-dimensional space to copy values from one location to another.
+    /// 
+    /// Imagine you have a multi-floor building (3D space) and need to copy the contents of
+    /// one apartment to another apartment with the same layout but on a different floor.
+    /// This method systematically goes through each room and copies everything over.
+    /// </para>
+    /// </remarks>
+    private void CopySampleRecursive(
+        Tensor<T> source, 
+        Tensor<T> destination, 
+        int sourceIndex, 
+        int destIndex, 
+        int currentDim, 
+        int[] indices)
+    {
+        if (currentDim == source.Rank)
+        {
+            // We've built complete indices for all dimensions, now copy the value
+            indices[0] = sourceIndex; // Set the sample index for source
+            T value = source[indices];
+        
+            indices[0] = destIndex; // Set the sample index for destination
+            destination[indices] = value;
+        }
+        else
+        {
+            // We're still building indices, continue recursion for the next dimension
+            for (int i = 0; i < source.Shape[currentDim]; i++)
+            {
+                indices[currentDim] = i;
+                CopySampleRecursive(source, destination, sourceIndex, destIndex, currentDim + 1, indices);
+            }
+        }
     }
 }

@@ -15,7 +15,7 @@ namespace AiDotNet.FitDetectors;
 /// the model's complexity and uncertainty, providing a more comprehensive assessment of model fit.
 /// </para>
 /// </remarks>
-public class BayesianFitDetector<T> : FitDetectorBase<T>
+public class BayesianFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Bayesian fit detector.
@@ -65,7 +65,7 @@ public class BayesianFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
 
@@ -104,27 +104,27 @@ public class BayesianFitDetector<T> : FitDetectorBase<T>
     /// while inconsistent values across metrics might indicate instability.
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var dic = StatisticsHelper<T>.CalculateDIC(evaluationData.ModelStats);
         var waic = StatisticsHelper<T>.CalculateWAIC(evaluationData.ModelStats);
         var loo = StatisticsHelper<T>.CalculateLOO(evaluationData.ModelStats);
 
-        if (_numOps.LessThan(dic, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-            _numOps.LessThan(waic, _numOps.FromDouble(_options.GoodFitThreshold)) &&
-            _numOps.LessThan(loo, _numOps.FromDouble(_options.GoodFitThreshold)))
+        if (NumOps.LessThan(dic, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+            NumOps.LessThan(waic, NumOps.FromDouble(_options.GoodFitThreshold)) &&
+            NumOps.LessThan(loo, NumOps.FromDouble(_options.GoodFitThreshold)))
         {
             return FitType.GoodFit;
         }
-        else if (_numOps.GreaterThan(dic, _numOps.FromDouble(_options.OverfitThreshold)) ||
-                 _numOps.GreaterThan(waic, _numOps.FromDouble(_options.OverfitThreshold)) ||
-                 _numOps.GreaterThan(loo, _numOps.FromDouble(_options.OverfitThreshold)))
+        else if (NumOps.GreaterThan(dic, NumOps.FromDouble(_options.OverfitThreshold)) ||
+                 NumOps.GreaterThan(waic, NumOps.FromDouble(_options.OverfitThreshold)) ||
+                 NumOps.GreaterThan(loo, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.LessThan(dic, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.LessThan(waic, _numOps.FromDouble(_options.UnderfitThreshold)) &&
-                 _numOps.LessThan(loo, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.LessThan(dic, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.LessThan(waic, NumOps.FromDouble(_options.UnderfitThreshold)) &&
+                 NumOps.LessThan(loo, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
@@ -155,13 +155,13 @@ public class BayesianFitDetector<T> : FitDetectorBase<T>
     /// indicating greater confidence in the fit assessment.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var posteriorPredictiveCheck = StatisticsHelper<T>.CalculatePosteriorPredictiveCheck(evaluationData.ModelStats);
         var bayes_factor = StatisticsHelper<T>.CalculateBayesFactor(evaluationData.ModelStats);
 
-        var confidenceScore = _numOps.Multiply(posteriorPredictiveCheck, bayes_factor);
-        return _numOps.GreaterThan(confidenceScore, _numOps.One) ? _numOps.One : confidenceScore;
+        var confidenceScore = NumOps.Multiply(posteriorPredictiveCheck, bayes_factor);
+        return NumOps.GreaterThan(confidenceScore, NumOps.One) ? NumOps.One : confidenceScore;
     }
 
     /// <summary>
@@ -189,7 +189,7 @@ public class BayesianFitDetector<T> : FitDetectorBase<T>
     /// the basis for the assessment.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

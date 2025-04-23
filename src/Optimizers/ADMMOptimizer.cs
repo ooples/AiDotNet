@@ -13,12 +13,12 @@ namespace AiDotNet.Optimizers;
 /// It's particularly good at handling problems with constraints or when you want to distribute the computation across multiple processors.
 /// </para>
 /// </remarks>
-public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
+public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the ADMM optimizer.
     /// </summary>
-    private ADMMOptimizerOptions _options;
+    private ADMMOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The current iteration count.
@@ -28,7 +28,7 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <summary>
     /// The regularization method used in the optimization.
     /// </summary>
-    private IRegularization<T> _regularization;
+    private IRegularization<T, TInput, TOutput> _regularization;
 
     /// <summary>
     /// The auxiliary variable in ADMM algorithm.
@@ -44,35 +44,20 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
     /// Initializes a new instance of the ADMMOptimizer class.
     /// </summary>
     /// <param name="options">The options for configuring the ADMM optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
-    /// <param name="regularization">The regularization method to use.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the ADMM optimizer with its initial configuration.
     /// You can customize various aspects of how it solves the optimization problem, or use default settings.
     /// </para>
     /// </remarks>
     public ADMMOptimizer(
-        ADMMOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null,
-        IRegularization<T>? regularization = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        ADMMOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new ADMMOptimizerOptions();
-        _regularization = regularization ?? new NoRegularization<T>();
+        _options = options ?? new ADMMOptimizerOptions<T, TInput, TOutput>();
+        _regularization = _options.Regularization;
         _z = Vector<T>.Empty();
         _u = Vector<T>.Empty();
+
         InitializeAdaptiveParameters();
     }
 
@@ -99,16 +84,17 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
     /// using the ADMM steps until it reaches the best possible solution or hits a stopping condition.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        _z = new Vector<T>(currentSolution.Coefficients.Length);
-        _u = new Vector<T>(currentSolution.Coefficients.Length);
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var parameters = currentSolution.GetParameters();
+        _z = new Vector<T>(parameters.Length);
+        _u = new Vector<T>(parameters.Length);
 
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
 
@@ -118,8 +104,8 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
 
             // ADMM steps
             currentSolution = UpdateX(currentSolution, inputData.XTrain, inputData.YTrain);
-            UpdateZ(currentSolution.Coefficients);
-            UpdateU(currentSolution.Coefficients);
+            UpdateZ(parameters);
+            UpdateU(parameters);
 
             var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
@@ -131,7 +117,7 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            if (CheckConvergence(currentSolution.Coefficients))
+            if (CheckConvergence(parameters))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
@@ -154,21 +140,22 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's like finding the best compromise between fitting the data and satisfying the constraints.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateX(ISymbolicModel<T> currentSolution, Matrix<T> X, Vector<T> y)
+    private IFullModel<T, TInput, TOutput> UpdateX(IFullModel<T, TInput, TOutput> currentSolution, TInput X, TOutput y)
     {
         // Solve (X^T X + rho I)x = X^T y + rho(z - u)
-        var XTranspose = X.Transpose();
-        var XTX = XTranspose.Multiply(X);
+        var matrix = ConversionsHelper.ConvertToMatrix<T, TInput>(X);
+        var XTranspose = matrix.Transpose();
+        var XTX = XTranspose.Multiply(matrix);
         var rhoI = Matrix<T>.CreateIdentity(XTX.Rows).Multiply(NumOps.FromDouble(_options.Rho));
         var leftSide = XTX.Add(rhoI);
 
-        var XTy = XTranspose.Multiply(y);
+        var XTy = XTranspose.Multiply(ConversionsHelper.ConvertToVector<T, TOutput>(y));
         var zMinusU = _z.Subtract(_u);
         var rhoZMinusU = zMinusU.Multiply(NumOps.FromDouble(_options.Rho));
         var rightSide = XTy.Add(rhoZMinusU);
         var newCoefficients = MatrixSolutionHelper.SolveLinearSystem(leftSide, rightSide, _options.DecompositionType);
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -184,7 +171,7 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
     {
         var xPlusU = x.Add(_u);
         var scaledXPlusU = xPlusU.Multiply(NumOps.FromDouble(1.0 / _options.Rho));
-        _z = _regularization.RegularizeCoefficients(scaledXPlusU);
+        _z = _regularization.Regularize(scaledXPlusU);
     }
 
     /// <summary>
@@ -233,13 +220,13 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It can change certain parameters to help the optimizer find a better solution more quickly.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
         if (_options.UseAdaptiveRho)
         {
-            var primalResidual = currentStepData.Solution.Coefficients.Subtract(_z);
+            var primalResidual = currentStepData.Solution.GetParameters().Subtract(_z);
             var dualResidual = _z.Subtract(_z.Subtract(_u));
 
             var primalNorm = primalResidual.Norm();
@@ -266,9 +253,9 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's like adjusting the controls on a machine that's already operating.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is ADMMOptimizerOptions admmOptions)
+        if (options is ADMMOptimizerOptions<T, TInput, TOutput> admmOptions)
         {
             _options = admmOptions;
             _regularization = GetRegularizationFromOptions(admmOptions);
@@ -289,14 +276,14 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
     /// Regularization helps prevent overfitting, which is when a model performs well on training data but poorly on new data.
     /// </para>
     /// </remarks>
-    private IRegularization<T> GetRegularizationFromOptions(ADMMOptimizerOptions options)
+    private IRegularization<T, TInput, TOutput> GetRegularizationFromOptions(ADMMOptimizerOptions<T, TInput, TOutput> options)
     {
         return options.RegularizationType switch
         {
-            RegularizationType.L1 => new L1Regularization<T>(new RegularizationOptions { Strength = options.RegularizationStrength }),
-            RegularizationType.L2 => new L2Regularization<T>(new RegularizationOptions { Strength = options.RegularizationStrength }),
-            RegularizationType.ElasticNet => new ElasticNetRegularization<T>(new RegularizationOptions { Strength = options.RegularizationStrength, L1Ratio = options.ElasticNetMixing }),
-            _ => new NoRegularization<T>()
+            RegularizationType.L1 => new L1Regularization<T, TInput, TOutput>(new RegularizationOptions { Strength = options.RegularizationStrength }),
+            RegularizationType.L2 => new L2Regularization<T, TInput, TOutput>(new RegularizationOptions { Strength = options.RegularizationStrength }),
+            RegularizationType.ElasticNet => new ElasticNetRegularization<T, TInput, TOutput>(new RegularizationOptions { Strength = options.RegularizationStrength, L1Ratio = options.ElasticNetMixing }),
+            _ => new NoRegularization<T, TInput, TOutput>()
         };
     }
 
@@ -309,7 +296,7 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's like looking at the current settings on a machine.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -362,7 +349,7 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<ADMMOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<ADMMOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();
@@ -385,9 +372,9 @@ public class ADMMOptimizer<T> : GradientBasedOptimizerBase<T>
     /// It's used to efficiently store and retrieve calculated gradients, which helps speed up the optimization process.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
-        return $"{baseKey}_ADMM_{_options.Rho}_{_regularization.GetType().Name}_{_options.AbsoluteTolerance}_{_iteration}";
+        return $"{baseKey}_ADMM_{_options.Rho}_{_regularization?.GetType().Name}_{_options.AbsoluteTolerance}_{_iteration}";
     }
 }

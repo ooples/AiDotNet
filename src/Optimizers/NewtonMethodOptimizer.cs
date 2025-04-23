@@ -15,12 +15,12 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class NewtonMethodOptimizer<T> : GradientBasedOptimizerBase<T>
+public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Newton's Method optimizer.
     /// </summary>
-    private NewtonMethodOptimizerOptions _options;
+    private NewtonMethodOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -41,25 +41,12 @@ public class NewtonMethodOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <param name="options">The Newton's Method-specific optimization options.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     public NewtonMethodOptimizer(
-        NewtonMethodOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null,
-        IGradientCache<T>? gradientCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache, gradientCache)
+        NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new NewtonMethodOptimizerOptions();
+        _options = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
+
         InitializeAdaptiveParameters();
     }
 
@@ -101,13 +88,13 @@ public class NewtonMethodOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
 
@@ -187,9 +174,9 @@ public class NewtonMethodOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="model">The current model.</param>
     /// <param name="inputData">The input data for optimization.</param>
     /// <returns>The Hessian matrix at the current point.</returns>
-    private Matrix<T> CalculateHessian(ISymbolicModel<T> model, OptimizationInputData<T> inputData)
+    private Matrix<T> CalculateHessian(IFullModel<T, TInput, TOutput> model, OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        int n = model.Coefficients.Length;
+        int n = model.GetParameters().Length;
         var hessian = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
@@ -220,37 +207,39 @@ public class NewtonMethodOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="i">The index of the first parameter.</param>
     /// <param name="j">The index of the second parameter.</param>
     /// <returns>The approximated second partial derivative.</returns>
-    private T CalculateSecondPartialDerivative(ISymbolicModel<T> model, OptimizationInputData<T> inputData, int i, int j)
+    private T CalculateSecondPartialDerivative(IFullModel<T, TInput, TOutput> model, OptimizationInputData<T, TInput, TOutput> inputData, int i, int j)
     {
+        var parameters = model.GetParameters();
         var epsilon = NumOps.FromDouble(1e-5);
-        var originalI = model.Coefficients[i];
-        var originalJ = model.Coefficients[j];
+        var originalI = parameters[i];
+        var originalJ = parameters[j];
 
         // f(x+h, y+h)
-        model.Coefficients[i] = NumOps.Add(originalI, epsilon);
-        model.Coefficients[j] = NumOps.Add(originalJ, epsilon);
+        parameters[i] = NumOps.Add(originalI, epsilon);
+        parameters[j] = NumOps.Add(originalJ, epsilon);
         var fhh = CalculateLoss(model, inputData);
 
         // f(x+h, y-h)
-        model.Coefficients[j] = NumOps.Subtract(originalJ, epsilon);
+        parameters[j] = NumOps.Subtract(originalJ, epsilon);
         var fhm = CalculateLoss(model, inputData);
 
         // f(x-h, y+h)
-        model.Coefficients[i] = NumOps.Subtract(originalI, epsilon);
-        model.Coefficients[j] = NumOps.Add(originalJ, epsilon);
+        parameters[i] = NumOps.Subtract(originalI, epsilon);
+        parameters[j] = NumOps.Add(originalJ, epsilon);
         var fmh = CalculateLoss(model, inputData);
 
         // f(x-h, y-h)
-        model.Coefficients[j] = NumOps.Subtract(originalJ, epsilon);
+        parameters[j] = NumOps.Subtract(originalJ, epsilon);
         var fmm = CalculateLoss(model, inputData);
 
         // Reset coefficients
-        model.Coefficients[i] = originalI;
-        model.Coefficients[j] = originalJ;
+        parameters[i] = originalI;
+        parameters[j] = originalJ;
 
         // Calculate second partial derivative
         var numerator = NumOps.Subtract(NumOps.Add(fhh, fmm), NumOps.Add(fhm, fmh));
         var denominator = NumOps.Multiply(NumOps.FromDouble(4), NumOps.Multiply(epsilon, epsilon));
+
         return NumOps.Divide(numerator, denominator);
     }
 
@@ -269,15 +258,16 @@ public class NewtonMethodOptimizer<T> : GradientBasedOptimizerBase<T>
     /// <param name="currentSolution">The current solution (model parameters).</param>
     /// <param name="direction">The direction to move in the parameter space.</param>
     /// <returns>A new ISymbolicModel with updated coefficients.</returns>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> direction)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction)
     {
-        var newCoefficients = new Vector<T>(currentSolution.Coefficients.Length);
-        for (int i = 0; i < currentSolution.Coefficients.Length; i++)
+        var parameters = currentSolution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
-            newCoefficients[i] = NumOps.Subtract(currentSolution.Coefficients[i], NumOps.Multiply(CurrentLearningRate, direction[i]));
+            newCoefficients[i] = NumOps.Subtract(currentSolution.GetParameters()[i], NumOps.Multiply(CurrentLearningRate, direction[i]));
         }
 
-        return new VectorModel<T>(newCoefficients);
+        return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -295,7 +285,7 @@ public class NewtonMethodOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -331,9 +321,9 @@ public class NewtonMethodOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </remarks>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is NewtonMethodOptimizerOptions newtonOptions)
+        if (options is NewtonMethodOptimizerOptions<T, TInput, TOutput> newtonOptions)
         {
             _options = newtonOptions;
         }
@@ -356,7 +346,7 @@ public class NewtonMethodOptimizer<T> : GradientBasedOptimizerBase<T>
     /// </para>
     /// </remarks>
     /// <returns>The current optimization algorithm options.</returns>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -416,7 +406,7 @@ public class NewtonMethodOptimizer<T> : GradientBasedOptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<NewtonMethodOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<NewtonMethodOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();

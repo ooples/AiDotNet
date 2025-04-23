@@ -87,7 +87,7 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public KernelRidgeRegression(KernelRidgeRegressionOptions options, IRegularization<T>? regularization = null)
+    public KernelRidgeRegression(KernelRidgeRegressionOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _gramMatrix = Matrix<T>.Empty();
@@ -144,13 +144,13 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         }
 
         // Apply regularization to the Gram matrix
-        Matrix<T> regularizedGramMatrix = Regularization.RegularizeMatrix(_gramMatrix);
+        Matrix<T> regularizedGramMatrix = Regularization.Regularize(_gramMatrix);
 
         // Solve (K + λI + R)α = y, where R is the regularization term
         _dualCoefficients = MatrixSolutionHelper.SolveLinearSystem(regularizedGramMatrix, y, Options.DecompositionType);
 
         // Apply regularization to the dual coefficients
-        _dualCoefficients = Regularization.RegularizeCoefficients(_dualCoefficients);
+        _dualCoefficients = Regularization.Regularize(_dualCoefficients);
 
         // Store X as support vectors for prediction
         SupportVectors = X;
@@ -223,9 +223,9 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        var metadata = base.GetModelMetadata();
+        var metadata = base.GetModelMetaData();
         metadata.AdditionalInfo["LambdaKRR"] = Options.LambdaKRR;
         metadata.AdditionalInfo["RegularizationType"] = Regularization.GetType().Name;
 
@@ -380,5 +380,32 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         {
             _dualCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the KernelRidgeRegression with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new KernelRidgeRegression instance with the same options and regularization as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the KernelRidgeRegression model with the same configuration options
+    /// and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
+    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of model with identical settings:
+    /// - This method creates a new, empty model with the same configuration
+    /// - It's like making a copy of a recipe before you start cooking
+    /// - The new model has the same settings but no trained data
+    /// - This is useful for techniques that need multiple models, like cross-validation
+    /// 
+    /// For example, when testing your model on different subsets of data,
+    /// you'd want each test to use a model with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new KernelRidgeRegression<T>((KernelRidgeRegressionOptions)Options, Regularization);
     }
 }

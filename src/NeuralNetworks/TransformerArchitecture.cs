@@ -315,25 +315,20 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         int feedForwardDimension,
         NetworkComplexity complexity = NetworkComplexity.Medium,
         int inputSize = 0,
-        int inputHeight = 0,
-        int inputWidth = 0,
-        int inputDepth = 1,
         int outputSize = 0,
         double dropoutRate = 0.1,
         int maxSequenceLength = 512,
         int vocabularySize = 0,
         bool usePositionalEncoding = true,
         double temperature = 1.0,
-        List<ILayer<T>>? layers = null,
-        List<RestrictedBoltzmannMachine<T>>? rbmLayers = null)
+        List<ILayer<T>>? layers = null)
         : base(
             inputType: inputType, 
             taskType: taskType, 
             complexity: complexity,
             inputSize: inputSize, 
             outputSize: outputSize,
-            layers: layers, 
-            rbmLayers: rbmLayers)
+            layers: layers)
     {
         NumEncoderLayers = numEncoderLayers;
         NumDecoderLayers = numDecoderLayers;

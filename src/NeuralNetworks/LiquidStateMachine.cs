@@ -56,7 +56,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// This is one of the most important parameters to adjust when setting up a Liquid State Machine.
     /// </para>
     /// </remarks>
-    private readonly int _reservoirSize;
+    private int _reservoirSize;
 
     /// <summary>
     /// Gets the probability of connection between neurons in the reservoir.
@@ -81,7 +81,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// Finding the right balance helps the network process complex patterns efficiently.
     /// </para>
     /// </remarks>
-    private readonly double _connectionProbability;
+    private double _connectionProbability;
 
     /// <summary>
     /// Gets the spectral radius of the reservoir weight matrix.
@@ -108,7 +108,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// This parameter helps balance the network's memory capacity with its stability.
     /// </para>
     /// </remarks>
-    private readonly double _spectralRadius;
+    private double _spectralRadius;
 
     /// <summary>
     /// Gets the scaling factor applied to input signals.
@@ -133,7 +133,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// Finding the right input scaling helps the network properly respond to the strength of your signals.
     /// </para>
     /// </remarks>
-    private readonly double _inputScaling;
+    private double _inputScaling;
 
     /// <summary>
     /// Gets the leaking rate of the reservoir neurons.
@@ -161,7 +161,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// This parameter helps control the network's memory duration.
     /// </para>
     /// </remarks>
-    private readonly double _leakingRate;
+    private double _leakingRate;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiquidStateMachine{T}"/> class with the specified architecture and parameters.
@@ -263,44 +263,6 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a forward pass through the network to generate a prediction from an input vector.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector containing the prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method processes an input vector through all layers of the Liquid State Machine sequentially, transforming
-    /// it at each step according to the layer's function, and returns the final output vector. For Liquid State Machines,
-    /// this typically means passing through the input projection, the reservoir, and the readout layers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method processes your input data through the network to get a prediction.
-    /// 
-    /// The process works like this:
-    /// 1. Your input enters the network and is projected into the reservoir
-    /// 2. The reservoir neurons respond to the input, creating complex patterns
-    /// 3. These patterns evolve based on the connections between neurons
-    /// 4. The readout layer interprets these patterns to produce the final output
-    /// 
-    /// Each time you call this method with new input:
-    /// - The reservoir state changes based on both the new input and its previous state
-    /// - This gives the network its ability to process sequences and remember context
-    /// - The output is computed based on the current reservoir state
-    /// 
-    /// This temporal processing is what makes Liquid State Machines powerful for time-series data.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        var current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network using the provided parameter vector.
     /// </summary>
     /// <param name="parameters">A vector containing updated parameters for all layers.</param>
@@ -343,116 +305,433 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the Liquid State Machine to a binary writer.
+    /// Performs a forward pass through the Liquid State Machine to make a prediction.
     /// </summary>
-    /// <param name="writer">The binary writer to write the serialized network to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a null layer is encountered or when a layer type name cannot be determined.</exception>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor containing the prediction.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the Liquid State Machine's structure and parameters to a binary format that can be stored
-    /// and later loaded. It writes the number of layers and then serializes each layer individually,
-    /// preserving the network's configuration and any trained readout weights.
+    /// This method passes the input data through the reservoir and readout layers to produce an output.
+    /// The liquid state machine relies on the complex dynamics of the reservoir to transform the input
+    /// signal into a higher-dimensional representation, which is then processed by the readout layers.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves your Liquid State Machine to a file.
+    /// <para><b>For Beginners:</b> This is how the LSM processes new data to make predictions.
     /// 
-    /// After setting up and potentially training your network, you'll want to save it
-    /// so you can use it later without recreating it. This method:
+    /// It works like this:
+    /// 1. Input data enters the "reservoir" (like dropping an object into a pool of water)
+    /// 2. The reservoir creates complex ripple patterns based on its internal connections
+    /// 3. The readout layers interpret these patterns to produce the final output
     /// 
-    /// 1. Counts how many layers your network has
-    /// 2. Writes this count to the file
-    /// 3. For each layer:
-    ///    - Writes the type of layer
-    ///    - Saves the configuration and parameters for that layer
-    /// 
-    /// This is particularly important for Liquid State Machines because:
-    /// - The randomly-initialized reservoir is a key part of the network
-    /// - If you created a new random reservoir, it would behave differently
-    /// - Saving ensures you can use exactly the same network later
-    /// 
-    /// The saved file captures both the fixed reservoir and any trained readout mechanisms.
+    /// The key advantage is that even simple readout mechanisms can solve complex problems
+    /// by leveraging the rich dynamics of the reservoir.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
+        // Clear any stored state from previous predictions
+        ResetState();
 
-        writer.Write(Layers.Count);
+        Tensor<T> current = input;
+        
+        // Process the input through each layer sequentially
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (!IsTrainingMode)
+            {
+                // For inference mode, just forward pass
+                current = Layers[i].Forward(current);
+            }
+            else
+            {
+                // For training mode, store intermediate values
+                _layerInputs[i] = current;
+                current = Layers[i].Forward(current);
+                _layerOutputs[i] = current;
+            }
+        }
+        
+        return current;
+    }
+
+    /// <summary>
+    /// Resets the state of the Liquid State Machine.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the Liquid State Machine and all its layers.
+    /// It clears the stored inputs and outputs from previous forward passes and resets the state
+    /// of any stateful layers like the reservoir. This is important when starting to process a new,
+    /// unrelated sequence or when you want to clear the temporal memory of the network.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like clearing the water surface to start fresh.
+    /// 
+    /// In our water analogy:
+    /// - ResetState() is like calming the water so no ripples remain
+    /// - This ensures that previous inputs don't affect how the network processes new inputs
+    /// - It's important to call this when starting to process a completely new sequence
+    /// 
+    /// For example, if you've processed one audio clip and now want to process another unrelated clip,
+    /// you should reset the state in between to clear the "memory" of the first clip.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Clear stored layer activations
+        _layerInputs.Clear();
+        _layerOutputs.Clear();
+        
+        // Reset all layers, especially important for reservoir layers
         foreach (var layer in Layers)
         {
-            if (layer == null)
-                throw new InvalidOperationException("Encountered a null layer during serialization.");
+            layer.ResetState();
+        }
+        
+        // Initialize empty dictionaries for storing layer inputs/outputs
+        // during future forward passes
+        _layerInputs = [];
+        _layerOutputs = [];
+    }
 
-            string? fullName = layer.GetType().FullName;
-            if (string.IsNullOrEmpty(fullName))
-                throw new InvalidOperationException($"Unable to get full name for layer type {layer.GetType()}");
+    /// <summary>
+    /// Trains the Liquid State Machine on a single input-output pair.
+    /// </summary>
+    /// <param name="input">The input tensor to learn from.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
+    /// <remarks>
+    /// <para>
+    /// This method trains the readout mechanism of the Liquid State Machine using the given input-output pair.
+    /// In LSMs, typically only the readout layers are trained, while the reservoir remains fixed
+    /// after initialization. This makes training efficient compared to fully recurrent networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how the LSM learns from examples.
+    /// 
+    /// The unique aspect of Liquid State Machines is that:
+    /// - The reservoir (internal pool of neurons) is randomly connected and stays fixed
+    /// - Only the readout mechanism (which interprets the reservoir states) is trained
+    /// 
+    /// This makes training much simpler than in other recurrent networks, because:
+    /// 1. Input data is passed through the fixed reservoir
+    /// 2. The reservoir creates complex patterns
+    /// 3. Only the readout layer is trained to map these patterns to correct outputs
+    /// 
+    /// It's like learning to read ripple patterns in water without changing how water behaves.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!IsTrainingMode)
+        {
+            SetTrainingMode(true);
+        }
 
-            writer.Write(fullName);
-            layer.Serialize(writer);
+        // Forward pass through the network, storing intermediate values
+        Tensor<T> prediction = Predict(input);
+
+        // Calculate loss
+        var flattenedPredictions = prediction.ToVector();
+        var flattenedExpected = expectedOutput.ToVector();
+        var loss = new MeanSquaredErrorLoss<T>().CalculateLoss(flattenedPredictions, flattenedExpected);
+
+        // Calculate output gradients
+        var outputGradients = new MeanSquaredErrorLoss<T>().CalculateDerivative(flattenedPredictions, flattenedExpected);
+
+        // Backpropagate to get parameter gradients
+        Vector<T> gradients = Backpropagate(outputGradients);
+
+        // Get parameter gradients for all trainable layers
+        Vector<T> parameterGradients = GetParameterGradients();
+
+        // Clip gradients to prevent exploding gradients
+        parameterGradients = ClipGradient(parameterGradients);
+
+        // Create optimizer
+        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
+
+        // Get current parameters
+        Vector<T> currentParameters = GetParameters();
+
+        // Update parameters using the optimizer
+        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+
+        // Apply updated parameters
+        UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Gets metadata about the Liquid State Machine model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the LSM, including its model type, architecture details,
+    /// reservoir properties, and serialized model data. This information is useful for model management
+    /// and for saving/loading models.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides a summary of your LSM's configuration.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (LSM)
+    /// - Details about the reservoir (size, connectivity, etc.)
+    /// - Parameters that affect the model's behavior
+    /// - Serialized data that can be used to save and reload the model
+    /// 
+    /// This is useful for keeping track of different models and their configurations,
+    /// especially when experimenting with multiple settings.
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.LiquidStateMachine,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ReservoirSize", _reservoirSize },
+                { "ConnectionProbability", _connectionProbability },
+                { "SpectralRadius", _spectralRadius },
+                { "InputScaling", _inputScaling },
+                { "LeakingRate", _leakingRate },
+                { "LayerCount", Layers.Count },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes Liquid State Machine-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes LSM-specific configuration data to a binary stream. This includes
+    /// properties such as reservoir size, connection probability, spectral radius, input scaling,
+    /// and leaking rate. This data is needed to reconstruct the LSM when deserializing.
+    /// </para>
+    /// <para><b>For Beginners:</b> This saves the special configuration of your LSM.
+    /// 
+    /// It's like writing down the recipe for how your specific LSM was built:
+    /// - How big the reservoir is
+    /// - How densely it's connected
+    /// - How strongly inputs affect it
+    /// - How quickly information fades
+    /// 
+    /// These details are crucial because they define how your LSM processes information,
+    /// and they need to be saved along with the weights for the model to work correctly
+    /// when loaded later.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write LSM-specific properties
+        writer.Write(_reservoirSize);
+        writer.Write(_connectionProbability);
+        writer.Write(_spectralRadius);
+        writer.Write(_inputScaling);
+        writer.Write(_leakingRate);
+        
+        // Write whether we're in training mode
+        writer.Write(IsTrainingMode);
+    }
+
+    /// <summary>
+    /// Deserializes Liquid State Machine-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads LSM-specific configuration data from a binary stream. It restores
+    /// properties such as reservoir size, connection probability, spectral radius, input scaling,
+    /// and leaking rate. After reading this data, the state of the LSM is fully restored.
+    /// </para>
+    /// <para><b>For Beginners:</b> This restores the special configuration of your LSM from saved data.
+    /// 
+    /// It's like following the recipe to rebuild your LSM exactly as it was:
+    /// - Setting the reservoir to the right size
+    /// - Configuring the connection density
+    /// - Setting up how strongly inputs affect the network
+    /// - Restoring how quickly information fades
+    /// 
+    /// By reading these details, the LSM can be reconstructed exactly as it was
+    /// when it was saved, preserving all its behavior and learned patterns.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _reservoirSize = reader.ReadInt32();
+        _connectionProbability = reader.ReadDouble();
+        _spectralRadius = reader.ReadDouble();
+        _inputScaling = reader.ReadDouble();
+        _leakingRate = reader.ReadDouble();
+        
+        // Read training mode
+        IsTrainingMode = reader.ReadBoolean();
+    }
+    
+    /// <summary>
+    /// Sets the training mode for the Liquid State Machine.
+    /// </summary>
+    /// <param name="isTraining">True to enable training mode; false to enable inference mode.</param>
+    /// <remarks>
+    /// <para>
+    /// This method overrides the base class implementation to set the training mode for both
+    /// the LSM itself and all its layers. In training mode, the network keeps track of intermediate
+    /// values needed for backpropagation, while in inference mode it operates more efficiently.
+    /// </para>
+    /// <para><b>For Beginners:</b> This switches the LSM between learning mode and prediction mode.
+    /// 
+    /// In training mode (isTraining = true):
+    /// - The network keeps track of more information to enable learning
+    /// - It stores intermediate values needed for backpropagation
+    /// - It uses more memory but can adjust its parameters
+    /// 
+    /// In inference mode (isTraining = false):
+    /// - The network is more efficient
+    /// - It doesn't need to store extra information
+    /// - It's faster but cannot learn new patterns
+    /// 
+    /// Switching to the right mode is important for both efficient training and fast prediction.
+    /// </para>
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        
+        // Also set training mode for all layers
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(isTraining);
+        }
+        
+        // Clear stored states when switching modes
+        if (IsTrainingMode != isTraining)
+        {
+            _layerInputs.Clear();
+            _layerOutputs.Clear();
+        }
+    }
+    
+    /// <summary>
+    /// Simulates the LSM with time-series data, allowing the reservoir state to evolve over time.
+    /// </summary>
+    /// <param name="timeSeriesInput">A sequence of input tensors representing a time series.</param>
+    /// <returns>A sequence of output tensors corresponding to each input time step.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method processes a sequence of inputs through the LSM, maintaining the reservoir state
+    /// between time steps. This allows the network to exhibit temporal memory and process time-series
+    /// data effectively. The method returns the corresponding sequence of outputs.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how the LSM processes data that changes over time.
+    /// 
+    /// Think of it like continuously dropping objects into water:
+    /// - Each input creates new ripples
+    /// - But these ripples interact with existing ripples from previous inputs
+    /// - The state of the water at any moment depends on both current and past inputs
+    /// 
+    /// This temporal memory makes LSMs excellent for:
+    /// - Speech recognition (where sounds have meaning in sequence)
+    /// - Time-series prediction (like stock prices or weather)
+    /// - Any data where history matters
+    /// </para>
+    /// </remarks>
+    public List<Tensor<T>> SimulateTimeSeries(List<Tensor<T>> timeSeriesInput)
+    {
+        var outputs = new List<Tensor<T>>();
+        
+        // Reset state before starting the simulation
+        ResetState();
+        
+        // Process each time step
+        foreach (var input in timeSeriesInput)
+        {
+            var output = Predict(input);
+            outputs.Add(output);
+            
+            // Note: We don't reset state between time steps to maintain temporal dynamics
+        }
+        
+        return outputs;
+    }
+    
+    /// <summary>
+    /// Performs online learning for time-series data, updating the network after each time step.
+    /// </summary>
+    /// <param name="timeSeriesInput">A sequence of input tensors representing a time series.</param>
+    /// <param name="timeSeriesExpectedOutput">A sequence of expected output tensors.</param>
+    /// <remarks>
+    /// <para>
+    /// This method implements online learning for time-series data, where the network is updated
+    /// after each time step rather than after processing the entire sequence. This approach
+    /// allows the LSM to adapt to changing dynamics in the time series.
+    /// </para>
+    /// <para><b>For Beginners:</b> This trains the LSM on data that changes over time, updating after each step.
+    /// 
+    /// In online learning:
+    /// - The network processes each time step and makes a prediction
+    /// - It immediately receives feedback on how accurate that prediction was
+    /// - It updates its parameters before moving to the next time step
+    /// 
+    /// This is different from batch learning where the network would see the entire sequence
+    /// before making any updates. Online learning can be better for:
+    /// - Data streams that continually arrive
+    /// - Systems that need to adapt to changing conditions
+    /// - Learning from very long sequences
+    /// </para>
+    /// </remarks>
+    public void TrainOnTimeSeries(List<Tensor<T>> timeSeriesInput, List<Tensor<T>> timeSeriesExpectedOutput)
+    {
+        if (timeSeriesInput.Count != timeSeriesExpectedOutput.Count)
+        {
+            throw new ArgumentException("Input and expected output sequences must have the same length");
+        }
+        
+        // Reset state before starting the training
+        ResetState();
+        SetTrainingMode(true);
+        
+        // Process each time step
+        for (int i = 0; i < timeSeriesInput.Count; i++)
+        {
+            // Forward pass and train on this time step
+            Train(timeSeriesInput[i], timeSeriesExpectedOutput[i]);
+            
+            // Note: We don't reset state between time steps to maintain temporal dynamics
         }
     }
 
     /// <summary>
-    /// Deserializes the Liquid State Machine from a binary reader.
+    /// Creates a new instance of the Liquid State Machine with the same architecture and configuration.
     /// </summary>
-    /// <param name="reader">The binary reader to read the serialized network from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when an empty layer type name is encountered, when a layer type cannot be found, when a type does not implement the required interface, or when a layer instance cannot be created.</exception>
+    /// <returns>A new Liquid State Machine instance with the same architecture and configuration.</returns>
     /// <remarks>
     /// <para>
-    /// This method loads a previously serialized Liquid State Machine from a binary format. It reads the number of layers
-    /// and then deserializes each layer individually, recreating the network's structure and parameters.
-    /// This allows the network to continue with the exact same reservoir and readout configuration.
+    /// This method creates a new instance of the Liquid State Machine with the same architecture and LSM-specific
+    /// parameters as the current instance. It's used in scenarios where a fresh copy of the model is needed
+    /// while maintaining the same configuration.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved Liquid State Machine from a file.
+    /// <para><b>For Beginners:</b> This method creates a brand new copy of the LSM with the same setup.
     /// 
-    /// When you want to use a network that was saved earlier, this method:
+    /// Think of it like creating a clone of the network:
+    /// - The new network has the same architecture (structure)
+    /// - It has the same reservoir size, connection probability, and other settings
+    /// - But it's a completely separate instance with its own internal state
+    /// - The reservoir will be randomly initialized again, creating a different random network
     /// 
-    /// 1. Reads how many layers the network should have
-    /// 2. Creates a new, empty network
-    /// 3. For each layer:
-    ///    - Reads what type of layer it should be
-    ///    - Creates that type of layer
-    ///    - Loads the configuration and parameters for that layer
-    /// 
-    /// This is particularly important for Liquid State Machines because:
-    /// - It restores the exact same random reservoir that was saved
-    /// - It maintains the exact same dynamics that were present before
-    /// - Any trained readout mechanisms are preserved
-    /// 
-    /// After loading, the network will behave identically to when it was saved,
-    /// which is essential for consistent predictions.
+    /// This is useful when you want to:
+    /// - Train multiple networks with the same configuration
+    /// - Compare how different random initializations affect learning
+    /// - Create an ensemble of models with the same parameters
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        int layerCount = reader.ReadInt32();
-        Layers.Clear();
-
-        for (int i = 0; i < layerCount; i++)
-        {
-            string layerTypeName = reader.ReadString();
-            if (string.IsNullOrEmpty(layerTypeName))
-                throw new InvalidOperationException("Encountered an empty layer type name during deserialization.");
-
-            Type? layerType = Type.GetType(layerTypeName);
-            if (layerType == null)
-                throw new InvalidOperationException($"Cannot find type {layerTypeName}");
-
-            if (!typeof(ILayer<T>).IsAssignableFrom(layerType))
-                throw new InvalidOperationException($"Type {layerTypeName} does not implement ILayer<T>");
-
-            object? instance = Activator.CreateInstance(layerType);
-            if (instance == null)
-                throw new InvalidOperationException($"Failed to create an instance of {layerTypeName}");
-
-            var layer = (ILayer<T>)instance;
-            layer.Deserialize(reader);
-            Layers.Add(layer);
-        }
+        return new LiquidStateMachine<T>(
+            this.Architecture,
+            _reservoirSize,
+            _connectionProbability,
+            _spectralRadius,
+            _inputScaling,
+            _leakingRate);
     }
 }

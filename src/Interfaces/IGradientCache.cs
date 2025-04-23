@@ -52,7 +52,7 @@ public interface IGradientCache<T>
     /// Using cached gradients can significantly speed up training because you avoid
     /// repeating the same complex calculations multiple times.
     /// </remarks>
-    ISymbolicModel<T>? GetCachedGradient(string key);
+    IGradientModel<T>? GetCachedGradient(string key);
 
     /// <summary>
     /// Stores a gradient in the cache with a unique key for later retrieval.
@@ -80,7 +80,7 @@ public interface IGradientCache<T>
     /// If you cache a gradient with a key that already exists in the cache,
     /// the new gradient typically replaces the old one.
     /// </remarks>
-    void CacheGradient(string key, ISymbolicModel<T> gradient);
+    void CacheGradient(string key, IGradientModel<T> gradient);
 
     /// <summary>
     /// Removes all cached gradients, freeing up memory.

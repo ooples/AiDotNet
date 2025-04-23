@@ -1,6 +1,5 @@
 namespace AiDotNet.Regression;
 
-
 /// <summary>
 /// A neural network regression model that can learn complex non-linear relationships in data.
 /// </summary>
@@ -31,7 +30,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// <value>
     /// Contains settings like layer sizes, learning rate, batch size, and activation functions.
     /// </value>
-    private readonly NeuralNetworkRegressionOptions<T> _options;
+    private readonly NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> _options;
 
     /// <summary>
     /// The weight matrices for each layer of the neural network.
@@ -55,7 +54,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// <value>
     /// An implementation of the IOptimizer interface that determines how weights and biases are updated.
     /// </value>
-    private readonly IOptimizer<T> _optimizer;
+    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
 
     /// <summary>
     /// Initializes a new instance of the NeuralNetworkRegression class with the specified options and regularization.
@@ -78,13 +77,14 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// Think of it like setting up a balanced starting point for the learning process.
     /// </para>
     /// </remarks>
-    public NeuralNetworkRegression(NeuralNetworkRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public NeuralNetworkRegression(NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
-        _options = options ?? new NeuralNetworkRegressionOptions<T>();
-        _optimizer = _options.Optimizer ?? new AdamOptimizer<T>();
+        _options = options ?? new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>();
+        _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>();
         _weights = [];
         _biases = [];
+
         InitializeNetwork();
     }
 
@@ -307,7 +307,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             List<Vector<T>> activations = ForwardPass(input);
 
             // Compute loss
-            T loss = _options.LossFunction(activations[activations.Count - 1], target);
+            T loss = _options.LossFunction.CalculateLoss(activations[activations.Count - 1], target);
             batchLoss = NumOps.Add(batchLoss, loss);
 
             // Backward pass
@@ -391,11 +391,11 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private List<Vector<T>> BackwardPass(List<Vector<T>> activations, Vector<T> target)
     {
-        List<Vector<T>> deltas = new List<Vector<T>>();
+        var deltas = new List<Vector<T>>();
 
         // Output layer error
         int lastIndex = activations.Count - 1;
-        Vector<T> error = _options.LossFunctionDerivative(activations[lastIndex], target);
+        Vector<T> error = _options.LossFunction.CalculateDerivative(activations[lastIndex], target);
         Vector<T> delta = error.PointwiseMultiply(ApplyActivationDerivative(activations[lastIndex], true));
         deltas.Add(delta);
 
@@ -489,10 +489,10 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             Matrix<T> avgWeightGradient = weightGradients[i].Transform((g, _, _) => NumOps.Multiply(g, scaleFactor));
             Vector<T> avgBiasGradient = biasGradients[i].Transform(g => NumOps.Multiply(g, scaleFactor));
 
-            if (_optimizer is IGradientBasedOptimizer<T> gradientOptimizer)
+            if (_optimizer is IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> gradientOptimizer)
             {
-                _weights[i] = gradientOptimizer.UpdateMatrix(_weights[i], avgWeightGradient);
-                _biases[i] = gradientOptimizer.UpdateVector(_biases[i], avgBiasGradient);
+                _weights[i] = gradientOptimizer.UpdateParameters(_weights[i], avgWeightGradient);
+                _biases[i] = gradientOptimizer.UpdateParameters(_biases[i], avgBiasGradient);
             }
             else
             {
@@ -502,8 +502,8 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             }
 
             // Apply regularization
-            _weights[i] = Regularization.RegularizeMatrix(_weights[i]);
-            _biases[i] = Regularization.RegularizeCoefficients(_biases[i]);
+            _weights[i] = Regularization.Regularize(_weights[i]);
+            _biases[i] = Regularization.Regularize(_biases[i]);
         }
     }
 
@@ -559,8 +559,28 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Vector<T> ApplyActivation(Vector<T> input, bool isOutputLayer)
     {
-        var activationFunc = isOutputLayer ? _options.OutputActivationFunction : _options.HiddenActivationFunction;
-        return input.Transform(x => activationFunc(x));
+        // First check if vector activation is available
+        var vectorActivation = isOutputLayer
+            ? _options.OutputVectorActivation
+            : _options.HiddenVectorActivation;
+
+        if (vectorActivation != null)
+        {
+            return vectorActivation.Activate(input);
+        }
+
+        // Fall back to scalar activation
+        var scalarActivation = isOutputLayer
+            ? _options.OutputActivationFunction
+            : _options.HiddenActivationFunction;
+
+        if (scalarActivation != null)
+        {
+            return input.Transform(x => scalarActivation.Activate(x));
+        }
+
+        // If no activation function is specified, return the input unchanged (identity function)
+        return input;
     }
 
     /// <summary>
@@ -584,8 +604,28 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Vector<T> ApplyActivationDerivative(Vector<T> input, bool isOutputLayer)
     {
-        var activationFuncDerivative = isOutputLayer ? _options.OutputActivationFunctionDerivative : _options.HiddenActivationFunctionDerivative;
-        return input.Transform(x => activationFuncDerivative(x));
+        // First check if vector activation is available
+        var vectorActivation = isOutputLayer
+            ? _options.OutputVectorActivation
+            : _options.HiddenVectorActivation;
+
+        if (vectorActivation != null)
+        {
+            return vectorActivation.Derivative(input).ToVector();
+        }
+
+        // Fall back to scalar activation
+        var scalarActivation = isOutputLayer
+            ? _options.OutputActivationFunction
+            : _options.HiddenActivationFunction;
+
+        if (scalarActivation != null)
+        {
+            return input.Transform(x => scalarActivation.Derivative(x));
+        }
+
+        // If no activation function is specified, return ones (derivative of identity function)
+        return input.Transform(_ => NumOps.One);
     }
 
     /// <summary>
@@ -747,5 +787,56 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         }
 
         InitializeNetwork();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Neural Network Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Neural Network Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Neural Network Regression model, including its 
+    /// layer structure, weights, biases, optimizer configuration, and regularization settings.
+    /// The new instance is completely independent of the original, allowing modifications without
+    /// affecting the original model.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method creates an exact copy of your trained neural network.
+    /// 
+    /// Think of it like cloning your neural network with all its learned knowledge:
+    /// - It copies the structure (how many neurons in each layer)
+    /// - It duplicates all the connection strengths (weights) between neurons
+    /// - It preserves all the bias values for each neuron
+    /// - It maintains the same learning algorithm (optimizer) and settings
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before further training or experimentation
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        var newModel = new NeuralNetworkRegression<T>(_options, Regularization);
+        
+        // Clear the auto-initialized weights and biases
+        newModel._weights.Clear();
+        newModel._biases.Clear();
+        
+        // Deep copy all weight matrices
+        foreach (var weight in _weights)
+        {
+            newModel._weights.Add(weight.Clone());
+        }
+        
+        // Deep copy all bias vectors
+        foreach (var bias in _biases)
+        {
+            newModel._biases.Add(bias.Clone());
+        }
+        
+        return newModel;
     }
 }

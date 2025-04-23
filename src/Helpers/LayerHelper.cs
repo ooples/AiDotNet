@@ -220,6 +220,50 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default layers for a Deep Boltzmann Machine (DBM).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
+    /// <returns>A collection of layers forming a Deep Boltzmann Machine.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A Deep Boltzmann Machine is a type of neural network that learns to recognize patterns 
+    /// in data without supervision. It's made up of multiple layers of "hidden units" that learn to represent 
+    /// features of the input data. DBMs are particularly good at learning complex patterns and can be used for 
+    /// tasks like feature learning, dimensionality reduction, and generating new data similar to the training set.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepBoltzmannMachineLayers(
+        NeuralNetworkArchitecture<T> architecture)
+    {
+        ValidateLayerParameters(1, 32, architecture.OutputSize);
+
+        var inputShape = architecture.GetInputShape();
+        int inputSize = inputShape[0];
+
+        // Define the sizes of each layer in the DBM
+        int[] layerSizes = [inputSize, 500, 500, 2000, architecture.OutputSize];
+
+        // Create layers
+        for (int i = 0; i < layerSizes.Length - 1; i++)
+        {
+            yield return new RBMLayer<T>(
+                visibleUnits: layerSizes[i],
+                hiddenUnits: layerSizes[i + 1],
+                new SigmoidActivation<T>() as IActivationFunction<T>
+            );
+
+            // Add a BatchNormalization layer after each RBM layer except the last one
+            if (i < layerSizes.Length - 2)
+            {
+                yield return new BatchNormalizationLayer<T>(layerSizes[i + 1]);
+            }
+        }
+
+        // Output layer
+        yield return new DenseLayer<T>(layerSizes[layerSizes.Length - 2], layerSizes[layerSizes.Length - 1], new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
     /// Creates default layers for an occupancy detection neural network without temporal data.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
@@ -638,8 +682,6 @@ public static class LayerHelper<T>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultDeepBeliefNetworkLayers(NeuralNetworkArchitecture<T> architecture)
     {
-        var rbmLayers = new List<RestrictedBoltzmannMachine<T>>();
-
         // Default layer sizes for DBN (can be adjusted as needed)
         int[] layerSizes = [architecture.GetInputShape()[0], 500, 500, 2000, architecture.OutputSize];
 
@@ -653,11 +695,13 @@ public static class LayerHelper<T>
             int hiddenUnits = layerSizes[i + 1];
 
             // Create and add RBM layer
-            var rbm = new RestrictedBoltzmannMachine<T>(architecture, visibleUnits, hiddenUnits, sigmoidActivation);
-            rbmLayers.Add(rbm);
+            yield return new RBMLayer<T>(
+                visibleUnits: visibleUnits,
+                hiddenUnits: hiddenUnits,
+                scalarActivation: sigmoidActivation
+            );
 
-            // Add dense layer and activation layer for each RBM
-            yield return new DenseLayer<T>(visibleUnits, hiddenUnits, sigmoidActivation);
+            // Add activation layer for each RBM
             yield return new ActivationLayer<T>([hiddenUnits], sigmoidActivation);
         }
 
@@ -665,8 +709,6 @@ public static class LayerHelper<T>
         int outputSize = layerSizes[layerSizes.Length - 1];
         yield return new DenseLayer<T>(outputSize, outputSize, softmaxActivation);
         yield return new ActivationLayer<T>([outputSize], softmaxActivation);
-
-        architecture.RbmLayers = rbmLayers;
     }
 
     /// <summary>
@@ -2193,5 +2235,58 @@ public static class LayerHelper<T>
             // For regression (predicting continuous values)
             yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
         }
+    }
+
+    /// <summary>
+    /// Creates default layers for a feed-forward neural network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
+    /// <param name="hiddenLayerCount">Number of hidden layers (default: 2).</param>
+    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 64).</param>
+    /// <returns>A collection of layers forming a feed-forward neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method builds a basic feed-forward neural network. Think of it as a series of 
+    /// connected layers where information flows from the input, through "hidden" processing layers, to the output.
+    /// </para>
+    /// <para>
+    /// Key components:
+    /// - Input layer: Receives the raw data
+    /// - Hidden layers: Process and transform the data, learning patterns
+    /// - Output layer: Produces the final prediction or classification
+    /// 
+    /// The network automatically adjusts for different types of tasks (like classification or regression) 
+    /// by choosing appropriate activation functions for the output layer.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFeedForwardLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 2,
+        int hiddenLayerSize = 64)
+    {
+        ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, architecture.OutputSize);
+
+        var inputShape = architecture.GetInputShape();
+        int inputSize = inputShape.Aggregate((a, b) => a * b);  // Flatten multi-dimensional input
+
+        // Input layer (flattening if necessary)
+        if (inputShape.Length > 1)
+        {
+            yield return new FlattenLayer<T>(inputShape);
+        }
+
+        // First hidden layer
+        yield return new DenseLayer<T>(inputSize, hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Additional hidden layers
+        for (int i = 1; i < hiddenLayerCount; i++)
+        {
+            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        // Output layer
+        var outputActivation = NeuralNetworkHelper<T>.GetDefaultActivationFunction(architecture.TaskType);
+
+        yield return new DenseLayer<T>(hiddenLayerSize, architecture.OutputSize, outputActivation);
     }
 }

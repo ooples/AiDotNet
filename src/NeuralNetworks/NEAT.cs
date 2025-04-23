@@ -580,40 +580,6 @@ public class NEAT<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a forward pass through the best genome in the population to generate a prediction from an input vector.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector containing the prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses the best-performing genome (neural network) in the population to make predictions.
-    /// It identifies the genome with the highest fitness score and activates it with the provided input vector.
-    /// The genome's neural network processes the input through its evolved topology to produce an output.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method uses the best neural network from your population to make a prediction.
-    /// 
-    /// When you need to use your evolved neural network:
-    /// 1. NEAT finds the network with the highest fitness score
-    /// 2. It passes your input through this network
-    /// 3. The network processes the input through its evolved structure
-    /// 4. The result is returned as the prediction
-    /// 
-    /// The beauty of NEAT is that this network's structure was not designed manually
-    /// but discovered through evolution. It may have a unique arrangement of neurons
-    /// and connections that a human designer might not have thought of.
-    /// 
-    /// After many generations of evolution, this best network should perform well
-    /// on your target problem.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        // Use the best genome for prediction
-        var bestGenome = _population.OrderByDescending(g => g.Fitness).First();
-        return bestGenome.Activate(input);
-    }
-
-    /// <summary>
     /// Not implemented for NEAT, as it evolves parameters through natural selection rather than direct updates.
     /// </summary>
     /// <param name="parameters">A vector containing parameters to update.</param>
@@ -643,108 +609,708 @@ public class NEAT<T> : NeuralNetworkBase<T>
     public override void UpdateParameters(Vector<T> parameters)
     {
         // NEAT doesn't use this method for parameter updates
-        throw new NotImplementedException("NEAT doesn't support direct parameter updates.");
     }
 
     /// <summary>
-    /// Serializes the NEAT algorithm state to a binary writer.
+    /// Predicts output values for input data using the best genome in the population.
     /// </summary>
-    /// <param name="writer">The binary writer to write the serialized state to.</param>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after processing.</returns>
     /// <remarks>
     /// <para>
-    /// This method saves the NEAT algorithm's state to a binary format that can be stored and later loaded.
-    /// It writes the evolution parameters (population size, mutation rate, crossover rate), the current innovation
-    /// number, and the entire population of genomes. Each genome is serialized individually, preserving the
-    /// evolved network structures and their fitness values.
+    /// This method uses the highest-fitness genome in the population to make predictions. It activates the 
+    /// genome's neural network with the provided input data and returns the resulting output activations.
+    /// For batch inputs, it processes each sample independently.
     /// </para>
-    /// <para><b>For Beginners:</b> This method saves the current state of your NEAT system to a file.
+    /// <para><b>For Beginners:</b> This method uses the best evolved network to make predictions.
     /// 
-    /// When you save a NEAT system, several things are preserved:
+    /// When making a prediction:
+    /// - NEAT uses the highest-performing network from the population
+    /// - The input data is fed into this network
+    /// - The network processes the data through its evolved structure
+    /// - The resulting output values are returned
     /// 
-    /// 1. Configuration parameters:
-    ///    - Population size
-    ///    - Mutation rate
-    ///    - Crossover rate
-    ///    - Current innovation number counter
-    /// 
-    /// 2. The entire population:
-    ///    - All evolved neural networks
-    ///    - Their structures (neurons and connections)
-    ///    - Their fitness scores
-    /// 
-    /// This comprehensive saving ensures that when you reload the system later,
-    /// you can continue evolution from exactly where you left off, without
-    /// losing any of the progress made so far.
-    /// 
-    /// This is useful for:
-    /// - Pausing and resuming long evolutionary runs
-    /// - Backing up particularly successful populations
-    /// - Distributing evolved neural networks to others
+    /// Unlike traditional neural networks with fixed structures, the network used here
+    /// has evolved its structure through the evolutionary process, potentially developing
+    /// complex and unique connection patterns that solve the problem effectively.
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
+        // Get the best genome (the one with highest fitness)
+        var bestGenome = GetBestGenome();
+    
+        // Check if we're dealing with a batch or a single input
+        bool isBatch = input.Shape.Length > 1 && input.Shape[0] > 1;
+    
+        if (isBatch)
+        {
+            // Process each input in the batch
+            int batchSize = input.Shape[0];
+            int featureSize = input.Shape[1];
+        
+            // Create output tensor with correct shape
+            var output = new Tensor<T>(new int[] { batchSize, Architecture.OutputSize });
+        
+            // Process each sample
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Extract individual input
+                var sampleInput = new Vector<T>(featureSize);
+                for (int f = 0; f < featureSize; f++)
+                {
+                    sampleInput[f] = input[b, f];
+                }
+            
+                // Get activations for this sample
+                var activations = ActivateGenome(bestGenome, sampleInput);
+            
+                // Store output activations
+                for (int o = 0; o < Architecture.OutputSize; o++)
+                {
+                    output[b, o] = activations[Architecture.InputSize + o];
+                }
+            }
+        
+            return output;
+        }
+        else
+        {
+            // Single input
+            // Convert input tensor to vector
+            var inputVector = input.ToVector();
+        
+            // Get activations
+            var activations = ActivateGenome(bestGenome, inputVector);
+        
+            // Create output tensor
+            var output = new Tensor<T>([Architecture.OutputSize]);
+            for (int i = 0; i < Architecture.OutputSize; i++)
+            {
+                output[i] = activations[Architecture.InputSize + i];
+            }
+        
+            return output;
+        }
+    }
+
+    /// <summary>
+    /// Gets the genome with the highest fitness from the population.
+    /// </summary>
+    /// <returns>The best genome in the population.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method sorts the population by fitness in descending order and returns the genome
+    /// with the highest fitness score. If the population hasn't been evaluated yet, it assigns
+    /// a default fitness value to each genome.
+    /// </para>
+    /// <para><b>For Beginners:</b> This finds the top-performing network from the population.
+    /// 
+    /// This method:
+    /// - Sorts all networks based on their fitness scores (performance)
+    /// - Returns the network with the highest score
+    /// - If networks haven't been evaluated yet, it assigns a neutral score
+    /// 
+    /// The returned network is the "champion" of the population - the one that
+    /// has evolved to best solve the problem you're working on.
+    /// </para>
+    /// </remarks>
+    private Genome<T> GetBestGenome()
+    {
+        // Check if any genomes have fitness set
+        bool anyFitnessSet = _population.Any(g => !NumOps.Equals(g.Fitness, NumOps.Zero));
+    
+        // If no fitness values are set, assign default
+        if (!anyFitnessSet)
+        {
+            foreach (var genome in _population)
+            {
+                genome.Fitness = NumOps.One; // Neutral fitness
+            }
+        }
+    
+        // Sort by fitness and return the best
+        return _population.OrderByDescending(g => g.Fitness).First();
+    }
+
+    /// <summary>
+    /// Activates a genome's neural network with the given input.
+    /// </summary>
+    /// <param name="genome">The genome to activate.</param>
+    /// <param name="input">The input values.</param>
+    /// <returns>A dictionary mapping node IDs to their activation values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs a forward pass through the genome's neural network. It initializes
+    /// input nodes with the provided values, processes connections in a topologically sorted order,
+    /// and applies activation functions to produce the final node activations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This runs input data through the evolved neural network.
+    /// 
+    /// The activation process:
+    /// 1. Sets the input nodes to the provided input values
+    /// 2. Processes connections in the correct order (feed-forward)
+    /// 3. Applies the activation function to each neuron
+    /// 4. Returns all neuron activation values
+    /// 
+    /// This is how a NEAT network processes information, similar to a traditional
+    /// neural network but with the specific connection structure that evolved
+    /// during the evolutionary process.
+    /// </para>
+    /// </remarks>
+    private Dictionary<int, T> ActivateGenome(Genome<T> genome, Vector<T> input)
+    {
+        // Initialize all nodes with zero activation
+        var activations = new Dictionary<int, T>();
+    
+        // Set input nodes
+        for (int i = 0; i < Architecture.InputSize; i++)
+        {
+            activations[i] = input[i];
+        }
+    
+        // Set bias node if needed
+        activations[Architecture.InputSize + Architecture.OutputSize] = NumOps.One;
+    
+        // Initialize output nodes
+        for (int i = 0; i < Architecture.OutputSize; i++)
+        {
+            activations[Architecture.InputSize + i] = NumOps.Zero;
+        }
+    
+        // Sort connections topologically for proper feed-forward activation
+        var sortedConnections = SortConnectionsTopologically(genome);
+    
+        // Process connections
+        foreach (var connection in sortedConnections)
+        {
+            if (!connection.IsEnabled) continue;
+        
+            // Ensure nodes exist in activations
+            if (!activations.ContainsKey(connection.FromNode))
+            {
+                activations[connection.FromNode] = NumOps.Zero;
+            }
+            if (!activations.ContainsKey(connection.ToNode))
+            {
+                activations[connection.ToNode] = NumOps.Zero;
+            }
+        
+            // Calculate weighted input and add to target node
+            T weightedInput = NumOps.Multiply(activations[connection.FromNode], connection.Weight);
+            activations[connection.ToNode] = NumOps.Add(activations[connection.ToNode], weightedInput);
+        }
+    
+        // Apply activation function to all non-input nodes
+        var nonInputNodes = activations.Keys.Where(k => k >= Architecture.InputSize).ToList();
+        foreach (var nodeId in nonInputNodes)
+        {
+            activations[nodeId] = ApplySigmoid(activations[nodeId]);
+        }
+    
+        return activations;
+    }
+
+    /// <summary>
+    /// Sorts connections in topological order for proper feed-forward activation.
+    /// </summary>
+    /// <param name="genome">The genome containing connections to sort.</param>
+    /// <returns>A list of connections sorted in topological order.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method sorts the connections in a genome to ensure they are processed in the correct
+    /// order during network activation. It creates layers of nodes based on their depth in the network
+    /// and sorts connections accordingly.
+    /// </para>
+    /// <para><b>For Beginners:</b> This determines the correct order to process connections.
+    /// 
+    /// In a neural network:
+    /// - Information flows from input to output
+    /// - Connections must be processed in the correct order
+    /// - Inputs need to be calculated before they can be used
+    /// 
+    /// This method:
+    /// - Figures out which neurons depend on which other neurons
+    /// - Sorts connections so inputs are always processed before outputs
+    /// - Ensures the network processes information in a feed-forward manner
+    /// 
+    /// This is especially important in NEAT since the connection structure
+    /// evolves and isn't fixed in predefined layers.
+    /// </para>
+    /// </remarks>
+    private List<Connection<T>> SortConnectionsTopologically(Genome<T> genome)
+    {
+        // Create a dictionary to track nodes that feed into each node
+        var incomingConnections = new Dictionary<int, List<Connection<T>>>();
+    
+        // Create a set of all nodes
+        var allNodes = new HashSet<int>();
+    
+        // Populate incoming connections and collect all nodes
+        foreach (var conn in genome.Connections)
+        {
+            if (!conn.IsEnabled) continue;
+        
+            allNodes.Add(conn.FromNode);
+            allNodes.Add(conn.ToNode);
+        
+            if (!incomingConnections.ContainsKey(conn.ToNode))
+            {
+                incomingConnections[conn.ToNode] = [];
+            }
+        
+            incomingConnections[conn.ToNode].Add(conn);
+        }
+    
+        // Create a dictionary to track processed nodes
+        var processedNodes = new Dictionary<int, bool>();
+    
+        // Input nodes don't have incoming connections and are already processed
+        for (int i = 0; i < Architecture.InputSize; i++)
+        {
+            processedNodes[i] = true;
+        }
+    
+        // Sort connections
+        var sortedConnections = new List<Connection<T>>();
+    
+        // Process until all connections are sorted
+        while (sortedConnections.Count < genome.Connections.Count(c => c.IsEnabled))
+        {
+            bool addedConnection = false;
+        
+            // Check each enabled connection
+            foreach (var conn in genome.Connections.Where(c => c.IsEnabled))
+            {
+                // Skip if already in sorted list
+                if (sortedConnections.Contains(conn)) continue;
+            
+                // Check if from node is processed
+                if (processedNodes.ContainsKey(conn.FromNode) && processedNodes[conn.FromNode])
+                {
+                    // Add connection to sorted list
+                    sortedConnections.Add(conn);
+                
+                    // Mark to node as processed
+                    processedNodes[conn.ToNode] = true;
+                
+                    addedConnection = true;
+                }
+            }
+        
+            // If no connections were added in this iteration, we might have a cycle
+            // In an evolved network, this shouldn't happen with proper constraints
+            if (!addedConnection) break;
+        }
+    
+        return sortedConnections;
+    }
+
+    /// <summary>
+    /// Applies the sigmoid activation function to a value.
+    /// </summary>
+    /// <param name="value">The input value.</param>
+    /// <returns>The sigmoid of the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method applies the sigmoid activation function (1 / (1 + e^-x)) to the input value.
+    /// Sigmoid squashes input values to the range (0, 1), which is useful for producing
+    /// normalized activation values in the network.
+    /// </para>
+    /// <para><b>For Beginners:</b> This transforms neuron values to a value between 0 and 1.
+    /// 
+    /// The sigmoid function:
+    /// - Takes any input value (positive or negative)
+    /// - Transforms it to a value between 0 and 1
+    /// - Creates a smooth, non-linear response
+    /// 
+    /// This non-linearity is important because:
+    /// - It allows the network to learn complex patterns
+    /// - It prevents the network from just computing weighted sums
+    /// - It gives neurons an "activation threshold" like biological neurons
+    /// 
+    /// Sigmoid is one of several possible activation functions used in neural networks.
+    /// </para>
+    /// </remarks>
+    private T ApplySigmoid(T value)
+    {
+        // Sigmoid function: 1 / (1 + e^-x)
+        T negValue = NumOps.Negate(value);
+        T expNeg = NumOps.Exp(negValue);
+        T denominator = NumOps.Add(NumOps.One, expNeg);
+    
+        return NumOps.Divide(NumOps.One, denominator);
+    }
+
+    /// <summary>
+    /// Trains the NEAT system using supervised learning data.
+    /// </summary>
+    /// <param name="input">The input training data tensor.</param>
+    /// <param name="expectedOutput">The expected output tensor.</param>
+    /// <remarks>
+    /// <para>
+    /// This method adapts NEAT to work with traditional supervised learning data. It creates a fitness
+    /// function based on the mean squared error between network predictions and expected outputs,
+    /// then evolves the population to minimize this error. This allows NEAT to be used in scenarios
+    /// where traditional supervised learning would be applied.
+    /// </para>
+    /// <para><b>For Beginners:</b> This teaches the NEAT system using example input-output pairs.
+    /// 
+    /// Unlike traditional neural networks that use gradient descent, NEAT learns through evolution:
+    /// 1. It creates a fitness function based on prediction error
+    ///    - Networks that make more accurate predictions get higher fitness scores
+    ///    - Networks with lower error perform better
+    /// 
+    /// 2. It evolves the population for several generations
+    ///    - Better networks reproduce more often
+    ///    - Genetic operators (crossover and mutation) create diversity
+    ///    - The population gradually improves at the task
+    /// 
+    /// This allows NEAT to work with supervised learning data while using its
+    /// evolutionary approach to discover effective network structures.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Check if input and output have compatible batch sizes
+        if (input.Shape[0] != expectedOutput.Shape[0])
+        {
+            throw new ArgumentException("Input and expected output must have the same batch size");
+        }
+    
+        int batchSize = input.Shape[0];
+    
+        // Convert input and expected output to a format suitable for the fitness function
+        var trainingData = ExtractTrainingData(input, expectedOutput);
+    
+        // Create a fitness function that measures how well each genome performs on the training data
+        Func<Genome<T>, T> fitnessFunction = genome =>
+        {
+            T totalError = NumOps.Zero;
+        
+            // Calculate error for each training example
+            foreach (var (sampleInput, sampleExpected) in trainingData)
+            {
+                // Get actual output from genome
+                var activations = ActivateGenome(genome, sampleInput);
+            
+                // Calculate squared error for this sample
+                T sampleError = NumOps.Zero;
+                for (int i = 0; i < Architecture.OutputSize; i++)
+                {
+                    int outputNodeId = Architecture.InputSize + i;
+                    T difference = NumOps.Subtract(activations[outputNodeId], sampleExpected[i]);
+                    sampleError = NumOps.Add(sampleError, NumOps.Multiply(difference, difference));
+                }
+            
+                totalError = NumOps.Add(totalError, sampleError);
+            }
+        
+            // Calculate mean squared error
+            T mse = NumOps.Divide(totalError, NumOps.FromDouble(batchSize * Architecture.OutputSize));
+        
+            // Convert error to fitness (higher is better, so invert error)
+            // Add small constant to avoid division by zero
+            T fitness = NumOps.Divide(NumOps.One, NumOps.Add(mse, NumOps.FromDouble(0.01)));
+        
+            return fitness;
+        };
+    
+        // Evolve the population for multiple generations
+        // The number of generations can be adjusted based on the problem complexity
+        int generations = 50;
+        EvolvePopulation(fitnessFunction, generations);
+    }
+
+    /// <summary>
+    /// Extracts training data pairs from input and expected output tensors.
+    /// </summary>
+    /// <param name="input">The input training data tensor.</param>
+    /// <param name="expectedOutput">The expected output tensor.</param>
+    /// <returns>A list of input-output vector pairs.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts tensor-based training data into a list of vector pairs that can be
+    /// more easily processed by the NEAT algorithm. Each pair consists of an input vector and
+    /// its corresponding expected output vector.
+    /// </para>
+    /// <para><b>For Beginners:</b> This converts tensor-based training data into a format NEAT can use.
+    /// 
+    /// The conversion process:
+    /// 1. Takes the tensor-based input and output data
+    /// 2. Extracts each individual training example
+    /// 3. Creates pairs of (input, expected output) vectors
+    /// 4. Returns a list of these pairs for the fitness function to use
+    /// 
+    /// This preprocessing step allows NEAT to work with the same types of
+    /// training data used by traditional neural networks, making it more
+    /// versatile for different applications.
+    /// </para>
+    /// </remarks>
+    private List<(Vector<T> input, Vector<T> expected)> ExtractTrainingData(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        int batchSize = input.Shape[0];
+        int inputFeatures = input.Shape[1];
+        int outputFeatures = expectedOutput.Shape[1];
+    
+        var trainingData = new List<(Vector<T> input, Vector<T> expected)>(batchSize);
+    
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Extract input vector
+            var inputVector = new Vector<T>(inputFeatures);
+            for (int i = 0; i < inputFeatures; i++)
+            {
+                inputVector[i] = input[b, i];
+            }
+        
+            // Extract expected output vector
+            var expectedVector = new Vector<T>(outputFeatures);
+            for (int o = 0; o < outputFeatures; o++)
+            {
+                expectedVector[o] = expectedOutput[b, o];
+            }
+        
+            // Add pair to training data
+            trainingData.Add((inputVector, expectedVector));
+        }
+    
+        return trainingData;
+    }
+
+    /// <summary>
+    /// Gets metadata about the NEAT model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the NEAT model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns comprehensive metadata about the NEAT model, including its architecture,
+    /// evolutionary parameters, and population statistics. This information is useful for model
+    /// management, tracking experiments, and reporting results.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides detailed information about your NEAT system.
+    /// 
+    /// The metadata includes:
+    /// - What this model is and what it does
+    /// - Population size and evolutionary parameters
+    /// - Statistics about the current population
+    /// - Information about the best-performing network
+    /// 
+    /// This information is useful for:
+    /// - Tracking your experiments
+    /// - Comparing different NEAT runs
+    /// - Documenting your work
+    /// - Understanding the evolved solution
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        // Get the best genome
+        var bestGenome = GetBestGenome();
+    
+        // Count average number of connections and nodes in the population
+        double avgConnections = _population.Average(g => g.Connections.Count);
+        int maxConnections = _population.Max(g => g.Connections.Count);
+    
+        // Count nodes by finding the highest node ID in each genome
+        var nodeCounts = _population.Select(g => 
+            g.Connections.Any() ? 
+                g.Connections.Max(c => Math.Max(c.FromNode, c.ToNode)) + 1 : 
+                Architecture.InputSize + Architecture.OutputSize
+        );
+        double avgNodes = nodeCounts.Average();
+        int maxNodes = nodeCounts.Max();
+    
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.NEAT,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "PopulationSize", _populationSize },
+                { "MutationRate", _mutationRate },
+                { "CrossoverRate", _crossoverRate },
+                { "InnovationNumber", _innovationNumber },
+                { "AverageConnections", avgConnections },
+                { "MaxConnections", maxConnections },
+                { "AverageNodes", avgNodes },
+                { "MaxNodes", maxNodes },
+                { "BestGenomeFitness", Convert.ToDouble(bestGenome.Fitness) },
+                { "BestGenomeConnections", bestGenome.Connections.Count },
+                { "BestGenomeEnabledConnections", bestGenome.Connections.Count(c => c.IsEnabled) }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes NEAT-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method saves the state of the NEAT model to a binary stream. It serializes the
+    /// evolutionary parameters, innovation number, and all genomes in the population, allowing
+    /// the complete state to be restored later.
+    /// </para>
+    /// <para><b>For Beginners:</b> This saves the complete state of your NEAT system to a file.
+    /// 
+    /// When saving the NEAT model:
+    /// - Population size, mutation rate, and crossover rate are saved
+    /// - The current innovation number is saved
+    /// - Every genome in the population is saved with all its connections
+    /// 
+    /// This allows you to:
+    /// - Save your progress and continue evolution later
+    /// - Share evolved populations with others
+    /// - Keep records of particularly successful runs
+    /// - Deploy evolved networks in applications
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Save NEAT parameters
         writer.Write(_populationSize);
         writer.Write(_mutationRate);
         writer.Write(_crossoverRate);
         writer.Write(_innovationNumber);
-
+    
+        // Save population
         writer.Write(_population.Count);
         foreach (var genome in _population)
         {
-            genome.Serialize(writer);
+            // Save genome fitness
+            writer.Write(Convert.ToDouble(genome.Fitness));
+        
+            // Save connections
+            writer.Write(genome.Connections.Count);
+            foreach (var conn in genome.Connections)
+            {
+                writer.Write(conn.FromNode);
+                writer.Write(conn.ToNode);
+                writer.Write(Convert.ToDouble(conn.Weight));
+                writer.Write(conn.IsEnabled);
+                writer.Write(conn.Innovation);
+            }
         }
     }
 
     /// <summary>
-    /// Deserializes the NEAT algorithm state from a binary reader.
+    /// Deserializes NEAT-specific data from a binary reader.
     /// </summary>
-    /// <param name="reader">The binary reader to read the serialized state from.</param>
+    /// <param name="reader">The binary reader to read from.</param>
     /// <remarks>
     /// <para>
-    /// This method loads a previously serialized NEAT algorithm state from a binary format. It reads the
-    /// evolution parameters (population size, mutation rate, crossover rate), the current innovation number,
-    /// and reconstructs the entire population of genomes. Each genome is deserialized individually, restoring
-    /// the evolved network structures and their fitness values.
+    /// This method loads the state of a previously saved NEAT model from a binary stream. It restores
+    /// the evolutionary parameters, innovation number, and all genomes in the population, allowing
+    /// evolution to continue from exactly where it left off.
     /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved NEAT system from a file.
+    /// <para><b>For Beginners:</b> This loads a complete NEAT system from a saved file.
     /// 
-    /// When loading a NEAT system, the method restores:
+    /// When loading the NEAT model:
+    /// - Population size, mutation rate, and crossover rate are restored
+    /// - The innovation number is restored
+    /// - Every genome in the population is recreated with all its connections
     /// 
-    /// 1. Configuration parameters:
-    ///    - Population size
-    ///    - Mutation rate
-    ///    - Crossover rate
-    ///    - Current innovation number counter
-    /// 
-    /// 2. The entire population:
-    ///    - All evolved neural networks
-    ///    - Their structures (neurons and connections)
-    ///    - Their fitness scores
-    /// 
-    /// This allows you to:
-    /// - Resume evolution from exactly where you left off
-    /// - Continue working with previously evolved networks
-    /// - Import networks evolved by others
-    /// 
-    /// After loading, the NEAT system is in exactly the same state it was when saved,
-    /// ready to continue evolution or to use the best-evolved network for predictions.
+    /// This lets you:
+    /// - Continue evolution from where you left off
+    /// - Use previously evolved populations
+    /// - Compare or combine results from different runs
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader)
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        // Load NEAT parameters
         _populationSize = reader.ReadInt32();
         _mutationRate = reader.ReadDouble();
         _crossoverRate = reader.ReadDouble();
         _innovationNumber = reader.ReadInt32();
-
+    
+        // Load population
         int populationCount = reader.ReadInt32();
-        _population = new List<Genome<T>>();
+        _population = new List<Genome<T>>(populationCount);
+    
         for (int i = 0; i < populationCount; i++)
         {
+            // Create new genome
             var genome = new Genome<T>(Architecture.InputSize, Architecture.OutputSize);
-            genome.Deserialize(reader);
+        
+            // Load genome fitness
+            genome.Fitness = NumOps.FromDouble(reader.ReadDouble());
+        
+            // Load connections
+            int connectionCount = reader.ReadInt32();
+            for (int j = 0; j < connectionCount; j++)
+            {
+                int fromNode = reader.ReadInt32();
+                int toNode = reader.ReadInt32();
+                T weight = NumOps.FromDouble(reader.ReadDouble());
+                bool isEnabled = reader.ReadBoolean();
+                int innovation = reader.ReadInt32();
+            
+                genome.AddConnection(fromNode, toNode, weight, isEnabled, innovation);
+            }
+        
             _population.Add(genome);
         }
+    }
+
+    /// <summary>
+    /// Checks if the NEAT model is ready to make predictions.
+    /// </summary>
+    /// <returns>True if the model is ready; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method checks if the NEAT model has a population with at least one genome that can be
+    /// used for making predictions. It's useful for determining if the model has been properly
+    /// initialized and evolved.
+    /// </para>
+    /// <para><b>For Beginners:</b> This checks if your NEAT system is ready to use.
+    /// 
+    /// It verifies that:
+    /// - The population exists
+    /// - There is at least one genome in the population
+    /// - At least one genome has connections that can process inputs
+    /// 
+    /// This is helpful for error checking before trying to use the model
+    /// for predictions or continuing evolution.
+    /// </para>
+    /// </remarks>
+    public bool IsReadyToPredict()
+    {
+        return _population != null && 
+               _population.Count > 0 && 
+               _population.Any(g => g.Connections.Count > 0);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the NEAT model with the same architecture and evolutionary parameters.
+    /// </summary>
+    /// <returns>A new instance of the NEAT model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new NEAT model with the same architecture, population size, mutation rate,
+    /// and crossover rate as the current instance. The new instance starts with a fresh population,
+    /// making it useful for restarting evolution with the same parameters or for creating parallel
+    /// evolutionary runs.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a brand new NEAT system with the same settings.
+    /// 
+    /// This is useful when you want to:
+    /// - Start over with a fresh population but keep the same settings
+    /// - Run multiple separate evolutions with identical parameters
+    /// - Create a "clean slate" version of a successful setup
+    /// 
+    /// The new NEAT system will have:
+    /// - The same number of inputs and outputs
+    /// - The same population size and mutation/crossover rates
+    /// - A brand new initial population (not copying any evolved networks)
+    /// 
+    /// This effectively creates a "twin" of your NEAT system, but at the starting point
+    /// rather than with any of the evolved progress.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new NEAT<T>(Architecture, _populationSize, _mutationRate, _crossoverRate);
     }
 }

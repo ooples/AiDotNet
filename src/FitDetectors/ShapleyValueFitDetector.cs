@@ -19,7 +19,7 @@ namespace AiDotNet.FitDetectors;
 /// This detector will give you recommendations on how to improve your model based on this analysis.
 /// </para>
 /// </remarks>
-public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
+public class ShapleyValueFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options for the Shapley value fit detector.
@@ -59,7 +59,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// and gives you specific recommendations on how to improve it.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var features = GetFeatures(evaluationData);
         var shapleyValues = CalculateShapleyValues(evaluationData, features);
@@ -96,7 +96,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// - Good fit: Your model has found the right balance
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var features = GetFeatures(evaluationData);
         var shapleyValues = CalculateShapleyValues(evaluationData, features);
@@ -119,30 +119,30 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     private FitType DetermineFitType(Dictionary<string, T> shapleyValues)
     {
         var sortedValues = shapleyValues.OrderByDescending(kv => kv.Value).ToList();
-        var totalImportance = sortedValues.Aggregate(_numOps.Zero, (acc, kv) => _numOps.Add(acc, kv.Value));
-        var cumulativeImportance = _numOps.Zero;
+        var totalImportance = sortedValues.Aggregate(NumOps.Zero, (acc, kv) => NumOps.Add(acc, kv.Value));
+        var cumulativeImportance = NumOps.Zero;
         var featureCount = 0;
 
         foreach (var kv in sortedValues)
         {
-            cumulativeImportance = _numOps.Add(cumulativeImportance, kv.Value);
+            cumulativeImportance = NumOps.Add(cumulativeImportance, kv.Value);
             featureCount++;
 
-            if (_numOps.GreaterThanOrEquals(
-                _numOps.Divide(cumulativeImportance, totalImportance),
-                _numOps.FromDouble(_options.ImportanceThreshold)))
+            if (NumOps.GreaterThanOrEquals(
+                NumOps.Divide(cumulativeImportance, totalImportance),
+                NumOps.FromDouble(_options.ImportanceThreshold)))
             {
                 break;
             }
         }
 
-        var importantFeatureRatio = _numOps.Divide(_numOps.FromDouble(featureCount), _numOps.FromDouble(shapleyValues.Count));
+        var importantFeatureRatio = NumOps.Divide(NumOps.FromDouble(featureCount), NumOps.FromDouble(shapleyValues.Count));
 
-        if (_numOps.LessThanOrEquals(importantFeatureRatio, _numOps.FromDouble(_options.OverfitThreshold)))
+        if (NumOps.LessThanOrEquals(importantFeatureRatio, NumOps.FromDouble(_options.OverfitThreshold)))
         {
             return FitType.Overfit;
         }
-        else if (_numOps.GreaterThanOrEquals(importantFeatureRatio, _numOps.FromDouble(_options.UnderfitThreshold)))
+        else if (NumOps.GreaterThanOrEquals(importantFeatureRatio, NumOps.FromDouble(_options.UnderfitThreshold)))
         {
             return FitType.Underfit;
         }
@@ -167,33 +167,33 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// - If feature importance is more evenly distributed, confidence is lower
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var features = GetFeatures(evaluationData);
         var shapleyValues = CalculateShapleyValues(evaluationData, features);
         var sortedValues = shapleyValues.Values.OrderByDescending(v => v).ToList();
-        var totalImportance = sortedValues.Aggregate(_numOps.Zero, (acc, v) => _numOps.Add(acc, v));
-        var cumulativeImportance = _numOps.Zero;
+        var totalImportance = sortedValues.Aggregate(NumOps.Zero, (acc, v) => NumOps.Add(acc, v));
+        var cumulativeImportance = NumOps.Zero;
         var featureCount = 0;
 
         foreach (var value in sortedValues)
         {
-            cumulativeImportance = _numOps.Add(cumulativeImportance, value);
+            cumulativeImportance = NumOps.Add(cumulativeImportance, value);
             featureCount++;
 
-            if (_numOps.GreaterThanOrEquals(
-                _numOps.Divide(cumulativeImportance, totalImportance),
-                _numOps.FromDouble(_options.ImportanceThreshold)))
+            if (NumOps.GreaterThanOrEquals(
+                NumOps.Divide(cumulativeImportance, totalImportance),
+                NumOps.FromDouble(_options.ImportanceThreshold)))
             {
                 break;
             }
         }
 
-        return _numOps.Subtract(
-            _numOps.One,
-            _numOps.Divide(
-                _numOps.FromDouble(featureCount),
-                _numOps.FromDouble(shapleyValues.Count)
+        return NumOps.Subtract(
+            NumOps.One,
+            NumOps.Divide(
+                NumOps.FromDouble(featureCount),
+                NumOps.FromDouble(shapleyValues.Count)
             )
         );
     }
@@ -217,14 +217,14 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// Higher Shapley values mean more important features.
     /// </para>
     /// </remarks>
-    private Dictionary<string, T> CalculateShapleyValues(ModelEvaluationData<T> evaluationData, List<string> features)
+    private Dictionary<string, T> CalculateShapleyValues(ModelEvaluationData<T, TInput, TOutput> evaluationData, List<string> features)
     {
         var shapleyValues = new Dictionary<string, T>();
         var n = features.Count;
 
         foreach (var feature in features)
         {
-            T shapleyValue = _numOps.Zero;
+            T shapleyValue = NumOps.Zero;
 
             for (int i = 0; i < _options.MonteCarloSamples; i++)
             {
@@ -233,14 +233,14 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
                 var withFeature = new HashSet<string>(permutation.Take(index + 1));
                 var withoutFeature = new HashSet<string>(permutation.Take(index));
 
-                var marginalContribution = _numOps.Subtract(
+                var marginalContribution = NumOps.Subtract(
                     CalculatePerformance(evaluationData, withFeature),
                     CalculatePerformance(evaluationData, withoutFeature));
 
-                shapleyValue = _numOps.Add(shapleyValue, marginalContribution);
+                shapleyValue = NumOps.Add(shapleyValue, marginalContribution);
             }
 
-            shapleyValues[feature] = _numOps.Divide(shapleyValue, _numOps.FromDouble(_options.MonteCarloSamples));
+            shapleyValues[feature] = NumOps.Divide(shapleyValue, NumOps.FromDouble(_options.MonteCarloSamples));
         }
 
         return shapleyValues;
@@ -258,7 +258,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// different pieces of information your model considers when making a decision.
     /// </para>
     /// </remarks>
-    private List<string> GetFeatures(ModelEvaluationData<T> evaluationData)
+    private List<string> GetFeatures(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         return evaluationData.ModelStats.FeatureNames;
     }
@@ -281,15 +281,33 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// (closer to 1.0) mean better performance.
     /// </para>
     /// </remarks>
-    private T CalculatePerformance(ModelEvaluationData<T> evaluationData, HashSet<string> features)
+    private T CalculatePerformance(ModelEvaluationData<T, TInput, TOutput> evaluationData, HashSet<string> features)
     {
         var subsetFeatures = evaluationData.ModelStats.FeatureValues
             .Where(kv => features.Contains(kv.Key))
-            .ToDictionary(kv => kv.Key, kv => kv.Value);
+            .ToDictionary(
+                kv => kv.Key,
+                kv => ConversionsHelper.ConvertToVector<T, TOutput>(kv.Value)
+            );
 
-        var featureMatrix = CreateFeatureMatrix(subsetFeatures);
-        var predictions = evaluationData.ModelStats.Model?.Predict(featureMatrix) ?? Vector<T>.Empty();
-        return StatisticsHelper<T>.CalculateR2(evaluationData.ModelStats.Actual, predictions);
+        var featureMatrix = CreateFeatures(subsetFeatures);
+
+        Vector<T> predictions;
+        if (evaluationData.ModelStats.Model == null)
+        {
+            predictions = Vector<T>.Empty();
+        }
+        else
+        {
+            // Convert the matrix to the appropriate input type
+            var modelPredictions = evaluationData.ModelStats.Model.Predict((TInput)(object)featureMatrix);
+            predictions = ConversionsHelper.ConvertToVector<T, TOutput>(modelPredictions);
+        }
+
+        return StatisticsHelper<T>.CalculateR2(
+            ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual),
+            predictions
+        );
     }
 
     /// <summary>
@@ -307,7 +325,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// (a matrix) so your model can process all the data together.
     /// </para>
     /// </remarks>
-    private Matrix<T> CreateFeatureMatrix(Dictionary<string, Vector<T>> features)
+    private Matrix<T> CreateFeatures(Dictionary<string, Vector<T>> features)
     {
         int rowCount = features.First().Value.Length;
         int colCount = features.Count;
@@ -342,7 +360,7 @@ public class ShapleyValueFitDetector<T> : FitDetectorBase<T>
     /// This is like a doctor first running tests, then using the test results to recommend treatment.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var features = GetFeatures(evaluationData);
         var shapleyValues = CalculateShapleyValues(evaluationData, features);

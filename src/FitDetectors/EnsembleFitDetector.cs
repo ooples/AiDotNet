@@ -15,7 +15,7 @@
 /// to each detector's opinion, to determine the overall fit type, confidence level, and recommendations.
 /// </para>
 /// </remarks>
-public class EnsembleFitDetector<T> : FitDetectorBase<T>
+public class EnsembleFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The list of individual fit detectors that make up the ensemble.
@@ -24,7 +24,7 @@ public class EnsembleFitDetector<T> : FitDetectorBase<T>
     /// <b>For Beginners:</b> These are the different "expert opinions" that will be combined to form 
     /// the ensemble's assessment. Each detector may use different techniques to evaluate model fit.
     /// </remarks>
-    private readonly List<IFitDetector<T>> _detectors;
+    private readonly List<IFitDetector<T, TInput, TOutput>> _detectors;
     
     /// <summary>
     /// Configuration options for the ensemble fit detector.
@@ -60,7 +60,7 @@ public class EnsembleFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public EnsembleFitDetector(List<IFitDetector<T>> detectors, EnsembleFitDetectorOptions? options = null)
+    public EnsembleFitDetector(List<IFitDetector<T, TInput, TOutput>> detectors, EnsembleFitDetectorOptions? options = null)
     {
         _detectors = detectors ?? throw new ArgumentNullException(nameof(detectors));
         if (_detectors.Count == 0)
@@ -89,7 +89,7 @@ public class EnsembleFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
@@ -142,7 +142,7 @@ public class EnsembleFitDetector<T> : FitDetectorBase<T>
     /// </list>
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var weightedFitTypes = _detectors.Select((d, i) =>
         {
@@ -189,19 +189,19 @@ public class EnsembleFitDetector<T> : FitDetectorBase<T>
     /// confidence in the ensemble's assessment.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var weightedConfidences = _detectors.Select((d, i) =>
         {
             var result = d.DetectFit(evaluationData);
             var weight = i < _options.DetectorWeights.Count ? _options.DetectorWeights[i] : 1.0;
-            return _numOps.Multiply(result.ConfidenceLevel ?? _numOps.Zero, _numOps.FromDouble(weight));
+            return NumOps.Multiply(result.ConfidenceLevel ?? NumOps.Zero, NumOps.FromDouble(weight));
         }).ToList();
 
-        var totalWeight = _numOps.FromDouble(_options.DetectorWeights.Sum());
-        var sumConfidence = weightedConfidences.Aggregate(_numOps.Zero, _numOps.Add);
+        var totalWeight = NumOps.FromDouble(_options.DetectorWeights.Sum());
+        var sumConfidence = weightedConfidences.Aggregate(NumOps.Zero, NumOps.Add);
 
-        return _numOps.Divide(sumConfidence, totalWeight);
+        return NumOps.Divide(sumConfidence, totalWeight);
     }
 
     /// <summary>
@@ -230,7 +230,7 @@ public class EnsembleFitDetector<T> : FitDetectorBase<T>
     /// fit type determination.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new HashSet<string>();
 

@@ -1,6 +1,5 @@
 namespace AiDotNet.Regression;
 
-
 /// <summary>
 /// Implements Principal Component Regression (PCR), a technique that combines principal component analysis (PCA) 
 /// with linear regression to handle multicollinearity in the predictor variables.
@@ -90,7 +89,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    public PrincipalComponentRegression(PrincipalComponentRegressionOptions<T>? options = null, IRegularization<T>? regularization = null)
+    public PrincipalComponentRegression(PrincipalComponentRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new PrincipalComponentRegressionOptions<T>();
@@ -150,7 +149,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         Coefficients = _components.Multiply(coefficients);
 
         // Apply regularization to coefficients
-        Coefficients = Regularization.RegularizeCoefficients(Coefficients);
+        Coefficients = Regularization.Regularize(Coefficients);
 
         // Adjust for scaling
         for (int i = 0; i < Coefficients.Length; i++)
@@ -310,9 +309,9 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// variables are most influential in making predictions.
     /// </para>
     /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
+    public override ModelMetaData<T> GetModelMetaData()
     {
-        return new ModelMetadata<T>
+        return new ModelMetaData<T>
         {
             ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
@@ -428,5 +427,70 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         _yMean = SerializationHelper<T>.DeserializeVector(reader);
         _xStd = SerializationHelper<T>.DeserializeVector(reader);
         _yStd = SerializationHelper<T>.ReadValue(reader);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Principal Component Regression model with the same configuration.
+    /// </summary>
+    /// <returns>A new instance of the Principal Component Regression model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the current Principal Component Regression model, including its options,
+    /// principal components, coefficients, intercept, and preprocessing parameters (means and standard deviations).
+    /// The new instance is completely independent of the original, allowing modifications without affecting the original model.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method creates an exact copy of your trained model.
+    /// 
+    /// Think of it like making a perfect copy of your regression model:
+    /// - It duplicates all the configuration settings (like how many components to use)
+    /// - It copies the learned principal components (the patterns found in your data)
+    /// - It preserves the coefficients and intercept (the actual formula for making predictions)
+    /// - It maintains all the scaling information (means and standard deviations) needed to process new data
+    /// 
+    /// Creating a copy is useful when you want to:
+    /// - Create a backup before further modifying the model
+    /// - Create variations of the same model for different purposes
+    /// - Share the model with others while keeping your original intact
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        // Create a new instance with the same options and regularization
+        var newModel = new PrincipalComponentRegression<T>(_options, Regularization);
+        
+        // Copy coefficients and intercept from base class
+        if (Coefficients != null)
+        {
+            newModel.Coefficients = Coefficients.Clone();
+        }
+        newModel.Intercept = Intercept;
+        
+        // Copy principal components matrix
+        if (_components != null)
+        {
+            newModel._components = _components.Clone();
+        }
+        
+        // Copy means and standard deviations used for scaling
+        if (_xMean != null)
+        {
+            newModel._xMean = _xMean.Clone();
+        }
+        
+        if (_yMean != null)
+        {
+            newModel._yMean = _yMean.Clone();
+        }
+        
+        if (_xStd != null)
+        {
+            newModel._xStd = _xStd.Clone();
+        }
+        
+        newModel._yStd = _yStd;
+        
+        return newModel;
     }
 }

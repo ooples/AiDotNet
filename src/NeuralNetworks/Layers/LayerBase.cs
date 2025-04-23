@@ -821,6 +821,135 @@ public abstract class LayerBase<T> : ILayer<T>
     }
 
     /// <summary>
+    /// Applies the activation function to a rank-1 tensor (vector).
+    /// </summary>
+    /// <param name="input">The input tensor to activate.</param>
+    /// <returns>The activated tensor.</returns>
+    /// <exception cref="ArgumentException">Thrown when the input tensor is not rank-1.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method applies the layer's activation function to a rank-1 tensor (a vector). It first converts
+    /// the tensor to a vector, applies the activation, and then converts it back to a tensor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method applies the activation function to a 1D array of values.
+    /// 
+    /// When processing a single "row" of data:
+    /// - This method converts it to a format the activation function can process
+    /// - Applies either the scalar or vector activation function
+    /// - Converts the result back to a tensor
+    /// 
+    /// This is a utility method used internally by various layer types.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> ApplyActivation(Tensor<T> input)
+    {
+        Vector<T> inputVector = input.ToVector();
+        Vector<T> outputVector = ApplyActivation(inputVector);
+
+        return Tensor<T>.FromVector(outputVector);
+    }
+
+    /// <summary>
+    /// Applies the activation function to a vector.
+    /// </summary>
+    /// <param name="input">The input vector to activate.</param>
+    /// <returns>The activated vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method applies the layer's activation function to a vector. It uses the vector activation function
+    /// if one is specified, or applies the scalar activation function element-wise if no vector activation is available.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method applies the activation function to a vector of values.
+    /// 
+    /// This method:
+    /// - First checks if a vector activation function is available (processes all elements together)
+    /// - If not, uses the scalar activation function (processes each element independently)
+    /// - If neither is available, returns the input unchanged (identity function)
+    /// 
+    /// This flexibility allows the layer to use the most appropriate activation method 
+    /// based on what was specified during creation.
+    /// </para>
+    /// </remarks>
+    protected Vector<T> ApplyActivation(Vector<T> input)
+    {
+        if (VectorActivation != null)
+        {
+            return VectorActivation.Activate(input);
+        }
+        else if (ScalarActivation != null)
+        {
+            return input.Transform(ScalarActivation.Activate);
+        }
+        else
+        {
+            return input; // Identity activation
+        }
+    }
+
+    /// <summary>
+    /// Applies a scalar activation function to each element of a tensor.
+    /// </summary>
+    /// <param name="activation">The scalar activation function to apply.</param>
+    /// <param name="input">The input tensor to activate.</param>
+    /// <returns>The activated tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This helper method applies a scalar activation function to each element of a tensor. If the activation
+    /// function is null, it returns the input tensor unchanged.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method applies an activation function to each value in a tensor.
+    /// 
+    /// Activation functions:
+    /// - Transform values in specific ways (like sigmoid squeezes values between 0 and 1)
+    /// - Add non-linearity, which helps neural networks learn complex patterns
+    /// - Are applied individually to each number in the data
+    /// 
+    /// If no activation function is provided, the values pass through unchanged.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> ActivateTensor(IActivationFunction<T>? activation, Tensor<T> input)
+    {
+        if (activation == null)
+        {
+            return input;
+        }
+
+        return input.Transform((x, _) => activation.Activate(x));
+    }
+
+    /// <summary>
+    /// Applies a vector activation function to a tensor.
+    /// </summary>
+    /// <param name="activation">The vector activation function to apply.</param>
+    /// <param name="input">The input tensor to activate.</param>
+    /// <returns>The activated tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This helper method applies a vector activation function to a tensor. If the activation function is null,
+    /// it returns the input tensor unchanged. Vector activation functions operate on entire tensors at once,
+    /// which can be more efficient than element-wise operations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method applies an activation function to an entire tensor at once.
+    /// 
+    /// Vector activation functions:
+    /// - Process entire groups of values simultaneously
+    /// - Can be more efficient than processing one value at a time
+    /// - Provide the same mathematical result but often faster
+    /// 
+    /// If no activation function is provided, the values pass through unchanged.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> ActivateTensor(IVectorActivationFunction<T>? activation, Tensor<T> input)
+    {
+        if (activation == null)
+        {
+            return input;
+        }
+
+        return activation.Activate(input);
+    }
+
+    /// <summary>
     /// Calculates a standard input shape for 2D data with batch size of 1.
     /// </summary>
     /// <param name="inputDepth">The depth (number of channels) of the input.</param>
@@ -899,7 +1028,7 @@ public abstract class LayerBase<T> : ILayer<T>
     /// - Saving a layer's state before making changes
     /// </para>
     /// </remarks>
-    public virtual LayerBase<T> Copy()
+    public virtual LayerBase<T> Clone()
     {
         var copy = (LayerBase<T>)this.MemberwiseClone();
         
@@ -918,101 +1047,6 @@ public abstract class LayerBase<T> : ILayer<T>
         }
 
         return copy;
-    }
-
-    /// <summary>
-    /// Applies the activation function to a rank-1 tensor (vector).
-    /// </summary>
-    /// <param name="input">The input tensor to activate.</param>
-    /// <returns>The activated tensor.</returns>
-    /// <exception cref="ArgumentException">Thrown when the input tensor is not rank-1.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method applies the layer's activation function to a rank-1 tensor (a vector). It first converts
-    /// the tensor to a vector, applies the activation, and then converts it back to a tensor.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method applies the activation function to a 1D array of values.
-    /// 
-    /// When processing a single "row" of data:
-    /// - This method converts it to a format the activation function can process
-    /// - Applies either the scalar or vector activation function
-    /// - Converts the result back to a tensor
-    /// 
-    /// This is a utility method used internally by various layer types.
-    /// </para>
-    /// </remarks>
-    protected Tensor<T> ApplyActivation(Tensor<T> input)
-    {
-        if (input.Rank != 1)
-            throw new ArgumentException("Input tensor must be rank-1 (vector).");
-
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> outputVector = ApplyActivation(inputVector);
-
-        return Tensor<T>.FromVector(outputVector);
-    }
-
-    /// <summary>
-    /// Applies a scalar activation function to each element of a tensor.
-    /// </summary>
-    /// <param name="activation">The scalar activation function to apply.</param>
-    /// <param name="input">The input tensor to activate.</param>
-    /// <returns>The activated tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// This helper method applies a scalar activation function to each element of a tensor. If the activation
-    /// function is null, it returns the input tensor unchanged.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method applies an activation function to each value in a tensor.
-    /// 
-    /// Activation functions:
-    /// - Transform values in specific ways (like sigmoid squeezes values between 0 and 1)
-    /// - Add non-linearity, which helps neural networks learn complex patterns
-    /// - Are applied individually to each number in the data
-    /// 
-    /// If no activation function is provided, the values pass through unchanged.
-    /// </para>
-    /// </remarks>
-    protected Tensor<T> ActivateTensor(IActivationFunction<T>? activation, Tensor<T> input)
-    {
-        if (activation == null)
-        {
-            return input;
-        }
-
-        return input.Transform((x, _) => activation.Activate(x));
-    }
-
-    /// <summary>
-    /// Applies a vector activation function to a tensor.
-    /// </summary>
-    /// <param name="activation">The vector activation function to apply.</param>
-    /// <param name="input">The input tensor to activate.</param>
-    /// <returns>The activated tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// This helper method applies a vector activation function to a tensor. If the activation function is null,
-    /// it returns the input tensor unchanged. Vector activation functions operate on entire tensors at once,
-    /// which can be more efficient than element-wise operations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method applies an activation function to an entire tensor at once.
-    /// 
-    /// Vector activation functions:
-    /// - Process entire groups of values simultaneously
-    /// - Can be more efficient than processing one value at a time
-    /// - Provide the same mathematical result but often faster
-    /// 
-    /// If no activation function is provided, the values pass through unchanged.
-    /// </para>
-    /// </remarks>
-    protected Tensor<T> ActivateTensor(IVectorActivationFunction<T>? activation, Tensor<T> input)
-    {
-        if (activation == null)
-        {
-            return input;
-        }
-
-        return activation.Activate(input);
     }
 
     /// <summary>
@@ -1046,43 +1080,6 @@ public abstract class LayerBase<T> : ILayer<T>
         }
 
         return input.Transform((x, _) => activation.Derivative(x));
-    }
-
-    /// <summary>
-    /// Applies the activation function to a vector.
-    /// </summary>
-    /// <param name="input">The input vector to activate.</param>
-    /// <returns>The activated vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the layer's activation function to a vector. It uses the vector activation function
-    /// if one is specified, or applies the scalar activation function element-wise if no vector activation is available.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method applies the activation function to a vector of values.
-    /// 
-    /// This method:
-    /// - First checks if a vector activation function is available (processes all elements together)
-    /// - If not, uses the scalar activation function (processes each element independently)
-    /// - If neither is available, returns the input unchanged (identity function)
-    /// 
-    /// This flexibility allows the layer to use the most appropriate activation method 
-    /// based on what was specified during creation.
-    /// </para>
-    /// </remarks>
-    protected Vector<T> ApplyActivation(Vector<T> input)
-    {
-        if (VectorActivation != null)
-        {
-            return VectorActivation.Activate(input);
-        }
-        else if (ScalarActivation != null)
-        {
-            return input.Transform(ScalarActivation.Activate);
-        }
-        else
-        {
-            return input; // Identity activation
-        }
     }
 
     /// <summary>

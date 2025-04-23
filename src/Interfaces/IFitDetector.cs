@@ -24,7 +24,7 @@
 /// This interface provides methods to analyze your model's performance and detect which
 /// of these situations you're dealing with, so you can make appropriate adjustments.
 /// </remarks>
-public interface IFitDetector<T>
+public interface IFitDetector<T, TInput, TOutput>
 {
     /// <summary>
     /// Analyzes model evaluation data to detect whether the model is underfitting, overfitting, or has a good fit.
@@ -54,5 +54,5 @@ public interface IFitDetector<T>
     /// - If overfitting: Try regularization, get more training data, or simplify the model
     /// - If good fit: Your model is ready to use!
     /// </remarks>
-    FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData);
+    FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData);
 }

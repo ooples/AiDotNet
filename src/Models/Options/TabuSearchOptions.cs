@@ -36,7 +36,7 @@ namespace AiDotNet.Models.Options;
 /// This class lets you configure how the Tabu Search algorithm behaves.
 /// </para>
 /// </remarks>
-public class TabuSearchOptions : GeneticAlgorithmOptimizerOptions
+public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the size of the tabu list.

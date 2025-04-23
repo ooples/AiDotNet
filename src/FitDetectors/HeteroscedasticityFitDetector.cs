@@ -15,7 +15,7 @@ namespace AiDotNet.FitDetectors;
 /// This detector helps you identify if your model has this problem and suggests ways to fix it.
 /// </para>
 /// </remarks>
-public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
+public class HeteroscedasticityFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options that control how the detector evaluates heteroscedasticity.
@@ -51,7 +51,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// specific recommendations to improve your model.
     /// </para>
     /// </remarks>
-    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T> evaluationData)
+    public override FitDetectorResult<T> DetectFit(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var fitType = DetermineFitType(evaluationData);
         var confidenceLevel = CalculateConfidenceLevel(evaluationData);
@@ -82,18 +82,18 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// show very inconsistent errors, it returns "Unstable". If the results are somewhere in between, it returns "Moderate".
     /// </para>
     /// </remarks>
-    protected override FitType DetermineFitType(ModelEvaluationData<T> evaluationData)
+    protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var breuschPaganTestStatistic = CalculateBreuschPaganTestStatistic(evaluationData);
         var whiteTestStatistic = CalculateWhiteTestStatistic(evaluationData);
 
-        if (_numOps.GreaterThan(breuschPaganTestStatistic, _numOps.FromDouble(_options.HeteroscedasticityThreshold)) ||
-            _numOps.GreaterThan(whiteTestStatistic, _numOps.FromDouble(_options.HeteroscedasticityThreshold)))
+        if (NumOps.GreaterThan(breuschPaganTestStatistic, NumOps.FromDouble(_options.HeteroscedasticityThreshold)) ||
+            NumOps.GreaterThan(whiteTestStatistic, NumOps.FromDouble(_options.HeteroscedasticityThreshold)))
         {
             return FitType.Unstable;
         }
-        else if (_numOps.LessThan(breuschPaganTestStatistic, _numOps.FromDouble(_options.HomoscedasticityThreshold)) &&
-                 _numOps.LessThan(whiteTestStatistic, _numOps.FromDouble(_options.HomoscedasticityThreshold)))
+        else if (NumOps.LessThan(breuschPaganTestStatistic, NumOps.FromDouble(_options.HomoscedasticityThreshold)) &&
+                 NumOps.LessThan(whiteTestStatistic, NumOps.FromDouble(_options.HomoscedasticityThreshold)))
         {
             return FitType.GoodFit;
         }
@@ -116,16 +116,16 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// score means it's less certain.
     /// </para>
     /// </remarks>
-    protected override T CalculateConfidenceLevel(ModelEvaluationData<T> evaluationData)
+    protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var breuschPaganTestStatistic = CalculateBreuschPaganTestStatistic(evaluationData);
         var whiteTestStatistic = CalculateWhiteTestStatistic(evaluationData);
 
-        var maxTestStatistic = _numOps.GreaterThan(breuschPaganTestStatistic, whiteTestStatistic) ? breuschPaganTestStatistic : whiteTestStatistic;
-        var normalizedTestStatistic = _numOps.Divide(maxTestStatistic, _numOps.FromDouble(_options.HeteroscedasticityThreshold));
+        var maxTestStatistic = NumOps.GreaterThan(breuschPaganTestStatistic, whiteTestStatistic) ? breuschPaganTestStatistic : whiteTestStatistic;
+        var normalizedTestStatistic = NumOps.Divide(maxTestStatistic, NumOps.FromDouble(_options.HeteroscedasticityThreshold));
 
         // Invert the normalized test statistic to get a confidence level (higher test statistic = lower confidence)
-        return _numOps.Subtract(_numOps.One, _numOps.LessThan(_numOps.One, normalizedTestStatistic) ? _numOps.One : normalizedTestStatistic);
+        return NumOps.Subtract(NumOps.One, NumOps.LessThan(NumOps.One, normalizedTestStatistic) ? NumOps.One : normalizedTestStatistic);
     }
 
     /// <summary>
@@ -144,15 +144,25 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// If they can, it suggests the error size depends on the input values, indicating heteroscedasticity.
     /// </para>
     /// </remarks>
-    private T CalculateBreuschPaganTestStatistic(ModelEvaluationData<T> evaluationData)
+    private T CalculateBreuschPaganTestStatistic(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var X = evaluationData.ModelStats.FeatureMatrix;
-        var y = evaluationData.ModelStats.Actual;
-        var yPredicted = evaluationData.ModelStats.Model?.Predict(X) ?? Vector<T>.Empty();
-        var residuals = y.Subtract(yPredicted);
+        var X = ConversionsHelper.ConvertToMatrix<T, TInput>(evaluationData.ModelStats.Features);
+        var y = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
 
-        var squaredResiduals = residuals.Select(r => _numOps.Multiply(r, r));
-        var meanSquaredResidual = _numOps.Divide(squaredResiduals.Sum(), _numOps.FromDouble(squaredResiduals.Length));
+        Vector<T> yPredicted;
+        if (evaluationData.ModelStats.Model == null)
+        {
+            yPredicted = new Vector<T>(y.Length);
+        }
+        else
+        {
+            var predictions = evaluationData.ModelStats.Model.Predict(evaluationData.ModelStats.Features);
+            yPredicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
+        }
+
+        var residuals = y.Subtract(yPredicted);
+        var squaredResiduals = residuals.Select(r => NumOps.Multiply(r, r));
+        var meanSquaredResidual = NumOps.Divide(squaredResiduals.Sum(), NumOps.FromDouble(squaredResiduals.Length));
 
         var scaledResiduals = squaredResiduals.Divide(meanSquaredResidual);
         var auxiliaryRegression = new SimpleRegression<T>();
@@ -167,7 +177,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
         };
         var predictionStats = new PredictionStats<T>(predictionStatsInputs);
 
-        return _numOps.Multiply(_numOps.FromDouble(X.Rows), predictionStats.R2);
+        return NumOps.Multiply(NumOps.FromDouble(X.Rows), predictionStats.R2);
     }
 
     /// <summary>
@@ -190,14 +200,24 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// not desirable for reliable predictions.
     /// </para>
     /// </remarks>
-    private T CalculateWhiteTestStatistic(ModelEvaluationData<T> evaluationData)
+    private T CalculateWhiteTestStatistic(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var X = evaluationData.ModelStats.FeatureMatrix;
-        var y = evaluationData.ModelStats.Actual;
-        var yPredicted = evaluationData.ModelStats.Model?.Predict(X) ?? new Vector<T>(y.Length);
-        var residuals = y.Subtract(yPredicted);
+        var X = ConversionsHelper.ConvertToMatrix<T, TInput>(evaluationData.ModelStats.Features);
+        var y = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
 
-        var squaredResiduals = residuals.Select(r => _numOps.Multiply(r, r));
+        Vector<T> yPredicted;
+        if (evaluationData.ModelStats.Model == null)
+        {
+            yPredicted = new Vector<T>(y.Length);
+        }
+        else
+        {
+            var predictions = evaluationData.ModelStats.Model.Predict(evaluationData.ModelStats.Features);
+            yPredicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
+        }
+
+        var residuals = y.Subtract(yPredicted);
+        var squaredResiduals = residuals.Select(r => NumOps.Multiply(r, r));
 
         // Create augmented X matrix with squared terms and cross products
         var augmentedX = new Matrix<T>(X.Rows, X.Columns * (X.Columns + 3) / 2 + 1);
@@ -205,13 +225,13 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
         for (int i = 0; i < X.Columns; i++)
         {
             augmentedX.SetColumn(column++, X.GetColumn(i));
-            augmentedX.SetColumn(column++, X.GetColumn(i).Select(x => _numOps.Multiply(x, x)));
+            augmentedX.SetColumn(column++, X.GetColumn(i).Select(x => NumOps.Multiply(x, x)));
             for (int j = i + 1; j < X.Columns; j++)
             {
-                augmentedX.SetColumn(column++, new Vector<T>(X.GetColumn(i).Zip(X.GetColumn(j), (a, b) => _numOps.Multiply(a, b))));
+                augmentedX.SetColumn(column++, new Vector<T>(X.GetColumn(i).Zip(X.GetColumn(j), (a, b) => NumOps.Multiply(a, b))));
             }
         }
-        augmentedX.SetColumn(column, Vector<T>.CreateDefault(X.Rows, _numOps.One));
+        augmentedX.SetColumn(column, Vector<T>.CreateDefault(X.Rows, NumOps.One));
 
         var auxiliaryRegression = new SimpleRegression<T>();
         auxiliaryRegression.Train(augmentedX, new Vector<T>(squaredResiduals));
@@ -224,7 +244,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
 
         var predictionStats = new PredictionStats<T>(predictionStatsInputs);
 
-        return _numOps.Multiply(_numOps.FromDouble(X.Rows), predictionStats.R2);
+        return NumOps.Multiply(NumOps.FromDouble(X.Rows), predictionStats.R2);
     }
 
     /// <summary>
@@ -248,7 +268,7 @@ public class HeteroscedasticityFitDetector<T> : FitDetectorBase<T>
     /// the recommendations.
     /// </para>
     /// </remarks>
-    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T> evaluationData)
+    protected override List<string> GenerateRecommendations(FitType fitType, ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var recommendations = new List<string>();
 

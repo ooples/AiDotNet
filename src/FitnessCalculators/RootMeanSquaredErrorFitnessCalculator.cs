@@ -42,7 +42,7 @@ namespace AiDotNet.FitnessCalculators;
 /// interpretable measure of prediction error in the original units of the target variable.
 /// </para>
 /// </remarks>
-public class RootMeanSquaredErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class RootMeanSquaredErrorFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the RootMeanSquaredErrorFitnessCalculator class.
@@ -97,7 +97,7 @@ public class RootMeanSquaredErrorFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// This method simply retrieves the pre-calculated RMSE value from the dataset's error statistics.
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
         return dataSet.ErrorStats.RMSE;
     }

@@ -4,6 +4,8 @@
 /// Defines an interface for data preprocessing operations commonly used in machine learning workflows.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
 /// <remarks>
 /// <b>For Beginners:</b> Data preprocessing is like preparing ingredients before cooking.
 /// 
@@ -19,17 +21,17 @@
 /// 
 /// This interface provides standard methods to perform these essential preprocessing tasks.
 /// </remarks>
-public interface IDataPreprocessor<T>
+public interface IDataPreprocessor<T, TInput, TOutput>
 {
     /// <summary>
     /// Preprocesses the input data by applying normalization and other transformations.
     /// </summary>
-    /// <param name="X">The matrix of input features where each row represents a sample and each column represents a feature.</param>
-    /// <param name="y">The vector of target values corresponding to each sample in the input matrix.</param>
+    /// <param name="X">The input features where each row represents a sample and each column represents a feature.</param>
+    /// <param name="y">The target values corresponding to each sample in the input data.</param>
     /// <returns>
     /// A tuple containing:
-    /// - The preprocessed feature matrix
-    /// - The preprocessed target vector
+    /// - The preprocessed feature data
+    /// - The preprocessed target data
     /// - Normalization information that can be used to transform new data consistently
     /// </returns>
     /// <remarks>
@@ -54,21 +56,21 @@ public interface IDataPreprocessor<T>
     /// - Then for new predictions, you need to apply the same division
     /// - The normInfo stores these details so you can apply consistent transformations
     /// </remarks>
-    (Matrix<T> X, Vector<T> y, NormalizationInfo<T> normInfo) PreprocessData(Matrix<T> X, Vector<T> y);
+    (TInput X, TOutput y, NormalizationInfo<T, TInput, TOutput> normInfo) PreprocessData(TInput X, TOutput y);
     
     /// <summary>
     /// Splits the dataset into training, validation, and test sets.
     /// </summary>
-    /// <param name="X">The matrix of input features.</param>
-    /// <param name="y">The vector of target values.</param>
+    /// <param name="X">The input features.</param>
+    /// <param name="y">The target values.</param>
     /// <returns>
     /// A tuple containing six elements:
-    /// - XTrain: Feature matrix for training
-    /// - yTrain: Target vector for training
-    /// - XValidation: Feature matrix for validation
-    /// - yValidation: Target vector for validation
-    /// - XTest: Feature matrix for testing
-    /// - yTest: Target vector for testing
+    /// - XTrain: Feature data for training
+    /// - yTrain: Target data for training
+    /// - XValidation: Feature data for validation
+    /// - yValidation: Target data for validation
+    /// - XTest: Feature data for testing
+    /// - yTest: Target data for testing
     /// </returns>
     /// <remarks>
     /// <b>For Beginners:</b> This method divides your data into three separate sets, each with a specific purpose.
@@ -89,6 +91,6 @@ public interface IDataPreprocessor<T>
     /// Each set contains both features (X) and targets (y), keeping the relationship between
     /// input data and expected outputs intact for each portion of the data.
     /// </remarks>
-    (Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XValidation, Vector<T> yValidation, Matrix<T> XTest, Vector<T> yTest) 
-        SplitData(Matrix<T> X, Vector<T> y);
+    (TInput XTrain, TOutput yTrain, TInput XValidation, TOutput yValidation, TInput XTest, TOutput yTest) 
+        SplitData(TInput X, TOutput y);
 }

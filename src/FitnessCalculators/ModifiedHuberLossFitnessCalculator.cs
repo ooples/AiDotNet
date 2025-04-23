@@ -38,7 +38,7 @@
 /// - When you want a balance between robustness and mathematical convenience
 /// </para>
 /// </remarks>
-public class ModifiedHuberLossFitnessCalculator<T> : FitnessCalculatorBase<T>
+public class ModifiedHuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the ModifiedHuberLossFitnessCalculator class.
@@ -104,8 +104,9 @@ public class ModifiedHuberLossFitnessCalculator<T> : FitnessCalculatorBase<T>
     /// - Your data might contain some noise or mislabeled examples
     /// </para>
     /// </remarks>
-    protected override T GetFitnessScore(DataSetStats<T> dataSet)
+    protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return NeuralNetworkHelper<T>.ModifiedHuberLoss(dataSet.Predicted, dataSet.Actual);
+        return new ModifiedHuberLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

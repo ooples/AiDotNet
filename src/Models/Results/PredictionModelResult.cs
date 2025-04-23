@@ -38,7 +38,7 @@ namespace AiDotNet.Models.Results;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [Serializable]
-internal class PredictionModelResult<T> : IPredictiveModel<T>
+internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the underlying model used for making predictions.
@@ -66,7 +66,7 @@ internal class PredictionModelResult<T> : IPredictiveModel<T>
     /// or you'll get an InvalidOperationException.
     /// </para>
     /// </remarks>
-    public IFullModel<T>? Model { get; private set; }
+    public IFullModel<T, TInput, TOutput>? Model { get; private set; }
     
     /// <summary>
     /// Gets or sets the results of the optimization process that created the model.
@@ -96,7 +96,7 @@ internal class PredictionModelResult<T> : IPredictiveModel<T>
     /// to understand how well the model is likely to perform on new data.
     /// </para>
     /// </remarks>
-    public OptimizationResult<T> OptimizationResult { get; private set; } = new();
+    public OptimizationResult<T, TInput, TOutput> OptimizationResult { get; private set; } = new();
     
     /// <summary>
     /// Gets or sets the normalization information used to preprocess input data and postprocess predictions.
@@ -128,7 +128,7 @@ internal class PredictionModelResult<T> : IPredictiveModel<T>
     /// need to be scaled back to the original units.
     /// </para>
     /// </remarks>
-    public NormalizationInfo<T> NormalizationInfo { get; private set; } = new();
+    public NormalizationInfo<T, TInput, TOutput> NormalizationInfo { get; private set; } = new();
     
     /// <summary>
     /// Gets or sets the metadata associated with the model.
@@ -158,7 +158,7 @@ internal class PredictionModelResult<T> : IPredictiveModel<T>
     /// based on features like "square_footage", "num_bedrooms", and "location_score".
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> ModelMetadata { get; private set; } = new();
+    public ModelMetaData<T> ModelMetadata { get; private set; } = new();
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
@@ -190,12 +190,13 @@ internal class PredictionModelResult<T> : IPredictiveModel<T>
     /// to create a complete package that can be saved and used for making predictions.
     /// </para>
     /// </remarks>
-    public PredictionModelResult(IFullModel<T> model, OptimizationResult<T> optimizationResult, NormalizationInfo<T> normalizationInfo)
+    public PredictionModelResult(IFullModel<T, TInput, TOutput>? model, OptimizationResult<T, TInput, TOutput> optimizationResult, 
+        NormalizationInfo<T, TInput, TOutput> normalizationInfo)
     {
         Model = model;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
-        ModelMetadata = model.GetModelMetadata();
+        ModelMetadata = model?.GetModelMetaData() ?? new();
     }
 
     /// <summary>
@@ -254,7 +255,7 @@ internal class PredictionModelResult<T> : IPredictiveModel<T>
     /// so you can ensure your input data has the correct columns.
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> GetModelMetadata()
+    public ModelMetaData<T> GetModelMetadata()
     {
         return ModelMetadata;
     }
@@ -290,7 +291,7 @@ internal class PredictionModelResult<T> : IPredictiveModel<T>
     /// this method will return a vector of predicted house prices.
     /// </para>
     /// </remarks>
-    public Vector<T> Predict(Matrix<T> newData)
+    public TOutput Predict(TInput newData)
     {
         if (Model == null)
         {
@@ -302,10 +303,10 @@ internal class PredictionModelResult<T> : IPredictiveModel<T>
             throw new InvalidOperationException("Normalizer is not initialized.");
         }
 
-        var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeMatrix(newData);
+        var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(newData);
         var normalizedPredictions = Model.Predict(normalizedNewData);
 
-        return NormalizationInfo.Normalizer.DenormalizeVector(normalizedPredictions, NormalizationInfo.YParams);
+        return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
     }
 
     /// <summary>
@@ -386,7 +387,7 @@ internal class PredictionModelResult<T> : IPredictiveModel<T>
     public void Deserialize(byte[] data)
     {
         var jsonString = Encoding.UTF8.GetString(data);
-        var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T>>(jsonString, new JsonSerializerSettings
+        var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, new JsonSerializerSettings
         {
             TypeNameHandling = TypeNameHandling.All
         });
@@ -468,10 +469,10 @@ internal class PredictionModelResult<T> : IPredictiveModel<T>
     /// This method is static, so you call it on the class itself, not on an instance.
     /// </para>
     /// </remarks>
-    public static PredictionModelResult<T> LoadModel(string filePath)
+    public static PredictionModelResult<T, TInput, TOutput> LoadModel(string filePath)
     {
         var data = File.ReadAllBytes(filePath);
-        var result = new PredictionModelResult<T>();
+        var result = new PredictionModelResult<T, TInput, TOutput>();
         result.Deserialize(data);
 
         return result;

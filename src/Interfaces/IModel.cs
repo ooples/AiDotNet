@@ -22,7 +22,7 @@ namespace AiDotNet.Interfaces;
 /// This interface provides the essential methods needed for this learning and prediction process.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface IModel<T>
+public interface IModel<TInput, TOutput, TMetadata>
 {
     /// <summary>
     /// Trains the model using input features and their corresponding target values.
@@ -48,7 +48,7 @@ public interface IModel<T>
     /// </remarks>
     /// <param name="x">A matrix where each row represents a training example and each column represents a feature.</param>
     /// <param name="y">A vector containing the target values corresponding to each training example.</param>
-    void Train(Matrix<T> x, Vector<T> y);
+    void Train(TInput input, TOutput expectedOutput);
 
     /// <summary>
     /// Uses the trained model to make predictions for new input data.
@@ -75,7 +75,7 @@ public interface IModel<T>
     /// </remarks>
     /// <param name="input">A matrix where each row represents a new example to predict and each column represents a feature.</param>
     /// <returns>A vector containing the predicted values for each input example.</returns>
-    Vector<T> Predict(Matrix<T> input);
+    TOutput Predict(TInput input);
 
     /// <summary>
     /// Retrieves metadata and performance metrics about the trained model.
@@ -103,5 +103,5 @@ public interface IModel<T>
     /// and decide if it's ready to use or needs more training.
     /// </remarks>
     /// <returns>An object containing metadata and performance metrics about the trained model.</returns>
-    ModelMetadata<T> GetModelMetadata();
+    TMetadata GetModelMetaData();
 }

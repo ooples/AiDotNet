@@ -287,35 +287,6 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a forward pass through the network to generate a prediction from an input vector.
-    /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector containing the recalled pattern.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the predict functionality required by the NeuralNetworkBase class.
-    /// For Hopfield networks, prediction is equivalent to pattern recall, so this method simply
-    /// calls the Recall method with the provided input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is the network's way of making a prediction from an input.
-    /// 
-    /// In most neural networks, "predict" means taking an input and producing a new output.
-    /// In a Hopfield network:
-    /// - "Predict" actually means "recall the closest stored pattern"
-    /// - It uses the same recall process described above
-    /// - The input might be incomplete or noisy
-    /// - The output is the complete pattern that best matches the input
-    /// 
-    /// This method is required because the HopfieldNetwork class extends the base neural network class,
-    /// which requires a Predict method. It simply redirects to the Recall method.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Predict(Vector<T> input)
-    {
-        return Recall(input);
-    }
-
-    /// <summary>
     /// Not implemented for Hopfield networks, as they don't use gradient-based parameter updates.
     /// </summary>
     /// <param name="parameters">A vector containing parameters to update.</param>
@@ -348,87 +319,6 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Serializes the Hopfield network to a binary writer.
-    /// </summary>
-    /// <param name="writer">The binary writer to write the serialized network to.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the writer is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method saves the Hopfield network's state to a binary format that can be stored and
-    /// later loaded. It writes the size of the network and then serializes the weight matrix
-    /// by writing each element as a double value.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained Hopfield network to a file.
-    /// 
-    /// After training a network to remember patterns, you'll want to save it to use it later
-    /// without training again. This method:
-    /// 
-    /// 1. Saves the size of the network (how many neurons it has)
-    /// 2. Saves all the connection weights between neurons
-    /// 
-    /// The weights are what allow the network to remember patterns, so saving them
-    /// preserves all the network's "knowledge."
-    /// 
-    /// This is like taking a snapshot of the network's brain that you can reload later.
-    /// </para>
-    /// </remarks>
-    public override void Serialize(BinaryWriter writer)
-    {
-        if (writer == null)
-            throw new ArgumentNullException(nameof(writer));
-
-        writer.Write(_size);
-        for (int i = 0; i < _size; i++)
-        {
-            for (int j = 0; j < _size; j++)
-            {
-                writer.Write(Convert.ToDouble(_weights[i, j]));
-            }
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the Hopfield network from a binary reader.
-    /// </summary>
-    /// <param name="reader">The binary reader to read the serialized network from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method loads a previously serialized Hopfield network from a binary format. It reads the size
-    /// of the network and then deserializes the weight matrix by reading each element as a double value
-    /// and converting it to the appropriate numeric type T.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved Hopfield network from a file.
-    /// 
-    /// When you want to use a network that was trained earlier, this method:
-    /// 
-    /// 1. Reads how big the network is (how many neurons)
-    /// 2. Creates a new, empty weight matrix of that size
-    /// 3. Loads all the connection weights that were saved
-    /// 
-    /// After loading, the network will remember all the patterns it was trained on before,
-    /// without needing to train it again.
-    /// 
-    /// This is like restoring the network's "brain" from a snapshot.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(BinaryReader reader)
-    {
-        if (reader == null)
-            throw new ArgumentNullException(nameof(reader));
-
-        _size = reader.ReadInt32();
-        _weights = new Matrix<T>(_size, _size);
-        for (int i = 0; i < _size; i++)
-        {
-            for (int j = 0; j < _size; j++)
-            {
-                _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-    }
-
-    /// <summary>
     /// Initializes the layers of the neural network.
     /// </summary>
     /// <remarks>
@@ -456,5 +346,339 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     protected override void InitializeLayers()
     {
         // Hopfield networks don't use layers in the same way as feedforward networks
+    }
+
+    /// <summary>
+    /// Converts an input tensor to a vector, performs pattern recall, and converts back to a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor containing the pattern to recall.</param>
+    /// <returns>A tensor containing the recalled pattern.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the prediction functionality for the Hopfield network. It converts the input tensor
+    /// to a vector, performs the recall operation to retrieve the stored pattern most similar to the input,
+    /// and then converts the result back to a tensor. This allows the Hopfield network to be used within the
+    /// broader neural network framework while maintaining its unique recall-based approach.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how the Hopfield network makes predictions.
+    /// 
+    /// When you provide an input pattern (possibly noisy or incomplete):
+    /// 1. The method first converts it to the right format for the network
+    /// 2. It then runs the recall process to find the closest stored pattern
+    /// 3. Finally, it converts the result back to the expected output format
+    /// 
+    /// This allows the Hopfield network to be used like other neural networks
+    /// where you can simply call Predict() to get a result, even though
+    /// the underlying mechanism is quite different.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        // Convert input tensor to vector
+        Vector<T> inputVector = input.ToVector();
+        
+        // Ensure the input vector has the correct size
+        if (inputVector.Length != _size)
+        {
+            throw new ArgumentException($"Input vector length ({inputVector.Length}) does not match network size ({_size})");
+        }
+        
+        // Perform pattern recall
+        Vector<T> recalledPattern = Recall(inputVector);
+        
+        // Convert the recalled pattern back to a tensor with the same shape as the input
+        Tensor<T> result = Tensor<T>.FromVector(recalledPattern);
+        
+        // If the input has a non-trivial shape (not just a flat vector),
+        // reshape the result to match the input shape
+        if (input.Shape.Length > 1 || (input.Shape.Length == 1 && input.Shape[0] == recalledPattern.Length))
+        {
+            result = result.Reshape(input.Shape);
+        }
+        
+        return result;
+    }
+
+    /// <summary>
+    /// Trains the Hopfield network using the provided input patterns.
+    /// </summary>
+    /// <param name="input">A tensor containing the patterns to store.</param>
+    /// <param name="expectedOutput">This parameter is ignored in Hopfield networks.</param>
+    /// <remarks>
+    /// <para>
+    /// This method adapts the standard neural network training interface to the Hopfield network.
+    /// It extracts patterns from the input tensor and calls the Hebbian learning-based Train method.
+    /// The expectedOutput parameter is ignored since Hopfield networks are autoassociative and
+    /// use the same patterns for both input and output.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method allows the Hopfield network to learn patterns.
+    /// 
+    /// Unlike traditional neural networks that learn mappings from inputs to outputs:
+    /// - Hopfield networks learn to associate patterns with themselves
+    /// - The input tensor contains the patterns to be stored
+    /// - The expectedOutput parameter is ignored (not needed)
+    /// 
+    /// This method:
+    /// 1. Extracts individual patterns from the input tensor
+    /// 2. Converts them to the right format
+    /// 3. Calls the core training method that implements Hebbian learning
+    /// 
+    /// After training, the network will be able to recognize and complete these patterns.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Extract patterns from the input tensor
+        // Each row of the input tensor is treated as a separate pattern
+        List<Vector<T>> patterns = [];
+        
+        for (int i = 0; i < input.Shape[0]; i++)
+        {
+            // Extract the i-th pattern from the input tensor
+            Vector<T> pattern = new Vector<T>(_size);
+            for (int j = 0; j < _size; j++)
+            {
+                pattern[j] = input[i, j];
+            }
+            patterns.Add(pattern);
+        }
+        
+        // Train the network using Hebbian learning
+        Train(patterns);
+    }
+
+    /// <summary>
+    /// Gets metadata about the Hopfield network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns metadata about the Hopfield network, including its model type, size,
+    /// and serialized weights. This information is useful for model management and serialization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides a summary of the Hopfield network.
+    /// 
+    /// The metadata includes:
+    /// - The type of model (Hopfield Network)
+    /// - The size of the network (number of neurons)
+    /// - The current weight matrix (connection strengths)
+    /// - Serialized data that can be used to save and reload the network
+    /// 
+    /// This information is useful when:
+    /// - Managing multiple models
+    /// - Saving the network for later use
+    /// - Analyzing the network's properties
+    /// </para>
+    /// </remarks>
+    public override ModelMetaData<T> GetModelMetaData()
+    {
+        return new ModelMetaData<T>
+        {
+            ModelType = ModelType.HopfieldNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "Size", _size },
+                { "WeightMatrixShape", $"{_weights.Rows}x{_weights.Columns}" }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <summary>
+    /// Serializes Hopfield network-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The BinaryWriter to write the data to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method writes the Hopfield network's specific data to a binary stream. It includes
+    /// the network size and the weight matrix. This data is needed to reconstruct the Hopfield network
+    /// when deserializing.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the Hopfield network to a file.
+    /// 
+    /// It's like taking a snapshot of the network's current state, including:
+    /// - The size of the network (how many neurons it has)
+    /// - All the connection weights between neurons
+    /// 
+    /// This allows you to save a trained network and reload it later,
+    /// without having to train it again from scratch.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        // Write network size
+        writer.Write(_size);
+        
+        // Write weight matrix
+        writer.Write(_weights.Rows);
+        writer.Write(_weights.Columns);
+        
+        for (int i = 0; i < _weights.Rows; i++)
+        {
+            for (int j = 0; j < _weights.Columns; j++)
+            {
+                writer.Write(Convert.ToDouble(_weights[i, j]));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Deserializes Hopfield network-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The BinaryReader to read the data from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the Hopfield network's specific data from a binary stream. It retrieves
+    /// the network size and the weight matrix. After reading this data, the Hopfield network's state
+    /// is fully restored to what it was when saved.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a previously saved Hopfield network.
+    /// 
+    /// It's like restoring the network from a snapshot, retrieving:
+    /// - The size of the network
+    /// - All the connection weights that were learned during training
+    /// 
+    /// This allows you to use a previously trained network without
+    /// having to train it again on the same patterns.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Read network size
+        _size = reader.ReadInt32();
+        
+        // Read weight matrix dimensions
+        int rows = reader.ReadInt32();
+        int columns = reader.ReadInt32();
+        
+        // Initialize weight matrix
+        _weights = new Matrix<T>(rows, columns);
+        
+        // Read weight values
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Calculates the energy of the current state of the Hopfield network.
+    /// </summary>
+    /// <param name="state">The state vector to calculate energy for.</param>
+    /// <returns>The energy value of the given state.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the energy function of the Hopfield network for a given state.
+    /// The energy function is defined as E = -0.5 * sum(sum(w_ij * s_i * s_j)) - sum(theta_i * s_i),
+    /// where w_ij are the weights, s_i and s_j are the states of neurons i and j, and theta_i is the
+    /// bias for neuron i (typically 0 in standard Hopfield networks). Lower energy values correspond
+    /// to more stable states, and the network naturally evolves toward states with minimum energy.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how "stable" a pattern is in the network.
+    /// 
+    /// Think of energy like a ball rolling on a landscape:
+    /// - Lower energy = valleys where the ball comes to rest (stable patterns)
+    /// - Higher energy = hills that the ball rolls away from (unstable patterns)
+    /// 
+    /// The Hopfield network naturally moves toward lower energy states.
+    /// When you use the Recall method, the network is essentially rolling downhill
+    /// to the nearest valley (stable pattern) from your starting point (input pattern).
+    /// 
+    /// The stored patterns correspond to the deepest valleys in this energy landscape.
+    /// </para>
+    /// </remarks>
+    public T CalculateEnergy(Vector<T> state)
+    {
+        if (state.Length != _size)
+        {
+            throw new ArgumentException($"State vector length ({state.Length}) does not match network size ({_size})");
+        }
+        
+        // Calculate energy: E = -0.5 * sum(sum(w_ij * s_i * s_j))
+        // Lower energy = more stable state
+        T energy = NumOps.Zero;
+        
+        for (int i = 0; i < _size; i++)
+        {
+            for (int j = 0; j < _size; j++)
+            {
+                energy = NumOps.Subtract(
+                    energy,
+                    NumOps.Multiply(
+                        NumOps.Multiply(_weights[i, j], state[i]),
+                        state[j]
+                    )
+                );
+            }
+        }
+        
+        // Multiply by 0.5 (we've double-counted each pair)
+        energy = NumOps.Multiply(energy, NumOps.FromDouble(0.5));
+        
+        return energy;
+    }
+    
+    /// <summary>
+    /// Gets the maximum number of patterns that can be reliably stored in the network.
+    /// </summary>
+    /// <returns>The estimated capacity of the network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the theoretical capacity of the Hopfield network based on its size.
+    /// The general rule of thumb is that a Hopfield network can reliably store approximately
+    /// N/(4*log(N)) patterns, where N is the number of neurons. This is a theoretical upper bound,
+    /// and in practice, the capacity might be lower depending on the patterns' similarities.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many different patterns you can reliably store in the network.
+    /// 
+    /// Hopfield networks have limited memory capacity:
+    /// - Too many patterns will cause interference
+    /// - This leads to incorrect recall and "spurious patterns"
+    /// - The capacity depends on the number of neurons
+    /// 
+    /// The rule of thumb is that a network with N neurons can store approximately
+    /// N/(4*log(N)) patterns. For example, a network with 100 neurons can reliably
+    /// store about 5 patterns, not 100 patterns as you might expect.
+    /// 
+    /// This limited capacity is important to keep in mind when designing applications.
+    /// </para>
+    /// </remarks>
+    public int GetNetworkCapacity()
+    {
+        // Theoretical capacity of a Hopfield network is approximately N/(4*ln(N))
+        double capacity = _size / (4.0 * Math.Log(_size));
+        return (int)Math.Floor(capacity);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the Hopfield Network with the same architecture and configuration.
+    /// </summary>
+    /// <returns>A new Hopfield Network instance with the same architecture and size.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the Hopfield Network with the same architecture and size
+    /// as the current instance. It's used in scenarios where a fresh copy of the model is needed
+    /// while maintaining the same configuration.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a brand new copy of the network with the same setup.
+    /// 
+    /// Think of it like creating a blank version of the network:
+    /// - The new network has the same size (number of neurons)
+    /// - It has the same architecture (configuration)
+    /// - But it starts with no stored patterns - it's a fresh network
+    /// - The weight matrix is initialized to zeros
+    /// 
+    /// This is useful when you want to:
+    /// - Start with a clean network with the same structure
+    /// - Train it on different patterns
+    /// - Compare results between different training approaches
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new HopfieldNetwork<T>(this.Architecture, _size);
     }
 }

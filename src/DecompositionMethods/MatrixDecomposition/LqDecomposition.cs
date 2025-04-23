@@ -117,7 +117,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
         var L = new Matrix<T>(m, n);
         var Q = Matrix<T>.CreateIdentityMatrix<T>(n);
 
-        var a = matrix.Copy();
+        var a = matrix.Clone();
 
         for (int k = 0; k < Math.Min(m, n); k++)
         {
@@ -265,7 +265,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
         int m = matrix.Rows;
         int n = matrix.Columns;
 
-        var L = matrix.Copy();
+        var L = matrix.Clone();
         var Q = Matrix<T>.CreateIdentityMatrix<T>(n);
 
         for (int i = m - 1; i >= 0; i--)

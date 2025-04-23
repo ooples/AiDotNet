@@ -23,7 +23,7 @@
 /// - It can discover and follow valleys or ridges to reach peaks more quickly
 /// </para>
 /// </remarks>
-public class PowellOptimizer<T> : OptimizerBase<T>
+public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options specific to Powell's optimization method.
@@ -45,7 +45,7 @@ public class PowellOptimizer<T> : OptimizerBase<T>
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private PowellOptimizerOptions _options;
+    private PowellOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -94,12 +94,6 @@ public class PowellOptimizer<T> : OptimizerBase<T>
     /// Initializes a new instance of the <see cref="PowellOptimizer{T}"/> class with the specified options and components.
     /// </summary>
     /// <param name="options">The Powell optimization options, or null to use default options.</param>
-    /// <param name="predictionOptions">The prediction statistics options, or null to use default options.</param>
-    /// <param name="modelOptions">The model statistics options, or null to use default options.</param>
-    /// <param name="modelEvaluator">The model evaluator, or null to use the default evaluator.</param>
-    /// <param name="fitDetector">The fit detector, or null to use the default detector.</param>
-    /// <param name="fitnessCalculator">The fitness calculator, or null to use the default calculator.</param>
-    /// <param name="modelCache">The model cache, or null to use the default cache.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Powell optimizer with the specified options and components.
@@ -117,17 +111,12 @@ public class PowellOptimizer<T> : OptimizerBase<T>
     /// </para>
     /// </remarks>
     public PowellOptimizer(
-        PowellOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, fitDetector, fitnessCalculator, modelCache)
+        PowellOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
-        _options = options ?? new PowellOptimizerOptions();
+        _options = options ?? new PowellOptimizerOptions<T, TInput, TOutput>();
         _adaptiveStepSize = NumOps.Zero;
+
         InitializeAdaptiveParameters();
     }
 
@@ -185,14 +174,14 @@ public class PowellOptimizer<T> : OptimizerBase<T>
     /// This systematic approach helps find good solutions efficiently, even when the landscape is complex.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        int n = inputData.XTrain.Columns;
-        var currentSolution = InitializeRandomSolution(n);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        int n = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
 
@@ -302,7 +291,7 @@ public class PowellOptimizer<T> : OptimizerBase<T>
     /// This process helps find the best position along a single direction before moving to the next direction.
     /// </para>
     /// </remarks>
-    private (ISymbolicModel<T> OptimalSolution, T OptimalStep) LineSearch(ISymbolicModel<T> currentSolution, Vector<T> direction, OptimizationInputData<T> inputData)
+    private (IFullModel<T, TInput, TOutput> OptimalSolution, T OptimalStep) LineSearch(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var a = NumOps.FromDouble(-1.0);
         var b = NumOps.One;
@@ -354,14 +343,16 @@ public class PowellOptimizer<T> : OptimizerBase<T>
     /// This simple movement is the basic building block of how the algorithm explores the search space.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> MoveInDirection(ISymbolicModel<T> solution, Vector<T> direction, T step)
+    private IFullModel<T, TInput, TOutput> MoveInDirection(IFullModel<T, TInput, TOutput> solution, Vector<T> direction, T step)
     {
-        var newCoefficients = new Vector<T>(solution.Coefficients.Length);
-        for (int i = 0; i < solution.Coefficients.Length; i++)
+        var parameters = solution.GetParameters();
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
-            newCoefficients[i] = NumOps.Add(solution.Coefficients[i], NumOps.Multiply(direction[i], step));
+            newCoefficients[i] = NumOps.Add(parameters[i], NumOps.Multiply(direction[i], step));
         }
-        return new VectorModel<T>(newCoefficients);
+
+        return solution.WithParameters(newCoefficients);
     }
 
     /// <summary>
@@ -388,17 +379,23 @@ public class PowellOptimizer<T> : OptimizerBase<T>
     /// potentially speeding up the search process.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> ExtrapolatePoint(ISymbolicModel<T> oldPoint, ISymbolicModel<T> newPoint)
+    private IFullModel<T, TInput, TOutput> ExtrapolatePoint(IFullModel<T, TInput, TOutput> oldPoint, IFullModel<T, TInput, TOutput> newPoint)
     {
-        var extrapolatedCoefficients = new Vector<T>(oldPoint.Coefficients.Length);
-        for (int i = 0; i < oldPoint.Coefficients.Length; i++)
+        var parameters = newPoint.GetParameters();
+        var oldParameters = oldPoint.GetParameters();
+        var extrapolatedCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
+            // Calculate the vector from old to new, and double it
+            var direction = NumOps.Subtract(parameters[i], oldParameters[i]);
             extrapolatedCoefficients[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(2.0), newPoint.Coefficients[i]),
-                NumOps.Negate(oldPoint.Coefficients[i])
+                parameters[i],
+                direction // Add the direction again to double the movement
             );
         }
-        return new VectorModel<T>(extrapolatedCoefficients);
+
+        // Use the newPoint as a template to create a new model with the extrapolated coefficients
+        return newPoint.WithParameters(extrapolatedCoefficients);
     }
 
     /// <summary>
@@ -424,7 +421,7 @@ public class PowellOptimizer<T> : OptimizerBase<T>
     /// are going well and cautious when progress is difficult.
     /// </para>
     /// </remarks>
-    protected override void UpdateAdaptiveParameters(OptimizationStepData<T> currentStepData, OptimizationStepData<T> previousStepData)
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
@@ -468,9 +465,9 @@ public class PowellOptimizer<T> : OptimizerBase<T>
     /// This ensures that only appropriate settings are used with this specific optimizer.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is PowellOptimizerOptions powellOptions)
+        if (options is PowellOptimizerOptions<T, TInput, TOutput> powellOptions)
         {
             _options = powellOptions;
         }
@@ -499,7 +496,7 @@ public class PowellOptimizer<T> : OptimizerBase<T>
     /// or for making a copy of the settings to modify and apply later.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -578,7 +575,7 @@ public class PowellOptimizer<T> : OptimizerBase<T>
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<PowellOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<PowellOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();

@@ -1,3 +1,5 @@
+namespace AiDotNet.Regression;
+
 /// <summary>
 /// Base class for non-linear regression algorithms that provides common functionality for training and prediction.
 /// </summary>
@@ -68,7 +70,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// to find simpler solutions that generalize better to new examples.
     /// </para>
     /// </remarks>
-    protected IRegularization<T> Regularization { get; private set; }
+    protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
 
     /// <summary>
     /// Gets or sets the support vectors used by the model.
@@ -134,10 +136,10 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// before you actually train it with data.
     /// </para>
     /// </remarks>
-    protected NonLinearRegressionBase(NonLinearRegressionOptions? options = null, IRegularization<T>? regularization = null)
+    protected NonLinearRegressionBase(NonLinearRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
     {
         Options = options ?? new NonLinearRegressionOptions();
-        Regularization = regularization ?? new NoRegularization<T>();
+        Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         SupportVectors = new Matrix<T>(0, 0);
         Alphas = new Vector<T>(0);
@@ -439,9 +441,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// can be useful for understanding the model's complexity and for debugging purposes.
     /// </para>
     /// </remarks>
-    public virtual ModelMetadata<T> GetModelMetadata()
+    public virtual ModelMetaData<T> GetModelMetaData()
     {
-        var metadata = new ModelMetadata<T>
+        var metadata = new ModelMetaData<T>
         {
             ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
@@ -528,6 +530,27 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     }
 
     /// <summary>
+    /// Creates a new instance of the derived model class.
+    /// </summary>
+    /// <returns>A new instance of the same model type.</returns>
+    /// <remarks>
+    /// <para>
+    /// This abstract factory method must be implemented by derived classes to create a new
+    /// instance of their specific type. It's used by Clone and DeepCopy to ensure that
+    /// the correct derived type is instantiated.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method creates a new, empty instance of the specific model type.
+    /// It's used during cloning and deep copying to ensure that the copy
+    /// is of the same specific type as the original. This is more efficient
+    /// than using reflection to create instances and gives derived classes
+    /// explicit control over how new instances are created.
+    /// </para>
+    /// </remarks>
+    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateInstance();
+
+    /// <summary>
     /// Deserializes the model from a byte array.
     /// </summary>
     /// <param name="modelData">The byte array containing the serialized model data.</param>
@@ -581,8 +604,253 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             ?? new RegularizationOptions();
 
         // Create regularization based on deserialized options
-        Regularization = RegularizationFactory.CreateRegularization<T>(regularizationOptions);
+        Regularization = RegularizationFactory.CreateRegularization<T, Matrix<T>, Vector<T>>(regularizationOptions);
 
         NumOps = MathHelper.GetNumericOperations<T>();
+    }
+
+    /// <summary>
+    /// Gets the model parameters as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all model parameters (alpha coefficients and bias term).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method combines all model parameters into a single vector, with the bias term as the first element
+    /// followed by all alpha coefficients. This representation is useful for optimization algorithms and
+    /// for operations that need to treat all parameters uniformly.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method collects all the model's internal values (parameters) into a single list.
+    /// Think of it like getting a complete list of ingredients and measurements for a recipe.
+    /// This allows you to see all the parameters at once or pass them to other algorithms
+    /// that work with the model's parameters as a group.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        // Create a vector to hold all parameters (bias + alphas)
+        var parameters = new Vector<T>(Alphas.Length + 1);
+    
+        // Set the bias term as the first parameter
+        parameters[0] = B;
+    
+        // Copy all alpha coefficients
+        for (int i = 0; i < Alphas.Length; i++)
+        {
+            parameters[i + 1] = Alphas[i];
+        }
+    
+        return parameters;
+    }
+
+    /// <summary>
+    /// Creates a new model with the specified parameters.
+    /// </summary>
+    /// <param name="parameters">A vector containing all model parameters (bias term followed by alpha coefficients).</param>
+    /// <returns>A new model instance with the specified parameters.</returns>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector doesn't match the expected length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new model instance with the same structure as the current model but with different
+    /// parameter values. The first element of the parameters vector is interpreted as the bias term, and the
+    /// remaining elements are interpreted as alpha coefficients.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method creates a new model with specific parameter values you provide.
+    /// It's like following a recipe but changing the amounts of certain ingredients.
+    /// This is useful when you want to experiment with different parameter settings
+    /// or when an optimization algorithm suggests better parameter values.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    {
+        // Verify that the parameters vector has the correct length
+        if (parameters.Length != Alphas.Length + 1)
+        {
+            throw new ArgumentException($"Parameters vector length ({parameters.Length}) " +
+                                       $"does not match expected length ({Alphas.Length + 1}).");
+        }
+    
+        // Create a new instance of the model
+        var clone = (NonLinearRegressionBase<T>)this.Clone();
+    
+        // Set the bias term
+        clone.B = parameters[0];
+    
+        // Set the alpha coefficients
+        for (int i = 0; i < Alphas.Length; i++)
+        {
+            clone.Alphas[i] = parameters[i + 1];
+        }
+    
+        return clone;
+    }
+
+    /// <summary>
+    /// Gets the indices of features that are actively used by the model.
+    /// </summary>
+    /// <returns>A collection of feature indices that have non-zero weight in the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method identifies which features have a significant impact on the model's predictions by analyzing
+    /// the support vectors and their coefficients. A feature is considered active if it has a non-zero weight
+    /// in at least one support vector with a non-zero alpha coefficient.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method tells you which features (input variables) your model is actually using
+    /// to make predictions. Some models may effectively ignore certain features if they
+    /// don't help with predictions. Knowing which features are actually being used can help
+    /// you understand what information the model considers important and potentially simplify
+    /// your model by removing unused features.
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<int> GetActiveFeatureIndices()
+    {
+        // Create a set to store the active feature indices
+        // This set will automatically remove duplicate indices and ensure that we only return unique values
+        var activeIndices = new HashSet<int>(); activeIndices = new HashSet<int>();
+    
+        // Identify features that have non-zero weight in support vectors with non-zero alpha
+        for (int i = 0; i < Alphas.Length; i++)
+        {
+            // Skip if the alpha coefficient is effectively zero
+            if (NumOps.LessThan(NumOps.Abs(Alphas[i]), NumOps.FromDouble(1e-5)))
+                continue;
+        
+            // Check each feature in this support vector
+            for (int j = 0; j < SupportVectors.Columns; j++)
+            {
+                // If the feature has a non-zero value, consider it active
+                if (!NumOps.LessThan(NumOps.Abs(SupportVectors[i, j]), NumOps.FromDouble(1e-5)))
+                {
+                    activeIndices.Add(j);
+                }
+            }
+        }
+    
+        return activeIndices;
+    }
+
+    /// <summary>
+    /// Determines whether a specific feature is used by the model.
+    /// </summary>
+    /// <param name="featureIndex">The index of the feature to check.</param>
+    /// <returns>True if the feature is used by the model; otherwise, false.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when featureIndex is negative or greater than the number of features.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method checks whether a specific feature has a significant impact on the model's predictions
+    /// by determining if it has a non-zero weight in at least one support vector with a non-zero alpha coefficient.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method checks if a specific feature (input variable) is actually being used
+    /// by your model to make predictions. It's like checking if a particular ingredient
+    /// in a recipe is actually affecting the final dish or if it could be left out without
+    /// changing the result. This can help you understand what information your model
+    /// considers important and potentially simplify your model by removing unused features.
+    /// </para>
+    /// </remarks>
+    public virtual bool IsFeatureUsed(int featureIndex)
+    {
+        // Validate feature index
+        if (featureIndex < 0 || featureIndex >= SupportVectors.Columns)
+        {
+            throw new ArgumentOutOfRangeException(nameof(featureIndex), 
+                $"Feature index must be between 0 and {SupportVectors.Columns - 1}.");
+        }
+    
+        // Check if the feature has a non-zero value in any support vector with non-zero alpha
+        for (int i = 0; i < Alphas.Length; i++)
+        {
+            // Skip if the alpha coefficient is effectively zero
+            if (NumOps.LessThan(NumOps.Abs(Alphas[i]), NumOps.FromDouble(1e-5)))
+                continue;
+        
+            // Check if this feature has a non-zero value in this support vector
+            if (!NumOps.LessThan(NumOps.Abs(SupportVectors[i, featureIndex]), NumOps.FromDouble(1e-5)))
+            {
+                return true;
+            }
+        }
+    
+        return false;
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the model.
+    /// </summary>
+    /// <returns>A new model instance that is a deep copy of the current model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a completely independent copy of the model, including all parameters,
+    /// support vectors, and configuration options. Modifications to the returned model will not
+    /// affect the original model, and vice versa.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method creates a complete, independent copy of your model.
+    /// It's like making a photocopy of a document - the copy looks exactly
+    /// the same but is a separate object that can be modified without affecting
+    /// the original. This is useful when you want to experiment with changes to
+    /// a model without risking the original or when you need multiple independent
+    /// instances of the same model (e.g., for ensemble learning).
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        // Create a new instance through cloning
+        var clone = (NonLinearRegressionBase<T>)this.Clone();
+    
+        // Perform deep copy of all mutable fields
+        clone.SupportVectors = SupportVectors.Clone();
+        clone.Alphas = Alphas.Clone();
+        clone.B = B; // Value types are copied by value
+        clone.Options = JsonConvert.DeserializeObject<NonLinearRegressionOptions>(
+            JsonConvert.SerializeObject(Options)) ?? new NonLinearRegressionOptions();
+    
+        // Create a new regularization instance with the same options
+        var regularizationOptions = Regularization.GetOptions();
+        clone.Regularization = RegularizationFactory.CreateRegularization<T, Matrix<T>, Vector<T>>(regularizationOptions);
+    
+        return clone;
+    }
+
+    /// <summary>
+    /// Creates a shallow copy of the model.
+    /// </summary>
+    /// <returns>A new model instance that is a shallow copy of the current model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the model that shares references to the same internal data
+    /// structures as the original model. This is primarily used internally by other methods that need
+    /// to create modified copies of the model.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method creates a lightweight copy of your model.
+    /// Unlike DeepCopy, which creates completely independent copies of everything,
+    /// this method creates a new model object but may share some internal data
+    /// with the original. This makes it faster to create copies, but changes to one
+    /// copy might affect others in some cases. This is primarily used internally
+    /// by other methods rather than directly by users.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        // Create a new instance using the factory method
+        var clone = (NonLinearRegressionBase<T>)CreateInstance();
+    
+        // Copy the model parameters
+        clone.SupportVectors = SupportVectors;  // Shallow copy
+        clone.Alphas = Alphas;                 // Shallow copy
+        clone.B = B;                          // Value types are copied by value
+        clone.Options = Options;              // Shallow copy
+        clone.Regularization = Regularization; // Shallow copy
+    
+        return clone;
     }
 }

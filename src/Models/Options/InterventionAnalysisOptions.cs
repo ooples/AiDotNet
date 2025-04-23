@@ -27,7 +27,7 @@
 /// settings are also available. The additional settings specific to intervention analysis let you
 /// configure how the model handles both the time series patterns and the intervention effects.</para>
 /// </remarks>
-public class InterventionAnalysisOptions<T> : TimeSeriesRegressionOptions<T>
+public class InterventionAnalysisOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
 {
     /// <summary>
     /// Gets or sets the order of the AutoRegressive (AR) component in the ARIMA model.
@@ -138,5 +138,5 @@ public class InterventionAnalysisOptions<T> : TimeSeriesRegressionOptions<T>
     /// Advanced users might want to specify a particular optimizer if they have specific requirements
     /// regarding speed, precision, or if they're dealing with unusual time series patterns.</para>
     /// </remarks>
-    public IOptimizer<T>? Optimizer { get; set; }
+    public IOptimizer<T, TInput, TOutput>? Optimizer { get; set; }
 }

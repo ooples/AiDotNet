@@ -20,9 +20,9 @@ namespace AiDotNet.Optimizers;
 /// This method is efficient for large datasets and can often find good solutions quickly.
 /// </para>
 /// </remarks>
-public class StochasticGradientDescentOptimizer<T> : GradientBasedOptimizerBase<T>
+public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
-    private StochasticGradientDescentOptimizerOptions _options;
+    private StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
     /// Initializes a new instance of the StochasticGradientDescentOptimizer class.
@@ -49,15 +49,8 @@ public class StochasticGradientDescentOptimizer<T> : GradientBasedOptimizerBase<
     /// </para>
     /// </remarks>
     public StochasticGradientDescentOptimizer(
-        StochasticGradientDescentOptimizerOptions? options = null,
-        PredictionStatsOptions? predictionOptions = null,
-        ModelStatsOptions? modelOptions = null,
-        IModelEvaluator<T>? modelEvaluator = null,
-        IFitDetector<T>? fitDetector = null,
-        IFitnessCalculator<T>? fitnessCalculator = null,
-        IModelCache<T>? modelCache = null)
-        : base(options, predictionOptions, modelOptions, modelEvaluator, 
-               fitDetector, fitnessCalculator, modelCache)
+        StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
     {
         _options = options ?? new();
     }
@@ -88,11 +81,11 @@ public class StochasticGradientDescentOptimizer<T> : GradientBasedOptimizerBase<
     /// This process helps find a good solution efficiently, even in complex landscapes.
     /// </para>
     /// </remarks>
-    public override OptimizationResult<T> Optimize(OptimizationInputData<T> inputData)
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var currentSolution = InitializeRandomSolution(inputData.XTrain.Columns);
-        var bestStepData = new OptimizationStepData<T>();
-        var previousStepData = new OptimizationStepData<T>();
+        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
 
@@ -144,10 +137,10 @@ public class StochasticGradientDescentOptimizer<T> : GradientBasedOptimizerBase<
     /// This small step helps the hiker gradually move towards the lowest point.
     /// </para>
     /// </remarks>
-    private ISymbolicModel<T> UpdateSolution(ISymbolicModel<T> currentSolution, Vector<T> gradient)
+    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        Vector<T> updatedCoefficients = currentSolution.Coefficients.Subtract(gradient.Multiply(CurrentLearningRate));
-        return currentSolution.UpdateCoefficients(updatedCoefficients);
+        Vector<T> updatedCoefficients = currentSolution.GetParameters().Subtract(gradient.Multiply(CurrentLearningRate));
+        return currentSolution.WithParameters(updatedCoefficients);
     }
 
     /// <summary>
@@ -167,9 +160,9 @@ public class StochasticGradientDescentOptimizer<T> : GradientBasedOptimizerBase<
     /// This ensures that the optimizer always has the correct type of settings.
     /// </para>
     /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions options)
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is StochasticGradientDescentOptimizerOptions sgdOptions)
+        if (options is StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> sgdOptions)
         {
             _options = sgdOptions;
         }
@@ -195,7 +188,7 @@ public class StochasticGradientDescentOptimizer<T> : GradientBasedOptimizerBase<
     /// This is useful for understanding or checking the current setup of the optimizer.
     /// </para>
     /// </remarks>
-    public override OptimizationAlgorithmOptions GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
     }
@@ -268,7 +261,7 @@ public class StochasticGradientDescentOptimizer<T> : GradientBasedOptimizerBase<
 
             // Deserialize SGD-specific options
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<StochasticGradientDescentOptimizerOptions>(optionsJson)
+            _options = JsonConvert.DeserializeObject<StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
         }
     }
@@ -297,7 +290,7 @@ public class StochasticGradientDescentOptimizer<T> : GradientBasedOptimizerBase<
     /// This improves efficiency by avoiding redundant calculations.
     /// </para>
     /// </remarks>
-    protected override string GenerateGradientCacheKey(ISymbolicModel<T> model, Matrix<T> X, Vector<T> y)
+    protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_SGD_{CurrentLearningRate}_{_options.MaxIterations}";

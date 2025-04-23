@@ -563,5 +563,219 @@ public enum ModelType
     /// different aspects of a problem before combining their insights.
     /// </para>
     /// </remarks>
-    MultilayerPerceptronRegression
+    MultilayerPerceptronRegression,
+
+    /// <summary>
+    /// A generative stochastic neural network that can learn a probability distribution over its inputs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Deep Boltzmann Machine is a type of neural network that learns to recognize patterns 
+    /// in data by trying to recreate the input data from scratch. Imagine it as an artist trying to paint a 
+    /// picture after only glancing at it briefly. By doing this repeatedly, the network learns the important 
+    /// features and relationships in the data. This makes it useful for tasks like feature detection, 
+    /// dimensionality reduction, and generating new data similar to the training set.
+    /// </para>
+    /// </remarks>
+    DeepBoltzmannMachine,
+
+    /// <summary>
+    /// A type of neural network particularly effective for processing grid-like data such as images.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Convolutional Neural Networks are specialized for processing data with a grid-like 
+    /// structure, such as images. They use a mathematical operation called convolution to scan over the input, 
+    /// detecting features like edges, textures, and shapes. This is similar to how our eyes focus on different 
+    /// parts of an image. CNNs are highly effective for tasks like image classification, object detection, 
+    /// and even some types of time series analysis.
+    /// </para>
+    /// </remarks>
+    ConvolutionalNeuralNetwork,
+
+    /// <summary>
+    /// A neural network architecture designed to work with sequential data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Recurrent Neural Networks are designed to work with sequences of data, where the 
+    /// order matters. They have a form of memory, allowing information to persist. This makes them ideal for 
+    /// tasks involving time series, language, or any data where context from previous inputs is important. 
+    /// Think of it like reading a book - your understanding of each word is influenced by the words that came before it.
+    /// </para>
+    /// </remarks>
+    RecurrentNeuralNetwork,
+
+    /// <summary>
+    /// A type of neural network that learns to encode data into a compressed representation and then decode it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Autoencoders are neural networks that try to copy their input to their output. This 
+    /// might seem pointless, but there's a catch: they have to go through a narrow "bottleneck" in the middle. 
+    /// This forces the network to learn a compressed representation of the data. It's like learning to describe 
+    /// a movie in just a few words, then trying to recreate the whole movie from those words. This can be used 
+    /// for dimensionality reduction, feature learning, and generating new data.
+    /// </para>
+    /// </remarks>
+    Autoencoder,
+
+    /// <summary>
+    /// A neural network architecture that excels at processing sequential data with long-term dependencies.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Long Short-Term Memory networks are a special kind of Recurrent Neural Network 
+    /// capable of learning long-term dependencies. They're like a more sophisticated form of memory, able to 
+    /// remember information for long periods of time. This makes them particularly good at tasks like language 
+    /// translation, speech recognition, or any task where you need to consider context from much earlier in a sequence.
+    /// </para>
+    /// </remarks>
+    LongShortTermMemory,
+
+    /// <summary>
+    /// A neural network architecture that uses attention mechanisms to weigh the importance of different parts of the input.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Transformer models use a mechanism called "attention" to weigh the importance of 
+    /// different parts of the input when producing an output. It's like being able to focus on the most relevant 
+    /// words in a sentence to understand its meaning. This allows them to handle long-range dependencies in data 
+    /// very effectively. Transformers have revolutionized natural language processing tasks and are also being 
+    /// applied to other domains like computer vision.
+    /// </para>
+    /// </remarks>
+    Transformer,
+
+    /// <summary>
+    /// A neural network architecture that uses attention mechanisms to focus on relevant parts of the input.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Attention Networks are designed to focus on the most important parts of the input 
+    /// when making predictions. Imagine reading a long document and highlighting the key phrases - that's 
+    /// similar to what an attention network does. It learns which parts of the input are most relevant for 
+    /// the task at hand. This makes them particularly effective for tasks where some input elements are more 
+    /// important than others, such as in language translation, image captioning, or analyzing time series data 
+    /// where certain time steps might be more crucial than others.
+    /// </para>
+    /// </remarks>
+    AttentionNetwork,
+
+    /// <summary>
+    /// A probabilistic generative model composed of multiple layers of stochastic latent variables.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Deep Belief Networks are like a tower of pattern recognizers stacked on top of each other. 
+    /// Each layer learns to identify patterns in the output of the layer below it. The network starts by learning 
+    /// simple patterns in the raw data, then progressively learns more complex and abstract patterns in higher layers. 
+    /// </para>
+    /// <para>
+    /// For example, if analyzing images:
+    /// - The bottom layer might learn to detect edges and simple shapes
+    /// - Middle layers might recognize more complex features like eyes, noses, or wheels
+    /// - Top layers might identify complete objects or scenes
+    /// 
+    /// This layer-by-layer approach allows Deep Belief Networks to learn meaningful representations of data 
+    /// even when you don't have a lot of labeled examples, making them powerful for tasks like feature learning, 
+    /// dimensionality reduction, and generating new data similar to the training set.
+    /// </para>
+    /// </remarks>
+    DeepBeliefNetwork,
+
+    ResidualNeuralNetwork,
+
+    VariationalAutoencoder,
+
+    CapsuleNetwork,
+
+    QuantumNeuralNetwork,
+
+    SelfOrganizingMap,
+
+    LiquidStateMachine,
+
+    HopfieldNetwork,
+
+    GraphNeuralNetwork,
+
+    ExtremeLearningMachine,
+
+    DifferentiableNeuralComputer,
+
+    EchoStateNetwork,
+
+    DeepQNetwork,
+
+    GenerativeAdversarialNetwork,
+
+    NeuralTuringMachine,
+
+    NEAT,
+
+    MemoryNetwork,
+
+    LSTMNeuralNetwork,
+
+    HTMNetwork,
+
+    NeuralNetwork,
+
+    OccupancyNetwork,
+
+    RestrictedBoltzmannMachine,
+
+    SpikingNeuralNetwork,
+
+    FeedForwardNetwork,
+
+    Linear,
+    Polynomial,
+    Symbolic,
+    TreeBased,
+
+    ARIMAXModel,
+
+    ARMAModel,
+
+    ARModel,
+
+    BayesianStructuralTimeSeriesModel,
+
+    DynamicRegressionWithARIMAErrors,
+
+    ExponentialSmoothingModel,
+
+    GARCHModel,
+
+    GRUNeuralNetwork,
+
+    SiameseNetwork,
+
+    InterventionAnalysisModel,
+
+    TBATSModel,
+
+    STLDecomposition,
+
+    VARModel,
+
+    UnobservedComponentsModel,
+
+    TransferFunctionModel,
+
+    StateSpaceModel,
+
+    ARIMAModel,
+
+    MAModel,
+
+    SARIMAModel,
+
+    SpectralAnalysisModel,
+
+    ProphetModel,
+
+    NeuralNetworkARIMA
 }
