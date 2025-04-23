@@ -44,7 +44,7 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     /// <returns>
     /// A tuple containing the normalized data and the normalization parameters, which include the mean and standard deviation.
     /// </returns>
-    public override (TOutput, NormalizationParameters<T>) Normalize(TOutput data)
+    public override (TOutput, NormalizationParameters<T>) NormalizeOutput(TOutput data)
     {
         if (data is Vector<T> vector)
         {
@@ -94,7 +94,7 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     /// <returns>
     /// A tuple containing the normalized data and a list of normalization parameters for each column.
     /// </returns>
-    public override (TInput, List<NormalizationParameters<T>>) Normalize(TInput data)
+    public override (TInput, List<NormalizationParameters<T>>) NormalizeInput(TInput data)
     {
         if (data is Matrix<T> matrix)
         {

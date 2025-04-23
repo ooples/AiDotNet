@@ -44,6 +44,7 @@ public class BinaryIndividual : IEvolvable<BinaryGene, double>
                 value |= (1 << i);
             }
         }
+
         return value;
     }
 

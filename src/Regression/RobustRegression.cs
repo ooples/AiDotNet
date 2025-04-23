@@ -100,11 +100,30 @@ public class RobustRegression<T> : RegressionBase<T>
         int p = x.Columns;
         // Apply regularization to the input matrix
         x = Regularization.Regularize(x);
+
         // Initial regression estimate
         IRegression<T> initialRegression = _options.InitialRegression ?? new MultipleRegression<T>();
         initialRegression.Train(x, y);
-        Coefficients = initialRegression.Coefficients; 
-        Intercept = initialRegression.Intercept;
+        Vector<T> parameters = initialRegression.GetParameters();
+
+        // Extract coefficients and intercept from parameters
+        if (Options.UseIntercept)
+        {
+            // If using intercept, the last element is the intercept
+            Coefficients = new Vector<T>(parameters.Length - 1);
+            for (int i = 0; i < parameters.Length - 1; i++)
+            {
+                Coefficients[i] = parameters[i];
+            }
+            Intercept = parameters[parameters.Length - 1];
+        }
+        else
+        {
+            // If not using intercept, all parameters are coefficients
+            Coefficients = parameters;
+            Intercept = NumOps.Zero;
+        }
+
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
             Vector<T> residuals = y.Subtract(Predict(x));

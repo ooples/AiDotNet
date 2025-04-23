@@ -127,7 +127,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
-        var population = InitializePopulation(dimensions, _deOptions.PopulationSize);
+        var population = InitializePopulation(inputData.XTrain, _deOptions.PopulationSize);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var prevStepData = new OptimizationStepData<T, TInput, TOutput>();
         var currentStepData = new OptimizationStepData<T, TInput, TOutput>();
@@ -167,12 +167,12 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// Each solution is a random guess at what might be a good answer to the optimization problem.
     /// </para>
     /// </remarks>
-    private List<IFullModel<T, TInput, TOutput>> InitializePopulation(int dimensions, int populationSize)
+    private List<IFullModel<T, TInput, TOutput>> InitializePopulation(TInput input, int populationSize)
     {
         var population = new List<IFullModel<T, TInput, TOutput>>();
         for (int i = 0; i < populationSize; i++)
         {
-            population.Add(SymbolicModelFactory<T>.CreateRandomModel(Options.UseExpressionTrees, dimensions));
+            population.Add(InitializeRandomSolution(input));
         }
 
         return population;
@@ -201,44 +201,34 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
         } while (a == currentIndex || b == currentIndex || c == currentIndex || a == b || a == c || b == c);
 
         var currentModel = population[currentIndex];
-        IFullModel<T, TInput, TOutput> trialModel;
+
+        // Get parameters from each model
+        var aParams = population[a].GetParameters();
+        var bParams = population[b].GetParameters();
+        var cParams = population[c].GetParameters();
+        var currentParams = currentModel.GetParameters();
+
+        var trialParams = new Vector<T>(dimensions);
+        int R = Random.Next(dimensions);
         var currentCrossOverRate = Convert.ToDouble(_currentCrossoverRate);
         var currentMutationRate = Convert.ToDouble(_currentMutationRate);
 
-        if (Options.UseExpressionTrees)
+        for (int i = 0; i < dimensions; i++)
         {
-            // For expression trees, we'll use crossover and mutation
-            trialModel = SymbolicModelFactory<T>.Crossover(population[a], population[b], currentCrossOverRate).Item1;
-            trialModel = SymbolicModelFactory<T>.Mutate(trialModel, currentMutationRate);
-        }
-        else
-        {
-            var aVector = ((VectorModel<T>)population[a]).Coefficients;
-            var bVector = ((VectorModel<T>)population[b]).Coefficients;
-            var cVector = ((VectorModel<T>)population[c]).Coefficients;
-            var currentVector = ((VectorModel<T>)currentModel).Coefficients;
-
-            var trialVector = new Vector<T>(dimensions);
-            int R = Random.Next(dimensions);
-
-            for (int i = 0; i < dimensions; i++)
+            if (Random.NextDouble() < currentCrossOverRate || i == R)
             {
-                if (Random.NextDouble() < currentCrossOverRate || i == R)
-                {
-                    trialVector[i] = NumOps.Add(aVector[i],
-                        NumOps.Multiply(NumOps.FromDouble(currentMutationRate),
-                            NumOps.Subtract(bVector[i], cVector[i])));
-                }
-                else
-                {
-                    trialVector[i] = currentVector[i];
-                }
+                trialParams[i] = NumOps.Add(aParams[i],
+                    NumOps.Multiply(NumOps.FromDouble(currentMutationRate),
+                        NumOps.Subtract(bParams[i], cParams[i])));
             }
-
-            trialModel = new VectorModel<T>(trialVector);
+            else
+            {
+                trialParams[i] = currentParams[i];
+            }
         }
 
-        return trialModel;
+        // Create a new model with the modified parameters
+        return currentModel.WithParameters(trialParams);
     }
 
     /// <summary>

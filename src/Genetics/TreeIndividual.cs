@@ -37,10 +37,15 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
     /// <summary>
     /// Generates a random subtree.
     /// </summary>
-    private NodeGene GenerateRandomTree(int depth, List<string> terminals, bool fullMethod)
+    /// <summary>
+    /// Generates a random subtree.
+    /// </summary>
+    private NodeGene GenerateRandomTree(int depth, List<string> terminals, bool fullMethod, int? maxDepth = null)
     {
+        int effectiveMaxDepth = maxDepth ?? _maxInitialDepth;
+
         // Terminal node is forced at max depth or randomly in grow method
-        bool isTerminal = depth >= _maxInitialDepth || (!fullMethod && depth > 1 && _random.NextDouble() < 0.5);
+        bool isTerminal = depth >= effectiveMaxDepth || (!fullMethod && depth > 1 && _random.Next(2) == 0);
 
         if (isTerminal)
         {
@@ -58,7 +63,7 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
             int arity = GetFunctionArity(function);
             for (int i = 0; i < arity; i++)
             {
-                node.Children.Add(GenerateRandomTree(depth + 1, terminals, fullMethod));
+                node.Children.Add(GenerateRandomTree(depth + 1, terminals, fullMethod, maxDepth));
             }
 
             return node;
@@ -160,6 +165,20 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
     }
 
     /// <summary>
+    /// Ensures the tree doesn't exceed the maximum allowed depth.
+    /// </summary>
+    private void EnsureValidDepth()
+    {
+        int currentDepth = GetDepth();
+        if (currentDepth > _maxDepth)
+        {
+            // If tree is too deep, replace it with a simpler one
+            var terminals = new List<string> { "x", "1.0", "2.0", "0.5" }; // Example terminals
+            _rootNode = GenerateRandomTree(0, terminals, false, _maxDepth);
+        }
+    }
+
+    /// <summary>
     /// Recursively searches and replaces a node in the tree.
     /// </summary>
     private bool ReplaceInNode(NodeGene current, NodeGene target, NodeGene replacement)
@@ -216,7 +235,13 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
     {
         var node = SelectRandomNode();
         var terminals = new List<string> { "x", "1.0", "2.0", "0.5" }; // Example terminals
-        var newSubtree = GenerateRandomTree(0, terminals, false);
+
+        // Calculate current depth of the node to ensure we don't exceed max depth
+        int currentDepth = GetNodeDepthInTree(node);
+        int maxAllowedSubtreeDepth = _maxDepth - currentDepth;
+
+        // Generate a new subtree with limited depth
+        var newSubtree = GenerateRandomTree(0, terminals, false, maxAllowedSubtreeDepth);
 
         if (node == _rootNode)
         {
@@ -226,6 +251,32 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
         {
             ReplaceSubtree(node, newSubtree);
         }
+    }
+
+    /// <summary>
+    /// Gets the depth of a specific node within the tree.
+    /// </summary>
+    private int GetNodeDepthInTree(NodeGene target)
+    {
+        return FindNodeDepth(_rootNode, target, 0);
+    }
+
+    /// <summary>
+    /// Recursively finds the depth of a target node in the tree.
+    /// </summary>
+    private int FindNodeDepth(NodeGene current, NodeGene target, int depth)
+    {
+        if (current == target)
+            return depth;
+
+        foreach (var child in current.Children)
+        {
+            int result = FindNodeDepth(child, target, depth + 1);
+            if (result >= 0)
+                return result;
+        }
+
+        return -1; // Node not found in this branch
     }
 
     /// <summary>

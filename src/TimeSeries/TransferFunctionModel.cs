@@ -179,7 +179,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
         };
 
         OptimizationResult<T, Matrix<T>, Vector<T>> result = _optimizer.Optimize(inputData);
-        UpdateModelParameters(result.BestSolution.GetParameters());
+        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
     }
 
     /// <summary>

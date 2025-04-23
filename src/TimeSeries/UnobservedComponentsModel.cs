@@ -879,7 +879,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         var result = optimizer.Optimize(inputData);
 
         // Update model parameters with optimized values
-        UpdateModelParameters(result.BestSolution.GetParameters());
+        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
     }
 
     /// <summary>

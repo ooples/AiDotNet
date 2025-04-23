@@ -59,7 +59,7 @@ public interface INormalizer<T, TInput, TOutput>
     /// - The normalized data
     /// - The normalization parameters that were used (needed for later denormalization)
     /// </returns>
-    (TOutput, NormalizationParameters<T>) Normalize(TOutput data);
+    (TOutput, NormalizationParameters<T>) NormalizeOutput(TOutput data);
 
     /// <summary>
     /// Normalizes input data to a standard range.
@@ -85,7 +85,7 @@ public interface INormalizer<T, TInput, TOutput>
     /// - The normalized data
     /// - A list of normalization parameters for each feature (needed for later denormalization)
     /// </returns>
-    (TInput, List<NormalizationParameters<T>>) Normalize(TInput data);
+    (TInput, List<NormalizationParameters<T>>) NormalizeInput(TInput data);
 
     /// <summary>
     /// Reverses the normalization of data using the original normalization parameters.
@@ -169,6 +169,6 @@ public interface INormalizer<T, TInput, TOutput>
     /// <param name="xParams">The normalization parameters used for the input features (X).</param>
     /// <param name="yParams">The normalization parameters used for the target variable (Y).</param>
     /// <returns>The denormalized Y-intercept (constant term) for use with non-normalized data.</returns>
-    T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
+    T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams);
 }

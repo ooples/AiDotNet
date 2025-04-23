@@ -39,7 +39,7 @@ public abstract class NormalizerBase<T, TInput, TOutput> : INormalizer<T, TInput
     /// <para><b>For Beginners:</b> This method converts your data to a standard scale.
     /// It returns both the normalized data and information needed to convert back later.</para>
     /// </remarks>
-    public abstract (TOutput, NormalizationParameters<T>) Normalize(TOutput data);
+    public abstract (TOutput, NormalizationParameters<T>) NormalizeOutput(TOutput data);
     
     /// <summary>
     /// Normalizes input data to a standard range.
@@ -50,7 +50,7 @@ public abstract class NormalizerBase<T, TInput, TOutput> : INormalizer<T, TInput
     /// <para><b>For Beginners:</b> This method normalizes multiple features at once.
     /// Each feature (column) is normalized separately, and parameters for each are returned.</para>
     /// </remarks>
-    public abstract (TInput, List<NormalizationParameters<T>>) Normalize(TInput data);
+    public abstract (TInput, List<NormalizationParameters<T>>) NormalizeInput(TInput data);
     
     /// <summary>
     /// Reverses the normalization of data using the original normalization parameters.

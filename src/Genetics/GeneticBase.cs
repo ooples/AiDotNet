@@ -6,8 +6,6 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <typeparam name="TInput">The type of input data for the model.</typeparam>
 /// <typeparam name="TOutput">The type of output data produced by the model.</typeparam>
-/// <typeparam name="TIndividual">The type representing an individual in the genetic population.</typeparam>
-/// <typeparam name="TGene">The type representing a gene in the genetic model.</typeparam>
 /// <remarks>
 /// <para>
 /// This abstract base class implements the IGeneticModel interface, providing standard
@@ -28,20 +26,18 @@
 /// the entire genetic algorithm framework.
 /// </para>
 /// </remarks>
-public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
-    IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
-    where TIndividual : class, IEvolvable<TGene, T>
-    where TGene : class
+public abstract class GeneticBase<T, TInput, TOutput> :
+    IGeneticAlgorithm<T, TInput, TOutput, ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, ModelParameterGene<T>>
 {
     /// <summary>
     /// The current population of individuals.
     /// </summary>
-    protected List<TIndividual> Population { get; set; }
+    protected List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> Population { get; set; }
 
     /// <summary>
     /// The best individual found so far.
     /// </summary>
-    protected TIndividual BestIndividual { get; set; }
+    protected ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>? BestIndividual { get; set; }
 
     /// <summary>
     /// The parameters for the genetic algorithm.
@@ -54,6 +50,11 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     protected IFitnessCalculator<T, TInput, TOutput> FitnessCalculator { get; set; }
 
     /// <summary>
+    /// The fitness calculator used to evaluate individuals.
+    /// </summary>
+    protected IModelEvaluator<T, TInput, TOutput> ModelEvaluator { get; set; }
+
+    /// <summary>
     /// The random number generator used for stochastic operations.
     /// </summary>
     protected Random Random { get; set; }
@@ -61,12 +62,12 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <summary>
     /// A dictionary mapping crossover operator names to implementations.
     /// </summary>
-    protected Dictionary<string, Func<TIndividual, TIndividual, double, ICollection<TIndividual>>> CrossoverOperators { get; set; }
+    protected Dictionary<string, Func<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, double, ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>>> CrossoverOperators { get; set; }
 
     /// <summary>
     /// A dictionary mapping mutation operator names to implementations.
     /// </summary>
-    protected Dictionary<string, Func<TIndividual, double, TIndividual>> MutationOperators { get; set; }
+    protected Dictionary<string, Func<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, double, ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>> MutationOperators { get; set; }
 
     /// <summary>
     /// A stopwatch for tracking evolution time.
@@ -78,11 +79,13 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     protected EvolutionStats<T, TInput, TOutput> CurrentStats { get; set; }
 
+    protected INumericOperations<T> NumOps { get; set; } = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Initializes a new instance of the GeneticModelBase class.
     /// </summary>
     /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    protected GeneticBase(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
+    protected GeneticBase(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator, IModelEvaluator<T, TInput, TOutput> modelEvaluator)
     {
         FitnessCalculator = fitnessCalculator ?? throw new ArgumentNullException(nameof(fitnessCalculator));
         Population = [];
@@ -92,6 +95,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
         MutationOperators = [];
         EvolutionStopwatch = new Stopwatch();
         CurrentStats = new EvolutionStats<T, TInput, TOutput>(fitnessCalculator);
+        ModelEvaluator = modelEvaluator ?? throw new ArgumentNullException(nameof(modelEvaluator));
 
         // Register default operators
         AddDefaultCrossoverOperators();
@@ -106,22 +110,22 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
         // Single-point crossover
         AddCrossoverOperator("SinglePoint", (parent1, parent2, rate) =>
         {
-            var offspring = new List<TIndividual>();
+            var offspring = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
             if (Random.NextDouble() > rate)
             {
                 // Use pattern matching with null checks for cloning
-                if (parent1.Clone() is TIndividual clone1)
+                if (parent1.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone1)
                     offspring.Add(clone1);
 
-                if (parent2.Clone() is TIndividual clone2)
+                if (parent2.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone2)
                     offspring.Add(clone2);
 
                 return offspring;
             }
 
             // Clone with null checks
-            var child1 = parent1.Clone() as TIndividual;
-            var child2 = parent2.Clone() as TIndividual;
+            var child1 = parent1.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>;
+            var child2 = parent2.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>;
 
             // Check if either clone operation failed
             if (child1 == null || child2 == null)
@@ -135,9 +139,9 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
                 // If we couldn't add anything, add clones of the parents with null checks
                 if (offspring.Count == 0)
                 {
-                    if (parent1.Clone() is TIndividual clone1)
+                    if (parent1.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone1)
                         offspring.Add(clone1);
-                    if (parent2.Clone() is TIndividual clone2)
+                    if (parent2.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone2)
                         offspring.Add(clone2);
                 }
 
@@ -157,8 +161,8 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
 
             int crossoverPoint = Random.Next(Math.Min(genes1.Count, genes2.Count));
 
-            var newGenes1 = new List<TGene>();
-            var newGenes2 = new List<TGene>();
+            var newGenes1 = new List<ModelParameterGene<T>>();
+            var newGenes2 = new List<ModelParameterGene<T>>();
 
             for (int i = 0; i < Math.Max(genes1.Count, genes2.Count); i++)
             {
@@ -186,20 +190,20 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
         // Uniform crossover
         AddCrossoverOperator("Uniform", (parent1, parent2, rate) =>
         {
-            var offspring = new List<TIndividual>();
+            var offspring = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
             if (Random.NextDouble() > rate)
             {
-                if (parent1.Clone() is TIndividual clone1)
+                if (parent1.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone1)
                     offspring.Add(clone1);
 
-                if (parent2.Clone() is TIndividual clone2)
+                if (parent2.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone2)
                     offspring.Add(clone2);
 
                 return offspring;
             }
 
-            var child1 = parent1.Clone() as TIndividual;
-            var child2 = parent2.Clone() as TIndividual;
+            var child1 = parent1.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>;
+            var child2 = parent2.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>;
 
             // Check if either clone operation failed
             if (child1 == null || child2 == null)
@@ -213,9 +217,9 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
                 // If we couldn't add anything, add clones of the parents with null checks
                 if (offspring.Count == 0)
                 {
-                    if (parent1.Clone() is TIndividual clone1)
+                    if (parent1.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone1)
                         offspring.Add(clone1);
-                    if (parent2.Clone() is TIndividual clone2)
+                    if (parent2.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone2)
                         offspring.Add(clone2);
                 }
 
@@ -233,8 +237,8 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
                 return offspring;
             }
 
-            var newGenes1 = new List<TGene>();
-            var newGenes2 = new List<TGene>();
+            var newGenes1 = new List<ModelParameterGene<T>>();
+            var newGenes2 = new List<ModelParameterGene<T>>();
 
             for (int i = 0; i < Math.Max(genes1.Count, genes2.Count); i++)
             {
@@ -269,7 +273,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
         AddMutationOperator("Uniform", (individual, rate) =>
         {
             // Check if clone is null
-            if (individual.Clone() is not TIndividual clone)
+            if (individual.Clone() is not ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone)
             {
                 // If cloning failed, return the original individual
                 // This ensures we don't return null
@@ -294,7 +298,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
         AddMutationOperator("Gaussian", (individual, rate) =>
         {
             // Check if clone is null
-            if (individual.Clone() is not TIndividual clone)
+            if (individual.Clone() is not ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone)
             {
                 // If cloning failed, return the original individual
                 // This ensures we don't return null
@@ -321,14 +325,14 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="gene">The gene to mutate.</param>
     /// <returns>A mutated copy of the gene.</returns>
-    protected abstract TGene MutateGene(TGene gene);
+    protected abstract ModelParameterGene<T> MutateGene(ModelParameterGene<T> gene);
 
     /// <summary>
     /// Creates a mutated version of a gene using Gaussian noise.
     /// </summary>
     /// <param name="gene">The gene to mutate.</param>
     /// <returns>A mutated copy of the gene.</returns>
-    protected abstract TGene MutateGeneGaussian(TGene gene);
+    protected abstract ModelParameterGene<T> MutateGeneGaussian(ModelParameterGene<T> gene);
 
     #region IGeneticModel Implementation
 
@@ -355,7 +359,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// Gets the current population of individuals in the genetic model.
     /// </summary>
     /// <returns>A collection of individuals representing the current population.</returns>
-    public ICollection<TIndividual> GetPopulation()
+    public ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> GetPopulation()
     {
         return Population;
     }
@@ -363,9 +367,14 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <summary>
     /// Gets the best individual from the current population.
     /// </summary>
-    /// <returns>The individual with the highest fitness.</returns>
-    public TIndividual GetBestIndividual()
+    /// <returns>The individual with the highest fitness, or throws an exception if no best individual exists.</returns>
+    public ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> GetBestIndividual()
     {
+        if (BestIndividual == null)
+        {
+            throw new InvalidOperationException("No best individual found. Ensure the population has been evaluated.");
+        }
+
         return BestIndividual;
     }
 
@@ -379,7 +388,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <param name="validationOutput">Optional validation output data.</param>
     /// <returns>The calculated fitness score for the individual.</returns>
     public T EvaluateIndividual(
-        TIndividual individual,
+        ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> individual,
         TInput trainingInput,
         TOutput trainingOutput,
         TInput? validationInput = default,
@@ -390,30 +399,35 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
         // Generate predictions for training data
         TOutput predictedOutput = model.Predict(trainingInput);
 
-        // Calculate fitness score
-        T fitnessScore;
+        var subsetInputData = new OptimizationInputData<T, TInput, TOutput>
+        {
+            XTrain = trainingInput,
+            YTrain = trainingOutput,
+        };
 
+        var input = new ModelEvaluationInput<T, TInput, TOutput>
+        {
+            Model = model,
+            InputData = subsetInputData
+        };
+
+        // Train the model
+        input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);
+
+        // Evaluate the trained model
         if (validationInput != null && validationOutput != null)
         {
-            // Generate predictions for validation data
-            TOutput validationPredicted = model.Predict(validationInput);
+            input.InputData.XValidation = validationInput;
+            input.InputData.YValidation = validationOutput;
+        }
 
-            // Use both training and validation data for fitness calculation
-            fitnessScore = FitnessCalculator.CalculateFitnessScore(
-                predictedOutput, trainingOutput,
-                validationPredicted, validationOutput);
-        }
-        else
-        {
-            // Use only training data for fitness calculation
-            fitnessScore = FitnessCalculator.CalculateFitnessScore(
-                predictedOutput, trainingOutput);
-        }
+        var evaluationData = ModelEvaluator.EvaluateModel(input);
+        var currentFitnessScore = FitnessCalculator.CalculateFitnessScore(evaluationData);
 
         // Update the individual's fitness
-        individual.SetFitness(fitnessScore);
+        individual.SetFitness(currentFitnessScore);
 
-        return fitnessScore;
+        return currentFitnessScore;
     }
 
     /// <summary>
@@ -426,7 +440,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <param name="validationOutput">Optional validation output data.</param>
     /// <param name="stopCriteria">Optional function that determines when to stop evolution.</param>
     /// <returns>Statistics about the evolutionary process.</returns>
-    public EvolutionStats<T, TInput, TOutput> Evolve(
+    public virtual EvolutionStats<T, TInput, TOutput> Evolve(
         int generations,
         TInput trainingInput,
         TOutput trainingOutput,
@@ -531,13 +545,13 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <param name="validationInput">Optional validation input data.</param>
     /// <param name="validationOutput">Optional validation output data.</param>
     /// <returns>The new population.</returns>
-    protected virtual ICollection<TIndividual> CreateNextGeneration(
+    protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> CreateNextGeneration(
         TInput trainingInput,
         TOutput trainingOutput,
         TInput? validationInput = default,
         TOutput? validationOutput = default)
     {
-        List<TIndividual> newPopulation = new List<TIndividual>();
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> newPopulation = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
 
         // Elitism - keep the best individuals unchanged
         int eliteCount = (int)(GeneticParams.PopulationSize * GeneticParams.ElitismRate);
@@ -583,12 +597,12 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="count">The number of elite individuals to get.</param>
     /// <returns>The elite individuals.</returns>
-    protected virtual ICollection<TIndividual> GetElites(int count)
+    protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> GetElites(int count)
     {
         return Population
             .OrderByDescending(i => FitnessCalculator.IsHigherScoreBetter ? i.GetFitness() : InvertFitness(i.GetFitness()))
             .Take(count)
-            .Select(i => i.Clone() as TIndividual)
+            .Select(i => i.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>)
             .Where(i => i != null)  // Filter out any null values
             .ToList()!;
     }
@@ -627,17 +641,15 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     protected virtual void UpdateEvolutionStats()
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         // Find best, worst, and average fitness
-        T sumFitness = numOps.Zero;
-        T bestFit = FitnessCalculator.IsHigherScoreBetter ? numOps.MinValue : numOps.MaxValue;
-        T worstFit = FitnessCalculator.IsHigherScoreBetter ? numOps.MaxValue : numOps.MinValue;
+        T sumFitness = NumOps.Zero;
+        T bestFit = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue;
+        T worstFit = FitnessCalculator.IsHigherScoreBetter ? NumOps.MaxValue : NumOps.MinValue;
 
         foreach (var individual in Population)
         {
             T fitness = individual.GetFitness();
-            sumFitness = numOps.Add(sumFitness, fitness);
+            sumFitness = NumOps.Add(sumFitness, fitness);
 
             if (IsBetterFitness(fitness, bestFit))
             {
@@ -650,17 +662,17 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
             }
         }
 
-        T avgFitness = numOps.Divide(sumFitness, numOps.FromDouble(Population.Count));
+        T avgFitness = NumOps.Divide(sumFitness, NumOps.FromDouble(Population.Count));
 
         // Calculate fitness standard deviation
-        T sumSquaredDiff = numOps.Zero;
+        T sumSquaredDiff = NumOps.Zero;
         foreach (var individual in Population)
         {
-            T diff = numOps.Subtract(individual.GetFitness(), avgFitness);
-            sumSquaredDiff = numOps.Add(sumSquaredDiff, numOps.Multiply(diff, diff));
+            T diff = NumOps.Subtract(individual.GetFitness(), avgFitness);
+            sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
         }
 
-        T stdDev = numOps.Sqrt(numOps.Divide(sumSquaredDiff, numOps.FromDouble(Population.Count)));
+        T stdDev = NumOps.Sqrt(NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(Population.Count)));
 
         // Update stats
         CurrentStats.BestFitness = bestFit;
@@ -678,7 +690,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// Finds the best individual in the current population.
     /// </summary>
     /// <returns>The individual with the best fitness.</returns>
-    protected virtual TIndividual FindBestIndividual()
+    protected virtual ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> FindBestIndividual()
     {
         return Population
             .OrderByDescending(i => FitnessCalculator.IsHigherScoreBetter ? i.GetFitness() : InvertFitness(i.GetFitness()))
@@ -691,26 +703,24 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <returns>A measure of genetic diversity.</returns>
     protected virtual T CalculateDiversity()
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         if (Population.Count <= 1)
         {
-            return numOps.Zero;
+            return NumOps.Zero;
         }
 
-        T totalDistance = numOps.Zero;
+        T totalDistance = NumOps.Zero;
         int comparisons = 0;
 
         for (int i = 0; i < Population.Count; i++)
         {
             for (int j = i + 1; j < Population.Count; j++)
             {
-                totalDistance = numOps.Add(totalDistance, CalculateGeneticDistance(Population[i], Population[j]));
+                totalDistance = NumOps.Add(totalDistance, CalculateGeneticDistance(Population[i], Population[j]));
                 comparisons++;
             }
         }
 
-        return numOps.Divide(totalDistance, numOps.FromDouble(comparisons));
+        return NumOps.Divide(totalDistance, NumOps.FromDouble(comparisons));
     }
 
     /// <summary>
@@ -719,9 +729,10 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <param name="individual1">The first individual.</param>
     /// <param name="individual2">The second individual.</param>
     /// <returns>A measure of genetic distance.</returns>
-    protected virtual T CalculateGeneticDistance(TIndividual individual1, TIndividual individual2)
+    protected virtual T CalculateGeneticDistance(
+        ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> individual1,
+        ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> individual2)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         var genes1 = individual1.GetGenes().ToList();
         var genes2 = individual2.GetGenes().ToList();
 
@@ -742,7 +753,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
         // Add differences for length mismatch
         differences += Math.Abs(genes1.Count - genes2.Count);
 
-        return numOps.FromDouble(differences);
+        return NumOps.FromDouble(differences);
     }
 
     /// <summary>
@@ -752,8 +763,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <returns>The inverted fitness score.</returns>
     protected virtual T InvertFitness(T fitness)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return numOps.Negate(fitness);
+        return NumOps.Negate(fitness);
     }
 
     /// <summary>
@@ -764,15 +774,14 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <returns>True if fitnessA is better than fitnessB; otherwise, false.</returns>
     protected virtual bool IsBetterFitness(T fitnessA, T fitnessB)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
 
         if (FitnessCalculator.IsHigherScoreBetter)
         {
-            return numOps.GreaterThan(fitnessA, fitnessB);
+            return NumOps.GreaterThan(fitnessA, fitnessB);
         }
         else
         {
-            return numOps.LessThan(fitnessA, fitnessB);
+            return NumOps.LessThan(fitnessA, fitnessB);
         }
     }
 
@@ -783,7 +792,10 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <param name="parent2">The second parent individual.</param>
     /// <param name="crossoverRate">The probability of crossover occurring.</param>
     /// <returns>One or more offspring produced by crossover.</returns>
-    public virtual ICollection<TIndividual> Crossover(TIndividual parent1, TIndividual parent2, double crossoverRate)
+    public virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> Crossover(
+        ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> parent1,
+        ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> parent2,
+        double crossoverRate)
     {
         if (!CrossoverOperators.TryGetValue(GeneticParams.CrossoverOperator, out var crossoverFunc))
         {
@@ -799,7 +811,9 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <param name="individual">The individual to mutate.</param>
     /// <param name="mutationRate">The probability of each gene mutating.</param>
     /// <returns>The mutated individual.</returns>
-    public virtual TIndividual Mutate(TIndividual individual, double mutationRate)
+    public virtual ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> Mutate(
+        ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> individual,
+        double mutationRate)
     {
         if (!MutationOperators.TryGetValue(GeneticParams.MutationOperator, out var mutationFunc))
         {
@@ -815,7 +829,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <param name="selectionSize">The number of individuals to select.</param>
     /// <param name="selectionMethod">The method to use for selection (e.g., tournament, roulette wheel).</param>
     /// <returns>The selected individuals.</returns>
-    public virtual ICollection<TIndividual> Select(int selectionSize, SelectionMethod selectionMethod)
+    public virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> Select(int selectionSize, SelectionMethod selectionMethod)
     {
         return selectionMethod switch
         {
@@ -835,14 +849,14 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="selectionSize">The number of individuals to select.</param>
     /// <returns>The selected individuals.</returns>
-    protected virtual ICollection<TIndividual> TruncationSelection(int selectionSize)
+    protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> TruncationSelection(int selectionSize)
     {
         // Sort population by fitness and take the top selectionSize individuals
         return Population
             .OrderByDescending(i => FitnessCalculator.IsHigherScoreBetter ? i.GetFitness() : InvertFitness(i.GetFitness()))
             .Take(selectionSize)
-            .Select(i => i.Clone() as TIndividual)
-            .Where(i => i != null)  // Filter out any null values
+            .Select(i => i.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>)
+            .Where(i => i != null)
             .ToList()!;
     }
 
@@ -851,14 +865,25 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="selectionSize">The number of individuals to select.</param>
     /// <returns>The selected individuals.</returns>
-    protected virtual ICollection<TIndividual> UniformSelection(int selectionSize)
+    protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> UniformSelection(int selectionSize)
     {
-        List<TIndividual> selected = [];
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = [];
 
         for (int i = 0; i < selectionSize; i++)
         {
             int randomIndex = Random.Next(Population.Count);
-            selected.Add(Population[randomIndex].Clone() as TIndividual);
+
+            // Only add the clone if it's not null
+            if (Population[randomIndex].Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone)
+            {
+                selected.Add(clone);
+            }
+            else
+            {
+                // If cloning failed, try to add the original individual
+                // This is a fallback to ensure we don't skip selections
+                i--; // Retry this iteration
+            }
         }
 
         return selected;
@@ -869,10 +894,9 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="selectionSize">The number of individuals to select.</param>
     /// <returns>The selected individuals.</returns>
-    protected virtual ICollection<TIndividual> StochasticUniversalSamplingSelection(int selectionSize)
+    protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> StochasticUniversalSamplingSelection(int selectionSize)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        List<TIndividual> selected = [];
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = [];
 
         // Calculate selection probabilities
         List<double> fitnessValues = [];
@@ -934,7 +958,22 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
                 index++;
             }
 
-            selected.Add(Population[index].Clone() as TIndividual);
+            // Clone with null check
+            if (Population[index].Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone)
+            {
+                selected.Add(clone);
+            }
+            else
+            {
+                // If cloning failed, try again with a different individual
+                // This is a fallback to ensure we don't skip selections
+                int alternateIndex = (index + 1) % Population.Count;
+                if (Population[alternateIndex].Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> alternateClone)
+                {
+                    selected.Add(alternateClone);
+                }
+                // If both attempts fail, we'll just continue without adding to maintain the algorithm's flow
+            }
         }
 
         return selected;
@@ -945,18 +984,18 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="selectionSize">The number of individuals to select.</param>
     /// <returns>The selected individuals.</returns>
-    protected virtual ICollection<TIndividual> TournamentSelection(int selectionSize)
+    protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> TournamentSelection(int selectionSize)
     {
-        List<TIndividual> selected = [];
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = [];
 
         for (int i = 0; i < selectionSize; i++)
         {
-            TIndividual? best = null;
+            ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>? best = null;
 
             for (int j = 0; j < GeneticParams.TournamentSize; j++)
             {
                 int randomIndex = Random.Next(Population.Count);
-                TIndividual contender = Population[randomIndex];
+                ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> contender = Population[randomIndex];
 
                 if (best == null || IsBetterFitness(contender.GetFitness(), best.GetFitness()))
                 {
@@ -964,7 +1003,27 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
                 }
             }
 
-            selected.Add(best.Clone() as TIndividual);
+            // At this point, best should never be null since we're selecting from a non-empty population
+            // But we'll add a null check to be safe
+            if (best != null)
+            {
+                if (best.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone)
+                {
+                    selected.Add(clone);
+                }
+                else
+                {
+                    // If cloning failed, try to add the original individual
+                    // This is a fallback to ensure we don't skip selections
+                    i--; // Retry this iteration
+                }
+            }
+            else
+            {
+                // This should never happen with a non-empty population
+                // But if it does, retry the selection
+                i--;
+            }
         }
 
         return selected;
@@ -975,13 +1034,12 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="selectionSize">The number of individuals to select.</param>
     /// <returns>The selected individuals.</returns>
-    protected virtual ICollection<TIndividual> RouletteWheelSelection(int selectionSize)
+    protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> RouletteWheelSelection(int selectionSize)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        List<TIndividual> selected = new List<TIndividual>();
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = [];
 
         // Calculate selection probabilities
-        List<double> fitnessValues = new List<double>();
+        List<double> fitnessValues = [];
 
         // Adjust for minimization problems
         foreach (var individual in Population)
@@ -1007,7 +1065,15 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
             for (int i = 0; i < selectionSize; i++)
             {
                 int randomIndex = Random.Next(Population.Count);
-                selected.Add(Population[randomIndex].Clone() as TIndividual);
+                if (Population[randomIndex].Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone)
+                {
+                    selected.Add(clone);
+                }
+                else
+                {
+                    // If cloning failed, try again
+                    i--; // Retry this iteration
+                }
             }
 
             return selected;
@@ -1027,14 +1093,25 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
         for (int i = 0; i < selectionSize; i++)
         {
             double randomValue = Random.NextDouble();
+            bool selectedIndividual = false;
 
             for (int j = 0; j < cumulativeProbabilities.Count; j++)
             {
                 if (randomValue <= cumulativeProbabilities[j])
                 {
-                    selected.Add(Population[j].Clone() as TIndividual);
-                    break;
+                    if (Population[j].Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone)
+                    {
+                        selected.Add(clone);
+                        selectedIndividual = true;
+                        break;
+                    }
                 }
+            }
+
+            // If we couldn't select an individual (due to cloning failure), try again
+            if (!selectedIndividual)
+            {
+                i--; // Retry this iteration
             }
         }
 
@@ -1046,9 +1123,9 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="selectionSize">The number of individuals to select.</param>
     /// <returns>The selected individuals.</returns>
-    protected virtual ICollection<TIndividual> RankSelection(int selectionSize)
+    protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> RankSelection(int selectionSize)
     {
-        List<TIndividual> selected = [];
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = [];
 
         // Sort population by fitness
         var sortedPopulation = Population
@@ -1071,14 +1148,25 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
         for (int i = 0; i < selectionSize; i++)
         {
             double randomValue = Random.NextDouble();
+            bool selectedIndividual = false;
 
             for (int j = 0; j < cumulativeProbabilities.Count; j++)
             {
                 if (randomValue <= cumulativeProbabilities[j])
                 {
-                    selected.Add(sortedPopulation[j].Clone() as TIndividual);
-                    break;
+                    if (sortedPopulation[j].Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone)
+                    {
+                        selected.Add(clone);
+                        selectedIndividual = true;
+                        break;
+                    }
                 }
+            }
+
+            // If we couldn't select an individual (due to cloning failure), try again
+            if (!selectedIndividual)
+            {
+                i--; // Retry this iteration
             }
         }
 
@@ -1091,21 +1179,25 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// <param name="populationSize">The size of the population to create.</param>
     /// <param name="initializationMethod">The method to use for initialization.</param>
     /// <returns>The newly created population.</returns>
-    public abstract ICollection<TIndividual> InitializePopulation(int populationSize, InitializationMethod initializationMethod);
+    public abstract ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> InitializePopulation(
+        int populationSize,
+        InitializationMethod initializationMethod);
 
     /// <summary>
     /// Creates a new individual with the specified genes.
     /// </summary>
     /// <param name="genes">The genes to include in the individual.</param>
     /// <returns>A new individual with the specified genes.</returns>
-    public abstract TIndividual CreateIndividual(ICollection<TGene> genes);
+    public abstract ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> CreateIndividual(
+        ICollection<ModelParameterGene<T>> genes);
 
     /// <summary>
     /// Converts an individual to a trained model that can make predictions.
     /// </summary>
     /// <param name="individual">The individual to convert.</param>
     /// <returns>A model capable of making predictions based on the individual's genes.</returns>
-    public abstract IModel<TInput, TOutput, ModelMetaData<T>> IndividualToModel(TIndividual individual);
+    public abstract IFullModel<T, TInput, TOutput> IndividualToModel(
+        ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> individual);
 
     /// <summary>
     /// Gets statistics about the current evolutionary state.
@@ -1140,7 +1232,12 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="name">The name of the crossover operator.</param>
     /// <param name="crossoverOperator">The crossover function.</param>
-    public virtual void AddCrossoverOperator(string name, Func<TIndividual, TIndividual, double, ICollection<TIndividual>> crossoverOperator)
+    public virtual void AddCrossoverOperator(
+        string name,
+        Func<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>,
+             ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>,
+             double,
+             ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>> crossoverOperator)
     {
         if (string.IsNullOrEmpty(name))
         {
@@ -1155,7 +1252,11 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="name">The name of the mutation operator.</param>
     /// <param name="mutationOperator">The mutation function.</param>
-    public virtual void AddMutationOperator(string name, Func<TIndividual, double, TIndividual> mutationOperator)
+    public virtual void AddMutationOperator(
+        string name,
+        Func<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>,
+             double,
+             ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> mutationOperator)
     {
         if (string.IsNullOrEmpty(name))
         {
@@ -1189,7 +1290,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="filePath">The path from which to load the population.</param>
     /// <returns>The loaded population.</returns>
-    public virtual ICollection<TIndividual> LoadPopulation(string filePath)
+    public virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> LoadPopulation(string filePath)
     {
         if (!File.Exists(filePath))
         {
@@ -1217,7 +1318,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="data">The byte array containing the serialized population.</param>
     /// <returns>The deserialized population.</returns>
-    protected abstract ICollection<TIndividual> DeserializePopulation(byte[] data);
+    protected abstract ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> DeserializePopulation(byte[] data);
 
     #endregion
 
@@ -1258,7 +1359,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
             writer.Write(1); // Version 1
 
             // Write genetic parameters
-            writer.Write(JsonSerializer.Serialize(GeneticParams));
+            writer.Write(JsonConvert.SerializeObject(GeneticParams));
 
             // Write best individual if available
             bool hasBestIndividual = BestIndividual != null;
@@ -1266,7 +1367,8 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
 
             if (hasBestIndividual)
             {
-                byte[] individualData = SerializeIndividual(BestIndividual);
+                // BestIndividual is guaranteed to be non-null here because of the check above
+                byte[] individualData = SerializeIndividual(BestIndividual!);
                 writer.Write(individualData.Length);
                 writer.Write(individualData);
             }
@@ -1285,7 +1387,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="individual">The individual to serialize.</param>
     /// <returns>A byte array containing the serialized individual.</returns>
-    protected abstract byte[] SerializeIndividual(TIndividual individual);
+    protected abstract byte[] SerializeIndividual(ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> individual);
 
     /// <summary>
     /// Serializes model-specific data.
@@ -1312,7 +1414,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
 
             // Read genetic parameters
             string paramsJson = reader.ReadString();
-            GeneticParams = JsonSerializer.Deserialize<GeneticParameters>(paramsJson);
+            GeneticParams = JsonConvert.DeserializeObject<GeneticParameters>(paramsJson) ?? new GeneticParameters();
 
             // Read best individual if available
             bool hasBestIndividual = reader.ReadBoolean();
@@ -1336,7 +1438,7 @@ public abstract class GeneticBase<T, TInput, TOutput, TIndividual, TGene> :
     /// </summary>
     /// <param name="data">The byte array containing the serialized individual.</param>
     /// <returns>The deserialized individual.</returns>
-    protected abstract TIndividual DeserializeIndividual(byte[] data);
+    protected abstract ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> DeserializeIndividual(byte[] data);
 
     /// <summary>
     /// Deserializes model-specific data.

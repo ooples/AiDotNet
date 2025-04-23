@@ -51,7 +51,7 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     /// The smallest value becomes 0, the largest becomes 1, and everything else is proportionally distributed.
     /// </para>
     /// </remarks>
-    public override (TOutput, NormalizationParameters<T>) Normalize(TOutput data)
+    public override (TOutput, NormalizationParameters<T>) NormalizeOutput(TOutput data)
     {
         if (data is Vector<T> vector)
         {
@@ -110,7 +110,7 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     /// Each feature (column) is normalized separately to its own 0-1 range.
     /// </para>
     /// </remarks>
-    public override (TInput, List<NormalizationParameters<T>>) Normalize(TInput data)
+    public override (TInput, List<NormalizationParameters<T>>) NormalizeInput(TInput data)
     {
         if (data is Matrix<T> matrix)
         {

@@ -229,7 +229,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// expression that describes your data pattern.
     /// </para>
     /// </remarks>
-    private IFullModel<T, Matrix<T>, Vector<T>> _bestModel;
+    private IFullModel<T, Matrix<T>, Vector<T>>? _bestModel;
     
     /// <summary>
     /// The fitness score of the best model found.
@@ -336,7 +336,6 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         _fitDetector = fitDetector ?? new DefaultFitDetector<T, Matrix<T>, Vector<T>>();
         _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T, Matrix<T>, Vector<T>>();
         _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T, Matrix<T>, Vector<T>>(_normalizer, _featureSelector, _outlierRemoval);
-        _bestModel = SymbolicModelFactory<T, Matrix<T>, Vector<T>>.CreateRandomModel(true, 1);
         _bestFitness = _fitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue;
     }
 
@@ -372,7 +371,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Preprocess the data
-        var (preprocessedX, preprocessedY, normInfo) = _dataPreprocessor.PreprocessData(x, y);
+        var (preprocessedX, preprocessedY, _) = _dataPreprocessor.PreprocessData(x, y);
         // Split the data
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
         // Optimize the model
@@ -406,7 +405,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> X)
     {
-        return _bestModel.Predict(X);
+        return _bestModel?.Predict(X) ?? Vector<T>.Empty();
     }
 
     /// <summary>
@@ -433,6 +432,11 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
+        if (_bestModel == null)
+        {
+            throw new InvalidOperationException("The model has not been optimized yet. Please call OptimizeModel first.");
+        }
+
         Vector<T> regularizedInput = Regularization.Regularize(input);
         return _bestModel.Predict(Matrix<T>.FromVector(regularizedInput))[0];
     }

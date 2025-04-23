@@ -253,7 +253,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="input">The input data for model evaluation.</param>
     /// <returns>A tuple containing the fitness score, fit detection result, and evaluation data.</returns>
     private (T CurrentFitnessScore, FitDetectorResult<T> FitDetectionResult, ModelEvaluationData<T, TInput, TOutput> EvaluationData)
-    TrainAndEvaluateSolution(ModelEvaluationInput<T, TInput, TOutput> input)
+        TrainAndEvaluateSolution(ModelEvaluationInput<T, TInput, TOutput> input)
     {
         // Train the model
         input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);

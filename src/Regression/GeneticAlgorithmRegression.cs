@@ -62,7 +62,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// <summary>
     /// The best model found by the genetic algorithm.
     /// </summary>
-    private IFullModel<T, Matrix<T>, Vector<T>> _bestModel;
+    private IFullModel<T, Matrix<T>, Vector<T>>? _bestModel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GeneticAlgorithmRegression{T}"/> class.
@@ -161,14 +161,14 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         // Preprocess the data
-        var (preprocessedX, preprocessedY, normInfo) = _dataPreprocessor.PreprocessData(x, y);
+        var (preprocessedX, preprocessedY, _) = _dataPreprocessor.PreprocessData(x, y);
 
         // Split the data
         var (xTrain, yTrain, xVal, yVal, xTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         var result = _optimizer.Optimize(OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(xTrain, yTrain, xVal, yVal, xTest, yTest));
 
-        _bestModel = (VectorModel<T>)result.BestSolution;
+        _bestModel = result.BestSolution;
         UpdateCoefficientsAndIntercept();
     }
 
@@ -197,7 +197,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
-        return _bestModel.Predict(x);
+        return _bestModel?.Predict(x) ?? Vector<T>.Empty();
     }
 
     /// <summary>
@@ -211,7 +211,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </summary>
     private void UpdateCoefficientsAndIntercept()
     {
-        Coefficients = _bestModel.GetParameters();
+        Coefficients = _bestModel?.GetParameters() ?? Vector<T>.Empty();
 
         if (HasIntercept)
         {
@@ -268,7 +268,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         writer.Write(baseData);
 
         // Serialize GeneticAlgorithmRegression specific data
-        var parameters = _bestModel.GetParameters();
+        var parameters = _bestModel?.GetParameters() ?? Vector<T>.Empty();
         writer.Write(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {

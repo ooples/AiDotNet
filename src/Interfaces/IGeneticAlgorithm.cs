@@ -45,7 +45,7 @@
 /// - Evolving game-playing strategies or agent behaviors
 /// </para>
 /// </remarks>
-public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene> : 
+public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     where TIndividual : class, IEvolvable<TGene, T>
     where TGene : class
 {
@@ -151,13 +151,13 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene> :
     /// <param name="genes">The genes to include in the individual.</param>
     /// <returns>A new individual with the specified genes.</returns>
     TIndividual CreateIndividual(ICollection<TGene> genes);
-    
+
     /// <summary>
     /// Converts an individual to a trained model that can make predictions.
     /// </summary>
     /// <param name="individual">The individual to convert.</param>
     /// <returns>A model capable of making predictions based on the individual's genes.</returns>
-    IModel<TInput, TOutput, ModelMetaData<T>> IndividualToModel(TIndividual individual);
+    IFullModel<T, TInput, TOutput> IndividualToModel(TIndividual individual);
     
     /// <summary>
     /// Gets statistics about the current evolutionary state, including generation number,

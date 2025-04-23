@@ -102,7 +102,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
     /// This approach works well when you have extreme values that shouldn't overly influence your scaling.
     /// </para>
     /// </remarks>
-    public override (TOutput, NormalizationParameters<T>) Normalize(TOutput data)
+    public override (TOutput, NormalizationParameters<T>) NormalizeOutput(TOutput data)
     {
         if (data is Vector<T> vector)
         {
@@ -175,7 +175,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
     /// - The statistics for each column, so you can convert back to original values later if needed
     /// </para>
     /// </remarks>
-    public override (TInput, List<NormalizationParameters<T>>) Normalize(TInput data)
+    public override (TInput, List<NormalizationParameters<T>>) NormalizeInput(TInput data)
     {
         if (data is Matrix<T> matrix)
         {
@@ -186,7 +186,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
             {
                 var column = matrix.GetColumn(i);
                 // Convert column to TOutput for normalize method
-                var (normalizedColumn, parameters) = Normalize((TOutput)(object)column);
+                var (normalizedColumn, parameters) = NormalizeOutput((TOutput)(object)column);
                 // Convert back to Vector<T>
                 if (normalizedColumn is Vector<T> normalizedVector)
                 {
@@ -225,7 +225,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
             {
                 var column = newMatrix.GetColumn(i);
                 // Convert column to TOutput for normalize method
-                var (normalizedColumn, parameters) = Normalize((TOutput)(object)column);
+                var (normalizedColumn, parameters) = NormalizeOutput((TOutput)(object)column);
                 // Convert back to Vector<T>
                 if (normalizedColumn is Vector<T> normalizedVector)
                 {

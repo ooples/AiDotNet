@@ -99,23 +99,38 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector);
 
     /// <summary>
-    /// Configures the regression algorithm for the model.
+    /// Configures the prediction model algorithm to use.
     /// </summary>
     /// <remarks>
-    /// The regression component determines the core algorithm used to learn patterns from data.
+    /// This method lets you specify which machine learning algorithm will be used as the core of your predictive model.
     /// 
-    /// <b>For Beginners:</b> Regression is a technique for predicting numeric values (like prices, 
-    /// temperatures, or scores). This method lets you choose which specific regression algorithm 
-    /// to use, such as:
-    /// - Linear regression (finds the best straight line through your data)
-    /// - Polynomial regression (finds curves that fit your data)
-    /// - Ridge or Lasso regression (special types that help prevent overfitting)
+    /// <b>For Beginners:</b> This is where you choose the specific type of AI model for your prediction task.
+    /// You can select from various algorithms depending on your needs:
     /// 
-    /// Different algorithms work better for different types of problems.
+    /// - <b>Regression models</b> for predicting numeric values:
+    ///   - Linear regression (for simple straight-line relationships)
+    ///   - Polynomial regression (for curved relationships)
+    ///   - Ridge or Lasso regression (to prevent overfitting)
+    /// 
+    /// - <b>Classification models</b> for categorizing data:
+    ///   - Logistic regression (for yes/no predictions)
+    ///   - Decision trees (for rule-based decisions)
+    ///   - Support vector machines (for complex boundaries)
+    /// 
+    /// - <b>Neural networks</b> for complex pattern recognition:
+    ///   - Simple neural networks (for moderate complexity)
+    ///   - Deep learning models (for highly complex patterns)
+    /// 
+    /// - <b>Time series models</b> for sequential data:
+    ///   - ARIMA (for forecasting trends)
+    ///   - LSTM networks (for long-term patterns)
+    /// 
+    /// Different models excel at different types of problems, so choosing the right one
+    /// depends on your specific data and prediction goals.
     /// </remarks>
-    /// <param name="regression">The regression implementation to use.</param>
+    /// <param name="model">The prediction model implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRegression(IRegression<T> regression);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
     /// Configures the optimization algorithm for the model.

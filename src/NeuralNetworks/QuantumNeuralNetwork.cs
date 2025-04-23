@@ -368,7 +368,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<Complex<T>> PrepareQuantumState(Tensor<T> input)
     {
-        var (normalizedInput, _) = _normalizer.Normalize(input);
+        var (normalizedInput, _) = _normalizer.NormalizeInput(input);
         var quantumState = new Tensor<Complex<T>>([normalizedInput.Length]);
 
         for (int i = 0; i < normalizedInput.Length; i++)

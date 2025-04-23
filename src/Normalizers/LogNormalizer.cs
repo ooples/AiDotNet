@@ -104,7 +104,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
     /// which appears as equal steps in the normalized data.
     /// </para>
     /// </remarks>
-    public override (TOutput, NormalizationParameters<T>) Normalize(TOutput data)
+    public override (TOutput, NormalizationParameters<T>) NormalizeOutput(TOutput data)
     {
         if (data is Vector<T> vector)
         {
@@ -201,7 +201,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
     /// - The parameters for each column, so you can convert back to original values later if needed
     /// </para>
     /// </remarks>
-    public override (TInput, List<NormalizationParameters<T>>) Normalize(TInput data)
+    public override (TInput, List<NormalizationParameters<T>>) NormalizeInput(TInput data)
     {
         if (data is Matrix<T> matrix)
         {
@@ -212,7 +212,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
             {
                 var column = matrix.GetColumn(i);
                 // Convert column to TOutput for normalize method
-                var (normalizedColumn, parameters) = Normalize((TOutput)(object)column);
+                var (normalizedColumn, parameters) = NormalizeOutput((TOutput)(object)column);
                 // Convert back to Vector<T>
                 if (normalizedColumn is Vector<T> normalizedVector)
                 {
@@ -251,7 +251,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
             {
                 var column = newMatrix.GetColumn(i);
                 // Convert column to TOutput for normalize method
-                var (normalizedColumn, parameters) = Normalize((TOutput)(object)column);
+                var (normalizedColumn, parameters) = NormalizeOutput((TOutput)(object)column);
                 // Convert back to Vector<T>
                 if (normalizedColumn is Vector<T> normalizedVector)
                 {

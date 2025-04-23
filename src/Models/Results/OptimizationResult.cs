@@ -68,7 +68,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// - It allows for flexibility in the types of models that can be optimized
     /// </para>
     /// </remarks>
-    public IFullModel<T, TInput, TOutput> BestSolution { get; set; }
+    public IFullModel<T, TInput, TOutput>? BestSolution { get; set; }
     
     /// <summary>
     /// Gets or sets the intercept term of the best solution.
@@ -445,7 +445,6 @@ public class OptimizationResult<T, TInput, TOutput>
     public OptimizationResult()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        BestSolution = SymbolicModelFactory<T>.CreateRandomModel(false, 1); // Default to vector model
         FitnessHistory = Vector<T>.Empty();
         SelectedFeatures = [];
         TrainingResult = new DatasetResult();

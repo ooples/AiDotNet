@@ -303,7 +303,7 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
             throw new InvalidOperationException("Normalizer is not initialized.");
         }
 
-        var (normalizedNewData, _) = NormalizationInfo.Normalizer.Normalize(newData);
+        var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(newData);
         var normalizedPredictions = Model.Predict(normalizedNewData);
 
         return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);

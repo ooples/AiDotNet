@@ -96,15 +96,15 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
 
         if (_options.NormalizeBeforeFeatureSelection)
         {
-            (X, normInfo.XParams) = _normalizer.Normalize(X);
-            (y, normInfo.YParams) = _normalizer.Normalize(y);
+            (X, normInfo.XParams) = _normalizer.NormalizeInput(X);
+            (y, normInfo.YParams) = _normalizer.NormalizeOutput(y);
             X = _featureSelector.SelectFeatures(X);
         }
         else
         {
             X = _featureSelector.SelectFeatures(X);
-            (X, normInfo.XParams) = _normalizer.Normalize(X);
-            (y, normInfo.YParams) = _normalizer.Normalize(y);
+            (X, normInfo.XParams) = _normalizer.NormalizeInput(X);
+            (y, normInfo.YParams) = _normalizer.NormalizeOutput(y);
         }
 
         return (X, y, normInfo);

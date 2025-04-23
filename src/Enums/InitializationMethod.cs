@@ -28,5 +28,7 @@ public enum InitializationMethod
     /// <summary>
     /// Grid initialization - create individuals that systematically cover the solution space.
     /// </summary>
-    Grid
+    Grid,
+
+    XavierUniform
 }

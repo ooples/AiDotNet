@@ -444,7 +444,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         var result = optimizer.Optimize(inputData);
 
         // Update model parameters with optimized values
-        Vector<T> optimizedParameters = result.BestSolution.GetParameters();
+        Vector<T> optimizedParameters = result.BestSolution?.GetParameters() ?? Vector<T>.Empty();
         for (int i = 0; i < p; i++)
         {
             _regressors[i] = optimizedParameters[i];

@@ -76,7 +76,7 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
     /// even when no normalization is needed for a particular case.
     /// </para>
     /// </remarks>
-    public override (TOutput, NormalizationParameters<T>) Normalize(TOutput data)
+    public override (TOutput, NormalizationParameters<T>) NormalizeOutput(TOutput data)
     {
         // Since we're just passing through the data, we don't need type-specific handling
         // as long as the input and output types match, but for consistency with other normalizers,
@@ -115,7 +115,7 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
     /// even when no normalization is needed for a particular dataset.
     /// </para>
     /// </remarks>
-    public override (TInput, List<NormalizationParameters<T>>) Normalize(TInput data)
+    public override (TInput, List<NormalizationParameters<T>>) NormalizeInput(TInput data)
     {
         if (data is Matrix<T> matrix)
         {

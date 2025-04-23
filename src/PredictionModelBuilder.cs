@@ -33,7 +33,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IRegularization<T, TInput, TOutput>? _regularization;
     private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
     private IFitDetector<T, TInput, TOutput>? _fitDetector;
-    private IRegression<T>? _regression;
+    private IFullModel<T, TInput, TOutput>? _model;
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
@@ -136,18 +136,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Configures the core regression algorithm to use for predictions.
+    /// Configures the core algorithm to use for predictions.
     /// </summary>
-    /// <param name="regression">The regression algorithm to use.</param>
+    /// <param name="model">The prediction algorithm to use.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This is the main "brain" of your AI model - the algorithm that will
     /// learn patterns from your data and make predictions. Different algorithms work better for
     /// different types of problems, so you can choose the one that fits your needs.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRegression(IRegression<T> regression)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model)
     {
-        _regression = regression;
+        _model = model;
         return this;
     }
 
@@ -229,8 +229,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             throw new ArgumentNullException(nameof(y), "Output vector can't be null");
         if (convertedX.Rows != convertedY.Length)
             throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
-        if (_regression == null)
-            throw new InvalidOperationException("Regression method must be specified");
+        if (_model == null)
+            throw new InvalidOperationException("Model implementation must be specified");
 
         // Use defaults for these interfaces if they aren't set
         var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
@@ -251,7 +251,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Optimize the model
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
-        return new PredictionModelResult<T, TInput, TOutput>(_regression, optimizationResult, normInfo);
+        return new PredictionModelResult<T, TInput, TOutput>(_model, optimizationResult, normInfo);
     }
 
     /// <summary>

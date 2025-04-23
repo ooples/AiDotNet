@@ -117,7 +117,7 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
     /// values like [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] representing which bin they fall into.
     /// </para>
     /// </remarks>
-    public override (TOutput, NormalizationParameters<T>) Normalize(TOutput data)
+    public override (TOutput, NormalizationParameters<T>) NormalizeOutput(TOutput data)
     {
         if (data is Vector<T> vector)
         {
@@ -206,7 +206,7 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
     /// - A separate set of bin boundaries for each column, so you can reverse the process later
     /// </para>
     /// </remarks>
-    public override (TInput, List<NormalizationParameters<T>>) Normalize(TInput data)
+    public override (TInput, List<NormalizationParameters<T>>) NormalizeInput(TInput data)
     {
         if (data is Matrix<T> matrix)
         {
@@ -217,7 +217,7 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
             {
                 var column = matrix.GetColumn(i);
                 // Convert column to TOutput for normalize method
-                var (normalizedColumn, parameters) = Normalize((TOutput)(object)column);
+                var (normalizedColumn, parameters) = NormalizeOutput((TOutput)(object)column);
                 // Convert back to Vector<T>
                 if (normalizedColumn is Vector<T> normalizedVector)
                 {
@@ -256,7 +256,7 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
             {
                 var column = newMatrix.GetColumn(i);
                 // Convert column to TOutput for normalize method
-                var (normalizedColumn, parameters) = Normalize((TOutput)(object)column);
+                var (normalizedColumn, parameters) = NormalizeOutput((TOutput)(object)column);
                 // Convert back to Vector<T>
                 if (normalizedColumn is Vector<T> normalizedVector)
                 {
