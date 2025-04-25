@@ -146,7 +146,8 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     /// Then it initializes the layers of the network accordingly.
     /// </para>
     /// </remarks>
-    public RadialBasisFunctionNetwork(NeuralNetworkArchitecture<T> architecture, IRadialBasisFunction<T>? radialBasisFunction = null) : base(architecture)
+    public RadialBasisFunctionNetwork(NeuralNetworkArchitecture<T> architecture, IRadialBasisFunction<T>? radialBasisFunction = null, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         // Get the input shape and output size from the architecture
         var inputShape = architecture.GetInputShape();
@@ -374,6 +375,9 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
         Vector<T> errorVector = outputVector.Subtract(expectedOutputVector);
 
+        // Calculate and set the loss using the loss function
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedOutputVector);
+
         // Backpropagate error through the network
         Backpropagate(errorVector);
     }
@@ -518,6 +522,6 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         // Create a new instance with the cloned architecture and RBF
-        return new RadialBasisFunctionNetwork<T>(Architecture, _radialBasisFunction);
+        return new RadialBasisFunctionNetwork<T>(Architecture, _radialBasisFunction, LossFunction);
     }
 }

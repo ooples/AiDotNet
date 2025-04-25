@@ -71,7 +71,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0) : base(architecture, maxGradNorm)
+        double maxGradNorm = 1.0) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
         
@@ -259,29 +259,23 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         IsTrainingMode = true;
 
-        try
-        {
-            // Forward pass to get prediction
-            var prediction = Forward(input);
+        // Forward pass to get prediction
+        var prediction = Forward(input);
 
-            // Calculate loss
-            var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+        // Calculate loss
+        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
-            // Calculate output gradient (derivative of loss with respect to network output)
-            var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
+        // Calculate output gradient (derivative of loss with respect to network output)
+        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+        var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
 
-            // Backpropagation
-            var inputGradient = Backward(outputGradientTensor);
+        // Backpropagation
+        var inputGradient = Backward(outputGradientTensor);
 
-            // Update parameters using the optimizer
-            _optimizer.UpdateParameters(Layers);
-        }
-        finally
-        {
-            // Ensure we switch back to inference mode even if an exception occurs
-            IsTrainingMode = false;
-        }
+        // Update parameters using the optimizer
+        _optimizer.UpdateParameters(Layers);
+
+        IsTrainingMode = false;
     }
 
     /// <summary>

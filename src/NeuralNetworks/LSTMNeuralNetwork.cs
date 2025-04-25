@@ -36,11 +36,6 @@ namespace AiDotNet.NeuralNetworks;
 public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     /// <summary>
-    /// The loss function used for training the network.
-    /// </summary>
-    private ILossFunction<T> LossFunction { get; }
-
-    /// <summary>
     /// The activation function to apply to cell state outputs. Default is tanh.
     /// </summary>
     private IActivationFunction<T>? ScalarActivation { get; }
@@ -144,11 +139,9 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         IActivationFunction<T>? forgetGateActivation = null,
         IActivationFunction<T>? inputGateActivation = null,
         IActivationFunction<T>? cellGateActivation = null,
-        IActivationFunction<T>? outputGateActivation = null) : base(architecture)
+        IActivationFunction<T>? outputGateActivation = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        // Set default loss function if none provided
-        LossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        
         // Set activation functions (or defaults)
         ScalarActivation = outputActivation ?? new TanhActivation<T>();
 
@@ -215,11 +208,9 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         IVectorActivationFunction<T>? forgetGateVectorActivation = null,
         IVectorActivationFunction<T>? inputGateVectorActivation = null,
         IVectorActivationFunction<T>? cellGateVectorActivation = null,
-        IVectorActivationFunction<T>? outputGateVectorActivation = null) : base(architecture)
+        IVectorActivationFunction<T>? outputGateVectorActivation = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        // Set default loss function if none provided
-        LossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        
         // Set activation functions (or defaults)
         VectorActivation = outputVectorActivation ?? new TanhActivation<T>();
 
@@ -230,29 +221,6 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         OutputGateVectorActivation = outputGateVectorActivation ?? new SigmoidActivation<T>();
         
         InitializeLayers();
-    }
-    
-    /// <summary>
-    /// Calculates the loss between predictions and expected outputs using the configured loss function.
-    /// </summary>
-    /// <param name="predictions">The predicted output tensor.</param>
-    /// <param name="expected">The expected output tensor.</param>
-    /// <returns>A scalar value representing the loss.</returns>
-    private T CalculateLoss(Tensor<T> predictions, Tensor<T> expected)
-    {
-        return LossFunction.CalculateLoss(predictions.ToVector(), expected.ToVector());
-    }
-    
-    /// <summary>
-    /// Calculates output gradients using the configured loss function's derivative.
-    /// </summary>
-    /// <param name="predictions">The predicted output tensor.</param>
-    /// <param name="expected">The expected output tensor.</param>
-    /// <returns>The gradient tensor for backpropagation.</returns>
-    private Tensor<T> CalculateOutputGradients(Tensor<T> predictions, Tensor<T> expected)
-    {
-        var gradientVector = LossFunction.CalculateDerivative(predictions.ToVector(), expected.ToVector());
-        return new Tensor<T>(predictions.Shape, gradientVector);
     }
     
     /// <summary>
@@ -653,121 +621,122 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         int hiddenSize = hiddenState.Shape[1];
         int batchSize = hiddenState.Shape[0];
         int inputSize = input.Shape[1];
-        
+
         // Create concatenated input (input + hidden state) for all gates
         var combinedInput = new Tensor<T>([batchSize, inputSize + hiddenSize]);
-        
+
         // Concatenate input and hidden state along feature dimension
         for (int b = 0; b < batchSize; b++)
         {
+            // Copy input values
             for (int i = 0; i < inputSize; i++)
             {
                 combinedInput[b, i] = input[b, i];
             }
-            
+
+            // Copy hidden state values
             for (int h = 0; h < hiddenSize; h++)
             {
                 combinedInput[b, inputSize + h] = hiddenState[b, h];
             }
         }
-        
+
         // Forward through the layer to get all gate values
         var gateOutputs = Layers[layerIndex].Forward(combinedInput);
-        
-        // Get weight matrices and biases from the layer parameters
-        var parameters = Layers[layerIndex].GetParameters();
-        
-        // Split the gate outputs into forget, input, cell, and output gates
-        // For an LSTM with hidden size H, the gate output tensor will have 4*H units
-        // We need to properly slice this tensor to get the individual gates
-        
-        // Create tensors for each gate
-        var forgetGate = new Tensor<T>(new int[] { batchSize, hiddenSize });
-        var inputGate = new Tensor<T>(new int[] { batchSize, hiddenSize });
-        var cellGate = new Tensor<T>(new int[] { batchSize, hiddenSize });
-        var outputGate = new Tensor<T>(new int[] { batchSize, hiddenSize });
-        
-        // Extract gate values from the combined output
-        // Assuming gate outputs has shape [batch_size, 4*hidden_size]
-        if (gateOutputs.Shape[1] >= 4 * hiddenSize)
+
+        // Verify gate outputs have expected shape
+        if (gateOutputs.Shape[1] < 4 * hiddenSize)
         {
-            // Proper slicing of the gates
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int h = 0; h < hiddenSize; h++)
-                {
-                    forgetGate[b, h] = gateOutputs[b, h];
-                    inputGate[b, h] = gateOutputs[b, hiddenSize + h];
-                    cellGate[b, h] = gateOutputs[b, 2 * hiddenSize + h];
-                    outputGate[b, h] = gateOutputs[b, 3 * hiddenSize + h];
-                }
-            }
-            
-            // Apply appropriate activations to each gate
-            // Forget and input gates use sigmoid, cell gate uses tanh
-            forgetGate = NeuralNetworkHelper<T>.ApplyActivation(forgetGate, ForgetGateActivation, ForgetGateVectorActivation);
-            inputGate = NeuralNetworkHelper<T>.ApplyActivation(inputGate, InputGateActivation, InputGateVectorActivation);
-            cellGate = NeuralNetworkHelper<T>.ApplyActivation(cellGate, CellGateActivation, CellGateVectorActivation);
-            outputGate = NeuralNetworkHelper<T>.ApplyActivation(outputGate, OutputGateActivation, OutputGateVectorActivation);
-            
-            // Create new cell state and hidden state tensors
-            var newCellState = new Tensor<T>(cellState.Shape);
-            var newHiddenState = new Tensor<T>(hiddenState.Shape);
-            
-            // Apply LSTM equations
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int h = 0; h < hiddenSize; h++)
-                {
-                    // Update cell state:
-                    // c_t = f_t * c_{t-1} + i_t * g_t
-                    // where f_t = forget gate, i_t = input gate, g_t = cell gate
-                    T forgetComponent = NumOps.Multiply(forgetGate[b, h], cellState[b, h]);
-                    T inputComponent = NumOps.Multiply(inputGate[b, h], cellGate[b, h]);
-                    newCellState[b, h] = NumOps.Add(forgetComponent, inputComponent);
-                    
-                    // Apply activation to cell state to get hidden state output
-                    // Here we use the configured activation function
-                    T activatedCell;
-                    
-                    if (VectorActivation != null)
-                    {
-                        // For vector activation, we need to process the entire cell state
-                        // We'll use a simplified approach here for illustration
-                        var cellVector = new Vector<T>(hiddenSize);
-                        for (int i = 0; i < hiddenSize; i++)
-                        {
-                            cellVector[i] = newCellState[b, i];
-                        }
-                        
-                        var activatedVector = VectorActivation.Activate(cellVector);
-                        activatedCell = activatedVector[h];
-                    }
-                    else if (ScalarActivation != null)
-                    {
-                        // Apply scalar activation to cell state
-                        activatedCell = ScalarActivation.Activate(newCellState[b, h]);
-                    }
-                    else
-                    {
-                        activatedCell = newCellState[b, h]; // No activation
-                    }
-                    
-                    // Update hidden state:
-                    // h_t = o_t * tanh(c_t)
-                    // where o_t = output gate
-                    newHiddenState[b, h] = NumOps.Multiply(outputGate[b, h], activatedCell);
-                }
-            }
-            
-            return (newHiddenState, newHiddenState, newCellState);
-        }
-        else
-        {
-            // Handle the case where gate output dimension doesn't match expectations
             throw new InvalidOperationException(
                 $"Expected gate outputs of size {4 * hiddenSize}, but got {gateOutputs.Shape[1]}");
         }
+
+        // Create tensors for each gate
+        var forgetGate = new Tensor<T>([batchSize, hiddenSize]);
+        var inputGate = new Tensor<T>([batchSize, hiddenSize]);
+        var cellGate = new Tensor<T>([batchSize, hiddenSize]);
+        var outputGate = new Tensor<T>([batchSize, hiddenSize]);
+
+        // Extract and split gate values using efficient per-row copying
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < hiddenSize; h++)
+            {
+                // Extract gates from the combined output
+                forgetGate[b, h] = gateOutputs[b, h];
+                inputGate[b, h] = gateOutputs[b, hiddenSize + h];
+                cellGate[b, h] = gateOutputs[b, 2 * hiddenSize + h];
+                outputGate[b, h] = gateOutputs[b, 3 * hiddenSize + h];
+            }
+        }
+
+        // Apply appropriate activations to each gate
+        forgetGate = NeuralNetworkHelper<T>.ApplyActivation(forgetGate, ForgetGateActivation, ForgetGateVectorActivation);
+        inputGate = NeuralNetworkHelper<T>.ApplyActivation(inputGate, InputGateActivation, InputGateVectorActivation);
+        cellGate = NeuralNetworkHelper<T>.ApplyActivation(cellGate, CellGateActivation, CellGateVectorActivation);
+        outputGate = NeuralNetworkHelper<T>.ApplyActivation(outputGate, OutputGateActivation, OutputGateVectorActivation);
+
+        // Create new cell state and hidden state tensors
+        var newCellState = new Tensor<T>(cellState.Shape);
+        var newHiddenState = new Tensor<T>(hiddenState.Shape);
+
+        // Efficiently handle vector or scalar activation
+        if (VectorActivation != null)
+        {
+            // Process each batch item separately
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Create vectors for the current batch item
+                var cellStateVector = new Vector<T>(hiddenSize);
+                var newCellStateVector = new Vector<T>(hiddenSize);
+
+                // First compute the new cell state
+                for (int h = 0; h < hiddenSize; h++)
+                {
+                    // c_t = f_t * c_{t-1} + i_t * g_t
+                    T forgetComponent = NumOps.Multiply(forgetGate[b, h], cellState[b, h]);
+                    T inputComponent = NumOps.Multiply(inputGate[b, h], cellGate[b, h]);
+                    newCellState[b, h] = NumOps.Add(forgetComponent, inputComponent);
+
+                    // Prepare vector for vector activation
+                    newCellStateVector[h] = newCellState[b, h];
+                }
+
+                // Apply vector activation to the entire cell state vector
+                var activatedVector = VectorActivation.Activate(newCellStateVector);
+
+                // Calculate hidden state using activated cell state
+                for (int h = 0; h < hiddenSize; h++)
+                {
+                    // h_t = o_t * tanh(c_t)
+                    newHiddenState[b, h] = NumOps.Multiply(outputGate[b, h], activatedVector[h]);
+                }
+            }
+        }
+        else
+        {
+            // Use scalar activation for each element individually
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int h = 0; h < hiddenSize; h++)
+                {
+                    // c_t = f_t * c_{t-1} + i_t * g_t
+                    T forgetComponent = NumOps.Multiply(forgetGate[b, h], cellState[b, h]);
+                    T inputComponent = NumOps.Multiply(inputGate[b, h], cellGate[b, h]);
+                    newCellState[b, h] = NumOps.Add(forgetComponent, inputComponent);
+
+                    // Apply activation to cell state
+                    T activatedCell = ScalarActivation != null
+                        ? ScalarActivation.Activate(newCellState[b, h])
+                        : (new TanhActivation<T>()).Activate(newCellState[b, h]);
+
+                    // h_t = o_t * tanh(c_t)
+                    newHiddenState[b, h] = NumOps.Multiply(outputGate[b, h], activatedCell);
+                }
+            }
+        }
+
+        return (newHiddenState, newHiddenState, newCellState);
     }
 
     /// <summary>
@@ -1195,42 +1164,22 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     
         // Forward pass to get predictions
         var predictions = Predict(input);
-    
+
+        var flattenedPredictions = predictions.ToVector();
+        var flattenedExpected = expectedOutput.ToVector();
+
         // Calculate loss
-        var loss = CalculateLoss(predictions, expectedOutput);
+        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
     
         // Calculate output gradients
-        var outputGradients = CalculateOutputGradients(predictions, expectedOutput);
-    
+        var gradientVector = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
+        var outputGradients = new Tensor<T>(predictions.Shape, gradientVector);
+
         // Backpropagation through time
         BackpropagateOverTime(outputGradients, input);
     
         // Update parameters
         UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Determines if tensor shapes are compatible for element-wise operations.
-    /// </summary>
-    /// <param name="shape1">The first tensor shape.</param>
-    /// <param name="shape2">The second tensor shape.</param>
-    /// <returns>True if shapes are compatible; otherwise, false.</returns>
-    private bool AreShapesCompatible(int[] shape1, int[] shape2)
-    {
-        if (shape1.Length != shape2.Length)
-        {
-            return false;
-        }
-    
-        for (int i = 0; i < shape1.Length; i++)
-        {
-            if (shape1[i] != shape2[i])
-            {
-                return false;
-            }
-        }
-    
-        return true;
     }
 
     /// <summary>
@@ -1240,29 +1189,692 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="input">The original input used in the forward pass.</param>
     private void BackpropagateOverTime(Tensor<T> outputGradients, Tensor<T> input)
     {
-        // For LSTMs, we need to backpropagate through time
-        // In a full implementation, this would:
-        // 1. Unroll the network through time
-        // 2. Compute gradients at each time step
-        // 3. Propagate gradients backwards through time
-        // 4. Accumulate gradients for each layer
-    
-        // For this simplified implementation, we'll pass the gradients to each layer's Backward method
-    
-        // Start with output gradients
+        // Determine dimensions
+        int batchSize = input.Shape[0];
+        int sequenceLength = input.Shape.Length > 1 ? input.Shape[1] : 1;
+        int inputFeatures = input.Shape.Length > 2 ? input.Shape[2] : (input.Shape.Length > 1 ? input.Shape[1] : input.Length);
+
+        // Handle different scenarios for output gradients based on returnSequences setting
+        Tensor<T>[] gradientPerTimeStep;
+
+        if (Architecture.ShouldReturnFullSequence)
+        {
+            // If returning full sequence, split output gradients by time step
+            gradientPerTimeStep = new Tensor<T>[sequenceLength];
+            for (int t = 0; t < sequenceLength; t++)
+            {
+                // Extract gradient for current time step
+                var shape = new int[outputGradients.Shape.Length - 1];
+                shape[0] = batchSize;
+                if (shape.Length > 1)
+                {
+                    Array.Copy(outputGradients.Shape, 2, shape, 1, shape.Length - 1);
+                }
+
+                gradientPerTimeStep[t] = new Tensor<T>(shape);
+
+                // Copy gradient data for this time step
+                for (int b = 0; b < batchSize; b++)
+                {
+                    if (shape.Length == 1)
+                    {
+                        gradientPerTimeStep[t][b] = outputGradients[b, t];
+                    }
+                    else
+                    {
+                        // Handle higher dimensional outputs
+                        int outputFeatures = outputGradients.Shape[2];
+                        for (int f = 0; f < outputFeatures; f++)
+                        {
+                            gradientPerTimeStep[t][b, f] = outputGradients[b, t, f];
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // If not returning full sequence, use the provided gradient only for the last time step
+            gradientPerTimeStep = new Tensor<T>[sequenceLength];
+            for (int t = 0; t < sequenceLength - 1; t++)
+            {
+                // Zero gradients for all steps except the last
+                gradientPerTimeStep[t] = new Tensor<T>(outputGradients.Shape);
+            }
+            gradientPerTimeStep[sequenceLength - 1] = outputGradients;
+        }
+
+        // Initialize hidden state and cell state gradients for tracking between time steps
+        var hiddenStateGradients = new Dictionary<int, Tensor<T>>();
+        var cellStateGradients = new Dictionary<int, Tensor<T>>();
+
+        // Find LSTM layers
+        var lstmLayerIndices = new List<int>();
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (IsLSTMLayer(Layers[i]))
+            {
+                int hiddenSize = GetLSTMLayerHiddenSize(i);
+                hiddenStateGradients[i] = new Tensor<T>([batchSize, hiddenSize]);
+                cellStateGradients[i] = new Tensor<T>([batchSize, hiddenSize]);
+                lstmLayerIndices.Add(i);
+            }
+        }
+
+        // Check if we have stored activations
+        if (_storedActivations == null || _storedActivations.Count == 0)
+        {
+            // If no activations are stored, fall back to a simpler approach
+            FallbackBackPropagation(outputGradients, input);
+            return;
+        }
+
+        // Backpropagate through time (from last time step to first)
+        for (int t = sequenceLength - 1; t >= 0; t--)
+        {
+            // Extract input for this time step
+            Tensor<T> timeStepInput;
+            if (input.Shape.Length > 2)
+            {
+                timeStepInput = input.Slice(1, t, t + 1).Reshape([batchSize, inputFeatures]);
+            }
+            else if (input.Shape.Length == 2)
+            {
+                timeStepInput = new Tensor<T>([batchSize, 1]);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    timeStepInput[b, 0] = input[b, t];
+                }
+            }
+            else
+            {
+                timeStepInput = input; // Single input, no time dimension
+            }
+
+            // Current gradient for this time step
+            Tensor<T> currentGradient = gradientPerTimeStep[t];
+
+            // Add hidden state gradients from future time steps
+            foreach (var lstmIndex in lstmLayerIndices)
+            {
+                if (hiddenStateGradients.ContainsKey(lstmIndex) && !IsZeroTensor(hiddenStateGradients[lstmIndex]))
+                {
+                    // We need to transform the hidden state gradient to match the output gradient shape
+                    // This might require a specific transformation based on your architecture
+                    var transformedGradient = TransformHiddenGradientToOutputGradient(
+                        hiddenStateGradients[lstmIndex],
+                        currentGradient.Shape);
+
+                    currentGradient = currentGradient.Add(transformedGradient);
+                }
+            }
+
+            // Backpropagate through layers in reverse order for this time step
+            Tensor<T> layerGradient = currentGradient;
+
+            for (int l = Layers.Count - 1; l >= 0; l--)
+            {
+                // The key modification is here - we're using the existing Backward method of each layer
+                layerGradient = Layers[l].Backward(layerGradient);
+
+                // For LSTM layers, we need to update our tracking of state gradients
+                if (lstmLayerIndices.Contains(l))
+                {
+                    // Save hidden state gradient for the previous time step
+                    // This is a simplification - in a full implementation, we would compute proper
+                    // gradients for hidden and cell states based on the LSTM equations
+                    hiddenStateGradients[l] = layerGradient.Clone();
+                }
+            }
+        }
+
+        // Update parameters for each layer
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i].SupportsTraining)
+            {
+                // Apply parameter updates using the existing method
+                T learningRate = NumOps.FromDouble(0.01); // Use proper learning rate from optimizer
+                Layers[i].UpdateParameters(learningRate);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fallback implementation of backpropagation when no stored activations are available.
+    /// </summary>
+    /// <param name="outputGradients">The gradients from the output layer.</param>
+    /// <param name="input">The original input used in the forward pass.</param>
+    private void FallbackBackPropagation(Tensor<T> outputGradients, Tensor<T> input)
+    {
+        // Simple backpropagation without considering time steps
         Tensor<T> gradients = outputGradients;
-    
+
         // Backpropagate through each layer in reverse order
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             gradients = Layers[i].Backward(gradients);
         }
-    
-        // In a real LSTM implementation, we would need to:
-        // - Keep track of activations at each time step during forward pass
-        // - Propagate gradients backwards through each time step
-        // - Handle the recurrent connections between time steps
-        // - Apply truncated BPTT if sequences are very long
+
+        // Update parameters for each layer
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i].SupportsTraining)
+            {
+                T learningRate = NumOps.FromDouble(0.01); // Use proper learning rate from optimizer
+                Layers[i].UpdateParameters(learningRate);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Transforms a hidden state gradient to match the shape of an output gradient.
+    /// </summary>
+    /// <param name="hiddenGradient">The hidden state gradient.</param>
+    /// <param name="outputShape">The shape of the output gradient.</param>
+    /// <returns>A transformed gradient matching the output shape.</returns>
+    private Tensor<T> TransformHiddenGradientToOutputGradient(Tensor<T> hiddenGradient, int[] outputShape)
+    {
+        // This is a placeholder implementation that needs to be adapted to your specific architecture
+        // In a proper implementation, this would project the hidden state gradient to the output space
+
+        // Create a tensor with the target shape
+        var transformedGradient = new Tensor<T>(outputShape);
+
+        // If shapes match, we can just copy the data
+        if (hiddenGradient.Shape.SequenceEqual(outputShape))
+        {
+            for (int i = 0; i < hiddenGradient.Length; i++)
+            {
+                transformedGradient[i] = hiddenGradient[i];
+            }
+            return transformedGradient;
+        }
+
+        // Otherwise, we need to project the hidden gradient to the output space
+        // This is highly dependent on the network architecture
+
+        // For now, we'll implement a simple zero-padding or truncation approach
+        int minLength = Math.Min(hiddenGradient.Length, transformedGradient.Length);
+
+        for (int i = 0; i < minLength; i++)
+        {
+            transformedGradient[i] = hiddenGradient[i];
+        }
+
+        return transformedGradient;
+    }
+
+    /// <summary>
+    /// Checks if a tensor contains only zero values.
+    /// </summary>
+    /// <param name="tensor">The tensor to check.</param>
+    /// <returns>True if the tensor contains only zeros; otherwise, false.</returns>
+    private bool IsZeroTensor(Tensor<T> tensor)
+    {
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            if (!MathHelper.AlmostEqual(tensor[i], NumOps.Zero))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Dictionary to store activations and states from the forward pass.
+    /// </summary>
+    private Dictionary<string, Tensor<T>> _storedActivations = new Dictionary<string, Tensor<T>>();
+
+    /// <summary>
+    /// Performs the backward pass through a single LSTM cell.
+    /// </summary>
+    /// <param name="dhNext">The gradient of the loss with respect to the hidden state.</param>
+    /// <param name="dhPrev">The gradient from the next time step's hidden state.</param>
+    /// <param name="dcPrev">The gradient from the next time step's cell state.</param>
+    /// <param name="x">The input at this time step.</param>
+    /// <param name="h">The hidden state at this time step.</param>
+    /// <param name="c">The cell state at this time step.</param>
+    /// <param name="hPrev">The hidden state from the previous time step.</param>
+    /// <param name="cPrev">The cell state from the previous time step.</param>
+    /// <param name="i">The input gate activation.</param>
+    /// <param name="f">The forget gate activation.</param>
+    /// <param name="g">The cell gate activation.</param>
+    /// <param name="o">The output gate activation.</param>
+    /// <param name="layerIndex">The index of the LSTM layer.</param>
+    /// <returns>A tuple containing gradients for the hidden state, cell state, and input.</returns>
+    private (Tensor<T> dh, Tensor<T> dc, Tensor<T> dx) BackwardLSTMCell(
+        Tensor<T> dhNext,
+        Tensor<T>? dhPrev,
+        Tensor<T>? dcPrev,
+        Tensor<T> x,
+        Tensor<T> h,
+        Tensor<T> c,
+        Tensor<T> hPrev,
+        Tensor<T> cPrev,
+        Tensor<T>? i,
+        Tensor<T>? f,
+        Tensor<T>? g,
+        Tensor<T>? o,
+        int layerIndex)
+    {
+        int batchSize = h.Shape[0];
+        int hiddenSize = h.Shape[1];
+        int inputSize = x.Shape[1];
+
+        // Initialize gradients
+        Tensor<T> dh = dhPrev != null ? dhNext.Add(dhPrev) : dhNext.Clone();
+        Tensor<T> dc = dcPrev != null ? dcPrev.Clone() : new Tensor<T>([batchSize, hiddenSize]);
+
+        // Calculate gradients for the gates
+        Tensor<T> do_ = new Tensor<T>([batchSize, hiddenSize]);
+        Tensor<T> di = new Tensor<T>([batchSize, hiddenSize]);
+        Tensor<T> df = new Tensor<T>([batchSize, hiddenSize]);
+        Tensor<T> dg = new Tensor<T>([batchSize, hiddenSize]);
+        Tensor<T> dc_tanh = new Tensor<T>([batchSize, hiddenSize]);
+
+        // Calculate activated cell state
+        Tensor<T> c_tanh = new Tensor<T>([batchSize, hiddenSize]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int j = 0; j < hiddenSize; j++)
+            {
+                c_tanh[b, j] = ScalarActivation != null
+                    ? ScalarActivation.Activate(c[b, j])
+                    : (new TanhActivation<T>()).Activate(c[b, j]);
+            }
+        }
+
+        // Ensure we have gate activations
+        if (i == null || f == null || g == null || o == null)
+        {
+            throw new InvalidOperationException("Gate activations must be stored during forward pass for backpropagation.");
+        }
+
+        // Backward pass through output gate
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int j = 0; j < hiddenSize; j++)
+            {
+                do_[b, j] = NumOps.Multiply(dh[b, j], c_tanh[b, j]);
+
+                // Gradient for tanh(c)
+                dc_tanh[b, j] = NumOps.Multiply(dh[b, j], o[b, j]);
+
+                // Gradient for c
+                T tanh_derivative;
+                if (ScalarActivation != null)
+                {
+                    tanh_derivative = ScalarActivation.Derivative(c[b, j]);
+                }
+                else
+                {
+                    T tanh_value = (new TanhActivation<T>()).Activate(c[b, j]);
+                    tanh_derivative = NumOps.Subtract(NumOps.One, NumOps.Multiply(tanh_value, tanh_value));
+                }
+
+                // Add gradient from next cell state
+                T dc_value = NumOps.Multiply(dc_tanh[b, j], tanh_derivative);
+                if (dcPrev != null)
+                {
+                    dc_value = NumOps.Add(dc_value, dc[b, j]);
+                }
+                dc[b, j] = dc_value;
+
+                // Gradients for gates
+                di[b, j] = NumOps.Multiply(dc[b, j], g[b, j]);
+                dg[b, j] = NumOps.Multiply(dc[b, j], i[b, j]);
+                df[b, j] = NumOps.Multiply(dc[b, j], cPrev[b, j]);
+
+                // Gradient to previous cell state
+                dc[b, j] = NumOps.Multiply(dc[b, j], f[b, j]);
+            }
+        }
+
+        // Apply gate activation derivatives
+        Tensor<T> di_input = new Tensor<T>([batchSize, hiddenSize]);
+        Tensor<T> df_input = new Tensor<T>([batchSize, hiddenSize]);
+        Tensor<T> dg_input = new Tensor<T>([batchSize, hiddenSize]);
+        Tensor<T> do_input = new Tensor<T>([batchSize, hiddenSize]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int j = 0; j < hiddenSize; j++)
+            {
+                // Sigmoid derivative: sigmoid(x) * (1 - sigmoid(x))
+                di_input[b, j] = NumOps.Multiply(di[b, j],
+                    NumOps.Multiply(i[b, j], NumOps.Subtract(NumOps.One, i[b, j])));
+
+                df_input[b, j] = NumOps.Multiply(df[b, j],
+                    NumOps.Multiply(f[b, j], NumOps.Subtract(NumOps.One, f[b, j])));
+
+                do_input[b, j] = NumOps.Multiply(do_[b, j],
+                    NumOps.Multiply(o[b, j], NumOps.Subtract(NumOps.One, o[b, j])));
+
+                // Tanh derivative: 1 - tanh(x)^2
+                T tanh_derivative;
+                if (CellGateActivation != null)
+                {
+                    tanh_derivative = CellGateActivation.Derivative(g[b, j]);
+                }
+                else
+                {
+                    tanh_derivative = NumOps.Subtract(NumOps.One, NumOps.Multiply(g[b, j], g[b, j]));
+                }
+
+                dg_input[b, j] = NumOps.Multiply(dg[b, j], tanh_derivative);
+            }
+        }
+
+        // Get LSTM layer parameters
+        var parameters = GetLSTMLayerParameters(layerIndex);
+
+        // Calculate gradient for input x
+        Tensor<T> dx = new Tensor<T>([batchSize, inputSize]);
+
+        // Calculate gradients for weights
+        Tensor<T> dWi = new Tensor<T>([hiddenSize, inputSize]);
+        Tensor<T> dWf = new Tensor<T>([hiddenSize, inputSize]);
+        Tensor<T> dWg = new Tensor<T>([hiddenSize, inputSize]);
+        Tensor<T> dWo = new Tensor<T>([hiddenSize, inputSize]);
+
+        Tensor<T> dUi = new Tensor<T>([hiddenSize, hiddenSize]);
+        Tensor<T> dUf = new Tensor<T>([hiddenSize, hiddenSize]);
+        Tensor<T> dUg = new Tensor<T>([hiddenSize, hiddenSize]);
+        Tensor<T> dUo = new Tensor<T>([hiddenSize, hiddenSize]);
+
+        Tensor<T> dbi = new Tensor<T>([hiddenSize]);
+        Tensor<T> dbf = new Tensor<T>([hiddenSize]);
+        Tensor<T> dbg = new Tensor<T>([hiddenSize]);
+        Tensor<T> dbo = new Tensor<T>([hiddenSize]);
+
+        // Calculate gradients for input, weights, and biases
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int j = 0; j < hiddenSize; j++)
+            {
+                // Bias gradients
+                dbi[j] = NumOps.Add(dbi[j], di_input[b, j]);
+                dbf[j] = NumOps.Add(dbf[j], df_input[b, j]);
+                dbg[j] = NumOps.Add(dbg[j], dg_input[b, j]);
+                dbo[j] = NumOps.Add(dbo[j], do_input[b, j]);
+
+                // Input gradients
+                for (int k = 0; k < inputSize; k++)
+                {
+                    T dxi = NumOps.Multiply(parameters.Wi[j, k], di_input[b, j]);
+                    T dxf = NumOps.Multiply(parameters.Wf[j, k], df_input[b, j]);
+                    T dxg = NumOps.Multiply(parameters.Wg[j, k], dg_input[b, j]);
+                    T dxo = NumOps.Multiply(parameters.Wo[j, k], do_input[b, j]);
+
+                    dx[b, k] = NumOps.Add(dx[b, k], NumOps.Add(NumOps.Add(dxi, dxf), NumOps.Add(dxg, dxo)));
+
+                    // Weight gradients (input)
+                    dWi[j, k] = NumOps.Add(dWi[j, k], NumOps.Multiply(di_input[b, j], x[b, k]));
+                    dWf[j, k] = NumOps.Add(dWf[j, k], NumOps.Multiply(df_input[b, j], x[b, k]));
+                    dWg[j, k] = NumOps.Add(dWg[j, k], NumOps.Multiply(dg_input[b, j], x[b, k]));
+                    dWo[j, k] = NumOps.Add(dWo[j, k], NumOps.Multiply(do_input[b, j], x[b, k]));
+                }
+
+                // Weight gradients (hidden)
+                for (int k = 0; k < hiddenSize; k++)
+                {
+                    dUi[j, k] = NumOps.Add(dUi[j, k], NumOps.Multiply(di_input[b, j], hPrev[b, k]));
+                    dUf[j, k] = NumOps.Add(dUf[j, k], NumOps.Multiply(df_input[b, j], hPrev[b, k]));
+                    dUg[j, k] = NumOps.Add(dUg[j, k], NumOps.Multiply(dg_input[b, j], hPrev[b, k]));
+                    dUo[j, k] = NumOps.Add(dUo[j, k], NumOps.Multiply(do_input[b, j], hPrev[b, k]));
+                }
+            }
+        }
+
+        // Store weight gradients for parameter updates
+        StoreLSTMGradients(layerIndex, dWi, dWf, dWg, dWo, dUi, dUf, dUg, dUo, dbi, dbf, dbg, dbo);
+
+        return (dh, dc, dx);
+    }
+
+    /// <summary>
+    /// Gets the hidden size for a specific LSTM layer.
+    /// </summary>
+    /// <param name="layerIndex">The index of the LSTM layer.</param>
+    /// <returns>The hidden size of the LSTM layer.</returns>
+    private int GetLSTMLayerHiddenSize(int layerIndex)
+    {
+        // Get from layer's output shape if available
+        if (layerIndex >= 0 && layerIndex < Layers.Count)
+        {
+            var outputShape = Layers[layerIndex].GetOutputShape();
+            if (outputShape.Length >= 2)
+            {
+                return outputShape[1];
+            }
+        }
+
+        // Fallback to architecture's hidden layer size
+        var hiddenLayerSizes = Architecture.GetHiddenLayerSizes();
+        if (hiddenLayerSizes != null && hiddenLayerSizes.Length > 0)
+        {
+            return hiddenLayerSizes[0];
+        }
+
+        // Default if no information is available
+        return 128;
+    }
+
+    /// <summary>
+    /// Represents LSTM layer parameters.
+    /// </summary>
+    private class LSTMParameters
+    {
+        public Matrix<T> Wi { get; set; } = Matrix<T>.Empty();
+        public Matrix<T> Wf { get; set; } = Matrix<T>.Empty();
+        public Matrix<T> Wg { get; set; } = Matrix<T>.Empty();
+        public Matrix<T> Wo { get; set; } = Matrix<T>.Empty();
+
+        public Matrix<T> Ui { get; set; } = Matrix<T>.Empty();
+        public Matrix<T> Uf { get; set; } = Matrix<T>.Empty();
+        public Matrix<T> Ug { get; set; } = Matrix<T>.Empty();
+        public Matrix<T> Uo { get; set; } = Matrix<T>.Empty();
+
+        public Vector<T> Bi { get; set; } = Vector<T>.Empty();
+        public Vector<T> Bf { get; set; } = Vector<T>.Empty();
+        public Vector<T> Bg { get; set; } = Vector<T>.Empty();
+        public Vector<T> Bo { get; set; } = Vector<T>.Empty();
+    }
+
+    /// <summary>
+    /// Gets the LSTM layer parameters for a specific layer.
+    /// </summary>
+    /// <param name="layerIndex">The index of the LSTM layer.</param>
+    /// <returns>The parameters of the LSTM layer.</returns>
+    private LSTMParameters GetLSTMLayerParameters(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Layers.Count || !IsLSTMLayer(Layers[layerIndex]))
+        {
+            throw new ArgumentException("Invalid LSTM layer index.");
+        }
+
+        // For a production implementation, we would extract these from the actual layer
+        // This is a simplified approach that assumes specific layer structure
+        var layer = Layers[layerIndex];
+        int hiddenSize = GetLSTMLayerHiddenSize(layerIndex);
+        int inputSize = layer.GetInputShape()[1];
+
+        // Extract parameters from layer
+        var allParams = layer.GetParameters();
+
+        // Assuming parameter order: Wi, Wf, Wg, Wo, Ui, Uf, Ug, Uo, bi, bf, bg, bo
+        int matrixSize = hiddenSize * inputSize;
+        int recurrentSize = hiddenSize * hiddenSize;
+
+        return new LSTMParameters
+        {
+            Wi = ExtractMatrix(allParams, 0, hiddenSize, inputSize),
+            Wf = ExtractMatrix(allParams, matrixSize, hiddenSize, inputSize),
+            Wg = ExtractMatrix(allParams, 2 * matrixSize, hiddenSize, inputSize),
+            Wo = ExtractMatrix(allParams, 3 * matrixSize, hiddenSize, inputSize),
+
+            Ui = ExtractMatrix(allParams, 4 * matrixSize, hiddenSize, hiddenSize),
+            Uf = ExtractMatrix(allParams, 4 * matrixSize + recurrentSize, hiddenSize, hiddenSize),
+            Ug = ExtractMatrix(allParams, 4 * matrixSize + 2 * recurrentSize, hiddenSize, hiddenSize),
+            Uo = ExtractMatrix(allParams, 4 * matrixSize + 3 * recurrentSize, hiddenSize, hiddenSize),
+
+            Bi = ExtractVector(allParams, 4 * matrixSize + 4 * recurrentSize, hiddenSize),
+            Bf = ExtractVector(allParams, 4 * matrixSize + 4 * recurrentSize + hiddenSize, hiddenSize),
+            Bg = ExtractVector(allParams, 4 * matrixSize + 4 * recurrentSize + 2 * hiddenSize, hiddenSize),
+            Bo = ExtractVector(allParams, 4 * matrixSize + 4 * recurrentSize + 3 * hiddenSize, hiddenSize)
+        };
+    }
+
+    /// <summary>
+    /// Extracts a matrix from a parameter vector.
+    /// </summary>
+    /// <param name="parameters">The parameter vector.</param>
+    /// <param name="startIndex">The starting index in the parameter vector.</param>
+    /// <param name="rows">The number of rows in the matrix.</param>
+    /// <param name="cols">The number of columns in the matrix.</param>
+    /// <returns>The extracted matrix.</returns>
+    private Matrix<T> ExtractMatrix(Vector<T> parameters, int startIndex, int rows, int cols)
+    {
+        var matrix = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                matrix[i, j] = parameters[startIndex + i * cols + j];
+            }
+        }
+
+        return matrix;
+    }
+
+    /// <summary>
+    /// Extracts a vector from a parameter vector.
+    /// </summary>
+    /// <param name="parameters">The parameter vector.</param>
+    /// <param name="startIndex">The starting index in the parameter vector.</param>
+    /// <param name="length">The length of the vector.</param>
+    /// <returns>The extracted vector.</returns>
+    private Vector<T> ExtractVector(Vector<T> parameters, int startIndex, int length)
+    {
+        var vector = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = parameters[startIndex + i];
+        }
+
+        return vector;
+    }
+
+    /// <summary>
+    /// Stores LSTM gradients for parameter updates.
+    /// </summary>
+    /// <param name="layerIndex">The index of the LSTM layer.</param>
+    /// <param name="dWi">Gradient for input gate weights (input).</param>
+    /// <param name="dWf">Gradient for forget gate weights (input).</param>
+    /// <param name="dWg">Gradient for cell gate weights (input).</param>
+    /// <param name="dWo">Gradient for output gate weights (input).</param>
+    /// <param name="dUi">Gradient for input gate weights (recurrent).</param>
+    /// <param name="dUf">Gradient for forget gate weights (recurrent).</param>
+    /// <param name="dUg">Gradient for cell gate weights (recurrent).</param>
+    /// <param name="dUo">Gradient for output gate weights (recurrent).</param>
+    /// <param name="dbi">Gradient for input gate bias.</param>
+    /// <param name="dbf">Gradient for forget gate bias.</param>
+    /// <param name="dbg">Gradient for cell gate bias.</param>
+    /// <param name="dbo">Gradient for output gate bias.</param>
+    private void StoreLSTMGradients(
+        int layerIndex,
+        Tensor<T> dWi, Tensor<T> dWf, Tensor<T> dWg, Tensor<T> dWo,
+        Tensor<T> dUi, Tensor<T> dUf, Tensor<T> dUg, Tensor<T> dUo,
+        Tensor<T> dbi, Tensor<T> dbf, Tensor<T> dbg, Tensor<T> dbo)
+    {
+        if (layerIndex < 0 || layerIndex >= Layers.Count || !IsLSTMLayer(Layers[layerIndex]))
+        {
+            return;
+        }
+
+        // In a production implementation, we would use the layer's specific method to set gradients
+        var layer = Layers[layerIndex];
+
+        if (layer.SupportsTraining)
+        {
+            // Create gradient vector in the expected format
+            int hiddenSize = GetLSTMLayerHiddenSize(layerIndex);
+            int inputSize = layer.GetInputShape()[1];
+
+            int totalParamCount = 4 * (hiddenSize * inputSize + hiddenSize * hiddenSize + hiddenSize);
+            Vector<T> gradients = new Vector<T>(totalParamCount);
+
+            // Get each component as a vector using built-in methods
+            var dWiVector = dWi.ToMatrix().ToColumnVector();
+            var dWfVector = dWf.ToMatrix().ToColumnVector();
+            var dWgVector = dWg.ToMatrix().ToColumnVector();
+            var dWoVector = dWo.ToMatrix().ToColumnVector();
+
+            var dUiVector = dUi.ToMatrix().ToColumnVector();
+            var dUfVector = dUf.ToMatrix().ToColumnVector();
+            var dUgVector = dUg.ToMatrix().ToColumnVector();
+            var dUoVector = dUo.ToMatrix().ToColumnVector();
+
+            // Combine all vectors into the final gradient vector
+            int index = 0;
+
+            // Copy input weights
+            var dWiLength = dWiVector.Length;
+            for (int i = 0; i < dWiLength; i++) gradients[index++] = dWiVector[i];
+
+            var dWfLength = dWfVector.Length;
+            for (int i = 0; i < dWfLength; i++) gradients[index++] = dWfVector[i];
+
+            var dWgLength = dWgVector.Length;
+            for (int i = 0; i < dWgLength; i++) gradients[index++] = dWgVector[i];
+
+            var dWoLength = dWoVector.Length;
+            for (int i = 0; i < dWoLength; i++) gradients[index++] = dWoVector[i];
+
+            // Copy recurrent weights
+            var dUiLength = dUiVector.Length;
+            for (int i = 0; i < dUiLength; i++) gradients[index++] = dUiVector[i];
+
+            var dUfLength = dUfVector.Length;
+            for (int i = 0; i < dUfLength; i++) gradients[index++] = dUfVector[i];
+
+            var dUgLength = dUgVector.Length;
+            for (int i = 0; i < dUgLength; i++) gradients[index++] = dUgVector[i];
+
+            var dUoLength = dUoVector.Length;
+            for (int i = 0; i < dUoLength; i++) gradients[index++] = dUoVector[i];
+
+            // Copy biases
+            var dbiLength = dbi.ToVector().Length;
+            for (int i = 0; i < dbiLength; i++) gradients[index++] = dbi.ToVector()[i];
+
+            var dbfLength = dbf.ToVector().Length;
+            for (int i = 0; i < dbfLength; i++) gradients[index++] = dbf.ToVector()[i];
+
+            var dbgLength = dbg.ToVector().Length;
+            for (int i = 0; i < dbgLength; i++) gradients[index++] = dbg.ToVector()[i];
+
+            var dboLength = dbo.ToVector().Length;
+            for (int i = 0; i < dboLength; i++) gradients[index++] = dbo.ToVector()[i];
+
+            T learningRate = NumOps.FromDouble(0.01); // Use appropriate learning rate
+
+            // Get current parameters
+            Vector<T> currentParams = layer.GetParameters();
+
+            // Update parameters: params = params - learningRate * gradients
+            for (int i = 0; i < gradients.Length && i < currentParams.Length; i++)
+            {
+                currentParams[i] = NumOps.Subtract(currentParams[i],
+                    NumOps.Multiply(learningRate, gradients[i]));
+            }
+
+            // Apply updated parameters to the layer
+            layer.UpdateParameters(currentParams);
+        }
     }
 
     /// <summary>

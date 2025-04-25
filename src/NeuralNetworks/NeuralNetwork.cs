@@ -61,7 +61,8 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// - 10 outputs (one for each digit 0-9)
     /// </para>
     /// </remarks>
-    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         InitializeLayers();
     }
@@ -228,27 +229,30 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Ensure we're in training mode
         SetTrainingMode(true);
-        
+
         // Step 1: Forward pass with memory for backpropagation
         Vector<T> inputVector = input.ToVector();
         Vector<T> outputVector = ForwardWithMemory(inputVector);
-        
+
         // Step 2: Calculate loss/error (e.g., mean squared error)
         Vector<T> expectedVector = expectedOutput.ToVector();
-        Vector<T> errorVector = new Vector<T>(expectedVector.Length);
-        
+        Vector<T> errorVector = new(expectedVector.Length);
+
         for (int i = 0; i < expectedVector.Length; i++)
         {
             // Error = expected - actual
             errorVector[i] = NumOps.Subtract(expectedVector[i], outputVector[i]);
         }
-        
+
+        // Calculate and store the loss value
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
+
         // Step 3: Backpropagation to compute gradients
         Backpropagate(errorVector);
-        
+
         // Step 4: Update parameters using gradients and learning rate
         T learningRate = NumOps.FromDouble(0.01);
-        
+
         foreach (var layer in Layers)
         {
             if (layer.SupportsTraining && layer.ParameterCount > 0)

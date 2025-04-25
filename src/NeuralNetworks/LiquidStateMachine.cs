@@ -210,7 +210,8 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         double connectionProbability = 0.1,
         double spectralRadius = 0.9,
         double inputScaling = 1.0,
-        double leakingRate = 1.0) : base(architecture)
+        double leakingRate = 1.0,
+        ILossFunction<T>? lossFunction = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _leakingRate = leakingRate;
         _inputScaling = inputScaling;
@@ -430,10 +431,10 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         // Calculate loss
         var flattenedPredictions = prediction.ToVector();
         var flattenedExpected = expectedOutput.ToVector();
-        var loss = new MeanSquaredErrorLoss<T>().CalculateLoss(flattenedPredictions, flattenedExpected);
+        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
 
         // Calculate output gradients
-        var outputGradients = new MeanSquaredErrorLoss<T>().CalculateDerivative(flattenedPredictions, flattenedExpected);
+        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
 
         // Backpropagate to get parameter gradients
         Vector<T> gradients = Backpropagate(outputGradients);

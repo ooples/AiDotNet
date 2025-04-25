@@ -122,12 +122,12 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// you would set the size to 64 (8x8=64).
     /// </para>
     /// </remarks>
-    public HopfieldNetwork(NeuralNetworkArchitecture<T> architecture, int size) : base(new NeuralNetworkArchitecture<T>(
+    public HopfieldNetwork(NeuralNetworkArchitecture<T> architecture, int size, ILossFunction<T>? lossFunction = null) : base(new NeuralNetworkArchitecture<T>(
         architecture.InputType,
         taskType: architecture.TaskType,
         complexity: architecture.Complexity,
         inputSize: size,
-        outputSize: size))
+        outputSize: size), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _size = size;
         _weights = new Matrix<T>(size, size);
@@ -431,20 +431,43 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         // Extract patterns from the input tensor
         // Each row of the input tensor is treated as a separate pattern
         List<Vector<T>> patterns = [];
-        
+
         for (int i = 0; i < input.Shape[0]; i++)
         {
             // Extract the i-th pattern from the input tensor
-            Vector<T> pattern = new Vector<T>(_size);
+            var pattern = new Vector<T>(_size);
             for (int j = 0; j < _size; j++)
             {
                 pattern[j] = input[i, j];
             }
+
             patterns.Add(pattern);
         }
-        
+
         // Train the network using Hebbian learning
         Train(patterns);
+
+        // Calculate the average energy of all patterns as a measure of loss
+        // Lower energy means more stable patterns (better storage)
+        T totalEnergy = NumOps.Zero;
+        foreach (var pattern in patterns)
+        {
+            // Calculate energy for this pattern
+            T patternEnergy = CalculateEnergy(pattern);
+
+            // Add to total
+            totalEnergy = NumOps.Add(totalEnergy, patternEnergy);
+        }
+
+        // Calculate average energy (if there are patterns)
+        if (patterns.Count > 0)
+        {
+            LastLoss = NumOps.Divide(totalEnergy, NumOps.FromDouble(patterns.Count));
+        }
+        else
+        {
+            LastLoss = NumOps.Zero;
+        }
     }
 
     /// <summary>

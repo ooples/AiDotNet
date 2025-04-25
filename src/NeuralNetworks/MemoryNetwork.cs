@@ -142,7 +142,8 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// and sets up the layers needed for processing inputs and interacting with memory.
     /// </para>
     /// </remarks>
-    public MemoryNetwork(NeuralNetworkArchitecture<T> architecture, int memorySize, int embeddingSize) : base(architecture)
+    public MemoryNetwork(NeuralNetworkArchitecture<T> architecture, int memorySize, int embeddingSize, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _memorySize = memorySize;
         _embeddingSize = embeddingSize;
@@ -582,22 +583,28 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     {
         // Set to training mode
         SetTrainingMode(true);
-    
+
         // Forward pass to get predictions
         var predictions = Predict(input);
-    
-        // Calculate loss (mean squared error)
-        var loss = CalculateMeanSquaredError(predictions, expectedOutput);
-    
-        // Calculate output gradients
-        var outputGradients = CalculateOutputGradients(predictions, expectedOutput);
-    
+
+        // Calculate loss using the specified loss function
+        Vector<T> predictedVector = predictions.ToVector();
+        Vector<T> expectedVector = expectedOutput.ToVector();
+        T loss = LossFunction.CalculateLoss(predictedVector, expectedVector);
+
+        // Set the LastLoss property
+        LastLoss = loss;
+
+        // Calculate output gradients using the loss function's derivative
+        var gradientVector = LossFunction.CalculateDerivative(predictedVector, expectedVector);
+        var outputGradients = new Tensor<T>(predictions.Shape, gradientVector);
+
         // Backpropagation
         BackpropagateMemoryNetwork(outputGradients);
-    
+
         // Update parameters
         UpdateMemoryNetworkParameters();
-    
+
         // Always update memory during training
         // This is handled in the Predict method
     }

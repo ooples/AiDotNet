@@ -199,8 +199,8 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// that will grow more complex through evolution.
     /// </para>
     /// </remarks>
-    public NEAT(NeuralNetworkArchitecture<T> architecture, int populationSize, double mutationRate = 0.1, double crossoverRate = 0.75)
-        : base(architecture)
+    public NEAT(NeuralNetworkArchitecture<T> architecture, int populationSize, double mutationRate = 0.1, double crossoverRate = 0.75, ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _populationSize = populationSize;
         _mutationRate = mutationRate;
@@ -977,45 +977,52 @@ public class NEAT<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentException("Input and expected output must have the same batch size");
         }
-    
+
         int batchSize = input.Shape[0];
-    
+
         // Convert input and expected output to a format suitable for the fitness function
         var trainingData = ExtractTrainingData(input, expectedOutput);
-    
+
         // Create a fitness function that measures how well each genome performs on the training data
-        Func<Genome<T>, T> fitnessFunction = genome =>
+        T fitnessFunction(Genome<T> genome)
         {
             T totalError = NumOps.Zero;
-        
+
             // Calculate error for each training example
             foreach (var (sampleInput, sampleExpected) in trainingData)
             {
                 // Get actual output from genome
                 var activations = ActivateGenome(genome, sampleInput);
-            
-                // Calculate squared error for this sample
-                T sampleError = NumOps.Zero;
+
+                // Extract predicted values into a vector
+                var predictedVector = new Vector<T>(Architecture.OutputSize);
                 for (int i = 0; i < Architecture.OutputSize; i++)
                 {
                     int outputNodeId = Architecture.InputSize + i;
-                    T difference = NumOps.Subtract(activations[outputNodeId], sampleExpected[i]);
-                    sampleError = NumOps.Add(sampleError, NumOps.Multiply(difference, difference));
+                    predictedVector[i] = activations[outputNodeId];
                 }
-            
-                totalError = NumOps.Add(totalError, sampleError);
+
+                // Use the loss function to calculate error for this sample
+                T sampleLoss = LossFunction.CalculateLoss(predictedVector, sampleExpected);
+                totalError = NumOps.Add(totalError, sampleLoss);
             }
-        
-            // Calculate mean squared error
-            T mse = NumOps.Divide(totalError, NumOps.FromDouble(batchSize * Architecture.OutputSize));
-        
-            // Convert error to fitness (higher is better, so invert error)
+
+            // Calculate average loss across all samples
+            T averageLoss = NumOps.Divide(totalError, NumOps.FromDouble(batchSize));
+
+            // Store the loss value for the best genome after evaluation
+            if (genome == _population.OrderByDescending(g => g.Fitness).FirstOrDefault())
+            {
+                LastLoss = averageLoss;
+            }
+
+            // Convert loss to fitness (higher is better, so invert loss)
             // Add small constant to avoid division by zero
-            T fitness = NumOps.Divide(NumOps.One, NumOps.Add(mse, NumOps.FromDouble(0.01)));
-        
+            T fitness = NumOps.Divide(NumOps.One, NumOps.Add(averageLoss, NumOps.FromDouble(0.01)));
+
             return fitness;
-        };
-    
+        }
+
         // Evolve the population for multiple generations
         // The number of generations can be adjusted based on the problem complexity
         int generations = 50;

@@ -390,6 +390,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private int _warmupPeriod;
 
+    private ILossFunction<T> _lossFunction;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="EchoStateNetwork{T}"/> class with vector activation functions.
     /// </summary>
@@ -427,11 +429,12 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         double leakingRate = 1.0,
         double regularization = 1e-4,
         int warmupPeriod = 10,
+        ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? reservoirInputVectorActivation = null, 
         IVectorActivationFunction<T>? reservoirOutputVectorActivation = null, 
         IVectorActivationFunction<T>? reservoirVectorActivation = null, 
         IVectorActivationFunction<T>? outputVectorActivation = null) 
-        : base(architecture)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _reservoirSize = reservoirSize;
         _spectralRadius = spectralRadius;
@@ -442,7 +445,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _regularization = NumOps.FromDouble(regularization);
         _warmupPeriod = warmupPeriod;
         _isTraining = false;
-    
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
         // Initialize the reservoir state and other vectors/matrices
         _reservoirState = new Vector<T>(_reservoirSize);
         _inputWeights = new Matrix<T>(_inputSize, _reservoirSize);
@@ -506,11 +510,12 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         double leakingRate = 1.0,
         double regularization = 1e-4,
         int warmupPeriod = 10,
+        ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? reservoirInputScalarActivation = null, 
         IActivationFunction<T>? reservoirOutputScalarActivation = null, 
         IActivationFunction<T>? reservoirScalarActivation = null, 
         IActivationFunction<T>? outputScalarActivation = null) 
-        : base(architecture)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _reservoirSize = reservoirSize;
         _spectralRadius = spectralRadius;
@@ -521,7 +526,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _regularization = NumOps.FromDouble(regularization);
         _warmupPeriod = warmupPeriod;
         _isTraining = false;
-    
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
         // Initialize the reservoir state and other vectors/matrices
         _reservoirState = new Vector<T>(_reservoirSize);
         _inputWeights = new Matrix<T>(_inputSize, _reservoirSize);
@@ -1158,25 +1164,31 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             _collectedStates.Clear();
             _collectedTargets.Clear();
         }
-            
+
         // Flatten input and output
         Vector<T> inputVector = input.ToVector();
         Vector<T> targetVector = expectedOutput.ToVector();
-            
+
         // Check input and output sizes
         if (inputVector.Length != _inputSize)
         {
             throw new ArgumentException($"Input vector length ({inputVector.Length}) does not match expected input size ({_inputSize}).");
         }
-            
+
         if (targetVector.Length != _outputSize)
         {
             throw new ArgumentException($"Target vector length ({targetVector.Length}) does not match expected output size ({_outputSize}).");
         }
-            
+
         // Update reservoir state
         UpdateReservoirState(inputVector);
-            
+
+        // Calculate current prediction
+        Vector<T> prediction = ComputeOutput();
+
+        // Calculate and store loss
+        LastLoss = _lossFunction.CalculateLoss(prediction, targetVector);
+
         // Collect state and target (skip if we're still in warmup period)
         if (_collectedStates.Count >= _warmupPeriod)
         {
@@ -1184,7 +1196,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             _collectedTargets.Add(targetVector.Clone());
         }
     }
-        
+
     /// <summary>
     /// Finalizes training by computing the optimal output weights.
     /// </summary>
@@ -1746,6 +1758,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 Convert.ToDouble(_leakingRate),
                 Convert.ToDouble(_regularization),
                 _warmupPeriod,
+                _lossFunction,
                 _reservoirInputVectorActivation, 
                 _reservoirOutputVectorActivation, 
                 _reservoirVectorActivation, 
@@ -1762,6 +1775,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 Convert.ToDouble(_leakingRate),
                 Convert.ToDouble(_regularization),
                 _warmupPeriod,
+                _lossFunction,
                 _reservoirInputScalarActivation, 
                 _reservoirOutputScalarActivation, 
                 _reservoirScalarActivation, 

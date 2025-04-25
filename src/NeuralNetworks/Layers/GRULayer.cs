@@ -602,7 +602,7 @@ public class GRULayer<T> : LayerBase<T>
         throw new InvalidOperationException("No activation function specified.");
     }
 
-        /// <summary>
+    /// <summary>
     /// Performs the backward pass of the GRU layer.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
@@ -612,7 +612,7 @@ public class GRULayer<T> : LayerBase<T>
     /// <para>
     /// This method implements the backward pass of the GRU layer, which is used during training to propagate
     /// error gradients back through the network. It calculates the gradients for all the weights and biases,
-    /// and returns the gradient with respect to the input for further backpropagation.
+    /// and returns the gradient with respect to the layer's input for further backpropagation.
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// and parameters should change to reduce errors.
@@ -624,55 +624,248 @@ public class GRULayer<T> : LayerBase<T>
     /// 
     /// This complex calculation essentially runs the GRU's logic in reverse, tracking how
     /// changes to the output would affect each internal part of the layer.
-    /// 
-    /// Note: This implementation is simplified and may not handle the full sequence case correctly.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastHiddenState == null || _lastZ == null || _lastR == null || _lastH == null)
-        throw new InvalidOperationException("Forward pass must be called before backward pass.");
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Backward pass needs to be modified to handle sequences if returnSequences is true
-        // This is a simplified version that works for the non-sequence case
-    
-        var dh = outputGradient;
-        var dh_candidate = dh.ElementwiseMultiply(
-            _lastZ.Transform((x, _) => NumOps.Subtract(NumOps.One, x))
-        );
-        var dz = dh.ElementwiseMultiply(_lastHiddenState.Subtract(_lastH));
+        int batchSize = _lastInput.Shape[0];
+        int sequenceLength = _lastInput.Shape[1];
 
-        var dr = ApplyActivationDerivative(_lastH, isRecurrent: false)
-            .ElementwiseMultiply(dh_candidate)
-            .ElementwiseMultiply(_lastHiddenState.Multiply(_Uh));
+        // Initialize gradients
+        var dWz = new Tensor<T>([_hiddenSize, _inputSize]);
+        var dWr = new Tensor<T>([_hiddenSize, _inputSize]);
+        var dWh = new Tensor<T>([_hiddenSize, _inputSize]);
+        var dUz = new Tensor<T>([_hiddenSize, _hiddenSize]);
+        var dUr = new Tensor<T>([_hiddenSize, _hiddenSize]);
+        var dUh = new Tensor<T>([_hiddenSize, _hiddenSize]);
+        var dbz = new Tensor<T>([_hiddenSize]);
+        var dbr = new Tensor<T>([_hiddenSize]);
+        var dbh = new Tensor<T>([_hiddenSize]);
 
-        var dx = dz.Multiply(_Wz.Transpose())
-                   .Add(dr.Multiply(_Wr.Transpose()))
-                   .Add(dh_candidate.Multiply(_Wh.Transpose()));
+        // Initialize input gradients
+        var dInputs = new Tensor<T>([batchSize, sequenceLength, _inputSize]);
 
-        var dh_prev = dz.Multiply(_Uz.Transpose())
+        // If we don't have sequence data, just process the final time step
+        if (!_returnSequences || _allHiddenStates == null || _allHiddenStates.Count == 0)
+        {
+            // Handle single timestep case (simple backward pass)
+            var dh = outputGradient;
+            var dh_candidate = dh.ElementwiseMultiply(
+                _lastZ.Transform((x, _) => NumOps.Subtract(NumOps.One, x))
+            );
+            var dz = dh.ElementwiseMultiply(_lastHiddenState.Subtract(_lastH));
+
+            var dr = ApplyActivationDerivative(_lastH, isRecurrent: false)
+                .ElementwiseMultiply(dh_candidate)
+                .ElementwiseMultiply(_lastHiddenState.Multiply(_Uh));
+
+            var dx = dz.Multiply(_Wz.Transpose())
+                    .Add(dr.Multiply(_Wr.Transpose()))
+                    .Add(dh_candidate.Multiply(_Wh.Transpose()));
+
+            // Reshape dx to match input format for the last timestep
+            for (int i = 0; i < batchSize; i++)
+            {
+                for (int j = 0; j < _inputSize; j++)
+                {
+                    dInputs[i, sequenceLength - 1, j] = dx[i, j];
+                }
+            }
+
+            // Calculate gradients for weights and biases
+            dWz = _lastInput.Slice(1, sequenceLength - 1, sequenceLength)
+                            .Reshape([batchSize, _inputSize])
+                            .Transpose([1, 0])
+                            .Multiply(dz);
+            dWr = _lastInput.Slice(1, sequenceLength - 1, sequenceLength)
+                            .Reshape([batchSize, _inputSize])
+                            .Transpose([1, 0])
+                            .Multiply(dr);
+            dWh = _lastInput.Slice(1, sequenceLength - 1, sequenceLength)
+                            .Reshape([batchSize, _inputSize])
+                            .Transpose([1, 0])
+                            .Multiply(dh_candidate);
+
+            // For U gradients, we need the previous hidden state
+            // If not available, use zeros
+            Tensor<T> prevHidden;
+            if (sequenceLength > 1 && _allHiddenStates != null && _allHiddenStates.Count >= sequenceLength - 1)
+            {
+                prevHidden = _allHiddenStates[sequenceLength - 2];
+            }
+            else
+            {
+                prevHidden = new Tensor<T>([batchSize, _hiddenSize]);
+            }
+
+            dUz = prevHidden.Transpose([1, 0]).Multiply(dz);
+            dUr = prevHidden.Transpose([1, 0]).Multiply(dr);
+            dUh = prevHidden.Transpose([1, 0]).Multiply(dh_candidate.ElementwiseMultiply(_lastR));
+
+            dbz = dz.Sum([0]);
+            dbr = dr.Sum([0]);
+            dbh = dh_candidate.Sum([0]);
+        }
+        else
+        {
+            // For returning sequences, we need to backpropagate through all time steps
+
+            // Split the output gradient into time steps if returningSequences is true
+            Tensor<T>[] dhOutSequence = new Tensor<T>[sequenceLength];
+            if (_returnSequences)
+            {
+                // Split the gradient for each time step
+                for (int t = 0; t < sequenceLength; t++)
+                {
+                    dhOutSequence[t] = outputGradient.Slice(1, t, t + 1).Reshape([batchSize, _hiddenSize]);
+                }
+            }
+            else
+            {
+                // If not returning sequences, only the last time step has gradient from output
+                for (int t = 0; t < sequenceLength - 1; t++)
+                {
+                    dhOutSequence[t] = new Tensor<T>([batchSize, _hiddenSize]);
+                }
+                dhOutSequence[sequenceLength - 1] = outputGradient;
+            }
+
+            // Initialize hidden state gradient for the next timestep
+            var dhNext = new Tensor<T>([batchSize, _hiddenSize]);
+
+            // We need to store activations for each time step during forward pass
+            // If we haven't stored them, we'll recompute them now
+            List<Tensor<T>> timeStepHidden = new List<Tensor<T>>(sequenceLength);
+            List<Tensor<T>> timeStepZ = new List<Tensor<T>>(sequenceLength);
+            List<Tensor<T>> timeStepR = new List<Tensor<T>>(sequenceLength);
+            List<Tensor<T>> timeStepHCandidate = new List<Tensor<T>>(sequenceLength);
+
+            // We know the last state values
+            timeStepHidden.Add(_lastHiddenState);
+            timeStepZ.Add(_lastZ);
+            timeStepR.Add(_lastR);
+            timeStepHCandidate.Add(_lastH);
+
+            // If we have _allHiddenStates, use those states
+            if (_allHiddenStates != null && _allHiddenStates.Count == sequenceLength)
+            {
+                timeStepHidden = _allHiddenStates;
+            }
+            else
+            {
+                // Recompute hidden states for each time step
+                // This is computationally expensive but ensures correctness
+                var currentH = new Tensor<T>([batchSize, _hiddenSize]);
+
+                for (int t = 0; t < sequenceLength; t++)
+                {
+                    var xt = _lastInput.Slice(1, t, t + 1).Reshape([batchSize, _inputSize]);
+
+                    var z = ComputeGate(xt, currentH, _Wz, _Uz, _bz, true);
+                    var r = ComputeGate(xt, currentH, _Wr, _Ur, _br, true);
+                    var h_candidate = ComputeGate(xt, r.ElementwiseMultiply(currentH), _Wh, _Uh, _bh, false);
+
+                    var newH = z.ElementwiseMultiply(currentH).Add(
+                        z.Transform((x, _) => NumOps.Subtract(NumOps.One, x)).ElementwiseMultiply(h_candidate)
+                    );
+
+                    currentH = newH;
+
+                    if (t < sequenceLength - 1)
+                    {
+                        timeStepHidden[t] = currentH.Clone();
+                        timeStepZ[t] = z.Clone();
+                        timeStepR[t] = r.Clone();
+                        timeStepHCandidate[t] = h_candidate.Clone();
+                    }
+                }
+            }
+
+            // Backpropagate through time
+            for (int t = sequenceLength - 1; t >= 0; t--)
+            {
+                // Combine gradient from output and from next timestep
+                var dh = dhNext.Add(dhOutSequence[t]);
+
+                // Get activations for this timestep
+                var xt = _lastInput.Slice(1, t, t + 1).Reshape([batchSize, _inputSize]);
+                var h = timeStepHidden[t];
+                var z = timeStepZ[t];
+                var r = timeStepR[t];
+                var h_candidate = timeStepHCandidate[t];
+
+                // Get previous hidden state (or zeros for t=0)
+                var h_prev = t > 0 ? timeStepHidden[t - 1] : new Tensor<T>([batchSize, _hiddenSize]);
+
+                // Calculate gradients for this timestep
+                var dh_candidate = dh.ElementwiseMultiply(
+                    z.Transform((x, _) => NumOps.Subtract(NumOps.One, x))
+                );
+                var dz = dh.ElementwiseMultiply(h_prev.Subtract(h_candidate));
+
+                var dr = ApplyActivationDerivative(h_candidate, isRecurrent: false)
+                    .ElementwiseMultiply(dh_candidate)
+                    .ElementwiseMultiply(h_prev.Multiply(_Uh));
+
+                // Input gradient for this timestep
+                var dxt = dz.Multiply(_Wz.Transpose())
+                        .Add(dr.Multiply(_Wr.Transpose()))
+                        .Add(dh_candidate.Multiply(_Wh.Transpose()));
+
+                // Store input gradients
+                for (int i = 0; i < batchSize; i++)
+                {
+                    for (int j = 0; j < _inputSize; j++)
+                    {
+                        dInputs[i, t, j] = dxt[i, j];
+                    }
+                }
+
+                // Gradient for next timestep's hidden state
+                dhNext = dz.Multiply(_Uz.Transpose())
                         .Add(dr.Multiply(_Ur.Transpose()))
-                        .Add(dh_candidate.ElementwiseMultiply(_lastR).Multiply(_Uh.Transpose()));
+                        .Add(dh_candidate.ElementwiseMultiply(r).Multiply(_Uh.Transpose()));
 
-        // Calculate gradients for weights and biases
-        var dWz = _lastInput.Transpose(new[] { 1, 0 }).Multiply(dz);
-        var dWr = _lastInput.Transpose(new[] { 1, 0 }).Multiply(dr);
-        var dWh = _lastInput.Transpose(new[] { 1, 0 }).Multiply(dh_candidate);
+                // Accumulate weight gradients
+                dWz = dWz.Add(xt.Transpose([1, 0]).Multiply(dz));
+                dWr = dWr.Add(xt.Transpose([1, 0]).Multiply(dr));
+                dWh = dWh.Add(xt.Transpose([1, 0]).Multiply(dh_candidate));
 
-        var dUz = _lastHiddenState.Transpose(new[] { 1, 0 }).Multiply(dz);
-        var dUr = _lastHiddenState.Transpose(new[] { 1, 0 }).Multiply(dr);
-        var dUh = _lastHiddenState.Transpose(new[] { 1, 0 }).Multiply(dh_candidate.ElementwiseMultiply(_lastR));
+                dUz = dUz.Add(h_prev.Transpose([1, 0]).Multiply(dz));
+                dUr = dUr.Add(h_prev.Transpose([1, 0]).Multiply(dr));
+                dUh = dUh.Add(h_prev.Transpose([1, 0]).Multiply(dh_candidate.ElementwiseMultiply(r)));
 
-        var dbz = dz.Sum(new[] { 0 });
-        var dbr = dr.Sum(new[] { 0 });
-        var dbh = dh_candidate.Sum(new[] { 0 });
+                dbz = dbz.Add(dz.Sum([0]));
+                dbr = dbr.Add(dr.Sum([0]));
+                dbh = dbh.Add(dh_candidate.Sum([0]));
+            }
+        }
 
         // Store gradients for use in UpdateParameters
         _dWz = dWz; _dWr = dWr; _dWh = dWh;
         _dUz = dUz; _dUr = dUr; _dUh = dUh;
         _dbz = dbz; _dbr = dbr; _dbh = dbh;
 
-        return dx;
+        return dInputs;
+    }
+
+    /// <summary>
+    /// Computes a gate activation for the GRU layer.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="hidden">The hidden state tensor.</param>
+    /// <param name="W">The input weight matrix.</param>
+    /// <param name="U">The hidden state weight matrix.</param>
+    /// <param name="b">The bias vector.</param>
+    /// <param name="isRecurrent">If true, applies recurrent activation; otherwise, applies regular activation.</param>
+    /// <returns>The computed gate activation.</returns>
+    private Tensor<T> ComputeGate(Tensor<T> input, Tensor<T> hidden, Matrix<T> W, Matrix<T> U, Vector<T> b, bool isRecurrent)
+    {
+        var gate = input.Multiply(W).Add(hidden.Multiply(U)).Add(b);
+        return ApplyActivation(gate, isRecurrent);
     }
 
     /// <summary>

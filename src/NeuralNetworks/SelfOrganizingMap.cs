@@ -148,7 +148,8 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// These weights are initially random and will be adjusted during training.
     /// </para>
     /// </remarks>
-    public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture, int totalEpochs = 1000) : base(architecture)
+    public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture, int totalEpochs = 1000, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         // Get input dimension from the architecture
         _inputDimension = architecture.InputSize;
@@ -663,6 +664,11 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
         // Update weights
         UpdateWeights(input.ToVector(), bmu, learningRate, radius);
 
+        // Calculate and set the quantization error as the loss
+        // This is the distance between the input and the BMU's weights
+        Vector<T> bmuWeights = _weights.GetRow(bmu);
+        LastLoss = CalculateDistance(input.ToVector(), bmuWeights);
+
         _currentEpoch++;
     }
 
@@ -811,18 +817,6 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        // Create a new SOM with the same architecture
-        var newSom = new SelfOrganizingMap<T>(Architecture, _totalEpochs);
-        
-        // Copy the weights matrix
-        newSom._weights = _weights?.Clone() ?? throw new InvalidOperationException("Weights matrix is null");
-        
-        // Copy the dimensions and training progress
-        newSom._mapWidth = _mapWidth;
-        newSom._mapHeight = _mapHeight;
-        newSom._inputDimension = _inputDimension;
-        newSom._currentEpoch = _currentEpoch;
-        
-        return newSom;
+        return new SelfOrganizingMap<T>(Architecture, _totalEpochs, LossFunction);
     }
 }

@@ -51,7 +51,8 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// that will determine how information flows through your network.
     /// </para>
     /// </remarks>
-    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
     }
 
@@ -195,19 +196,19 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Set network to training mode
         SetTrainingMode(true);
-    
+
         // Forward pass with memory
         var predictions = ForwardWithMemory(input);
-    
+
         // Calculate error/loss
         var outputGradients = predictions.Subtract(expectedOutput);
-    
+
         // Backpropagate error
         Backpropagate(outputGradients);
-    
+
         // Calculate learning rate - could be more sophisticated in production
         T learningRate = NumOps.FromDouble(0.001);
-    
+
         // Update parameters based on gradients
         foreach (var layer in Layers)
         {
@@ -216,7 +217,10 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
                 layer.UpdateParameters(learningRate);
             }
         }
-    
+
+        // Calculate and store the loss using the loss function
+        LastLoss = LossFunction.CalculateLoss(predictions.ToVector(), expectedOutput.ToVector());
+
         // Set network back to inference mode
         SetTrainingMode(false);
     }

@@ -107,11 +107,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the loss function used for calculating reconstruction loss.
-    /// </summary>
-    private ILossFunction<T> _lossFunction { get; set; }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="VariationalAutoencoder{T}"/> class with the 
     /// specified architecture, latent space size, and optional optimizer and loss function.
     /// </summary>
@@ -142,11 +137,11 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
         int latentSize,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0) : base(architecture, maxGradNorm)
+        double maxGradNorm = 1.0) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         LatentSize = latentSize;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();
     }
@@ -572,7 +567,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
         var reconstructed = Decode(latentSample);
 
         // Calculate reconstruction loss
-        var reconstructionLoss = CalculateReconstructionLoss(inputVector, reconstructed);
+        var reconstructionLoss = LossFunction.CalculateLoss(inputVector, reconstructed);
 
         // Calculate KL divergence
         var klDivergence = CalculateKLDivergence(mean, logVariance);
@@ -707,14 +702,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Calculates the reconstruction loss between the input and reconstructed output.
-    /// </summary>
-    private T CalculateReconstructionLoss(Vector<T> input, Vector<T> reconstructed)
-    {
-        return _lossFunction.CalculateLoss(input, reconstructed);
-    }
-
-    /// <summary>
     /// Calculates the KL divergence between the learned distribution and a standard normal distribution.
     /// </summary>
     private T CalculateKLDivergence(Vector<T> mean, Vector<T> logVariance)
@@ -769,7 +756,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     {
         writer.Write(LatentSize);
         SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
     }
 
     /// <summary>
@@ -784,7 +770,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     {
         LatentSize = reader.ReadInt32();
         _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
-        _lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -822,7 +807,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
             Architecture,
             LatentSize,
             _optimizer,
-            _lossFunction,
+            LossFunction,
             Convert.ToDouble(MaxGradNorm));
     }
 }

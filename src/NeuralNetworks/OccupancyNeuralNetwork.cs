@@ -104,7 +104,9 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     public OccupancyNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture, 
         bool includeTemporalData = false, 
-        int historyWindowSize = 5) : base(architecture)
+        int historyWindowSize = 5,
+        ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _includeTemporalData = includeTemporalData;
         _historyWindowSize = includeTemporalData ? Math.Max(1, historyWindowSize) : 0;
@@ -432,7 +434,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
             TrainNonTemporal(input, expectedOutput);
         }
     }
-    
+
     /// <summary>
     /// Trains the network on temporal (sequence) data.
     /// </summary>
@@ -451,17 +453,24 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 nameof(TrainTemporal)
             );
         }
-        
+
         // Forward pass
         var output = ForwardTemporal(input);
-        
-        // Calculate error/loss
-        var error = CalculateError(output, expectedOutput);
-        
+
+        // Calculate loss using the loss function
+        Vector<T> predictedVector = output.ToVector();
+        Vector<T> expectedVector = expectedOutput.ToVector();
+        T loss = LossFunction.CalculateLoss(predictedVector, expectedVector);
+
+        // Set the LastLoss property
+        LastLoss = loss;
+
+        // Calculate error gradients using the loss function's derivative
+        Vector<T> gradients = LossFunction.CalculateDerivative(predictedVector, expectedVector);
+
         // Backpropagation
-        var flatError = error.ToVector();
-        Backpropagate(flatError);
-        
+        Backpropagate(gradients);
+
         // Update parameters with optimizer
         T learningRate = NumOps.FromDouble(0.01);
         foreach (var layer in Layers)
@@ -472,7 +481,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
             }
         }
     }
-    
+
     /// <summary>
     /// Trains the network on non-temporal (single time step) data.
     /// </summary>
@@ -482,14 +491,21 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Forward pass
         var output = Predict(input);
-        
-        // Calculate error/loss
-        var error = CalculateError(output, expectedOutput);
-        
+
+        // Calculate loss using the loss function
+        Vector<T> predictedVector = output.ToVector();
+        Vector<T> expectedVector = expectedOutput.ToVector();
+        T loss = LossFunction.CalculateLoss(predictedVector, expectedVector);
+
+        // Set the LastLoss property
+        LastLoss = loss;
+
+        // Calculate error gradients using the loss function's derivative
+        Vector<T> gradients = LossFunction.CalculateDerivative(predictedVector, expectedVector);
+
         // Backpropagation
-        var flatError = error.ToVector();
-        Backpropagate(flatError);
-        
+        Backpropagate(gradients);
+
         // Update parameters with optimizer
         T learningRate = NumOps.FromDouble(0.01);
         foreach (var layer in Layers)
@@ -500,7 +516,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
             }
         }
     }
-    
+
     /// <summary>
     /// Calculates the error between predicted and expected outputs.
     /// </summary>
@@ -701,6 +717,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         return new OccupancyNeuralNetwork<T>(
             Architecture, 
             _includeTemporalData, 
-            _historyWindowSize);
+            _historyWindowSize,
+            LossFunction);
     }
 }

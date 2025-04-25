@@ -145,6 +145,8 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private readonly int _batchSize = 32;
 
+    private ILossFunction<T> _lossFunction;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DeepQNetwork{T}"/> class with the specified architecture and exploration rate.
     /// </summary>
@@ -167,10 +169,12 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// a curiosity level (epsilon) that determines how often they'll experiment versus stick with what they know.
     /// </para>
     /// </remarks>
-    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, double epsilon = 1e16) : base(architecture)
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1e16) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _epsilon = NumOps.FromDouble(epsilon);
-        _targetNetwork = new DeepQNetwork<T>(architecture, epsilon);
+        _targetNetwork = new DeepQNetwork<T>(architecture, lossFunction, epsilon);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
     }
@@ -468,28 +472,28 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         {
             return;
         }
-    
+
         // Sample random batch of experiences
         var batch = SampleBatch(_batchSize);
-    
+
         // Prepare input batch (states) and output batch (Q-values)
         var states = new Tensor<T>[_batchSize];
         var targetQValues = new Tensor<T>[_batchSize];
-    
+
         for (int i = 0; i < _batchSize; i++)
         {
             var experience = batch[i];
             states[i] = experience.State;
-        
+
             // Get current Q-values for the state
             var currentQValues = GetQValues(experience.State);
-        
+
             // Create copy for updating
             var updatedQValues = currentQValues.Clone();
 
             // Calculate target Q-value for the action taken
             T targetQ;
-        
+
             if (experience.Done)
             {
                 // For terminal states, target Q-value is just the reward
@@ -505,31 +509,34 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
                 T gamma = NumOps.FromDouble(0.99); // Discount factor
                 targetQ = NumOps.Add(experience.Reward, NumOps.Multiply(gamma, maxNextQ));
             }
-        
+
             // Update only the Q-value for the action that was taken
             updatedQValues[experience.Action] = targetQ;
-        
+
             targetQValues[i] = updatedQValues;
         }
-    
+
         // Combine all states and target Q-values into batches
         var statesBatch = Tensor<T>.Stack(states);
         var targetsBatch = Tensor<T>.Stack(targetQValues);
-    
+
         // Set network to training mode
         SetTrainingMode(true);
-    
+
         // Forward pass with memory
         var predictions = ForwardWithMemoryBatch(statesBatch);
-    
+
+        // Calculate loss using the configured loss function
+        LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), targetsBatch.ToVector());
+
         // Compute gradients and update network
         var outputGradients = predictions.Subtract(targetsBatch);
         BackpropagateBatch(outputGradients);
         UpdateParameters(NumOps.FromDouble(0.001)); // Learning rate
-    
+
         // Set network back to inference mode
         SetTrainingMode(false);
-    
+
         // Periodically update target network (e.g., every 100 training steps)
         if (Random.Next(100) == 0)
         {
@@ -806,6 +813,6 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new DeepQNetwork<T>(this.Architecture, Convert.ToDouble(this._epsilon));
+        return new DeepQNetwork<T>(this.Architecture, _lossFunction, Convert.ToDouble(this._epsilon));
     }
 }

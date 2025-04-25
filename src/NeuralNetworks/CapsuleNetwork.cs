@@ -50,7 +50,8 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
     /// you're just getting everything ready to use.
     /// </para>
     /// </remarks>
-    public CapsuleNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : base(architecture)
+    public CapsuleNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? new MarginLoss<T>())
     {
         _lossFunction = lossFunction ?? new MarginLoss<T>();
 
@@ -193,6 +194,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
 
         // Calculate loss
         var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+        LastLoss = loss;
 
         // Backward pass
         var gradient = CalculateGradient(loss);

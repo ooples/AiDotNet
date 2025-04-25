@@ -27,7 +27,6 @@ namespace AiDotNet;
 /// </remarks>
 public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
 {
-    private readonly PredictionStatsOptions _options;
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
     private IRegularization<T, TInput, TOutput>? _regularization;
@@ -37,19 +36,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
-
-    /// <summary>
-    /// Creates a new instance of the PredictionModelBuilder.
-    /// </summary>
-    /// <param name="options">Optional configuration settings for the prediction model.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is the starting point for creating your AI model.
-    /// You can provide some basic settings here, or use the default settings if you're just getting started.
-    /// </remarks>
-    public PredictionModelBuilder(PredictionStatsOptions? options = null)
-    {
-        _options = options ?? new PredictionStatsOptions();
-    }
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -236,9 +222,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
         var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>();
         var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
-        var fitDetector = _fitDetector ?? new DefaultFitDetector<T, TInput, TOutput>();
-        var fitnessCalculator = _fitnessCalculator ?? new RSquaredFitnessCalculator<T, TInput, TOutput>();
-        var regularization = _regularization ?? new NoRegularization<T, TInput, TOutput>();
         var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
         var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
 
