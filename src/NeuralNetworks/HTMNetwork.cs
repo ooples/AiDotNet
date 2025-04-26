@@ -169,8 +169,9 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture, 
         int columnCount = 2048, 
         int cellsPerColumn = 32, 
-        double sparsityThreshold = 0.02) 
-        : base(architecture)
+        double sparsityThreshold = 0.02,
+        ILossFunction<T>? lossFunction = null) 
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         var inputShape = Architecture.GetInputShape();
         if (inputShape == null || inputShape.Length == 0)
@@ -499,18 +500,26 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     {
         // HTM networks don't use supervised learning with expected outputs
         // They learn by observing sequences of inputs
-        
+
+        // Track total anomaly score for batch processing
+        T totalAnomalyScore = NumOps.Zero;
+        int processedInputs = 0;
+
         // Process input based on its shape
         if (input.Rank == 1)
         {
             // Single input vector
             Learn(input.ToVector());
+
+            // Calculate anomaly score
+            totalAnomalyScore = CalculateAnomalyScore();
+            processedInputs = 1;
         }
         else if (input.Rank == 2)
         {
             // Batch of inputs - process them sequentially
             int batchSize = input.Shape[0];
-            
+
             for (int i = 0; i < batchSize; i++)
             {
                 // Extract the i-th input from the batch
@@ -519,15 +528,95 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
                 {
                     singleInput[j] = input[i, j];
                 }
-                
+
                 // Learn from this input
                 Learn(singleInput);
+
+                // Add to total anomaly score
+                totalAnomalyScore = NumOps.Add(totalAnomalyScore, CalculateAnomalyScore());
+                processedInputs++;
             }
         }
         else
         {
             throw new ArgumentException("Input tensor must be either a vector or a batch of vectors.");
         }
+
+        // Calculate average anomaly score for all processed inputs
+        if (processedInputs > 0)
+        {
+            LastLoss = NumOps.Divide(totalAnomalyScore, NumOps.FromDouble(processedInputs));
+        }
+    }
+
+    /// <summary>
+    /// Calculates the current anomaly score based on the network's state.
+    /// </summary>
+    /// <returns>An anomaly score where higher values indicate greater prediction error.</returns>
+    private T CalculateAnomalyScore()
+    {
+        T anomalyScore = NumOps.Zero;
+
+        // Check if we have an anomaly detector layer
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i] is AnomalyDetectorLayer<T> anomalyLayer)
+            {
+                // Get the current output from the previous layer
+                Vector<T> currentState;
+                if (i > 0 && Layers[i - 1] is TemporalMemoryLayer<T> temporalMemoryLayer &&
+                    temporalMemoryLayer.PreviousState != null)
+                {
+                    currentState = temporalMemoryLayer.PreviousState;
+                    var anomalyOutput = anomalyLayer.Forward(Tensor<T>.FromVector(currentState)).ToVector();
+                    if (anomalyOutput.Length > 0)
+                    {
+                        anomalyScore = anomalyOutput[0];
+                        return anomalyScore;
+                    }
+                }
+            }
+        }
+
+        // If no anomaly detector layer, calculate a simple prediction error
+        if (NumOps.Equals(anomalyScore, NumOps.Zero) && Layers.Count >= 2 &&
+            Layers[1] is TemporalMemoryLayer<T> temporalMemoryLayer2)
+        {
+            // Get the predicted cells from before this input was processed
+            var predictedCells = temporalMemoryLayer2.GetPredictions();
+
+            // If we have predictions, calculate a simple match score
+            if (predictedCells != null && predictedCells.Length > 0 &&
+                temporalMemoryLayer2.PreviousState != null)
+            {
+                // Calculate overlap between prediction and actual
+                int matches = 0;
+                int total = 0;
+
+                for (int i = 0; i < Math.Min(predictedCells.Length, temporalMemoryLayer2.PreviousState.Length); i++)
+                {
+                    if (!NumOps.Equals(predictedCells[i], NumOps.Zero) &&
+                        !NumOps.Equals(temporalMemoryLayer2.PreviousState[i], NumOps.Zero))
+                    {
+                        matches++;
+                    }
+                    if (!NumOps.Equals(predictedCells[i], NumOps.Zero) ||
+                        !NumOps.Equals(temporalMemoryLayer2.PreviousState[i], NumOps.Zero))
+                    {
+                        total++;
+                    }
+                }
+
+                // Calculate error rate (1.0 - match rate)
+                if (total > 0)
+                {
+                    double matchRate = (double)matches / total;
+                    anomalyScore = NumOps.FromDouble(1.0 - matchRate);
+                }
+            }
+        }
+
+        return anomalyScore;
     }
 
     /// <summary>

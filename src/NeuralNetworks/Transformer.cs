@@ -67,26 +67,6 @@ public class Transformer<T> : NeuralNetworkBase<T>
     public Tensor<T>? AttentionMask { get; set; }
 
     /// <summary>
-    /// The loss function used to calculate the error of the Transformer's predictions.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The loss function measures how far the Transformer's predictions are from the expected outputs.
-    /// It's crucial for training as it guides the optimization process to improve the Transformer's accuracy.
-    /// </para>
-    /// <para><b>For Beginners:</b> The loss function is like a scorekeeper for the Transformer.
-    /// 
-    /// Imagine you're playing a game where you have to guess numbers:
-    /// - The loss function tells you how close your guess was to the correct answer
-    /// - A lower score (loss) means you're doing better
-    /// - The Transformer uses this score to learn and make better guesses next time
-    /// 
-    /// Different types of loss functions can be used depending on the specific task the Transformer is performing.
-    /// </para>
-    /// </remarks>
-    private ILossFunction<T> _lossFunction;
-
-    /// <summary>
     /// The optimizer used to update the Transformer's parameters during training.
     /// </summary>
     /// <remarks>
@@ -130,10 +110,10 @@ public class Transformer<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public Transformer(TransformerArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, 
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _transformerArchitecture = architecture;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
 
         InitializeLayers();
@@ -353,8 +333,11 @@ public class Transformer<T> : NeuralNetworkBase<T>
         var flattenedPredictions = prediction.ToVector();
         var flattenedOutput = expectedOutput.ToVector();
 
+        // Calculate and store the loss
+        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedOutput);
+
         // Backward pass
-        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedOutput);
+        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedOutput);
 
         // Backpropagate to get gradients for all layers
         Backpropagate(outputGradients);
@@ -420,7 +403,7 @@ public class Transformer<T> : NeuralNetworkBase<T>
                 { "DropoutRate", _transformerArchitecture.DropoutRate },
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() },
-                { "LossFunction", _lossFunction.GetType().Name },
+                { "LossFunction", LossFunction.GetType().Name },
                 { "Optimizer", _optimizer.GetType().Name }
             },
             ModelData = this.Serialize()
@@ -456,7 +439,7 @@ public class Transformer<T> : NeuralNetworkBase<T>
         writer.Write(Convert.ToDouble(_transformerArchitecture.DropoutRate));
 
         // Write loss function and optimizer types
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
+        SerializationHelper<T>.SerializeInterface(writer, LossFunction);
         SerializationHelper<T>.SerializeInterface(writer, _optimizer);
     }
 
@@ -489,7 +472,6 @@ public class Transformer<T> : NeuralNetworkBase<T>
         T dropoutRate = NumOps.FromDouble(reader.ReadDouble());
 
         // Read and reconstruct loss function and optimizer
-        _lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ?? new MeanSquaredErrorLoss<T>();
         _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
     }
 
@@ -525,7 +507,7 @@ public class Transformer<T> : NeuralNetworkBase<T>
     {
         return new Transformer<T>(
             _transformerArchitecture,
-            _lossFunction,
+            LossFunction,
             _optimizer);
     }
 }

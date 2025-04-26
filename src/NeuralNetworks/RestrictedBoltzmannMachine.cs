@@ -258,7 +258,8 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1, 
-        IActivationFunction<T>? scalarActivation = null) : base(architecture)
+        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         VisibleSize = visibleSize;
         HiddenSize = hiddenSize;
@@ -301,7 +302,8 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1, 
-        IVectorActivationFunction<T>? vectorActivation = null) : base(architecture)
+        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         VisibleSize = visibleSize;
         HiddenSize = hiddenSize;
@@ -609,13 +611,13 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // For RBMs, we ignore expectedOutput as they are unsupervised models
-        
+
         // Reshape input to batch format if needed
         Tensor<T> batchInput;
         if (input.Shape.Length == 1)
         {
             // Single sample, reshape to [1, visibleSize]
-            batchInput = new Tensor<T>(new[] { 1, VisibleSize });
+            batchInput = new Tensor<T>([1, VisibleSize]);
             for (int i = 0; i < Math.Min(input.Shape[0], VisibleSize); i++)
             {
                 batchInput[0, i] = input[i];
@@ -626,83 +628,83 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             // Assume batch format [batchSize, visibleSize]
             batchInput = input;
         }
-        
+
         int batchSize = batchInput.Shape[0];
-        
+
         // Initialize weight and bias updates
         var weightUpdates = new Matrix<T>(HiddenSize, VisibleSize);
         var visibleBiasUpdates = new Vector<T>(VisibleSize);
         var hiddenBiasUpdates = new Vector<T>(HiddenSize);
-        
+
         // Process each sample in the batch
         for (int b = 0; b < batchSize; b++)
         {
             // Extract single sample
-            var visibleSample = new Tensor<T>(new[] { 1, VisibleSize });
+            var visibleSample = new Tensor<T>([1, VisibleSize]);
             for (int i = 0; i < VisibleSize; i++)
             {
                 visibleSample[0, i] = batchInput[b, i];
             }
-            
+
             // Positive phase
             var hiddenActivations = GetHiddenLayerActivation(visibleSample);
             var hiddenStates = SampleBinaryStates(hiddenActivations);
-            
+
             // Store positive associations
             var positiveAssociations = ComputeAssociations(visibleSample, hiddenActivations);
-            
+
             // Negative phase (Contrastive Divergence)
             var visibleReconstruction = visibleSample;
             var hiddenReactivations = hiddenActivations;
-            
+
             // Run Gibbs sampling chain for _cdSteps steps
             for (int step = 0; step < _cdSteps; step++)
             {
                 // Reconstruct visible layer
                 visibleReconstruction = GetVisibleLayerActivation(hiddenStates);
-                
+
                 // Compute hidden activations from reconstruction
                 hiddenReactivations = GetHiddenLayerActivation(visibleReconstruction);
-                
+
                 // Sample hidden states for next step (except last step)
                 if (step < _cdSteps - 1)
                 {
                     hiddenStates = SampleBinaryStates(hiddenReactivations);
                 }
             }
-            
+
             // Store negative associations
             var negativeAssociations = ComputeAssociations(visibleReconstruction, hiddenReactivations);
-            
+
             // Compute updates for this sample
-            var sampleWeightUpdates = MatrixSubtract(positiveAssociations, negativeAssociations);
-            
+            var sampleWeightUpdates = positiveAssociations.Subtract(negativeAssociations);
+
             // Accumulate updates
-            weightUpdates = MatrixAdd(weightUpdates, sampleWeightUpdates);
-            
+            weightUpdates = weightUpdates.Add(sampleWeightUpdates);
+
             // Update visible bias (visible data - visible reconstruction)
             for (int i = 0; i < VisibleSize; i++)
             {
                 visibleBiasUpdates[i] = NumOps.Add(
-                    visibleBiasUpdates[i], 
+                    visibleBiasUpdates[i],
                     NumOps.Subtract(visibleSample[0, i], visibleReconstruction[0, i])
                 );
             }
-            
+
             // Update hidden bias (hidden activations - hidden reactivations)
             for (int j = 0; j < HiddenSize; j++)
             {
                 hiddenBiasUpdates[j] = NumOps.Add(
-                    hiddenBiasUpdates[j], 
+                    hiddenBiasUpdates[j],
                     NumOps.Subtract(hiddenActivations[0, j], hiddenReactivations[0, j])
                 );
             }
         }
-        
+
         // Apply updates, normalized by batch size
         T batchNormalization = NumOps.FromDouble(1.0 / batchSize);
         T learningFactor = NumOps.Multiply(_learningRate, batchNormalization);
-        
+
         // Update weights
         for (int i = 0; i < HiddenSize; i++)
         {
@@ -712,19 +714,22 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
                 _weights[i, j] = NumOps.Add(_weights[i, j], update);
             }
         }
-        
+
         // Update biases
         for (int i = 0; i < VisibleSize; i++)
         {
             T update = NumOps.Multiply(visibleBiasUpdates[i], learningFactor);
             _visibleBiases[i] = NumOps.Add(_visibleBiases[i], update);
         }
-        
+
         for (int i = 0; i < HiddenSize; i++)
         {
             T update = NumOps.Multiply(hiddenBiasUpdates[i], learningFactor);
             _hiddenBiases[i] = NumOps.Add(_hiddenBiases[i], update);
         }
+
+        // Calculate and set the reconstruction error as the loss
+        LastLoss = ComputeReconstructionError(batchInput);
     }
 
     /// <summary>
@@ -746,58 +751,6 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         }
         
         return associations;
-    }
-    
-    /// <summary>
-    /// Adds two matrices element-wise.
-    /// </summary>
-    /// <param name="a">First matrix.</param>
-    /// <param name="b">Second matrix.</param>
-    /// <returns>Result of addition.</returns>
-    private Matrix<T> MatrixAdd(Matrix<T> a, Matrix<T> b)
-    {
-        if (a.Rows != b.Rows || a.Columns != b.Columns)
-        {
-            throw new ArgumentException("Matrix dimensions must match for addition.");
-        }
-        
-        var result = new Matrix<T>(a.Rows, a.Columns);
-        
-        for (int i = 0; i < a.Rows; i++)
-        {
-            for (int j = 0; j < a.Columns; j++)
-            {
-                result[i, j] = NumOps.Add(a[i, j], b[i, j]);
-            }
-        }
-        
-        return result;
-    }
-    
-    /// <summary>
-    /// Subtracts two matrices element-wise.
-    /// </summary>
-    /// <param name="a">First matrix.</param>
-    /// <param name="b">Second matrix.</param>
-    /// <returns>Result of subtraction.</returns>
-    private Matrix<T> MatrixSubtract(Matrix<T> a, Matrix<T> b)
-    {
-        if (a.Rows != b.Rows || a.Columns != b.Columns)
-        {
-            throw new ArgumentException("Matrix dimensions must match for subtraction.");
-        }
-        
-        var result = new Matrix<T>(a.Rows, a.Columns);
-        
-        for (int i = 0; i < a.Rows; i++)
-        {
-            for (int j = 0; j < a.Columns; j++)
-            {
-                result[i, j] = NumOps.Subtract(a[i, j], b[i, j]);
-            }
-        }
-        
-        return result;
     }
 
     /// <summary>
@@ -1190,6 +1143,18 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        throw new NotImplementedException();
+        // Determine which constructor to use based on whether we're using scalar or vector activations
+        if (_vectorActivation != null)
+        {
+            // Use the vector activation constructor
+            return new RestrictedBoltzmannMachine<T>(
+                Architecture, VisibleSize, HiddenSize, Convert.ToDouble(_learningRate), _cdSteps, _vectorActivation, LossFunction);
+        }
+        else
+        {
+            // Use the scalar activation constructor
+            return new RestrictedBoltzmannMachine<T>(
+                Architecture, VisibleSize, HiddenSize, Convert.ToDouble(_learningRate), _cdSteps, _scalarActivation, LossFunction);
+        }
     }
 }

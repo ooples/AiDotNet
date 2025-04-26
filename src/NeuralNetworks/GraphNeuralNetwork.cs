@@ -188,9 +188,11 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// capture relationships between different values.
     /// </para>
     /// </remarks>
-    public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, IVectorActivationFunction<T>? graphConvolutionalVectorActivation = null, 
+    public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
+        IVectorActivationFunction<T>? graphConvolutionalVectorActivation = null, 
         IVectorActivationFunction<T>? activationLayerVectorActivation = null, IVectorActivationFunction<T>? finalDenseLayerVectorActivation = null, 
-        IVectorActivationFunction<T>? finalActivationLayerVectorActivation = null) : base(architecture)
+        IVectorActivationFunction<T>? finalActivationLayerVectorActivation = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _graphConvolutionalVectorActivation = graphConvolutionalVectorActivation;
         _activationLayerVectorActivation = activationLayerVectorActivation;
@@ -224,9 +226,11 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// transformation to each number without considering relationships between values.
     /// </para>
     /// </remarks>
-    public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, IActivationFunction<T>? graphConvolutionalActivation = null, 
+    public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
+        IActivationFunction<T>? graphConvolutionalActivation = null, 
         IActivationFunction<T>? activationLayerActivation = null, IActivationFunction<T>? finalDenseLayerActivation = null, 
-        IActivationFunction<T>? finalActivationLayerActivation = null) : base(architecture)
+        IActivationFunction<T>? finalActivationLayerActivation = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _graphConvolutionalScalarActivation = graphConvolutionalActivation;
         _activationLayerScalarActivation = activationLayerActivation;
@@ -511,7 +515,6 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Extract node features and adjacency matrix from the input tensor
-        // Assuming the format is [nodeFeatures; adjacencyMatrix]
         int featuresDimension = input.Shape[0] / 2; // First half contains features
         
         // Extract node features
@@ -526,10 +529,10 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         // Calculate loss
         var flattenedPredictions = prediction.ToVector();
         var flattenedExpected = expectedOutput.ToVector();
-        var loss = new MeanSquaredErrorLoss<T>().CalculateLoss(flattenedPredictions, flattenedExpected);
+        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
 
         // Calculate output gradients
-        var outputGradients = new MeanSquaredErrorLoss<T>().CalculateDerivative(flattenedPredictions, flattenedExpected);
+        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
 
         // Backpropagate to get parameter gradients
         Vector<T> gradients = Backpropagate(outputGradients);

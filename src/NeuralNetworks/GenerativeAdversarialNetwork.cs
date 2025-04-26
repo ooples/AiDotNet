@@ -274,6 +274,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
 
+    private ILossFunction<T> _lossFunction;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GenerativeAdversarialNetwork{T}"/> class.
     /// </summary>
@@ -303,6 +305,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     public GenerativeAdversarialNetwork(NeuralNetworkArchitecture<T> generatorArchitecture, 
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
         InputType inputType,
+        ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.001)
         : base(new NeuralNetworkArchitecture<T>(
             inputType,
@@ -311,7 +314,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
             generatorArchitecture.InputSize, 
             discriminatorArchitecture.OutputSize, 
             0, 0, 0, 
-            null))
+            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         _initialLearningRate = initialLearningRate;
         _currentLearningRate = initialLearningRate;
@@ -321,11 +324,12 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         _beta2Power = NumOps.One;
     
         // Initialize tracking collections
-        _generatorLosses = new List<T>();
+        _generatorLosses = [];
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
         _momentum = Vector<T>.Empty();
         _secondMoment = Vector<T>.Empty();
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         InitializeLayers();
     }
@@ -803,51 +807,51 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     {
         // Get batch size from the input tensor
         int batchSize = input.Shape[0];
-    
+
         // Set both networks to training mode
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
-    
+
         // ------------ Train Discriminator ------------
-    
+
         // Generate fake images with tensor operations
         var fakeImages = Generator.Predict(input);
-    
+
         // Create label tensors (1 for real, 0 for fake)
         var realLabels = CreateLabelTensor(batchSize, NumOps.One);
         var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-    
+
         // Train discriminator on real images using tensor operations
         var realLoss = TrainDiscriminatorBatch(expectedOutput, realLabels);
-    
+
         // Train discriminator on fake images using tensor operations
         var fakeLoss = TrainDiscriminatorBatch(fakeImages, fakeLabels);
-    
+
         // Compute average discriminator loss
         var discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
         discriminatorLoss = NumOps.Divide(discriminatorLoss, NumOps.FromDouble(2.0));
-    
+
         // ------------ Train Generator ------------
 
         // For generator training, we want discriminator to think fake images are real
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-    
+
         // Train generator to fool discriminator using tensor operations
         var generatorLoss = TrainGeneratorBatch(input, allRealLabels);
-    
+
         // Track generator loss for monitoring
         _generatorLosses.Add(generatorLoss);
         if (_generatorLosses.Count > 100)
         {
             _generatorLosses.RemoveAt(0);
         }
-    
+
         // Adapt learning rate based on recent performance
         if (_generatorLosses.Count >= 20)
         {
             var recentAverage = _generatorLosses.Skip(_generatorLosses.Count - 10).Average(l => Convert.ToDouble(l));
             var previousAverage = _generatorLosses.Skip(_generatorLosses.Count - 20).Take(10).Average(l => Convert.ToDouble(l));
-        
+
             // If loss is not improving or worsening, adjust learning rate
             if (recentAverage > previousAverage * 0.95)
             {
@@ -859,6 +863,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
                 _currentLearningRate = Math.Min(_currentLearningRate * 1.05, 0.001); // Increase but cap
             }
         }
+
+        LastLoss = generatorLoss;
     }
 
     /// <summary>
@@ -1625,6 +1631,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
             Generator.Architecture,
             Discriminator.Architecture,
             Architecture.InputType,
+            _lossFunction,
             _initialLearningRate);
     }
 }

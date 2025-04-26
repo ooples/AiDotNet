@@ -71,12 +71,12 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0) : base(architecture, maxGradNorm)
+        double maxGradNorm = 1.0) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         ArchitectureValidator.ValidateInputType(architecture, InputType.ThreeDimensional, nameof(ConvolutionalNeuralNetwork<T>));
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
     }
@@ -245,6 +245,12 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Forward pass
         var prediction = Predict(input);
+
+        // Calculate loss
+        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+
+        // Store the last loss value
+        LastLoss = loss;
 
         // Calculate output gradient
         var outputGradient = CalculateOutputGradient(prediction, expectedOutput);

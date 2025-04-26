@@ -3,6 +3,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <summary>
 /// Represents a Neural Turing Machine, which is a neural network architecture that combines a neural network with external memory.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// A Neural Turing Machine (NTM) extends traditional neural networks by adding an external memory component that
@@ -25,183 +26,226 @@ namespace AiDotNet.NeuralNetworks;
 /// partial results and carry digits, similar to how humans solve addition problems.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
 {
     /// <summary>
-    /// Gets or sets the size of the external memory matrix (number of memory locations).
+    /// The size of the external memory matrix (number of memory locations).
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The memory size determines the number of separate memory locations available to the neural network.
-    /// A larger memory size allows the network to store more distinct pieces of information but increases
-    /// computational requirements.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the number of pages in the network's notebook.
-    /// 
-    /// More memory locations (larger MemorySize) means:
-    /// - The network can store more separate pieces of information
-    /// - It can keep track of more things at once
-    /// - It might perform better on complex tasks that require remembering many details
-    /// 
-    /// However, a larger memory also requires more computing power to process.
-    /// </para>
-    /// </remarks>
     private int _memorySize;
 
     /// <summary>
-    /// Gets or sets the size of each memory vector (the amount of information stored at each memory location).
+    /// The size of each memory vector (the amount of information stored at each memory location).
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The memory vector size determines how much information can be stored at each memory location.
-    /// Larger vector sizes allow more detailed information to be stored at each location but increase
-    /// computational requirements.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like how much information you can write on each page of the notebook.
-    /// 
-    /// A larger vector size means:
-    /// - Each memory location can store more detailed information
-    /// - The network can capture more complex patterns at each location
-    /// - It might provide better performance for tasks requiring nuanced memory
-    /// 
-    /// Think of it as the difference between taking brief notes versus detailed notes on each page.
-    /// </para>
-    /// </remarks>
     private int _memoryVectorSize;
 
     /// <summary>
-    /// Gets or sets the size of the controller network that manages memory operations.
+    /// The size of the controller network that manages memory operations.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The controller size determines the complexity of the neural network that decides how to interact with
-    /// the external memory. A larger controller can implement more sophisticated memory access strategies
-    /// but requires more computational resources.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the brain power of the system that decides when and how to use the notebook.
-    /// 
-    /// A larger controller size means:
-    /// - The network can make more sophisticated decisions about using memory
-    /// - It can develop more complex strategies for storing and retrieving information
-    /// - It might learn more effectively on difficult tasks
-    /// 
-    /// Think of it as having a smarter student who knows better strategies for taking and using notes.
-    /// </para>
-    /// </remarks>
     private int _controllerSize;
 
     /// <summary>
-    /// Gets or sets the external memory matrix used by the Neural Turing Machine.
+    /// The external memory matrices used by the Neural Turing Machine, one per batch element.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The memory matrix stores all the information that the Neural Turing Machine can access. It is organized
-    /// as a matrix where each row represents a memory location and each column represents a dimension of the
-    /// stored information vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the actual notebook where information is stored.
-    /// 
-    /// The memory matrix:
-    /// - Has _memorySize rows (like pages in a notebook)
-    /// - Has _memoryVectorSize columns (like the amount of information on each page)
-    /// - Can be read from and written to by the neural network
-    /// - Persists information across processing steps, allowing the network to "remember"
-    /// 
-    /// When the network processes information, it can store results here and retrieve them later,
-    /// which is what gives the Neural Turing Machine its powerful memory capabilities.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> _memory;
+    private List<Matrix<T>> _memories;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="NeuralTuringMachine{T}"/> class with the specified architecture and memory parameters.
+    /// The current reading weights for each batch element.
+    /// </summary>
+    private List<Vector<T>> _readWeights;
+
+    /// <summary>
+    /// The current writing weights for each batch element.
+    /// </summary>
+    private List<Vector<T>> _writeWeights;
+
+    /// <summary>
+    /// Indicates whether the network is in training mode.
+    /// </summary>
+    private bool _isTraining;
+
+    /// <summary>
+    /// The activation function to apply to content-based addressing similarity scores.
+    /// </summary>
+    public IActivationFunction<T>? ContentAddressingActivation { get; }
+
+    /// <summary>
+    /// The activation function to apply to interpolation gates.
+    /// </summary>
+    public IActivationFunction<T>? GateActivation { get; }
+
+    /// <summary>
+    /// The activation function to apply to the final output.
+    /// </summary>
+    public IActivationFunction<T>? OutputActivation { get; }
+
+    /// <summary>
+    /// The activation function to apply to content-based addressing similarity scores.
+    /// </summary>
+    public IVectorActivationFunction<T>? ContentAddressingVectorActivation { get; }
+
+    /// <summary>
+    /// The activation function to apply to interpolation gates.
+    /// </summary>
+    public IVectorActivationFunction<T>? GateVectorActivation { get; }
+
+    /// <summary>
+    /// The activation function to apply to the final output.
+    /// </summary>
+    public IVectorActivationFunction<T>? OutputVectorActivation { get; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NeuralTuringMachine{T}"/> class.
     /// </summary>
     /// <param name="architecture">The neural network architecture to use for the NTM.</param>
     /// <param name="memorySize">The number of memory locations (rows in the memory matrix).</param>
     /// <param name="memoryVectorSize">The size of each memory vector (columns in the memory matrix).</param>
     /// <param name="controllerSize">The size of the controller network that manages memory operations.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new Neural Turing Machine with the specified architecture and memory parameters.
-    /// It initializes the memory matrix with small random values to facilitate learning during training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This sets up the Neural Turing Machine with its basic components.
-    /// 
-    /// When creating a new NTM:
-    /// - architecture: Defines the overall structure of the neural network
-    /// - memorySize: Sets how many separate memory locations are available
-    /// - memoryVectorSize: Sets how much information can be stored at each location
-    /// - controllerSize: Sets how complex the control system is
-    /// 
-    /// The constructor also initializes the memory with small random values as a starting point,
-    /// similar to how you might prepare a notebook with light markings before actually using it.
-    /// </para>
-    /// </remarks>
-    public NeuralTuringMachine(NeuralNetworkArchitecture<T> architecture, int memorySize, int memoryVectorSize, int controllerSize) 
-        : base(architecture)
+    /// <param name="lossFunction">The loss function to use for training.</param>
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NeuralTuringMachine{T}"/> class with customizable activation functions.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture to use for the NTM.</param>
+    /// <param name="memorySize">The number of memory locations (rows in the memory matrix).</param>
+    /// <param name="memoryVectorSize">The size of each memory vector (columns in the memory matrix).</param>
+    /// <param name="controllerSize">The size of the controller network that manages memory operations.</param>
+    /// <param name="lossFunction">The loss function to use for training. If null, a default will be used based on the task type.</param>
+    /// <param name="contentAddressingActivation">The activation function to apply to content-based addressing. If null, softmax will be used.</param>
+    /// <param name="gateActivation">The activation function to apply to interpolation gates. If null, sigmoid will be used.</param>
+    /// <param name="outputActivation">The activation function to apply to the final output. If null, a default based on task type will be used.</param>
+    public NeuralTuringMachine(
+        NeuralNetworkArchitecture<T> architecture,
+        int memorySize,
+        int memoryVectorSize,
+        int controllerSize,
+        ILossFunction<T>? lossFunction = null,
+        IActivationFunction<T>? contentAddressingActivation = null,
+        IActivationFunction<T>? gateActivation = null,
+        IActivationFunction<T>? outputActivation = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        if (memorySize <= 0) throw new ArgumentOutOfRangeException(nameof(memorySize), "Memory size must be positive");
+        if (memoryVectorSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryVectorSize), "Memory vector size must be positive");
+        if (controllerSize <= 0) throw new ArgumentOutOfRangeException(nameof(controllerSize), "Controller size must be positive");
+
         _memorySize = memorySize;
         _memoryVectorSize = memoryVectorSize;
         _controllerSize = controllerSize;
-        _memory = new Matrix<T>(_memorySize, _memoryVectorSize);
 
-        InitializeMemory();
+        // Set activation functions (or defaults)
+        ContentAddressingActivation = contentAddressingActivation ?? new SoftmaxActivation<T>();
+        GateActivation = gateActivation ?? new SigmoidActivation<T>();
+        OutputActivation = outputActivation ?? NeuralNetworkHelper<T>.GetDefaultActivationFunction(architecture.TaskType);
+
+        _memories = [];
+        _readWeights = [];
+        _writeWeights = [];
+
+        // Initialize with default memory and weights
+        InitializeDefaultMemoryAndWeights();
         InitializeLayers();
     }
 
     /// <summary>
-    /// Initializes the memory matrix with small random values.
+    /// Initializes a new instance of the <see cref="NeuralTuringMachine{T}"/> class.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method populates the memory matrix with small random values between 0 and 0.1. Using small
-    /// initial values helps with the training process by providing a stable starting point that allows
-    /// gradual learning.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method prepares the notebook with light random markings.
-    /// 
-    /// When initializing memory:
-    /// - Each cell in the memory matrix gets a small random value
-    /// - These values are between 0 and 0.1 (very small)
-    /// - Starting with small random values helps the network learn more effectively
-    /// - It's like having faint pencil marks that can be easily modified during learning
-    /// 
-    /// Without this initialization, the network might have trouble starting the learning process.
-    /// </para>
-    /// </remarks>
-    private void InitializeMemory()
+    /// <param name="architecture">The neural network architecture to use for the NTM.</param>
+    /// <param name="memorySize">The number of memory locations (rows in the memory matrix).</param>
+    /// <param name="memoryVectorSize">The size of each memory vector (columns in the memory matrix).</param>
+    /// <param name="controllerSize">The size of the controller network that manages memory operations.</param>
+    /// <param name="lossFunction">The loss function to use for training.</param>
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NeuralTuringMachine{T}"/> class with customizable activation functions.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture to use for the NTM.</param>
+    /// <param name="memorySize">The number of memory locations (rows in the memory matrix).</param>
+    /// <param name="memoryVectorSize">The size of each memory vector (columns in the memory matrix).</param>
+    /// <param name="controllerSize">The size of the controller network that manages memory operations.</param>
+    /// <param name="lossFunction">The loss function to use for training. If null, a default will be used based on the task type.</param>
+    /// <param name="contentAddressingActivation">The activation function to apply to content-based addressing. If null, softmax will be used.</param>
+    /// <param name="gateActivation">The activation function to apply to interpolation gates. If null, sigmoid will be used.</param>
+    /// <param name="outputActivation">The activation function to apply to the final output. If null, a default based on task type will be used.</param>
+    public NeuralTuringMachine(
+        NeuralNetworkArchitecture<T> architecture,
+        int memorySize,
+        int memoryVectorSize,
+        int controllerSize,
+        ILossFunction<T>? lossFunction = null,
+        IVectorActivationFunction<T>? contentAddressingActivation = null,
+        IVectorActivationFunction<T>? gateActivation = null,
+        IVectorActivationFunction<T>? outputActivation = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        // Initialize memory with small random values
+        if (memorySize <= 0) throw new ArgumentOutOfRangeException(nameof(memorySize), "Memory size must be positive");
+        if (memoryVectorSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryVectorSize), "Memory vector size must be positive");
+        if (controllerSize <= 0) throw new ArgumentOutOfRangeException(nameof(controllerSize), "Controller size must be positive");
+
+        _memorySize = memorySize;
+        _memoryVectorSize = memoryVectorSize;
+        _controllerSize = controllerSize;
+
+        // Set activation functions (or defaults)
+        ContentAddressingVectorActivation = contentAddressingActivation ?? new SoftmaxActivation<T>();
+        GateVectorActivation = gateActivation ?? new SigmoidActivation<T>();
+        OutputVectorActivation = outputActivation ?? NeuralNetworkHelper<T>.GetDefaultVectorActivationFunction(architecture.TaskType);
+
+        _memories = [];
+        _readWeights = [];
+        _writeWeights = [];
+
+        // Initialize with default memory and weights
+        InitializeDefaultMemoryAndWeights();
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Initializes default memory and attention weights.
+    /// </summary>
+    private void InitializeDefaultMemoryAndWeights()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T uniformWeight = numOps.Divide(numOps.One, numOps.FromDouble(_memorySize));
+
+        // Create a default memory
+        var memory = new Matrix<T>(_memorySize, _memoryVectorSize);
+        _memories.Add(memory);
+
+        // Create initial read/write weights with uniform distribution
+        var readWeight = new Vector<T>(_memorySize);
+        var writeWeight = new Vector<T>(_memorySize);
+
         for (int i = 0; i < _memorySize; i++)
         {
-            for (int j = 0; j < _memoryVectorSize; j++)
+            readWeight[i] = uniformWeight;
+            writeWeight[i] = uniformWeight;
+        }
+
+        _readWeights.Add(readWeight);
+        _writeWeights.Add(writeWeight);
+
+        InitializeMemory();
+    }
+
+    /// <summary>
+    /// Initializes the memory matrices with small random values.
+    /// </summary>
+    private void InitializeMemory()
+    {
+        for (int m = 0; m < _memories.Count; m++)
+        {
+            for (int i = 0; i < _memorySize; i++)
             {
-                _memory[i, j] = NumOps.FromDouble(Random.NextDouble() * 0.1);
+                for (int j = 0; j < _memoryVectorSize; j++)
+                {
+                    // Initialize with values from normal distribution for better training stability
+                    _memories[m][i, j] = MathHelper.GetNormalRandom(NumOps.Zero, NumOps.FromDouble(0.1));
+                }
             }
         }
     }
 
     /// <summary>
-    /// Initializes the neural network layers based on the provided architecture or default configuration.
+    /// Initializes the neural network layers based on the provided architecture.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method sets up the neural network layers for the Neural Turing Machine. If the architecture
-    /// provides specific layers, those are used. Otherwise, a default configuration is created based on
-    /// the memory parameters. The method also validates that custom layers are compatible with NTM requirements.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method sets up the building blocks of the neural network.
-    /// 
-    /// When initializing layers:
-    /// - If the user provided specific layers, those are used
-    /// - Otherwise, default layers suitable for an NTM are created automatically
-    /// - The system checks that any custom layers will work properly with the NTM
-    /// 
-    /// Layers are like the different processing stages in the neural network.
-    /// Each layer performs a specific operation on the data as it flows through the network.
-    /// </para>
-    /// </remarks>
     protected override void InitializeLayers()
     {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
@@ -218,39 +262,54 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the neural network layers.
+    /// Sets up memories and attention weights for the given batch size.
     /// </summary>
-    /// <param name="parameters">The vector of parameter updates to apply.</param>
-    /// <remarks>
-    /// <para>
-    /// This method updates the parameters of each layer in the neural network based on the provided parameter
-    /// updates. The parameters vector is divided into segments corresponding to each layer's parameter count,
-    /// and each segment is applied to its respective layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates how the neural network makes decisions based on training.
-    /// 
-    /// During training:
-    /// - The network learns by adjusting its internal parameters
-    /// - This method applies those adjustments
-    /// - It takes a vector of parameter updates and distributes them to the correct layers
-    /// - Each layer gets the portion of updates meant specifically for it
-    /// 
-    /// Think of it like updating the decision-making rules for each part of the network
-    /// based on what was learned during training.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
+    /// <param name="batchSize">The batch size to set up for.</param>
+    private void SetupBatchMemories(int batchSize)
     {
-        int startIndex = 0;
-        foreach (var layer in Layers)
+        T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_memorySize));
+
+        // Ensure we have the right number of memory matrices
+        if (_memories.Count < batchSize)
         {
-            int layerParameterCount = layer.ParameterCount;
-            if (layerParameterCount > 0)
+            // Add new memories for additional batch elements
+            int additionalMemories = batchSize - _memories.Count;
+            for (int i = 0; i < additionalMemories; i++)
             {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
+                // Create new memory matrix
+                var newMemory = new Matrix<T>(_memorySize, _memoryVectorSize);
+
+                // Initialize with the same pattern as the first memory
+                for (int r = 0; r < _memorySize; r++)
+                {
+                    for (int c = 0; c < _memoryVectorSize; c++)
+                    {
+                        newMemory[r, c] = _memories[0][r, c];
+                    }
+                }
+
+                _memories.Add(newMemory);
+
+                // Add new read/write weights
+                var readWeight = new Vector<T>(_memorySize);
+                var writeWeight = new Vector<T>(_memorySize);
+
+                for (int j = 0; j < _memorySize; j++)
+                {
+                    readWeight[j] = uniformWeight;
+                    writeWeight[j] = uniformWeight;
+                }
+
+                _readWeights.Add(readWeight);
+                _writeWeights.Add(writeWeight);
             }
+        }
+        else if (_memories.Count > batchSize)
+        {
+            // Keep only the needed memories
+            _memories = _memories.GetRange(0, batchSize);
+            _readWeights = _readWeights.GetRange(0, batchSize);
+            _writeWeights = _writeWeights.GetRange(0, batchSize);
         }
     }
 
@@ -259,671 +318,711 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor to process.</param>
     /// <returns>The output tensor after processing.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method processes the input through the NTM, including controller network processing and
-    /// memory operations (reading and writing). It handles both single inputs and batches through
-    /// tensor operations for improved performance.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method processes information through the Neural Turing Machine.
-    /// 
-    /// During a forward pass:
-    /// - The input data is processed by the controller network
-    /// - The controller decides how to interact with memory (what to read and write)
-    /// - The network reads from appropriate memory locations
-    /// - It writes updated information to memory
-    /// - It produces an output based on both the input and what it read from memory
-    /// 
-    /// This combination of neural processing and memory operations is what makes the NTM powerful
-    /// for tasks requiring storing and retrieving information over time.
-    /// </para>
-    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Set to inference mode
-        SetTrainingMode(false);
-    
         // Get batch size and sequence length from input shape
         int batchSize = input.Shape[0];
         int sequenceLength = input.Shape.Length > 1 ? input.Shape[1] : 1;
-    
-        // Initialize attention weights (used to determine which memory locations to access)
-        var readWeights = InitializeAttentionWeights(batchSize);
-        var writeWeights = InitializeAttentionWeights(batchSize);
-    
-        // Store all outputs for each time step
+
+        // Setup memories for this batch
+        SetupBatchMemories(batchSize);
+
         var outputs = new List<Tensor<T>>();
-    
-        // Process each time step in the sequence
+
+        // Process each time step
         for (int t = 0; t < sequenceLength; t++)
         {
-            // Extract input for current time step
-            Tensor<T> currentInput;
-            if (sequenceLength > 1)
-            {
-                // For sequence inputs, extract the current time step
-                Vector<T> sliceVector = input.GetSlice(1, t);
-                currentInput = new Tensor<T>([1, sliceVector.Length]);
-                for (int i = 0; i < sliceVector.Length; i++)
-                {
-                    currentInput[0, i] = sliceVector[i];
-                }
-            }
-            else
-            {
-                // For single-step inputs, use the entire input
-                currentInput = input;
-            }
-        
-            // Process current input and memory state through controller
-            var controllerState = ProcessController(currentInput, readWeights);
-        
-            // Generate read and write attention parameters from controller state
-            var readParams = GenerateReadParameters(controllerState);
-            var writeParams = GenerateWriteParameters(controllerState);
-        
-            // Update attention weights based on parameters
-            readWeights = UpdateAttentionWeights(readWeights, readParams);
-            writeWeights = UpdateAttentionWeights(writeWeights, writeParams);
-        
-            // Read from memory using read weights
-            var readResult = ReadFromMemory(readWeights);
-        
-            // Write to memory using write weights
-            WriteToMemory(writeWeights, writeParams);
-        
-            // Generate output from controller state and read result
-            var output = GenerateOutput(controllerState, readResult);
+            // Extract current input
+            Tensor<T> currentInput = ExtractTimeStepInput(input, t, sequenceLength);
+
+            // Process through controller
+            var controllerOutput = ProcessController(currentInput);
+
+            // Generate parameters for memory operations
+            var readParams = GenerateReadParameters(controllerOutput);
+            var writeParams = GenerateWriteParameters(controllerOutput);
+
+            // Update attention mechanisms
+            UpdateAttentionWeights(readParams, writeParams);
+
+            // Perform memory operations
+            var readResults = ReadFromMemories();
+            WriteToMemories(writeParams);
+
+            // Generate output
+            var output = GenerateOutput(controllerOutput, readResults);
             outputs.Add(output);
         }
-    
-        // For sequence inputs, stack outputs; for single inputs, return the single output
-        if (sequenceLength > 1)
-        {
-            return Tensor<T>.Stack(outputs.ToArray(), 1);
-        }
-        else
-        {
-            return outputs[0];
-        }
+
+        // Combine outputs based on sequence length
+        return sequenceLength > 1
+            ? CombineSequenceOutputs(outputs)
+            : outputs[0];
     }
 
     /// <summary>
-    /// Initializes attention weights for memory access.
+    /// Extracts input for a specific time step from the input tensor.
     /// </summary>
-    /// <param name="batchSize">The batch size to initialize weights for.</param>
-    /// <returns>A tensor containing initialized attention weights.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method initializes the attention weights that determine which memory locations the
-    /// NTM reads from and writes to. Initially, attention is uniformly distributed across all
-    /// memory locations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates starting values for memory access.
-    /// 
-    /// Attention weights determine:
-    /// - Which memory locations the network focuses on
-    /// - How much importance is given to each location
-    /// - They start with equal focus on all memory locations
-    /// - During processing, these weights will be updated to focus on relevant locations
-    /// 
-    /// Think of it like starting with a blank notebook where all pages are equally likely to be used.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> InitializeAttentionWeights(int batchSize)
+    /// <param name="input">The input tensor.</param>
+    /// <param name="timeStep">The time step to extract.</param>
+    /// <param name="sequenceLength">The total sequence length.</param>
+    /// <returns>The input tensor for the specified time step.</returns>
+    private Tensor<T> ExtractTimeStepInput(Tensor<T> input, int timeStep, int sequenceLength)
     {
-        // Create a uniform distribution over memory locations for each batch
-        var shape = new int[] { batchSize, _memorySize };
-        var weights = new Tensor<T>(shape);
-    
-        // Initialize with uniform weights (1/memorySize for each location)
-        T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_memorySize));
-    
+        if (sequenceLength <= 1)
+        {
+            return input;
+        }
+
+        int batchSize = input.Shape[0];
+        int featureSize = input.Shape[2];
+
+        var result = new Tensor<T>(new int[] { batchSize, featureSize });
+
         for (int b = 0; b < batchSize; b++)
         {
-            for (int m = 0; m < _memorySize; m++)
+            for (int f = 0; f < featureSize; f++)
             {
-                weights[b, m] = uniformWeight;
+                result[b, f] = input[b, timeStep, f];
             }
         }
-    
-        return weights;
+
+        return result;
     }
 
     /// <summary>
-    /// Processes input and previous memory state through the controller network.
+    /// Combines sequence outputs into a single tensor.
+    /// </summary>
+    /// <param name="outputs">The list of output tensors.</param>
+    /// <returns>A combined tensor of all outputs.</returns>
+    private Tensor<T> CombineSequenceOutputs(List<Tensor<T>> outputs)
+    {
+        int batchSize = outputs[0].Shape[0];
+        int sequenceLength = outputs.Count;
+        int outputSize = outputs[0].Shape[1];
+
+        var combined = new Tensor<T>(new int[] { batchSize, sequenceLength, outputSize });
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int t = 0; t < sequenceLength; t++)
+            {
+                for (int o = 0; o < outputSize; o++)
+                {
+                    combined[b, t, o] = outputs[t][b, o];
+                }
+            }
+        }
+
+        return combined;
+    }
+
+    /// <summary>
+    /// Processes input through the controller network.
     /// </summary>
     /// <param name="input">The current input tensor.</param>
-    /// <param name="previousReadWeights">The previous read attention weights.</param>
-    /// <returns>The controller output state tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method runs the input and previous memory state through the controller network
-    /// to determine how to interact with memory. The controller is typically a neural network
-    /// that produces parameters for reading and writing operations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the brain deciding how to use the notebook.
-    /// 
-    /// The controller network:
-    /// - Takes the current input (what we're processing now)
-    /// - Considers what was previously read from memory
-    /// - Decides what information to read next
-    /// - Decides what information to write to memory
-    /// - Produces control signals for these memory operations
-    /// 
-    /// This is the "neural" part of the Neural Turing Machine that makes decisions about
-    /// how to use the external memory.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ProcessController(Tensor<T> input, Tensor<T> previousReadWeights)
+    /// <returns>The controller output.</returns>
+    private Tensor<T> ProcessController(Tensor<T> input)
     {
-        // Determine what was read from memory based on previous read weights
-        var previousReadResult = ReadFromMemory(previousReadWeights);
-    
-        // Concatenate input with previous read result to create controller input
-        var controllerInput = input.ConcatenateTensors(previousReadResult);
-    
-        // Pass through controller network (the first few layers of the NTM)
-        var current = controllerInput;
-        for (int i = 0; i < Layers.Count / 2; i++) // Use first half of layers as controller
+        int batchSize = input.Shape[0];
+
+        // Read from memories based on previous weights
+        var readResults = ReadFromMemories();
+
+        // Combine input with read results
+        var combined = new Tensor<T>(new int[] { batchSize, input.Shape[1] + readResults.Shape[1] });
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Copy input values
+            for (int i = 0; i < input.Shape[1]; i++)
+            {
+                combined[b, i] = input[b, i];
+            }
+
+            // Copy read results
+            for (int i = 0; i < readResults.Shape[1]; i++)
+            {
+                combined[b, input.Shape[1] + i] = readResults[b, i];
+            }
+        }
+
+        // Process through controller layers (first half of layers)
+        var current = combined;
+        for (int i = 0; i < Layers.Count / 2; i++)
         {
             current = Layers[i].Forward(current);
         }
-    
+
         return current;
     }
 
     /// <summary>
     /// Generates parameters for memory reading from controller output.
     /// </summary>
-    /// <param name="controllerState">The controller output state.</param>
+    /// <param name="controllerOutput">The controller output state.</param>
     /// <returns>A tensor containing read operation parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts parameters for the read operation from the controller output.
-    /// These parameters include key vectors (what to look for in memory) and sharpening
-    /// factors (how precisely to focus on specific memory locations).
-    /// </para>
-    /// <para><b>For Beginners:</b> This determines what information to look for in memory.
-    /// 
-    /// The read parameters include:
-    /// - Key vectors: patterns to match in memory (what to look for)
-    /// - Sharpening: how focused or diffuse the attention should be
-    /// 
-    /// Think of it like deciding which pages of a notebook to look at and how closely
-    /// to examine each page.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> GenerateReadParameters(Tensor<T> controllerState)
+    private Tensor<T> GenerateReadParameters(Tensor<T> controllerOutput)
     {
-        // Extract part of controller output dedicated to read parameters
-        // For simplicity, we'll use a portion of the controller state
-        int readParamStart = _controllerSize / 2;
-        int readParamSize = _controllerSize / 4;
-    
-        // Simplified implementation - in a real NTM, this would extract more specific parameters
-        var readParams = ExtractControllerParameters(controllerState, readParamStart, readParamSize);
-    
+        int batchSize = controllerOutput.Shape[0];
+        int controllerOutputSize = controllerOutput.Shape[1];
+
+        // Use first quarter of controller output for read parameters
+        int readParamSize = controllerOutputSize / 4;
+        var readParams = new Tensor<T>(new int[] { batchSize, readParamSize });
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < readParamSize; i++)
+            {
+                readParams[b, i] = controllerOutput[b, i];
+            }
+        }
+
         return readParams;
     }
 
     /// <summary>
     /// Generates parameters for memory writing from controller output.
     /// </summary>
-    /// <param name="controllerState">The controller output state.</param>
+    /// <param name="controllerOutput">The controller output state.</param>
     /// <returns>A tensor containing write operation parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts parameters for the write operation from the controller output.
-    /// These parameters include write keys (where to write), erase vectors (what to remove),
-    /// and write vectors (what to add to memory).
-    /// </para>
-    /// <para><b>For Beginners:</b> This determines what information to write to memory.
-    /// 
-    /// The write parameters include:
-    /// - Write keys: where in memory to write
-    /// - Erase vectors: what information to remove from memory
-    /// - Write vectors: what new information to add to memory
-    /// 
-    /// Think of it like deciding which pages of a notebook to write on,
-    /// what to erase, and what new notes to write down.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> GenerateWriteParameters(Tensor<T> controllerState)
+    private Tensor<T> GenerateWriteParameters(Tensor<T> controllerOutput)
     {
-        // Extract part of controller output dedicated to write parameters
-        // For simplicity, we'll use a portion of the controller state
-        int writeParamStart = _controllerSize * 3 / 4;
-        int writeParamSize = _controllerSize / 4;
-    
-        // Simplified implementation - in a real NTM, this would extract specific parameters
-        var writeParams = ExtractControllerParameters(controllerState, writeParamStart, writeParamSize);
-    
+        int batchSize = controllerOutput.Shape[0];
+        int controllerOutputSize = controllerOutput.Shape[1];
+
+        // Use second quarter of controller output for write parameters
+        int writeParamStart = controllerOutputSize / 4;
+        int writeParamSize = controllerOutputSize / 4;
+
+        var writeParams = new Tensor<T>(new int[] { batchSize, writeParamSize });
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < writeParamSize; i++)
+            {
+                writeParams[b, i] = controllerOutput[b, writeParamStart + i];
+            }
+        }
+
         return writeParams;
     }
 
     /// <summary>
-    /// Extracts a segment of parameters from the controller state.
+    /// Updates attention weights for both reading and writing operations.
     /// </summary>
-    /// <param name="controllerState">The controller output state.</param>
-    /// <param name="start">The starting index for extraction.</param>
-    /// <param name="size">The number of parameters to extract.</param>
-    /// <returns>A tensor containing the extracted parameters.</returns>
-    private Tensor<T> ExtractControllerParameters(Tensor<T> controllerState, int start, int size)
+    /// <param name="readParams">The parameters for read operations.</param>
+    /// <param name="writeParams">The parameters for write operations.</param>
+    private void UpdateAttentionWeights(Tensor<T> readParams, Tensor<T> writeParams)
     {
-        // Get shape information
-        int[] stateShape = controllerState.Shape;
-        int batchSize = stateShape[0];
-    
-        // Create result shape based on input dimensions
-        int[] resultShape;
-        if (stateShape.Length == 2)
+        int batchSize = readParams.Shape[0];
+
+        for (int b = 0; b < batchSize; b++)
         {
-            // For 2D input (batch, features)
-            resultShape = new int[] { batchSize, size };
+            // Extract parameters for this batch
+            var readVector = ExtractVector(readParams, b);
+            var writeVector = ExtractVector(writeParams, b);
+
+            // Update read weights using content-based and location-based addressing
+            _readWeights[b] = ComputeAttentionWeights(_readWeights[b], readVector, _memories[b]);
+
+            // Update write weights using content-based and location-based addressing
+            _writeWeights[b] = ComputeAttentionWeights(_writeWeights[b], writeVector, _memories[b]);
         }
-        else if (stateShape.Length == 3)
+    }
+
+    /// <summary>
+    /// Extracts a vector from a tensor for a specific batch element.
+    /// </summary>
+    /// <param name="tensor">The tensor to extract from.</param>
+    /// <param name="batchIndex">The batch index to extract.</param>
+    /// <returns>A vector containing the data for the specified batch element.</returns>
+    private Vector<T> ExtractVector(Tensor<T> tensor, int batchIndex)
+    {
+        int vectorSize = tensor.Shape[1];
+        var vector = new Vector<T>(vectorSize);
+
+        for (int i = 0; i < vectorSize; i++)
         {
-            // For 3D input (batch, sequence, features)
-            int seqLength = stateShape[1];
-            resultShape = new int[] { batchSize, seqLength, size };
+            vector[i] = tensor[batchIndex, i];
+        }
+
+        return vector;
+    }
+
+    /// <summary>
+    /// Computes attention weights using content-based and location-based addressing.
+    /// </summary>
+    /// <param name="previousWeights">The previous attention weights.</param>
+    /// <param name="parameters">The parameters for attention computation.</param>
+    /// <param name="memory">The memory to address.</param>
+    /// <returns>The updated attention weights.</returns>
+    private Vector<T> ComputeAttentionWeights(Vector<T> previousWeights, Vector<T> parameters, Matrix<T> memory)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Determine how many parameters we need for each part of the addressing mechanism
+        int parameterCount = parameters.Length;
+        int keyVectorSize = Math.Min(_memoryVectorSize, parameterCount / 4);
+
+        // Extract key vector (for content addressing)
+        var keyVector = parameters.Subvector(0, keyVectorSize);
+
+        // Extract key strength (focus sharpness parameter) - typically just one value after key vector
+        // Apply softplus using activation functions instead of direct call
+        T keyStrengthValue = parameters[keyVectorSize];
+        T keyStrength;
+        if (ContentAddressingVectorActivation != null)
+        {
+            var tempVector = new Vector<T>(1) { [0] = keyStrengthValue };
+            keyStrength = ContentAddressingVectorActivation.Activate(tempVector)[0];
+        }
+        else if (ContentAddressingActivation != null)
+        {
+            keyStrength = ContentAddressingActivation.Activate(keyStrengthValue);
         }
         else
         {
-            throw new NotSupportedException("Parameter extraction supports only 2D and 3D tensors");
+            // Fallback softplus implementation
+            keyStrength = numOps.Log(numOps.Add(numOps.One, numOps.Exp(keyStrengthValue)));
         }
-    
-        // Create result tensor
-        var result = new Tensor<T>(resultShape);
-    
-        // Extract values
-        if (stateShape.Length == 2)
+
+        // Extract gate value (interpolation parameter) - typically one value after key strength
+        // Apply sigmoid using our gate activation
+        T gateValue = parameters[keyVectorSize + 1];
+        T gate;
+        if (GateVectorActivation != null)
         {
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int i = 0; i < size && start + i < stateShape[1]; i++)
-                {
-                    result[b, i] = controllerState[b, start + i];
-                }
-            }
+            var tempVector = new Vector<T>(1) { [0] = gateValue };
+            gate = GateVectorActivation.Activate(tempVector)[0];
         }
-        else if (stateShape.Length == 3)
+        else if (GateActivation != null)
         {
-            int seqLength = stateShape[1];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLength; s++)
-                {
-                    for (int i = 0; i < size && start + i < stateShape[2]; i++)
-                    {
-                        result[b, s, i] = controllerState[b, s, start + i];
-                    }
-                }
-            }
+            gate = GateActivation.Activate(gateValue);
         }
-    
+        else
+        {
+            // Fallback sigmoid implementation
+            gate = MathHelper.Sigmoid(gateValue);
+        }
+
+        // Extract shift weights (for location addressing) - We'll use 3 values for -1, 0, +1 shifts
+        var shifts = new Vector<T>(3);
+        for (int i = 0; i < 3; i++)
+        {
+            shifts[i] = parameters[keyVectorSize + 2 + i];
+        }
+
+        // Apply softmax to shifts using our content addressing activation (since it's typically softmax)
+        shifts = ApplyActivation(shifts, ActivationType.ContentAddressing);
+
+        // Extract sharpening factor - one value after shifts
+        T sharpeningFactorValue = parameters[keyVectorSize + 5];
+        T sharpeningFactor;
+        if (ContentAddressingVectorActivation != null)
+        {
+            var tempVector = new Vector<T>(1) { [0] = sharpeningFactorValue };
+            sharpeningFactor = numOps.Add(numOps.One, ContentAddressingVectorActivation.Activate(tempVector)[0]);
+        }
+        else if (ContentAddressingActivation != null)
+        {
+            sharpeningFactor = numOps.Add(numOps.One, ContentAddressingActivation.Activate(sharpeningFactorValue));
+        }
+        else
+        {
+            // Fallback softplus implementation
+            sharpeningFactor = numOps.Add(numOps.One, numOps.Log(numOps.Add(numOps.One, numOps.Exp(sharpeningFactorValue))));
+        }
+
+        // 1. Content addressing - find similarity between key and each memory row
+        var contentWeights = ContentAddressing(memory, keyVector, keyStrength);
+
+        // 2. Interpolation - blend between previous weights and content weights
+        var interpolatedWeights = new Vector<T>(_memorySize);
+        for (int m = 0; m < _memorySize; m++)
+        {
+            interpolatedWeights[m] = numOps.Add(
+                numOps.Multiply(numOps.Subtract(numOps.One, gate), previousWeights[m]),
+                numOps.Multiply(gate, contentWeights[m])
+            );
+        }
+
+        // 3. Convolutional shift - apply circular shift to weights
+        var shiftedWeights = ConvolutionalShift(interpolatedWeights, shifts);
+
+        // 4. Sharpening - focus attention by raising to power and renormalizing
+        var sharpenedWeights = Sharpen(shiftedWeights, sharpeningFactor);
+
+        return sharpenedWeights;
+    }
+
+    /// <summary>
+    /// Applies a scalar activation function element-wise to a vector.
+    /// </summary>
+    /// <param name="vector">The input vector.</param>
+    /// <param name="activation">The activation function to apply.</param>
+    /// <returns>The activated vector.</returns>
+    private Vector<T> ApplyScalarActivation(Vector<T> vector, IActivationFunction<T>? activation)
+    {
+        if (activation == null)
+            return vector;
+
+        var result = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = activation.Activate(vector[i]);
+        }
+
         return result;
     }
 
     /// <summary>
-    /// Updates attention weights based on attention parameters.
+    /// Applies the appropriate activation function to a vector.
     /// </summary>
-    /// <param name="previousWeights">The previous attention weights.</param>
-    /// <param name="parameters">The parameters for updating attention.</param>
-    /// <returns>The updated attention weights.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method updates the attention weights that determine which memory locations to focus on
-    /// based on parameters from the controller. It implements content-based addressing (finding similar
-    /// content) and location-based addressing (shifting focus to nearby locations).
-    /// </para>
-    /// <para><b>For Beginners:</b> This updates where in memory to focus attention.
-    /// 
-    /// Attention updating includes:
-    /// - Content-based addressing: focusing on locations with similar content
-    /// - Location-based addressing: focusing on locations near previously attended ones
-    /// - Interpolation: combining previous attention with new focus
-    /// 
-    /// This complex addressing mechanism is what allows the NTM to find relevant information
-    /// in its memory based on both content and location.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> UpdateAttentionWeights(Tensor<T> previousWeights, Tensor<T> parameters)
+    /// <param name="vector">The input vector.</param>
+    /// <param name="activationType">The type of activation to apply.</param>
+    /// <returns>The activated vector.</returns>
+    private Vector<T> ApplyActivation(Vector<T> vector, ActivationType activationType)
     {
-        // In a full implementation, this would use the parameters to perform:
-        // 1. Content-based addressing (find locations with similar content)
-        // 2. Location-based addressing (shift focus to nearby locations)
-        // 3. Interpolation between previous and new weights
-    
-        // For this simplified implementation, we'll simulate attention updates
-        // with a basic content-based addressing approach
-    
-        // Get shape information
-        int[] weightShape = previousWeights.Shape;
-        int batchSize = weightShape[0];
-    
-        // Create new attention weights tensor
-        var newWeights = new Tensor<T>(weightShape);
-    
-        // Apply softmax to parameters to create focus (simplified approach)
-        var focusWeights = ApplySoftmax(parameters, batchSize);
-    
-        // Interpolate between previous weights and focus
-        // (simplified - a real NTM would use more complex logic)
-        T interpolation = NumOps.FromDouble(0.5); // 50% new, 50% old
-    
-        for (int b = 0; b < batchSize; b++)
+        switch (activationType)
         {
-            for (int m = 0; m < _memorySize; m++)
-            {
-                T oldWeight = previousWeights[b, m];
-                T newWeight = focusWeights[b, m % focusWeights.Shape[1]]; // Cycle through focus if needed
-            
-                newWeights[b, m] = NumOps.Add(
-                    NumOps.Multiply(NumOps.Subtract(NumOps.One, interpolation), oldWeight),
-                    NumOps.Multiply(interpolation, newWeight)
-                );
-            }
+            case ActivationType.ContentAddressing:
+                if (ContentAddressingVectorActivation != null)
+                    return ContentAddressingVectorActivation.Activate(vector);
+                else
+                    return ApplyScalarActivation(vector, ContentAddressingActivation);
+
+            case ActivationType.Gate:
+                if (GateVectorActivation != null)
+                    return GateVectorActivation.Activate(vector);
+                else
+                    return ApplyScalarActivation(vector, GateActivation);
+
+            case ActivationType.Output:
+                if (OutputVectorActivation != null)
+                    return OutputVectorActivation.Activate(vector);
+                else
+                    return ApplyScalarActivation(vector, OutputActivation);
+
+            default:
+                throw new ArgumentException("Unknown activation type", nameof(activationType));
         }
-    
-        // Normalize weights to ensure they sum to 1
-        newWeights = NormalizeWeights(newWeights);
-    
-        return newWeights;
     }
 
     /// <summary>
-    /// Applies softmax normalization to a tensor.
+    /// The types of activation functions used in the NTM.
     /// </summary>
-    /// <param name="tensor">The input tensor.</param>
-    /// <param name="batchSize">The batch size.</param>
-    /// <returns>A tensor with softmax applied.</returns>
-    private Tensor<T> ApplySoftmax(Tensor<T> tensor, int batchSize)
+    private enum ActivationType
     {
-        // Get size of last dimension
-        int size = tensor.Shape[tensor.Shape.Length - 1];
-    
-        // If size is larger than memory, truncate it
-        size = Math.Min(size, _memorySize);
-    
-        // Create result with shape [batchSize, size]
-        var result = new Tensor<T>(new int[] { batchSize, size });
-    
-        // Apply softmax to each batch independently
-        for (int b = 0; b < batchSize; b++)
+        ContentAddressing,
+        Gate,
+        Output
+    }
+
+    /// <summary>
+    /// Applies content-based addressing to find similar memory locations.
+    /// </summary>
+    /// <param name="memory">The memory matrix.</param>
+    /// <param name="key">The key vector to match against memory.</param>
+    /// <param name="keyStrength">The key strength parameter that amplifies similarity.</param>
+    /// <returns>A vector of attention weights based on content similarity.</returns>
+    private Vector<T> ContentAddressing(Matrix<T> memory, Vector<T> key, T keyStrength)
+    {
+        var similarities = new Vector<T>(_memorySize);
+
+        // Calculate cosine similarity between key and each memory row
+        for (int m = 0; m < _memorySize; m++)
         {
-            // Find max value for numerical stability
-            T max = NumOps.Negate(NumOps.MaxValue);
-            for (int i = 0; i < size; i++)
+            var memoryRow = new Vector<T>(_memoryVectorSize);
+            for (int i = 0; i < _memoryVectorSize; i++)
             {
-                T val = tensor.Shape.Length == 2 ? tensor[b, i] : tensor[b, 0, i];
-                if (NumOps.GreaterThan(val, max))
-                {
-                    max = val;
-                }
+                memoryRow[i] = memory[m, i];
             }
-        
-            // Calculate exp(x - max) for each element
-            T[] expValues = new T[size];
-            T sumExp = NumOps.Zero;
-        
-            for (int i = 0; i < size; i++)
+
+            similarities[m] = StatisticsHelper<T>.CosineSimilarity(key, memoryRow);
+        }
+
+        // Apply key strength (focus factor)
+        for (int m = 0; m < _memorySize; m++)
+        {
+            similarities[m] = NumOps.Multiply(keyStrength, similarities[m]);
+        }
+
+        // Apply softmax to get normalized attention weights
+        return ApplyActivation(similarities, ActivationType.ContentAddressing);
+    }
+
+    /// <summary>
+    /// Applies a circular convolution to shift attention weights.
+    /// </summary>
+    /// <param name="weights">The weights to shift.</param>
+    /// <param name="shifts">The distribution of shifts to apply.</param>
+    /// <returns>The shifted weights.</returns>
+    private Vector<T> ConvolutionalShift(Vector<T> weights, Vector<T> shifts)
+    {
+        var result = new Vector<T>(_memorySize);
+
+        // Initialize with zeros
+        for (int i = 0; i < _memorySize; i++)
+        {
+            result[i] = NumOps.Zero;
+        }
+
+        // Apply each shift with its corresponding weight
+        for (int i = 0; i < _memorySize; i++)
+        {
+            // Apply shifting with circular boundary conditions
+            for (int j = 0; j < shifts.Length; j++)
             {
-                T val = tensor.Shape.Length == 2 ? tensor[b, i] : tensor[b, 0, i];
-                T expVal = NumOps.Exp(NumOps.Subtract(val, max));
-                expValues[i] = expVal;
-                sumExp = NumOps.Add(sumExp, expVal);
-            }
-        
-            // Normalize by sum of exponentials
-            for (int i = 0; i < size; i++)
-            {
-                result[b, i] = NumOps.Divide(expValues[i], sumExp);
+                // Convert shift index (0,1,2) to shift offset (-1,0,1)
+                int shift = j - 1;
+
+                // Calculate source index with circular wrapping
+                int sourceIndex = (i - shift) % _memorySize;
+                if (sourceIndex < 0) sourceIndex += _memorySize;
+
+                // Add weighted contribution
+                result[i] = NumOps.Add(result[i],
+                    NumOps.Multiply(weights[sourceIndex], shifts[j]));
             }
         }
-    
+
         return result;
     }
 
     /// <summary>
-    /// Normalizes weights to ensure they sum to 1 across the memory dimension.
+    /// Sharpens a weight vector by raising to a power and renormalizing.
     /// </summary>
-    /// <param name="weights">The weights tensor to normalize.</param>
-    /// <returns>The normalized weights tensor.</returns>
-    private Tensor<T> NormalizeWeights(Tensor<T> weights)
+    /// <param name="weights">The weights to sharpen.</param>
+    /// <param name="gamma">The sharpening factor.</param>
+    /// <returns>The sharpened weights.</returns>
+    private Vector<T> Sharpen(Vector<T> weights, T gamma)
     {
-        // Get shape information
-        int[] weightShape = weights.Shape;
-        int batchSize = weightShape[0];
-    
-        // Create normalized weights tensor with same shape
-        var normalized = new Tensor<T>(weightShape);
-    
-        // Normalize each batch independently
+        var result = new Vector<T>(_memorySize);
+        T sum = NumOps.Zero;
+
+        // Raise each weight to the power of gamma
+        for (int i = 0; i < _memorySize; i++)
+        {
+            result[i] = NumOps.Power(weights[i], gamma);
+            sum = NumOps.Add(sum, result[i]);
+        }
+
+        // Avoid division by zero
+        if (NumOps.Equals(sum, NumOps.Zero))
+        {
+            sum = NumOps.FromDouble(1e-6);
+        }
+
+        // Normalize to ensure sum is 1
+        for (int i = 0; i < _memorySize; i++)
+        {
+            result[i] = NumOps.Divide(result[i], sum);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Reads from all batch memories using their respective attention weights.
+    /// </summary>
+    /// <returns>A tensor containing read results for all batch elements.</returns>
+    private Tensor<T> ReadFromMemories()
+    {
+        int batchSize = _memories.Count;
+        var result = new Tensor<T>([batchSize, _memoryVectorSize]);
+
         for (int b = 0; b < batchSize; b++)
         {
-            // Calculate sum
-            T sum = NumOps.Zero;
-            for (int m = 0; m < _memorySize; m++)
+            var readResult = ReadFromMemory(_memories[b], _readWeights[b]);
+            for (int v = 0; v < _memoryVectorSize; v++)
             {
-                sum = NumOps.Add(sum, weights[b, m]);
-            }
-        
-            // Ensure sum is not zero (add small epsilon if needed)
-            if (NumOps.Equals(sum, NumOps.Zero))
-            {
-                sum = NumOps.FromDouble(1e-6);
-            }
-        
-            // Normalize
-            for (int m = 0; m < _memorySize; m++)
-            {
-                normalized[b, m] = NumOps.Divide(weights[b, m], sum);
+                result[b, v] = readResult[v];
             }
         }
-    
-        return normalized;
+
+        return result;
     }
 
     /// <summary>
     /// Reads from memory using attention weights.
     /// </summary>
+    /// <param name="memory">The memory matrix to read from.</param>
     /// <param name="readWeights">The attention weights for reading.</param>
-    /// <returns>The weighted read result from memory.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs a content-based read from the memory matrix using the provided
-    /// attention weights. It calculates a weighted sum of memory vectors, where the weights
-    /// determine how much each memory location contributes to the result.
-    /// </para>
-    /// <para><b>For Beginners:</b> This retrieves information from memory.
-    /// 
-    /// The reading process:
-    /// - Uses the attention weights to determine which memory locations to focus on
-    /// - Takes a weighted average of the content at those locations
-    /// - Returns this combined information
-    /// 
-    /// Think of it like reading multiple pages of a notebook, paying more attention
-    /// to some pages than others, and combining the information.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ReadFromMemory(Tensor<T> readWeights)
+    /// <returns>The read result vector.</returns>
+    private Vector<T> ReadFromMemory(Matrix<T> memory, Vector<T> readWeights)
     {
-        // Get batch size from readWeights
-        int batchSize = readWeights.Shape[0];
-    
-        // Create result tensor with shape [batchSize, memoryVectorSize]
-        var readResult = new Tensor<T>(new int[] { batchSize, _memoryVectorSize });
-    
-        // For each batch, perform weighted read from memory
-        for (int b = 0; b < batchSize; b++)
+        var result = new Vector<T>(_memoryVectorSize);
+
+        // Initialize with zeros
+        for (int v = 0; v < _memoryVectorSize; v++)
         {
-            // Initialize read vector with zeros
+            result[v] = NumOps.Zero;
+        }
+
+        // Perform weighted read
+        for (int m = 0; m < _memorySize; m++)
+        {
+            T weight = readWeights[m];
+
+            // Skip if weight is effectively zero (optimization)
+            if (NumOps.LessThan(weight, NumOps.FromDouble(1e-10)))
+            {
+                continue;
+            }
+
             for (int v = 0; v < _memoryVectorSize; v++)
             {
-                readResult[b, v] = NumOps.Zero;
+                T weightedValue = NumOps.Multiply(weight, memory[m, v]);
+                result[v] = NumOps.Add(result[v], weightedValue);
             }
-        
-            // Perform weighted sum of memory vectors
-            for (int m = 0; m < _memorySize; m++)
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Writes to all batch memories using their respective attention weights.
+    /// </summary>
+    /// <param name="writeParams">The parameters for write operations.</param>
+    private void WriteToMemories(Tensor<T> writeParams)
+    {
+        int batchSize = _memories.Count;
+        int paramSize = writeParams.Shape[1];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Extract write parameters for this batch
+            var writeVector = ExtractVector(writeParams, b);
+
+            // Calculate erase and add vectors
+            var eraseVector = new Vector<T>(_memoryVectorSize);
+            var addVector = new Vector<T>(_memoryVectorSize);
+
+            // Extract erase vector (first half of parameters, apply gate activation to get [0,1] range)
+            int eraseSize = Math.Min(_memoryVectorSize, paramSize / 2);
+
+            // Create a temporary vector for the erase parameters
+            var eraseParams = new Vector<T>(eraseSize);
+            for (int i = 0; i < eraseSize; i++)
             {
-                T weight = readWeights[b, m];
-            
-                for (int v = 0; v < _memoryVectorSize; v++)
+                eraseParams[i] = writeVector[i];
+            }
+
+            // Apply activation function to the erase parameters
+            Vector<T> activatedEraseParams;
+            if (GateVectorActivation != null)
+            {
+                // Use vector activation if available
+                activatedEraseParams = GateVectorActivation.Activate(eraseParams);
+            }
+            else if (GateActivation != null)
+            {
+                // Use scalar activation if available
+                activatedEraseParams = ApplyScalarActivation(eraseParams, GateActivation);
+            }
+            else
+            {
+                // Fallback to default sigmoid implementation
+                activatedEraseParams = new Vector<T>(eraseParams.Length);
+                for (int i = 0; i < eraseParams.Length; i++)
                 {
-                    // Add weighted contribution from this memory location
-                    T weightedValue = NumOps.Multiply(weight, _memory[m, v]);
-                    readResult[b, v] = NumOps.Add(readResult[b, v], weightedValue);
+                    activatedEraseParams[i] = MathHelper.Sigmoid(eraseParams[i]);
                 }
             }
+
+            // Map the activated values to the erase vector
+            for (int v = 0; v < _memoryVectorSize; v++)
+            {
+                int eraseIndex = v % eraseSize;
+                eraseVector[v] = activatedEraseParams[eraseIndex];
+            }
+
+            // Extract add vector (second half of parameters)
+            int addStart = paramSize / 2;
+            int addSize = Math.Min(_memoryVectorSize, paramSize - addStart);
+            for (int v = 0; v < _memoryVectorSize; v++)
+            {
+                int addIndex = addStart + (v % addSize);
+                addVector[v] = writeVector[addIndex];
+            }
+
+            // Perform erase and add operations
+            WriteToMemory(_memories[b], _writeWeights[b], eraseVector, addVector);
         }
-    
-        return readResult;
     }
 
     /// <summary>
-    /// Writes to memory using attention weights and write parameters.
+    /// Writes to memory using attention weights and erase/add vectors.
     /// </summary>
+    /// <param name="memory">The memory matrix to write to.</param>
     /// <param name="writeWeights">The attention weights for writing.</param>
-    /// <param name="writeParams">The parameters for the write operation.</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs a content-based write to the memory matrix using the provided
-    /// attention weights and write parameters. It implements the NTM's erase-then-write
-    /// mechanism, where memory is first partially erased and then new content is added.
-    /// </para>
-    /// <para><b>For Beginners:</b> This updates information in memory.
-    /// 
-    /// The writing process:
-    /// - Uses attention weights to determine which memory locations to update
-    /// - First erases old information (partially or completely)
-    /// - Then writes new information
-    /// - The degree of update is controlled by the attention weights
-    /// 
-    /// Think of it like erasing parts of pages in a notebook and writing new notes,
-    /// focusing more on some pages than others.
-    /// </para>
-    /// </remarks>
-    private void WriteToMemory(Tensor<T> writeWeights, Tensor<T> writeParams)
+    /// <param name="eraseVector">The vector specifying what to erase at each location.</param>
+    /// <param name="addVector">The vector specifying what to add at each location.</param>
+    private void WriteToMemory(Matrix<T> memory, Vector<T> writeWeights, Vector<T> eraseVector, Vector<T> addVector)
     {
-        // Get batch size from writeWeights
-        int batchSize = writeWeights.Shape[0];
-    
-        // Extract erase and write vectors from writeParams (simplified)
-        // In a full implementation, these would be more carefully extracted
-    
-        // Use first half of writeParams for erase vector
-        var eraseVectors = new Tensor<T>(new int[] { batchSize, _memoryVectorSize });
-    
-        // Use second half of writeParams for write vector
-        var writeVectors = new Tensor<T>(new int[] { batchSize, _memoryVectorSize });
-    
-        // Extract values (handling both 2D and 3D tensors)
-        int paramsPerVector = writeParams.Shape[writeParams.Shape.Length - 1] / 2;
-    
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int v = 0; v < _memoryVectorSize; v++)
-            {
-                // For erase vector, get values and apply sigmoid to get values between 0 and 1
-                int eraseIndex = v % paramsPerVector;
-                T eraseValue = writeParams.Shape.Length == 2 ? 
-                    writeParams[b, eraseIndex] : 
-                    writeParams[b, 0, eraseIndex];
-            
-                eraseVectors[b, v] = Sigmoid(eraseValue);
-            
-                // For write vector, get values from second half
-                int writeIndex = paramsPerVector + (v % paramsPerVector);
-                T writeValue = writeParams.Shape.Length == 2 ? 
-                    writeParams[b, writeIndex] : 
-                    writeParams[b, 0, writeIndex];
-            
-                writeVectors[b, v] = writeValue;
-            }
-        }
-    
-        // Apply erase-then-write mechanism
-        // For simplicity, we'll apply batch 0's writes to the shared memory
-        // In a full implementation, each batch would have its own memory state
-    
-        // Erase phase
+        // Perform write operation for each memory location
         for (int m = 0; m < _memorySize; m++)
         {
-            T weight = writeWeights[0, m]; // Use first batch's weights
-        
-            for (int v = 0; v < _memoryVectorSize; v++)
+            T weight = writeWeights[m];
+
+            // Skip if weight is effectively zero (optimization)
+            if (NumOps.LessThan(weight, NumOps.FromDouble(1e-10)))
             {
-                // Erase = memory * (1 - weight * erase_vector)
-                T eraseValue = NumOps.Multiply(weight, eraseVectors[0, v]);
-                T retainValue = NumOps.Subtract(NumOps.One, eraseValue);
-                _memory[m, v] = NumOps.Multiply(_memory[m, v], retainValue);
+                continue;
             }
-        }
-    
-        // Write phase
-        for (int m = 0; m < _memorySize; m++)
-        {
-            T weight = writeWeights[0, m]; // Use first batch's weights
-        
+
+            // Erase phase - memory[i] = memory[i] * (1 - weight * erase[i])
             for (int v = 0; v < _memoryVectorSize; v++)
             {
-                // Add = memory + weight * write_vector
-                T addValue = NumOps.Multiply(weight, writeVectors[0, v]);
-                _memory[m, v] = NumOps.Add(_memory[m, v], addValue);
+                T eraseAmount = NumOps.Multiply(weight, eraseVector[v]);
+                T retainAmount = NumOps.Subtract(NumOps.One, eraseAmount);
+                memory[m, v] = NumOps.Multiply(memory[m, v], retainAmount);
+            }
+
+            // Add phase - memory[i] = memory[i] + weight * add[i]
+            for (int v = 0; v < _memoryVectorSize; v++)
+            {
+                T addAmount = NumOps.Multiply(weight, addVector[v]);
+                memory[m, v] = NumOps.Add(memory[m, v], addAmount);
             }
         }
     }
 
     /// <summary>
-    /// Applies the sigmoid function to a value.
-    /// </summary>
-    /// <param name="value">The input value.</param>
-    /// <returns>The sigmoid of the input value (between 0 and 1).</returns>
-    private T Sigmoid(T value)
-    {
-        // Sigmoid function: 1 / (1 + e^(-x))
-        T expNeg = NumOps.Exp(NumOps.Negate(value));
-        T denominator = NumOps.Add(NumOps.One, expNeg);
-        return NumOps.Divide(NumOps.One, denominator);
-    }
-
-    /// <summary>
-    /// Generates output from controller state and read result.
+    /// Generates the final output from controller state and read result.
     /// </summary>
     /// <param name="controllerState">The controller output state.</param>
-    /// <param name="readResult">The result of reading from memory.</param>
+    /// <param name="readResult">The result from reading memory.</param>
     /// <returns>The final output tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method combines the controller state and information read from memory to produce
-    /// the final output of the Neural Turing Machine. Typically, a portion of the controller's
-    /// output is dedicated to producing the final output, often combined with what was read
-    /// from memory.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates the final output from neural processing and memory.
-    /// 
-    /// The output generation:
-    /// - Combines what was directly processed by the neural network
-    /// - With information retrieved from memory
-    /// - Produces the final result of the NTM's computation
-    /// 
-    /// This integration of direct neural processing with memory operations is what
-    /// gives the NTM its power for complex sequential processing tasks.
-    /// </para>
-    /// </remarks>
     private Tensor<T> GenerateOutput(Tensor<T> controllerState, Tensor<T> readResult)
     {
-        // Concatenate controller state with read result
-        var combined = controllerState.ConcatenateTensors(readResult);
-    
-        // Process through output layers (second half of the NTM layers)
+        int batchSize = controllerState.Shape[0];
+
+        // Combine controller state with read result
+        var combined = new Tensor<T>(new int[] { batchSize, controllerState.Shape[1] + readResult.Shape[1] });
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Copy controller state
+            for (int i = 0; i < controllerState.Shape[1]; i++)
+            {
+                combined[b, i] = controllerState[b, i];
+            }
+
+            // Copy read result
+            for (int i = 0; i < readResult.Shape[1]; i++)
+            {
+                combined[b, controllerState.Shape[1] + i] = readResult[b, i];
+            }
+        }
+
+        // Process through output layers (second half of layers)
         var current = combined;
         for (int i = Layers.Count / 2; i < Layers.Count; i++)
         {
             current = Layers[i].Forward(current);
         }
-    
+
         return current;
     }
 
@@ -932,298 +1031,130 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor for training.</param>
     /// <param name="expectedOutput">The expected output tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the NTM using backpropagation through time (BPTT), which is an extension
-    /// of standard backpropagation for recurrent neural networks. It unrolls the network through
-    /// time steps, accumulates gradients, and updates the parameters to minimize the difference
-    /// between predicted and expected outputs.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the NTM to process information and use memory correctly.
-    /// 
-    /// The training process:
-    /// - Runs input through the NTM to get predictions
-    /// - Compares predictions to expected outputs
-    /// - Calculates how wrong the predictions were
-    /// - Propagates these errors backward through the network
-    /// - Updates the network's parameters to improve future predictions
-    /// 
-    /// Training an NTM is particularly complex because errors must be propagated
-    /// both through the neural network and through memory operations.
-    /// </para>
-    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        if (input.Shape[0] != expectedOutput.Shape[0])
+        {
+            throw new ArgumentException("Input and expected output must have the same batch size");
+        }
+
         // Set to training mode
         SetTrainingMode(true);
-    
-        // Forward pass to get predictions
+
+        // Forward pass
         var predictions = Predict(input);
-    
-        // Calculate loss (mean squared error)
-        var loss = CalculateMeanSquaredError(predictions, expectedOutput);
-    
+
+        // Calculate loss
+        var predVector = predictions.ToVector();
+        var expectedVector = expectedOutput.ToVector();
+        T loss = LossFunction.CalculateLoss(predVector, expectedVector);
+        LastLoss = loss;
+
         // Calculate output gradients
-        var outputGradients = CalculateOutputGradients(predictions, expectedOutput);
-    
-        // Backpropagation through time
-        BackpropagateNTM(outputGradients, input);
-    
-        // Update parameters with calculated gradients
-        UpdateNTMParameters();
-    }
+        var gradVector = LossFunction.CalculateDerivative(predVector, expectedVector);
+        var outputGradients = new Tensor<T>(predictions.Shape);
 
-    /// <summary>
-    /// Calculates mean squared error between predictions and expected outputs.
-    /// </summary>
-    /// <param name="predictions">The predicted output tensor.</param>
-    /// <param name="expected">The expected output tensor.</param>
-    /// <returns>The mean squared error loss value.</returns>
-    private T CalculateMeanSquaredError(Tensor<T> predictions, Tensor<T> expected)
-    {
-        // Ensure tensors have the same shape
-        if (!Enumerable.SequenceEqual(predictions.Shape, expected.Shape))
+        // Copy gradient values to tensor
+        int index = 0;
+        for (int b = 0; b < predictions.Shape[0]; b++)
         {
-            throw new ArgumentException("Predictions and expected outputs must have the same shape");
-        }
-    
-        // Calculate squared differences
-        T sumSquaredDiff = NumOps.Zero;
-        int totalElements = 0;
-    
-        // Handle different tensor shapes
-        if (predictions.Shape.Length == 2)
-        {
-            // 2D tensors [batch, features]
-            int batchSize = predictions.Shape[0];
-            int features = predictions.Shape[1];
-            totalElements = batchSize * features;
-        
-            for (int b = 0; b < batchSize; b++)
+            for (int i = 0; i < predictions.Shape[1]; i++)
             {
-                for (int f = 0; f < features; f++)
-                {
-                    T diff = NumOps.Subtract(predictions[b, f], expected[b, f]);
-                    sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
-                }
+                outputGradients[b, i] = gradVector[index++];
             }
         }
-        else if (predictions.Shape.Length == 3)
-        {
-            // 3D tensors [batch, sequence, features]
-            int batchSize = predictions.Shape[0];
-            int seqLength = predictions.Shape[1];
-            int features = predictions.Shape[2];
-            totalElements = batchSize * seqLength * features;
-        
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLength; s++)
-                {
-                    for (int f = 0; f < features; f++)
-                    {
-                        T diff = NumOps.Subtract(predictions[b, s, f], expected[b, s, f]);
-                        sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
-                    }
-                }
-            }
-        }
-        else
-        {
-            throw new NotSupportedException("MSE calculation currently supports only 2D and 3D tensors");
-        }
-    
-        // Calculate mean
-        return NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(totalElements));
-    }
 
-    /// <summary>
-    /// Calculates gradients for output layer based on predictions and expected outputs.
-    /// </summary>
-    /// <param name="predictions">The predicted output tensor.</param>
-    /// <param name="expected">The expected output tensor.</param>
-    /// <returns>The gradient tensor for the output layer.</returns>
-    private Tensor<T> CalculateOutputGradients(Tensor<T> predictions, Tensor<T> expected)
-    {
-        // Ensure tensors have the same shape
-        if (!Enumerable.SequenceEqual(predictions.Shape, expected.Shape))
-        {
-            throw new ArgumentException("Predictions and expected outputs must have the same shape");
-        }
-    
-        // Create gradient tensor with same shape as predictions
-        var gradients = new Tensor<T>(predictions.Shape);
-    
-        // For MSE loss, gradient is 2 * (prediction - expected) / n
-        // We'll simplify to (prediction - expected) and adjust learning rate instead
-    
-        // Handle different tensor shapes
-        if (predictions.Shape.Length == 2)
-        {
-            // 2D tensors [batch, features]
-            int batchSize = predictions.Shape[0];
-            int features = predictions.Shape[1];
-            T scaleFactor = NumOps.FromDouble(1.0 / (batchSize * features));
-        
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    T diff = NumOps.Subtract(predictions[b, f], expected[b, f]);
-                    gradients[b, f] = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(diff, scaleFactor));
-                }
-            }
-        }
-        else if (predictions.Shape.Length == 3)
-        {
-            // 3D tensors [batch, sequence, features]
-            int batchSize = predictions.Shape[0];
-            int seqLength = predictions.Shape[1];
-            int features = predictions.Shape[2];
-            T scaleFactor = NumOps.FromDouble(1.0 / (batchSize * seqLength * features));
-        
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLength; s++)
-                {
-                    for (int f = 0; f < features; f++)
-                    {
-                        T diff = NumOps.Subtract(predictions[b, s, f], expected[b, s, f]);
-                        gradients[b, s, f] = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(diff, scaleFactor));
-                    }
-                }
-            }
-        }
-        else
-        {
-            throw new NotSupportedException("Gradient calculation currently supports only 2D and 3D tensors");
-        }
-    
-        return gradients;
+        // Backpropagation
+        BackpropagateNTM(outputGradients);
+
+        // Update parameters using the learning rate
+        T learningRate = MathHelper.GetNumericOperations<T>().FromDouble(0.01); // Default learning rate
+        UpdateParameters(learningRate);
+
+        // Reset to inference mode
+        SetTrainingMode(false);
     }
 
     /// <summary>
     /// Performs backpropagation through the Neural Turing Machine.
     /// </summary>
     /// <param name="outputGradients">The gradients from the output layer.</param>
-    /// <param name="input">The original input tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// This method implements backpropagation through time (BPTT) for the NTM. It propagates gradients
-    /// backward through both the neural network and memory operations, accounting for the recurrent
-    /// nature of the NTM when processing sequences.
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates how to improve the NTM's parameters.
-    /// 
-    /// The backpropagation process:
-    /// - Traces errors backward through both neural network and memory operations
-    /// - Accounts for how current outputs depend on previous memory states
-    /// - Calculates how each parameter contributed to errors
-    /// - Determines how to adjust each parameter to reduce future errors
-    /// 
-    /// This is particularly complex for NTMs because errors must be propagated
-    /// through both the neural network and the external memory system.
-    /// </para>
-    /// </remarks>
-    private void BackpropagateNTM(Tensor<T> outputGradients, Tensor<T> input)
+    private void BackpropagateNTM(Tensor<T> outputGradients)
     {
-        // In a full implementation, this would:
-        // 1. Backpropagate through the neural network layers
-        // 2. Backpropagate through memory operations (reads and writes)
-        // 3. Accumulate gradients for all parameters
-    
-        // For our simplified implementation, we'll focus on backpropagation through the network layers
-    
-        // Get batch size and sequence length
-        int batchSize = input.Shape[0];
-        int sequenceLength = input.Shape.Length > 1 ? input.Shape[1] : 1;
-    
-        // Start with output gradients
+        // Clear existing gradients
+        foreach (var layer in Layers)
+        {
+            layer.ClearGradients();
+        }
+
+        // Backpropagate through output layers (second half)
         var gradients = outputGradients;
-    
-        // Backpropagate through output layers (second half of layers)
         for (int i = Layers.Count - 1; i >= Layers.Count / 2; i--)
         {
             gradients = Layers[i].Backward(gradients);
         }
-    
-        // For the memory and controller operations, we'd need to implement:
-        // - Gradients for memory reading
-        // - Gradients for memory writing
-        // - Gradients for controller operations
-    
-        // These are complex operations that require careful implementation of all
-        // the partial derivatives through the attention mechanisms and memory interactions
-    
-        // After passing through controller, backpropagate through input layers
+
+        // At this point, we would implement complex backpropagation through memory operations
+        // but for simplicity in this improved version, we focus on the neural network path
+
+        // Backpropagate through input layers (first half)
         for (int i = Layers.Count / 2 - 1; i >= 0; i--)
         {
             gradients = Layers[i].Backward(gradients);
         }
-    
-        // The result is that all layers now have their gradients computed and stored internally
     }
 
     /// <summary>
-    /// Updates the NTM parameters based on calculated gradients.
+    /// Updates the parameters of the neural network layers.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method applies gradient updates to all parameters in the NTM, including network
-    /// weights and any parameters related to memory operations. It uses a simple gradient
-    /// descent approach with a fixed learning rate.
-    /// </para>
-    /// <para><b>For Beginners:</b> This adjusts the NTM's parameters to improve performance.
-    /// 
-    /// The parameter update:
-    /// - Applies the calculated adjustments to all network parameters
-    /// - Uses a learning rate to control how large the adjustments are
-    /// - Small adjustments allow gradual, stable improvement
-    /// 
-    /// After these updates, the NTM should perform slightly better at its task
-    /// the next time it processes similar inputs.
-    /// </para>
-    /// </remarks>
-    private void UpdateNTMParameters()
+    /// <param name="learningRate">The learning rate for the update.</param>
+    private void UpdateParameters(T learningRate)
     {
-        // Simple learning rate for gradient descent
-        T learningRate = NumOps.FromDouble(0.01);
-    
-        // Update parameters for each layer
         foreach (var layer in Layers)
         {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
+            if (layer.SupportsTraining)
             {
                 layer.UpdateParameters(learningRate);
             }
         }
-    
-        // In a complete implementation, we would also update any additional parameters
-        // specific to the memory operations
+    }
+
+    /// <summary>
+    /// Updates the parameters of the neural network layers.
+    /// </summary>
+    /// <param name="parameters">The vector of parameter updates to apply.</param>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int startIndex = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = layer.ParameterCount;
+            if (layerParameterCount > 0)
+            {
+                Vector<T> layerParameters = parameters.Subvector(startIndex, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                startIndex += layerParameterCount;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sets the layer to training or evaluation mode.
+    /// </summary>
+    /// <param name="isTraining">True to set the layer to training mode, false for evaluation mode.</param>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        _isTraining = isTraining;
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(isTraining);
+        }
     }
 
     /// <summary>
     /// Gets metadata about the Neural Turing Machine model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the NTM.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns comprehensive metadata about the NTM, including its architecture,
-    /// memory configuration, and other relevant parameters. This information is useful for
-    /// model management, tracking experiments, and reporting.
-    /// </para>
-    /// <para><b>For Beginners:</b> This provides detailed information about the NTM's configuration.
-    /// 
-    /// The metadata includes:
-    /// - What this model is and what it does
-    /// - Details about the neural network architecture
-    /// - Information about the memory system (size, vector dimensions)
-    /// - Other configuration parameters
-    /// 
-    /// This information is useful for keeping track of different models,
-    /// documenting your work, and comparing experimental results.
-    /// </para>
-    /// </remarks>
     public override ModelMetaData<T> GetModelMetaData()
     {
         return new ModelMetaData<T>
@@ -1245,38 +1176,43 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
     /// Serializes NTM-specific data to a binary writer.
     /// </summary>
     /// <param name="writer">The binary writer to write to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method saves the state of the NTM to a binary stream. It serializes NTM-specific
-    /// parameters like the memory matrix and controller size, allowing the complete state
-    /// to be restored later.
-    /// </para>
-    /// <para><b>For Beginners:</b> This saves the complete state of the NTM to a file.
-    /// 
-    /// When saving the NTM:
-    /// - Memory contents are saved (what the model has "learned" and "remembers")
-    /// - Configuration parameters are saved
-    /// - Neural network parameters are saved
-    /// 
-    /// This allows you to:
-    /// - Save your progress and continue training later
-    /// - Share trained models with others
-    /// - Deploy models in applications
-    /// </para>
-    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        // Save memory configuration
+        // Write memory configuration
         writer.Write(_memorySize);
         writer.Write(_memoryVectorSize);
         writer.Write(_controllerSize);
-    
-        // Save memory matrix contents
-        for (int i = 0; i < _memorySize; i++)
+        writer.Write(_memories.Count);
+
+        // Write memory contents
+        foreach (var memory in _memories)
         {
-            for (int j = 0; j < _memoryVectorSize; j++)
+            for (int i = 0; i < _memorySize; i++)
             {
-                writer.Write(Convert.ToDouble(_memory[i, j]));
+                for (int j = 0; j < _memoryVectorSize; j++)
+                {
+                    writer.Write(Convert.ToDouble(memory[i, j]));
+                }
+            }
+        }
+
+        // Write read weights
+        writer.Write(_readWeights.Count);
+        foreach (var weights in _readWeights)
+        {
+            for (int i = 0; i < _memorySize; i++)
+            {
+                writer.Write(Convert.ToDouble(weights[i]));
+            }
+        }
+
+        // Write write weights
+        writer.Write(_writeWeights.Count);
+        foreach (var weights in _writeWeights)
+        {
+            for (int i = 0; i < _memorySize; i++)
+            {
+                writer.Write(Convert.ToDouble(weights[i]));
             }
         }
     }
@@ -1285,40 +1221,53 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
     /// Deserializes NTM-specific data from a binary reader.
     /// </summary>
     /// <param name="reader">The binary reader to read from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method loads the state of a previously saved NTM from a binary stream. It restores
-    /// NTM-specific parameters like the memory matrix and controller size, allowing the model
-    /// to continue from exactly where it left off.
-    /// </para>
-    /// <para><b>For Beginners:</b> This loads a complete NTM from a saved file.
-    /// 
-    /// When loading the NTM:
-    /// - Memory contents are restored (what the model had "learned" and "remembered")
-    /// - Configuration parameters are restored
-    /// - Neural network parameters are restored
-    /// 
-    /// This lets you:
-    /// - Continue working with a model exactly where you left off
-    /// - Use a model that someone else has trained
-    /// - Deploy pre-trained models in applications
-    /// </para>
-    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Load memory configuration
+        // Read memory configuration
         _memorySize = reader.ReadInt32();
         _memoryVectorSize = reader.ReadInt32();
         _controllerSize = reader.ReadInt32();
-    
-        // Create and load memory matrix
-        _memory = new Matrix<T>(_memorySize, _memoryVectorSize);
-        for (int i = 0; i < _memorySize; i++)
+        int memoryCount = reader.ReadInt32();
+
+        // Read memory contents
+        _memories.Clear();
+        for (int b = 0; b < memoryCount; b++)
         {
-            for (int j = 0; j < _memoryVectorSize; j++)
+            var memory = new Matrix<T>(_memorySize, _memoryVectorSize);
+            for (int i = 0; i < _memorySize; i++)
             {
-                _memory[i, j] = NumOps.FromDouble(reader.ReadDouble());
+                for (int j = 0; j < _memoryVectorSize; j++)
+                {
+                    memory[i, j] = NumOps.FromDouble(reader.ReadDouble());
+                }
             }
+            _memories.Add(memory);
+        }
+
+        // Read read weights
+        _readWeights.Clear();
+        int readWeightsCount = reader.ReadInt32();
+        for (int b = 0; b < readWeightsCount; b++)
+        {
+            var weights = new Vector<T>(_memorySize);
+            for (int i = 0; i < _memorySize; i++)
+            {
+                weights[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _readWeights.Add(weights);
+        }
+
+        // Read write weights
+        _writeWeights.Clear();
+        int writeWeightsCount = reader.ReadInt32();
+        for (int b = 0; b < writeWeightsCount; b++)
+        {
+            var weights = new Vector<T>(_memorySize);
+            for (int i = 0; i < _memorySize; i++)
+            {
+                weights[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _writeWeights.Add(weights);
         }
     }
 
@@ -1326,32 +1275,67 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
     /// Creates a new instance of the neural turing machine model.
     /// </summary>
     /// <returns>A new instance of the neural turing machine model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the neural turing machine model with the same configuration as the current instance.
-    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
-    /// with the serialized data. The new instance will have the same architecture, memory size, memory vector size, and
-    /// controller size as the original.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the network structure without copying the learned data.
-    /// 
-    /// Think of it like creating a duplicate of the NTM's blueprint:
-    /// - It copies the same neural network architecture 
-    /// - It uses the same memory configuration (same notebook size and page capacity)
-    /// - It sets up the same controller system (the brain that manages memory)
-    /// - But it doesn't copy any of the actual memories or learned behaviors
-    /// 
-    /// This is primarily used when saving or loading models, creating an empty framework
-    /// that the saved parameters can be loaded into later.
-    /// </para>
-    /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new NeuralTuringMachine<T>(
-            Architecture,
-            _memorySize,
-            _memoryVectorSize,
-            _controllerSize
-        );
+        // Determine which constructor to use based on whether we're using scalar or vector activations
+        if (ContentAddressingVectorActivation != null || GateVectorActivation != null || OutputVectorActivation != null)
+        {
+            // Use the vector activation constructor
+            return new NeuralTuringMachine<T>(
+                Architecture,
+                _memorySize,
+                _memoryVectorSize,
+                _controllerSize,
+                LossFunction,
+                ContentAddressingVectorActivation,
+                GateVectorActivation,
+                OutputVectorActivation);
+        }
+        else
+        {
+            // Use the scalar activation constructor
+            return new NeuralTuringMachine<T>(
+                Architecture,
+                _memorySize,
+                _memoryVectorSize,
+                _controllerSize,
+                LossFunction,
+                ContentAddressingActivation,
+                GateActivation,
+                OutputActivation);
+        }
+    }
+
+    /// <summary>
+    /// Resets the internal state of the neural network.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This clears the memory and attention weights, essentially
+    /// making the network "forget" everything it has learned during sequence processing.
+    /// It's useful when starting to process a new sequence that should not be influenced
+    /// by previous sequences.</para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_memorySize));
+
+        // Reset memory matrices to small random values
+        InitializeMemory();
+
+        // Reset attention weights to uniform distribution
+        for (int b = 0; b < _readWeights.Count; b++)
+        {
+            for (int i = 0; i < _memorySize; i++)
+            {
+                _readWeights[b][i] = uniformWeight;
+                _writeWeights[b][i] = uniformWeight;
+            }
+        }
+
+        // Reset layer states
+        foreach (var layer in Layers)
+        {
+            layer.ResetState();
+        }
     }
 }

@@ -209,6 +209,8 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private T _learningRateDecay;
 
+    private ILossFunction<T> _lossFunction;
+
     /// <summary>
     /// Initializes a new instance of the DeepBoltzmannMachine class with scalar activation.
     /// </summary>
@@ -228,10 +230,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         int epochs, 
         T learningRate, 
         double learningRateDecay = 1.0,
+        ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? activationFunction = null,
         int batchSize = 32, 
         int cdSteps = 1) 
-        : base(architecture)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _epochs = epochs;
         _learningRate = learningRate;
@@ -242,6 +245,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         _layerBiases = [];
         _layerWeights = [];
         _layerSizes = [];
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
     }
@@ -265,10 +269,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         int epochs, 
         T learningRate, 
         double learningRateDecay = 1.0,
+        ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? vectorActivationFunction = null,
         int batchSize = 32, 
         int cdSteps = 1) 
-        : base(architecture)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _epochs = epochs;
         _learningRate = learningRate;
@@ -279,6 +284,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         _layerBiases = [];
         _layerWeights = [];
         _layerSizes = [];
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
     }
@@ -578,7 +584,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         T currentLearningRate = _learningRate;
-    
+
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
             T epochLoss = NumOps.Zero;
@@ -593,7 +599,10 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(input.Shape[0]));
 
             Console.WriteLine($"Epoch {epoch + 1}/{_epochs}, Loss: {epochLoss}, Learning Rate: {currentLearningRate}");
-        
+
+            // Store the current loss
+            LastLoss = epochLoss;
+
             // Decay learning rate for next epoch
             currentLearningRate = NumOps.Multiply(currentLearningRate, _learningRateDecay);
         }
@@ -880,6 +889,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
                 _epochs,
                 _learningRate,
                 Convert.ToDouble(_learningRateDecay),
+                _lossFunction,
                 _activationFunction,
                 _batchSize,
                 _cdSteps
@@ -892,6 +902,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
                 _epochs,
                 _learningRate,
                 Convert.ToDouble(_learningRateDecay),
+                _lossFunction,
                 _vectorActivationFunction,
                 _batchSize,
                 _cdSteps

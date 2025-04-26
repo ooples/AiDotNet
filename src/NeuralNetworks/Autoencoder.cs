@@ -155,13 +155,13 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public Autoencoder(NeuralNetworkArchitecture<T> architecture, T learningRate, int epochs = 1, int batchSize = 32, ILossFunction<T>? lossFunction = null) 
-        : base(architecture)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         EncodedSize = 0;
         _learningRate = learningRate;
         _epochs = epochs;
         _batchSize = batchSize;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
     }
@@ -442,7 +442,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentException($"Input shape {input.Shape[1]} does not match expected input shape {Layers[0].GetInputShape()[0]}");
         }
-    
+
         if (expectedOutput.Shape[1] != Layers[Layers.Count - 1].GetOutputShape()[0])
         {
             throw new ArgumentException($"Expected output shape {expectedOutput.Shape[1]} does not match network output shape {Layers[Layers.Count - 1].GetOutputShape()[0]}");
@@ -452,36 +452,36 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
             T epochLoss = NumOps.Zero;
-        
+
             // Process in batches
             for (int i = 0; i < input.Shape[0]; i += _batchSize)
             {
                 int currentBatchSize = Math.Min(_batchSize, input.Shape[0] - i);
                 var batchInput = input.Slice(0, i, 0, i + currentBatchSize);
                 var batchExpected = expectedOutput.Slice(0, i, 0, i + currentBatchSize);
-            
+
                 // Forward pass
                 var current = batchInput;
                 List<Tensor<T>> layerOutputs = new List<Tensor<T>>(Layers.Count + 1) { batchInput };
-            
+
                 for (int j = 0; j < Layers.Count; j++)
                 {
                     current = Layers[j].Forward(current);
                     layerOutputs.Add(current);
                 }
-            
+
                 // Calculate loss
                 var loss = CalculateLoss(current, batchExpected);
                 epochLoss = NumOps.Add(epochLoss, loss);
-            
+
                 // Backward pass (calculate gradients)
                 var outputGradient = CalculateOutputGradient(current, batchExpected);
-            
+
                 for (int j = Layers.Count - 1; j >= 0; j--)
                 {
                     outputGradient = Layers[j].Backward(outputGradient);
                 }
-            
+
                 // Update parameters
                 for (int j = 0; j < Layers.Count; j++)
                 {
@@ -491,9 +491,14 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
                     }
                 }
             }
-        
-            // Report progress
+
+            // Calculate average loss for the epoch
             epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(input.Shape[0]));
+
+            // Store the last loss value
+            LastLoss = epochLoss;
+
+            // Report progress
             Console.WriteLine($"Epoch {epoch + 1}/{_epochs}, Loss: {epochLoss}");
         }
     }

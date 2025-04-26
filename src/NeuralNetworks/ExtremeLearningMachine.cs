@@ -72,8 +72,8 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// where each team member will be randomly assigned what to look for.
     /// </para>
     /// </remarks>
-    public ExtremeLearningMachine(NeuralNetworkArchitecture<T> architecture, int hiddenLayerSize) 
-        : base(architecture)
+    public ExtremeLearningMachine(NeuralNetworkArchitecture<T> architecture, int hiddenLayerSize, ILossFunction<T>? lossFunction = null) 
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _hiddenLayerSize = hiddenLayerSize;
 
@@ -214,35 +214,39 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         {
             throw new InvalidOperationException("ELM requires at least 3 layers: input projection, activation, and output.");
         }
-        
+
         // STEP 1: Get the hidden layer activations by projecting the input through the fixed random weights
         Tensor<T> hiddenActivations = input;
-        
+
         // Process through all layers except the last one (which is the output layer)
         for (int i = 0; i < Layers.Count - 1; i++)
         {
             hiddenActivations = Layers[i].Forward(hiddenActivations);
         }
-        
+
         // STEP 2: Calculate the optimal output weights using pseudo-inverse
         // We'll use the Moore-Penrose pseudoinverse: OutputWeights = (H⁺ × T)
         // where H⁺ is the pseudoinverse of H (hidden activations) and T is the target output
-        
+
         // Convert hidden activations and expected output to matrices for the calculation
         Matrix<T> H = hiddenActivations.ConvertToMatrix();
         Matrix<T> T = expectedOutput.ConvertToMatrix();
-        
+
         // Calculate pseudoinverse of H 
         Matrix<T> HPseudoInverse = CalculatePseudoInverse(H);
-        
+
         // Calculate output weights
         Matrix<T> outputWeights = HPseudoInverse.Multiply(T);
-        
+
         // STEP 3: Update only the last layer (output layer) with the calculated weights
         // In an ELM, only the output layer is trained
         UpdateOutputLayerWeights(outputWeights);
+
+        // STEP 4: Calculate and store the loss after training
+        Tensor<T> prediction = Predict(input);
+        LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
     }
-    
+
     /// <summary>
     /// Calculates the Moore-Penrose pseudoinverse of a matrix.
     /// </summary>

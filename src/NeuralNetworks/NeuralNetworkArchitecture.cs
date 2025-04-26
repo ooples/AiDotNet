@@ -355,6 +355,104 @@ public class NeuralNetworkArchitecture<T>
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="NeuralNetworkArchitecture{T}"/> class for regression tasks.
+    /// </summary>
+    /// <param name="inputFeatures">The number of input features (columns in the input matrix).</param>
+    /// <param name="outputSize">The number of output values to predict (typically 1 for simple regression).</param>
+    /// <param name="complexity">The complexity level of the neural network. Default is Medium.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor provides a simplified way to create a neural network architecture specifically for regression tasks.
+    /// It automatically sets the appropriate input type to TwoDimensional (for a matrix of samples × features) and
+    /// sets the task type to Regression.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a simpler way to create a neural network for predicting numerical values.
+    /// 
+    /// Use this constructor when:
+    /// - Your input is a matrix where each row is a sample and each column is a feature
+    ///   (like house size, number of bedrooms, etc. for multiple houses)
+    /// - You want to predict one or more numerical values (like house prices)
+    /// 
+    /// For example, to create a network that predicts house prices based on 5 features:
+    /// 
+    /// ```csharp
+    /// var architecture = new NeuralNetworkArchitecture<double>(
+    ///     inputFeatures: 5,  // 5 features (size, bedrooms, etc.)
+    ///     outputSize: 1      // 1 output (price)
+    /// );
+    /// ```
+    /// 
+    /// The network will automatically create appropriate layers based on the complexity setting.
+    /// You don't need to specify the number of samples - the network will handle any number of samples.
+    /// </para>
+    /// </remarks>
+    public NeuralNetworkArchitecture(
+        int inputFeatures,
+        int outputSize,
+        NetworkComplexity complexity = NetworkComplexity.Medium)
+        : this(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: complexity,
+            inputHeight: 0,  // This will be determined by the number of samples at runtime
+            inputWidth: inputFeatures,
+            outputSize: outputSize)
+    {
+        // The base constructor handles validation and setup
+        // We don't need to create custom layers here as the neural network will create
+        // appropriate default layers based on the architecture parameters
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NeuralNetworkArchitecture{T}"/> class for classification tasks.
+    /// </summary>
+    /// <param name="inputFeatures">The number of input features (columns in the input matrix).</param>
+    /// <param name="numClasses">The number of classes to classify into.</param>
+    /// <param name="isMultiClass">Whether this is a multi-class classification (true) or binary classification (false). Default is true.</param>
+    /// <param name="complexity">The complexity level of the neural network. Default is Medium.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor provides a simplified way to create a neural network architecture specifically for classification tasks.
+    /// It automatically sets the appropriate input type to TwoDimensional (for a matrix of samples × features) and
+    /// sets the task type to either MultiClassClassification or BinaryClassification based on the isMultiClass parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a simpler way to create a neural network for classifying data into categories.
+    /// 
+    /// Use this constructor when:
+    /// - Your input is a matrix where each row is a sample and each column is a feature
+    ///   (like petal length, petal width, etc. for multiple flowers)
+    /// - You want to classify each sample into one of several categories (like flower species)
+    /// 
+    /// For example, to create a network that classifies flowers into 3 species based on 4 features:
+    /// 
+    /// ```csharp
+    /// var architecture = new NeuralNetworkArchitecture<double>(
+    ///     inputFeatures: 4,  // 4 features (petal length, width, etc.)
+    ///     numClasses: 3      // 3 classes (setosa, versicolor, virginica)
+    /// );
+    /// ```
+    /// 
+    /// The network will automatically create appropriate layers based on the complexity setting.
+    /// You don't need to specify the number of samples - the network will handle any number of samples.
+    /// </para>
+    /// </remarks>
+    public NeuralNetworkArchitecture(
+        int inputFeatures,
+        int numClasses,
+        bool isMultiClass = true,
+        NetworkComplexity complexity = NetworkComplexity.Medium)
+        : this(
+            inputType: InputType.TwoDimensional,
+            taskType: isMultiClass ? NeuralNetworkTaskType.MultiClassClassification : NeuralNetworkTaskType.BinaryClassification,
+            complexity: complexity,
+            inputHeight: 0,  // This will be determined by the number of samples at runtime
+            inputWidth: inputFeatures,
+            outputSize: isMultiClass ? numClasses : 1)  // For binary classification, we only need 1 output (probability)
+    {
+        // The base constructor handles validation and setup
+    }
+
+    /// <summary>
     /// Gets the sizes of the hidden layers in the neural network.
     /// </summary>
     /// <returns>An array containing the size of each hidden layer.</returns>

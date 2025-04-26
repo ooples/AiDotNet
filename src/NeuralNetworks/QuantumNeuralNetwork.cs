@@ -51,8 +51,6 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     private int _numQubits;
 
     private readonly INormalizer<T, Tensor<T>, Tensor<T>> _normalizer;
-    private readonly ILossFunction<T> _lossFunction;
-
 
     /// <summary>
     /// Initializes a new instance of the <see cref="QuantumNeuralNetwork{T}"/> class with the specified architecture and number of qubits.
@@ -80,11 +78,11 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
 
     public QuantumNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numQubits, 
-        INormalizer<T, Tensor<T>, Tensor<T>> normalizer, ILossFunction<T> lossFunction) : base(architecture)
+        INormalizer<T, Tensor<T>, Tensor<T>>? normalizer = null, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _numQubits = numQubits;
-        _normalizer = normalizer;
-        _lossFunction = lossFunction;
+        _normalizer = normalizer ?? new NoNormalizer<T, Tensor<T>, Tensor<T>>();
 
         InitializeLayers();
     }
@@ -225,6 +223,9 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
         // Forward pass
         var prediction = Predict(input);
 
+        // Calculate and set the loss
+        LastLoss = CalculateLoss(prediction, expectedOutput);
+
         // Backward pass (quantum-inspired gradient calculation)
         var gradients = CalculateQuantumGradients(input, expectedOutput);
 
@@ -334,7 +335,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Backward pass
-        var outputGradient = _lossFunction.CalculateDerivative(MeasureQuantumState(quantumState).ToVector(), expectedOutput.ToVector());
+        var outputGradient = LossFunction.CalculateDerivative(MeasureQuantumState(quantumState).ToVector(), expectedOutput.ToVector());
         var complexOutputGradient = ConvertToComplexTensor(outputGradient);
 
         for (int i = Layers.Count - 1; i >= 0; i--)
@@ -480,7 +481,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private T CalculateLoss(Tensor<T> prediction, Tensor<T> expectedOutput)
     {
-        return _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+        return LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
     }
 
     /// <summary>
@@ -573,7 +574,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
             Architecture,
             _numQubits,
             _normalizer,
-            _lossFunction
+            LossFunction
         );
     }
 }

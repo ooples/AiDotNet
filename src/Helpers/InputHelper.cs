@@ -134,251 +134,387 @@ public static class InputHelper<T, TInput>
     /// <summary>
     /// Extracts a batch of data from the input based on the specified indices.
     /// </summary>
+    /// <typeparam name="TInput">The type of input data structure.</typeparam>
+    /// <typeparam name="T">The numeric data type of the elements.</typeparam>
     /// <param name="input">The input data structure.</param>
     /// <param name="indices">The indices of the elements or rows to include in the batch.</param>
     /// <returns>A new data structure containing only the selected elements.</returns>
     /// <exception cref="ArgumentNullException">Thrown when the input or indices are null.</exception>
     /// <exception cref="ArgumentException">Thrown when the input type is not supported or indices are invalid.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method creates a subset of the input data by selecting elements or rows based on the provided indices.
-    /// For Matrix&lt;T&gt;, it selects rows at the specified indices.
-    /// For Vector&lt;T&gt;, it selects elements at the specified indices.
-    /// For Tensor&lt;T&gt;, it selects slices along the first dimension.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is like creating a smaller version of your data
-    /// by picking only specific rows or elements. It's similar to selecting certain rows in a spreadsheet.
-    /// </para>
-    /// </remarks>
     public static TInput GetBatch(TInput input, int[] indices)
     {
+        // Validate input parameters
         if (input == null)
         {
             throw new ArgumentNullException(nameof(input), "Input data cannot be null.");
         }
-    
-        if (indices == null || indices.Length == 0)
+
+        if (indices == null)
         {
-            throw new ArgumentNullException(nameof(indices), "Indices array cannot be null or empty.");
+            throw new ArgumentNullException(nameof(indices), "Indices array cannot be null.");
         }
-    
-        // Handle Matrix<T>
-        if (input is Matrix<T> matrix)
+
+        if (indices.Length == 0)
         {
-            // Validate indices
-            foreach (var idx in indices)
+            throw new ArgumentException("Indices array cannot be empty.", nameof(indices));
+        }
+
+        try
+        {
+            // Handle Matrix<T>
+            if (input is Matrix<T> matrix)
             {
-                if (idx < 0 || idx >= matrix.Rows)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(indices), 
-                        $"Index {idx} is out of range for matrix with {matrix.Rows} rows.");
-                }
+                return (TInput)GetMatrixBatch(matrix, indices);
             }
-        
-            // Create a new matrix with the selected rows
-            var result = new Matrix<T>(indices.Length, matrix.Columns);
-        
+            // Handle Vector<T>
+            else if (input is Vector<T> vector)
+            {
+                return (TInput)GetVectorBatch(vector, indices);
+            }
+            // Handle Tensor<T>
+            else if (input is Tensor<T> tensor)
+            {
+                return (TInput)GetTensorBatch(tensor, indices);
+            }
+
+            throw new ArgumentException(
+                $"Unsupported input type: {input.GetType().Name}. " +
+                $"The GetBatch method only supports Matrix<T>, Vector<T>, and Tensor<T>.");
+        }
+        catch (InvalidCastException ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to cast result to type {typeof(TInput).Name}. Ensure the input type is compatible with batch operation.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Extracts a batch from a matrix based on the specified row indices.
+    /// </summary>
+    private static object GetMatrixBatch(Matrix<T> matrix, int[] indices)
+    {
+        // Pre-validate indices in a single pass for better error messages
+        int maxIndex = matrix.Rows - 1;
+        int? outOfRangeIndex = null;
+
+        for (int i = 0; i < indices.Length && outOfRangeIndex == null; i++)
+        {
+            if (indices[i] < 0 || indices[i] > maxIndex)
+            {
+                outOfRangeIndex = indices[i];
+            }
+        }
+
+        if (outOfRangeIndex.HasValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(indices),
+                $"Index {outOfRangeIndex} is out of range for matrix with {matrix.Rows} rows.");
+        }
+
+        // Create result and populate in a single pass
+        var result = new Matrix<T>(indices.Length, matrix.Columns);
+        for (int i = 0; i < indices.Length; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = matrix[indices[i], j];
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Extracts a batch from a vector based on the specified indices.
+    /// </summary>
+    private static object GetVectorBatch(Vector<T> vector, int[] indices)
+    {
+        // Pre-validate indices in a single pass
+        int maxIndex = vector.Length - 1;
+        int? outOfRangeIndex = null;
+
+        for (int i = 0; i < indices.Length && outOfRangeIndex == null; i++)
+        {
+            if (indices[i] < 0 || indices[i] > maxIndex)
+            {
+                outOfRangeIndex = indices[i];
+            }
+        }
+
+        if (outOfRangeIndex.HasValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(indices),
+                $"Index {outOfRangeIndex} is out of range for vector with length {vector.Length}.");
+        }
+
+        // Create result and populate in a single pass
+        var result = new Vector<T>(indices.Length);
+        for (int i = 0; i < indices.Length; i++)
+        {
+            result[i] = vector[indices[i]];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Extracts a batch from a tensor based on the specified indices along the first dimension.
+    /// </summary>
+    private static object GetTensorBatch(Tensor<T> tensor, int[] indices)
+    {
+        // Check tensor rank
+        if (tensor.Shape.Length < 1)
+        {
+            throw new ArgumentException("Cannot get batch from a scalar tensor.", nameof(tensor));
+        }
+
+        // Pre-validate indices in a single pass
+        int maxIndex = tensor.Shape[0] - 1;
+        int? outOfRangeIndex = null;
+
+        for (int i = 0; i < indices.Length && outOfRangeIndex == null; i++)
+        {
+            if (indices[i] < 0 || indices[i] > maxIndex)
+            {
+                outOfRangeIndex = indices[i];
+            }
+        }
+
+        if (outOfRangeIndex.HasValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(indices),
+                $"Index {outOfRangeIndex} is out of range for tensor with first dimension size {tensor.Shape[0]}.");
+        }
+
+        // Create new tensor shape with updated first dimension
+        int[] newShape = new int[tensor.Shape.Length];
+        newShape[0] = indices.Length;
+
+        // Calculate slice size once
+        int sliceSize = 1;
+        for (int i = 1; i < tensor.Shape.Length; i++)
+        {
+            newShape[i] = tensor.Shape[i];
+            sliceSize *= tensor.Shape[i];
+        }
+
+        // Create a new tensor with the selected slices
+        var result = new Tensor<T>(newShape);
+
+        // Use optimized approach based on tensor rank
+        if (tensor.Shape.Length == 1)
+        {
+            // Most efficient approach for 1D tensors - direct indexing
             for (int i = 0; i < indices.Length; i++)
             {
-                for (int j = 0; j < matrix.Columns; j++)
-                {
-                    result[i, j] = matrix[indices[i], j];
-                }
+                result[i] = tensor[indices[i]];
             }
-        
-            return (TInput)(object)result;
         }
-    
-        // Handle Vector<T>
-        else if (input is Vector<T> vector)
+        else if (tensor.Shape.Length == 2)
         {
-            // Validate indices
-            foreach (var idx in indices)
-            {
-                if (idx < 0 || idx >= vector.Length)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(indices), 
-                        $"Index {idx} is out of range for vector with length {vector.Length}.");
-                }
-            }
-        
-            // Create a new vector with the selected elements
-            var result = new Vector<T>(indices.Length);
-        
+            // Efficient approach for 2D tensors - row-wise copying
             for (int i = 0; i < indices.Length; i++)
             {
-                result[i] = vector[indices[i]];
+                int sourceIndex = indices[i];
+                for (int j = 0; j < tensor.Shape[1]; j++)
+                {
+                    result[i, j] = tensor[sourceIndex, j];
+                }
             }
-        
-            return (TInput)(object)result;
         }
-    
-        // Handle Tensor<T>
-        else if (input is Tensor<T> tensor)
+        else
         {
-            // For tensors, we'll select along the first dimension
-            if (tensor.Shape.Length < 1)
+            // Optimized block transfer for higher-dimensional tensors
+            // Get internal data arrays using the most efficient API
+            // This assumes direct access to the underlying data
+            for (int i = 0; i < indices.Length; i++)
             {
-                throw new ArgumentException("Cannot get batch from a scalar tensor.", nameof(input));
+                // Use tensor.GetSlice with proper offset calculation
+                var sourceSlice = tensor.GetSlice(indices[i]);
+                result.SetSlice(i, sourceSlice);
             }
-        
-            // Validate indices
-            foreach (var idx in indices)
-            {
-                if (idx < 0 || idx >= tensor.Shape[0])
-                {
-                    throw new ArgumentOutOfRangeException(nameof(indices), 
-                        $"Index {idx} is out of range for tensor with first dimension size {tensor.Shape[0]}.");
-                }
-            }
-        
-            // Create a new tensor shape with updated first dimension
-            int[] newShape = new int[tensor.Shape.Length];
-            newShape[0] = indices.Length;
-            for (int i = 1; i < tensor.Shape.Length; i++)
-            {
-                newShape[i] = tensor.Shape[i];
-            }
-        
-            // Create a new tensor with the selected slices
-            var result = new Tensor<T>(newShape);
-        
-            // Copy the selected slices
-            if (tensor.Shape.Length == 1)
-            {
-                // Handle 1D tensor (vector-like)
-                for (int i = 0; i < indices.Length; i++)
-                {
-                    result[i] = tensor[indices[i]];
-                }
-            }
-            else if (tensor.Shape.Length == 2)
-            {
-                // Handle 2D tensor (matrix-like)
-                for (int i = 0; i < indices.Length; i++)
-                {
-                    for (int j = 0; j < tensor.Shape[1]; j++)
-                    {
-                        result[i, j] = tensor[indices[i], j];
-                    }
-                }
-            }
-            else
-            {
-                // Handle higher-dimensional tensors
-                // This is a simplified approach - for complex tensors, you may need more specialized handling
-                var resultVector = result.ToVector();
-                var inputVector = tensor.ToVector();
-            
-                int sliceSize = 1;
-                for (int i = 1; i < tensor.Shape.Length; i++)
-                {
-                    sliceSize *= tensor.Shape[i];
-                }
-            
-                for (int i = 0; i < indices.Length; i++)
-                {
-                    int sourceOffset = indices[i] * sliceSize;
-                    int destOffset = i * sliceSize;
-                
-                    for (int j = 0; j < sliceSize; j++)
-                    {
-                        resultVector[destOffset + j] = inputVector[sourceOffset + j];
-                    }
-                }
-            
-                result = Tensor<T>.FromVector(resultVector, newShape);
-            }
-        
-            return (TInput)(object)result;
         }
-    
-        throw new ArgumentException(
-            $"Unsupported input type: {input.GetType().Name}. " +
-            $"The GetBatch method only supports Matrix<T>, Vector<T>, and Tensor<T>.");
+
+        return result;
     }
 
     /// <summary>
     /// Creates a batch containing a single item.
     /// </summary>
+    /// <typeparam name="TInput">The type of the input and output data structure.</typeparam>
+    /// <typeparam name="T">The element type of the data structure.</typeparam>
     /// <param name="item">The single item to include in the batch.</param>
     /// <returns>A batch containing only the provided item.</returns>
     /// <exception cref="ArgumentNullException">Thrown when the item is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when a type conversion fails.</exception>
     /// <exception cref="NotSupportedException">Thrown when the item type is not supported.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method creates a batch (a data structure that can hold multiple items) containing only the provided item.
-    /// It's useful when you have a single data point but need to use methods that expect batched input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method takes a single example and packages it as if it were a batch.
-    /// It's like putting a single item into a container designed for multiple items.
-    /// </para>
-    /// </remarks>
     public static TInput CreateSingleItemBatch(TInput item)
     {
         if (item == null)
-            throw new ArgumentNullException(nameof(item), "Item cannot be null.");
-
-        // Handle Vector<T> input
-        if (item is Vector<T> vector)
         {
-            // Create a matrix with a single row containing the vector data
-            var newMatrix = new Matrix<T>(1, vector.Length);
-            for (int i = 0; i < vector.Length; i++)
-            {
-                newMatrix[0, i] = vector[i];
-            }
-
-            return (TInput)(object)newMatrix;
+            throw new ArgumentNullException(nameof(item), "Item cannot be null.");
         }
 
-        // Handle Matrix<T> input - if it's already a matrix, ensure it has only one row
-        if (item is Matrix<T> matrix)
+        try
+        {
+            // Handle Vector<T> input
+            if (item is Vector<T> vector)
+            {
+                return CreateBatchFromVector(vector);
+            }
+
+            // Handle Matrix<T> input
+            if (item is Matrix<T> matrix)
+            {
+                return CreateBatchFromMatrix(matrix);
+            }
+
+            // Handle Tensor<T> input
+            if (item is Tensor<T> tensor)
+            {
+                return CreateBatchFromTensor(tensor);
+            }
+
+            // Handle scalar value
+            if (item is T scalarValue)
+            {
+                return CreateBatchFromScalar(scalarValue);
+            }
+
+            // If we've reached here, we're dealing with an unrecognized type
+            // Return as-is, but log a warning for diagnostic purposes
+            System.Diagnostics.Debug.WriteLine($"Warning: Unrecognized type {item.GetType().Name} in CreateSingleItemBatch. Returning original item.");
+            return item;
+        }
+        catch (InvalidCastException ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to convert {item.GetType().Name} to a batch format. Ensure the input type is compatible with batch operations.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Creates a batch from a single vector.
+    /// </summary>
+    private static TInput CreateBatchFromVector(Vector<T> vector)
+    {
+        if (vector.Length == 0)
+        {
+            throw new ArgumentException("Cannot create a batch from an empty vector.", nameof(vector));
+        }
+
+        try
+        {
+            // Create a matrix with a single row containing the vector data
+            var batchMatrix = new Matrix<T>(1, vector.Length);
+
+            // Optimize for contiguous memory copying when possible
+            if (vector is IArrayAccessible arrayVector && batchMatrix is IArraySettable arrayMatrix)
+            {
+                // Use direct array access for better performance
+                var sourceArray = arrayVector.GetArray();
+                arrayMatrix.SetArray(0, 0, sourceArray, 0, vector.Length);
+            }
+            else
+            {
+                // Fall back to element-by-element copying
+                for (int i = 0; i < vector.Length; i++)
+                {
+                    batchMatrix[0, i] = vector[i];
+                }
+            }
+
+            return (TInput)(object)batchMatrix;
+        }
+        catch (Exception ex) when (ex is not ArgumentException and not InvalidCastException)
+        {
+            throw new InvalidOperationException("Failed to create batch from vector.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Creates a batch from a single matrix, ensuring it's in the correct batch format.
+    /// </summary>
+    private static TInput CreateBatchFromMatrix(Matrix<T> matrix)
+    {
+        if (matrix.Rows == 0 || matrix.Columns == 0)
+        {
+            throw new ArgumentException("Cannot create a batch from an empty matrix.", nameof(matrix));
+        }
+
+        try
         {
             if (matrix.Rows == 1)
             {
                 // Already a single-row matrix, return as is
-                return item;
+                return (TInput)(object)matrix;
             }
-            else if (matrix.Columns == 1)
+
+            if (matrix.Columns == 1)
             {
-                // It's a single-column matrix, transpose it to make it a single-row matrix
-                var transposed = new Matrix<T>(1, matrix.Rows);
+                var batchMatrix = new Matrix<T>(1, matrix.Rows);
+
                 for (int i = 0; i < matrix.Rows; i++)
                 {
-                    transposed[0, i] = matrix[i, 0];
+                    batchMatrix[0, i] = matrix[i, 0];
                 }
-                return (TInput)(object)transposed;
+
+                return (TInput)(object)batchMatrix;
             }
-            else
+
+            var singleRow = new Matrix<T>(1, matrix.Columns);
+
+            for (int i = 0; i < matrix.Columns; i++)
             {
-                // Multi-dimensional matrix - create a new matrix with just the first row
-                var singleRow = new Matrix<T>(1, matrix.Columns);
-                for (int i = 0; i < matrix.Columns; i++)
-                {
-                    singleRow[0, i] = matrix[0, i];
-                }
-                return (TInput)(object)singleRow;
+                singleRow[0, i] = matrix[0, i];
             }
+
+            return (TInput)(object)singleRow;
+        }
+        catch (Exception ex) when (ex is not ArgumentException and not InvalidCastException)
+        {
+            throw new InvalidOperationException("Failed to create batch from matrix.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Creates a batch from a single tensor, ensuring the first dimension is 1.
+    /// </summary>
+    private static TInput CreateBatchFromTensor(Tensor<T> tensor)
+    {
+        if (tensor.Length == 0)
+        {
+            throw new ArgumentException("Cannot create a batch from an empty tensor.", nameof(tensor));
         }
 
-        // Handle Tensor<T> input
-        if (item is Tensor<T> tensor)
+        try
         {
-            // Create a new tensor with first dimension of size 1
-            int[] newShape = new int[tensor.Shape.Length];
-            newShape[0] = 1;
-            for (int i = 1; i < tensor.Shape.Length; i++)
+            // If first dimension is already 1, return as is
+            if (tensor.Shape.Length > 0 && tensor.Shape[0] == 1)
             {
-                newShape[i] = tensor.Shape[i];
+                return (TInput)(object)tensor;
+            }
+
+            // Create a new tensor with first dimension of size 1
+            int[] newShape = new int[Math.Max(1, tensor.Shape.Length)];
+            newShape[0] = 1;
+
+            for (int i = 1; i < newShape.Length; i++)
+            {
+                newShape[i] = i < tensor.Shape.Length ? tensor.Shape[i] : tensor.Shape[i - 1];
             }
 
             var batchTensor = new Tensor<T>(newShape);
 
-            // Copy the data from the original tensor to the first slice of the batch tensor
-            if (tensor.Shape.Length == 1)
+            // Handle different tensor ranks efficiently
+            if (tensor.Shape.Length == 0)
             {
-                // Handle 1D tensor
+                // Scalar tensor - special case
+                batchTensor[0] = tensor.GetFlatIndexValue(0);
+            }
+            else if (tensor.Shape.Length == 1)
+            {
+                // 1D tensor - map to first slice of batch
                 for (int i = 0; i < tensor.Shape[0]; i++)
                 {
                     batchTensor[0, i] = tensor[i];
@@ -386,35 +522,44 @@ public static class InputHelper<T, TInput>
             }
             else
             {
-                // For higher dimensions, we need to copy the entire tensor to the first slice
-                // This is a simplified approach - for complex tensors, more specialized handling may be needed
-                var batchVector = batchTensor.ToVector();
-                var inputVector = tensor.ToVector();
-
-                int sliceSize = inputVector.Length;
-                for (int i = 0; i < sliceSize; i++)
-                {
-                    batchVector[i] = inputVector[i];
-                }
-
-                batchTensor = Tensor<T>.FromVector(batchVector, newShape);
+                batchTensor.SetSlice(0, tensor);
             }
 
             return (TInput)(object)batchTensor;
         }
-
-        // For scalar values (when TInput is T), wrap in a Vector
-        if (item is T scalarValue)
+        catch (Exception ex) when (ex is not ArgumentException and not InvalidCastException)
         {
-            var newVector = new Vector<T>(1);
-            newVector[0] = scalarValue;
-
-            return (TInput)(object)newVector;
+            throw new InvalidOperationException("Failed to create batch from tensor.", ex);
         }
+    }
 
-        // If the item is already in a batch format or we don't know how to convert it,
-        // return it as is and let the caller handle any potential issues
-        return item;
+    public interface IArrayAccessible
+    {
+        T[] GetArray();
+        int GetOffset();
+    }
+
+    public interface IArraySettable
+    {
+        void SetArray(int row, int col, T[] array, int offset, int length);
+    }
+
+    /// <summary>
+    /// Creates a batch from a single scalar value.
+    /// </summary>
+    private static TInput CreateBatchFromScalar(T scalarValue)
+    {
+        try
+        {
+            var vector = new Vector<T>(1);
+            vector[0] = scalarValue;
+
+            return (TInput)(object)vector;
+        }
+        catch (Exception ex) when (ex is not ArgumentException and not InvalidCastException)
+        {
+            throw new InvalidOperationException("Failed to create batch from scalar value.", ex);
+        }
     }
 
     /// <summary>

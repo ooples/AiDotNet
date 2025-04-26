@@ -33,30 +33,6 @@ namespace AiDotNet.NeuralNetworks;
 public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     /// <summary>
-    /// Gets or sets the loss function used for training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The loss function measures how well the network's predictions match the expected outputs.
-    /// It provides a signal that guides the network's learning during training.
-    /// Different tasks require different loss functions, so this property allows specifying
-    /// the appropriate loss function for a specific task.
-    /// </para>
-    /// <para><b>For Beginners:</b> The loss function is like a scorecard that tells the network how well it's doing.
-    /// 
-    /// Think of it as:
-    /// - A way to measure the difference between the network's predictions and the correct answers
-    /// - A signal that guides the network's learning process
-    /// - Different tasks need different ways of measuring performance
-    /// 
-    /// If no loss function is provided, the network automatically selects one based on the task type:
-    /// - For classification tasks: Cross-entropy loss
-    /// - For regression tasks: Mean squared error loss
-    /// </para>
-    /// </remarks>
-    private ILossFunction<T>? _lossFunction;
-
-    /// <summary>
     /// Gets or sets the learning rate for parameter updates.
     /// </summary>
     /// <remarks>
@@ -181,12 +157,11 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
         int epochs = 10, 
         int batchSize = 32,
         ILossFunction<T>? lossFunction = null) 
-        : base(architecture)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _learningRate = learningRate ?? NumOps.FromDouble(0.01);
         _epochs = epochs;
         _batchSize = batchSize;
-        _lossFunction = lossFunction;
     }
 
     /// <summary>
@@ -270,48 +245,6 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
                 startIndex += layerParameterCount;
             }
         }
-    }
-
-    /// <summary>
-    /// Gets the appropriate loss function based on the task type if none was provided.
-    /// </summary>
-    /// <returns>A loss function appropriate for the network's task.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the loss function specified during initialization, or creates a default one
-    /// based on the task type if none was provided. For classification tasks, it creates a cross-entropy
-    /// loss function. For regression tasks, it creates a mean squared error loss function.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method picks the right scoring system for your task.
-    /// 
-    /// If you didn't specify a loss function when creating the network:
-    /// - For classification (categorizing), it uses cross-entropy loss
-    /// - For regression (predicting values), it uses mean squared error loss
-    /// 
-    /// These default choices work well for most common tasks, but you can always
-    /// specify a different loss function if you have specific requirements.
-    /// </para>
-    /// </remarks>
-    private ILossFunction<T> GetLossFunction()
-    {
-        if (_lossFunction != null)
-        {
-            return _lossFunction;
-        }
-        
-        // Create a default loss function based on task type
-        return Architecture.TaskType switch
-        {
-            NeuralNetworkTaskType.BinaryClassification => new CrossEntropyLoss<T>(),
-            NeuralNetworkTaskType.MultiClassClassification => new CrossEntropyLoss<T>(),
-            NeuralNetworkTaskType.MultiLabelClassification => new CrossEntropyLoss<T>(),
-            NeuralNetworkTaskType.ImageClassification => new CrossEntropyLoss<T>(),
-            NeuralNetworkTaskType.SequenceClassification => new CrossEntropyLoss<T>(),
-            NeuralNetworkTaskType.Regression => new MeanSquaredErrorLoss<T>(),
-            NeuralNetworkTaskType.TimeSeriesForecasting => new MeanSquaredErrorLoss<T>(),
-            // Default to MSE for other task types
-            _ => new MeanSquaredErrorLoss<T>()
-        };
     }
 
     /// <summary>
@@ -414,11 +347,11 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
                     var prediction = ForwardWithMemory(x);
                     
                     // Calculate loss and gradients for this example
-                    T loss = CalculateLoss(prediction, y);
+                    T loss = LossFunction.CalculateLoss(prediction, y);
                     totalLoss = NumOps.Add(totalLoss, loss);
                     
                     // Calculate output gradients
-                    Vector<T> outputGradients = CalculateOutputGradients(prediction, y);
+                    Vector<T> outputGradients = LossFunction.CalculateDerivative(prediction, y);
                     
                     // Backpropagate to compute gradients for all parameters
                     Backpropagate(outputGradients);
@@ -451,64 +384,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
         // Set back to inference mode after training
         SetTrainingMode(false);
     }
-
-    /// <summary>
-    /// Calculates the loss between predicted and expected outputs.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the network.</param>
-    /// <param name="expected">The expected (ground truth) values.</param>
-    /// <returns>The loss value based on the selected loss function.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the loss between the network's prediction and the expected output
-    /// using the loss function specified during initialization or a default one based on the task type.
-    /// The loss value provides a measure of how well the network is performing on the task.
-    /// </para>
-    /// <para><b>For Beginners:</b> This measures how wrong the network's predictions are.
-    /// 
-    /// The loss function:
-    /// - Compares the network's prediction with the correct answer
-    /// - Produces a number that's higher when predictions are worse
-    /// - Uses the appropriate calculation based on your task type
-    /// 
-    /// During training, we aim to minimize this loss, meaning the network gets better at
-    /// making accurate predictions for the specific task.
-    /// </para>
-    /// </remarks>
-    private T CalculateLoss(Vector<T> predicted, Vector<T> expected)
-    {
-        var lossFunction = GetLossFunction();
-        return lossFunction.CalculateLoss(predicted, expected);
-    }
-
-    /// <summary>
-    /// Calculates the gradients of the loss with respect to the network outputs.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the network.</param>
-    /// <param name="expected">The expected (target) values.</param>
-    /// <returns>A vector of gradients for the output layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates how the loss changes with respect to changes in the network's outputs.
-    /// These gradients are used during backpropagation to update the network's parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates how to adjust the network's outputs to reduce errors.
-    /// 
-    /// The gradient tells the network:
-    /// - How much each output value contributes to the overall error
-    /// - Which direction to adjust each output to reduce the error
-    /// - The size of adjustment needed for each output
-    /// 
-    /// This information flows backward through the network during training,
-    /// helping all parts of the network learn from its mistakes.
-    /// </para>
-    /// </remarks>
-    private Vector<T> CalculateOutputGradients(Vector<T> predicted, Vector<T> expected)
-    {
-        var lossFunction = GetLossFunction();
-        return lossFunction.CalculateDerivative(predicted, expected);
-    }
-
+   
     /// <summary>
     /// Gets metadata about the Residual Neural Network model.
     /// </summary>
@@ -650,7 +526,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
             _learningRate,
             _epochs,
             _batchSize,
-            _lossFunction
+            LossFunction
         );
     }
 }

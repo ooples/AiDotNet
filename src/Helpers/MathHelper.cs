@@ -433,6 +433,42 @@ public static class MathHelper
     }
 
     /// <summary>
+    /// Generates a normally distributed random number using the Box-Muller transform.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to return.</typeparam>
+    /// <param name="mean">The mean of the normal distribution.</param>
+    /// <param name="stdDev">The standard deviation of the normal distribution.</param>
+    /// <returns>A random number from the specified normal distribution.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Box-Muller transform to convert uniform random numbers into normally
+    /// distributed random numbers. This is useful for initializing neural network weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> Normal distribution (also called Gaussian distribution) is a
+    /// bell-shaped probability distribution that is symmetric around its mean.
+    /// 
+    /// This method generates random numbers that follow this distribution, which is important for
+    /// neural network initialization. Using normally distributed values helps prevent issues during
+    /// training and improves convergence.
+    /// </para>
+    /// </remarks>
+    public static T GetNormalRandom<T>(T mean, T stdDev)
+    {
+        var numOps = GetNumericOperations<T>();
+        var random = new Random();
+
+        // Box-Muller transform
+        double u1 = 1.0 - random.NextDouble(); // Uniform(0,1] random numbers
+        double u2 = 1.0 - random.NextDouble();
+        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+
+        // Scale and shift to get desired mean and standard deviation
+        double result = randStdNormal * Convert.ToDouble(stdDev) + Convert.ToDouble(mean);
+
+        return numOps.FromDouble(result);
+    }
+
+    /// <summary>
     /// Calculates the Bessel function of the first kind of order nu at point x.
     /// </summary>
     /// <typeparam name="T">The numeric type to use for calculations.</typeparam>

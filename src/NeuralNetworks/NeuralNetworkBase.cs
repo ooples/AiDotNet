@@ -59,7 +59,36 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// Random number generator for initialization.
     /// </summary>
     protected Random Random => new();
-    
+
+    /// <summary>
+    /// The loss function used to calculate error during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The loss function measures how wrong the network's predictions are.
+    /// Different types of problems need different loss functions:
+    /// - Classification problems often use Cross Entropy Loss
+    /// - Regression problems often use Mean Squared Error
+    /// - Ranking problems might use Hinge Loss
+    /// 
+    /// This is like having different ways to score different games - you wouldn't use the same
+    /// scoring system for basketball and golf.
+    /// </para>
+    /// </remarks>
+    protected ILossFunction<T> LossFunction;
+
+    /// <summary>
+    /// The last calculated loss value during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The loss value tells you how well your neural network is performing.
+    /// A lower loss means better performance. This field stores the most recent loss value
+    /// calculated during training, which you can use to track progress.
+    /// </para>
+    /// </remarks>
+    protected T? LastLoss;
+
     /// <summary>
     /// Indicates whether the network is currently in training mode.
     /// </summary>
@@ -87,12 +116,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// Creates a new neural network with the specified architecture.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the network.</param>
-    protected NeuralNetworkBase(NeuralNetworkArchitecture<T> architecture, double maxGradNorm = 1.0)
+    protected NeuralNetworkBase(NeuralNetworkArchitecture<T> architecture, ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
     {
         Architecture = architecture;
         Layers = [];
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
+        LossFunction = lossFunction;
     }
 
     /// <summary>
@@ -726,11 +756,63 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     }
 
     /// <summary>
+    /// Gets the loss value from the most recent training iteration.
+    /// </summary>
+    /// <returns>The loss value from the last training iteration, or zero if no training has occurred.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the error/loss value calculated during the most recent call to the Train method.
+    /// It's useful for monitoring the training progress and implementing early stopping.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how well your network is learning.
+    /// 
+    /// The loss value is a measure of how far off your network's predictions are from the correct answers.
+    /// - A high loss means the network is making big mistakes
+    /// - A low loss means the network is getting closer to the right answers
+    /// 
+    /// By tracking this value over time, you can:
+    /// - See if your network is improving
+    /// - Decide when to stop training (when the loss stops decreasing)
+    /// - Compare different network designs to see which learns better
+    /// 
+    /// Think of it like a score in a game - the lower the score, the better your network is performing.
+    /// </para>
+    /// </remarks>
+    public virtual T GetLastLoss()
+    {
+        // If we haven't calculated a loss yet, return a default value
+        if (LastLoss == null || NumOps.IsNaN(LastLoss))
+        {
+            return NumOps.Zero;
+        }
+
+        return LastLoss;
+    }
+
+    /// <summary>
     /// Trains the neural network on a single input-output pair.
     /// </summary>
     /// <param name="input">The input data.</param>
     /// <param name="expectedOutput">The expected output for the given input.</param>
-    /// <returns>The loss value after training on this example.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs one training step on the neural network using the provided input and expected output.
+    /// It updates the network's parameters to reduce the error between the network's prediction and the expected output.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is how your neural network learns. You provide:
+    /// - An input (what the network should process)
+    /// - The expected output (what the correct answer should be)
+    /// 
+    /// The network then:
+    /// 1. Makes a prediction based on the input
+    /// 2. Compares its prediction to the expected output
+    /// 3. Calculates how wrong it was (the loss)
+    /// 4. Adjusts its internal values to do better next time
+    /// 
+    /// After training, you can get the loss value using the GetLastLoss() method to see how well the network is learning.
+    /// </para>
+    /// </remarks>
     public abstract void Train(Tensor<T> input, Tensor<T> expectedOutput);
 
     /// <summary>

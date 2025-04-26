@@ -108,7 +108,7 @@ public static class NeuralNetworkHelper<T>
             _ => new SigmoidActivation<T>() // Default to sigmoid for Custom or unknown types
         };
     }
-        
+
     /// <summary>
     /// Gets the default vector activation function based on the task type.
     /// </summary>

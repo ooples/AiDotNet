@@ -139,7 +139,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// - For regression tasks: Mean squared error loss
     /// </para>
     /// </remarks>
-    private ILossFunction<T>? _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Indicates whether the network supports training (learning from data).
@@ -184,12 +184,12 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         int epochs = 10, 
         int batchSize = 32,
         ILossFunction<T>? lossFunction = null) 
-        : base(architecture)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _learningRate = learningRate ?? NumOps.FromDouble(0.01);
         _epochs = epochs;
         _batchSize = batchSize;
-        _lossFunction = lossFunction;
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _rbmLayers = [];
 
         InitializeLayers();
@@ -609,12 +609,15 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
                 
                 UpdateParameters(updatedParams);
             }
-            
+
             // Calculate average loss for the epoch
             T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(input.Shape[0]));
             Console.WriteLine($"Epoch {epoch + 1}/{_epochs}, Average Loss: {avgLoss}");
+
+            // Store the current loss
+            LastLoss = avgLoss;
         }
-        
+
         // Set back to inference mode after training
         SetTrainingMode(false);
     }
@@ -656,48 +659,6 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     }
     
     /// <summary>
-    /// Gets the appropriate loss function based on the task type if none was provided.
-    /// </summary>
-    /// <returns>A loss function appropriate for the network's task.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the loss function specified during initialization, or creates a default one
-    /// based on the task type if none was provided. For classification tasks, it creates a cross-entropy
-    /// loss function. For regression tasks, it creates a mean squared error loss function.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method picks the right scoring system for your task.
-    /// 
-    /// If you didn't specify a loss function when creating the network:
-    /// - For classification (categorizing), it uses cross-entropy loss
-    /// - For regression (predicting values), it uses mean squared error loss
-    /// 
-    /// These default choices work well for most common tasks, but you can always
-    /// specify a different loss function if you have specific requirements.
-    /// </para>
-    /// </remarks>
-    private ILossFunction<T> GetLossFunction()
-    {
-        if (_lossFunction != null)
-        {
-            return _lossFunction;
-        }
-        
-        // Create a default loss function based on task type
-        return Architecture.TaskType switch
-        {
-            NeuralNetworkTaskType.BinaryClassification => new CrossEntropyLoss<T>(),
-            NeuralNetworkTaskType.MultiClassClassification => new CrossEntropyLoss<T>(),
-            NeuralNetworkTaskType.MultiLabelClassification => new CrossEntropyLoss<T>(),
-            NeuralNetworkTaskType.ImageClassification => new CrossEntropyLoss<T>(),
-            NeuralNetworkTaskType.SequenceClassification => new CrossEntropyLoss<T>(),
-            NeuralNetworkTaskType.Regression => new MeanSquaredErrorLoss<T>(),
-            NeuralNetworkTaskType.TimeSeriesForecasting => new MeanSquaredErrorLoss<T>(),
-            // Default to MSE for other task types
-            _ => new MeanSquaredErrorLoss<T>()
-        };
-    }
-    
-    /// <summary>
     /// Calculates the loss between predicted and expected outputs using the appropriate loss function.
     /// </summary>
     /// <param name="predicted">The predicted output from the network.</param>
@@ -722,8 +683,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private T CalculateLoss(Tensor<T> predicted, Tensor<T> expected)
     {
-        var lossFunction = GetLossFunction();
-        return lossFunction.CalculateLoss(predicted.ToVector(), expected.ToVector());
+        return _lossFunction.CalculateLoss(predicted.ToVector(), expected.ToVector());
     }
     
     /// <summary>
@@ -750,8 +710,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Vector<T> CalculateOutputGradients(Vector<T> predicted, Vector<T> expected)
     {
-        var lossFunction = GetLossFunction();
-        return lossFunction.CalculateDerivative(predicted, expected);
+        return _lossFunction.CalculateDerivative(predicted, expected);
     }
     
     /// <summary>
@@ -868,7 +827,9 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         _batchSize = reader.ReadInt32();
 
         // Read and set the loss function if a custom one was used
-        _lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
+        var lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ?? 
+            throw new InvalidOperationException("Failed to deserialize the loss function. The loss function cannot be null.");
+        _lossFunction = lossFunction;
     }
 
     /// <summary>

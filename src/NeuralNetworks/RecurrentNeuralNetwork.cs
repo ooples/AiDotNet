@@ -77,7 +77,8 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     /// determines what kind of calculations it can perform and how it will process information.
     /// </para>
     /// </remarks>
-    public RecurrentNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double learningRate = 0.01) : base(architecture)
+    public RecurrentNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double learningRate = 0.01, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _learningRate = NumOps.FromDouble(learningRate);
     }
@@ -271,6 +272,9 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
 
         // Calculate error/loss
         Tensor<T> error = output.Subtract(expectedOutput);
+
+        // Calculate and set the loss using the loss function
+        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
 
         // Backpropagate error through time
         BackpropagateError(error);
@@ -470,6 +474,6 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Create a new instance with the cloned architecture and the same learning rate
         double learningRate = Convert.ToDouble(_learningRate);
-        return new RecurrentNeuralNetwork<T>(Architecture, learningRate);
+        return new RecurrentNeuralNetwork<T>(Architecture, learningRate, LossFunction);
     }
 }

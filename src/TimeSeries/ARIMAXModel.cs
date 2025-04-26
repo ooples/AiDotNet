@@ -269,6 +269,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
             }
             y = temp;
         }
+
         return y;
     }
 
@@ -293,23 +294,78 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void FitARIMAXModel(Matrix<T> x, Vector<T> y)
     {
-        // Implement ARIMAX model fitting
-        // This is a simplified version and may need to be expanded for more accurate results
+        // Validate inputs
+        if (x == null)
+            throw new ArgumentNullException(nameof(x), "Exogenous variables matrix cannot be null");
 
-        // Fit exogenous variables
+        if (y == null)
+            throw new ArgumentNullException(nameof(y), "Time series vector cannot be null");
+
+        if (x.Rows != y.Length)
+            throw new ArgumentException($"Number of rows in exogenous variables matrix ({x.Rows}) must match the length of the time series vector ({y.Length})");
+
+        if (x.Columns != _arimaxOptions.ExogenousVariables)
+            throw new ArgumentException($"Number of columns in exogenous variables matrix ({x.Columns}) must match the number of exogenous variables ({_arimaxOptions.ExogenousVariables})");
+
+        // Fit exogenous variables using the linear regression model
         Matrix<T> xT = x.Transpose();
         Matrix<T> xTx = xT * x;
         Vector<T> xTy = xT * y;
 
+        // Add small regularization to diagonal elements to avoid singularity issues
+        // This is more efficient than using try-catch for potential singularity
+        T regularizationFactor = NumOps.FromDouble(1e-6);
+        for (int i = 0; i < xTx.Rows; i++)
+        {
+            xTx[i, i] = NumOps.Add(xTx[i, i], regularizationFactor);
+        }
+
+        // Solve the linear system for exogenous coefficients
         _exogenousCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _arimaxOptions.DecompositionType);
 
         // Extract residuals
-        Vector<T> residuals = y - (x * _exogenousCoefficients);
+        Vector<T> fitted = x * _exogenousCoefficients;
+        Vector<T> residuals = new Vector<T>(y.Length);
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            residuals[i] = NumOps.Subtract(y[i], fitted[i]);
+        }
+
+        // Replace any invalid values in residuals with zeros
+        // This is more efficient than checking each value with try-catch
+        for (int i = 0; i < residuals.Length; i++)
+        {
+            double val = Convert.ToDouble(residuals[i]);
+            if (double.IsNaN(val) || double.IsInfinity(val))
+            {
+                residuals[i] = NumOps.Zero;
+            }
+        }
 
         // Fit ARMA model to residuals
         FitARMAModel(residuals);
 
-        _intercept = NumOps.Divide(y.Sum(), NumOps.FromDouble(y.Length));
+        // Calculate intercept efficiently
+        T sum = NumOps.Zero;
+        int validCount = y.Length;
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            double val = Convert.ToDouble(y[i]);
+            if (!double.IsNaN(val) && !double.IsInfinity(val))
+            {
+                sum = NumOps.Add(sum, y[i]);
+            }
+            else
+            {
+                validCount--;
+            }
+        }
+
+        _intercept = validCount > 0
+            ? NumOps.Divide(sum, NumOps.FromDouble(validCount))
+            : NumOps.Zero;
     }
 
     /// <summary>

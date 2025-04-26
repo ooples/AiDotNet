@@ -298,6 +298,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// </summary>
     private Matrix<T> _outputWeights;
 
+    private ILossFunction<T> _lossFunction;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DifferentiableNeuralComputer{T}"/> class with the specified parameters.
     /// </summary>
@@ -333,8 +335,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         int memoryWordSize, 
         int controllerSize, 
         int readHeads,
+        ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? activationFunction = null) 
-        : base(architecture)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _memorySize = memorySize;
         _memoryWordSize = memoryWordSize;
@@ -345,7 +348,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         _writeWeighting = new Vector<T>(_memorySize);
         _readWeightings = [];
         _readVectors = [];
-            
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
         // Calculate combinedSize (controller output + read vectors)
         int outputSize = architecture.OutputSize;
         int combinedSize = controllerSize + (_readHeads * _memoryWordSize);
@@ -402,8 +406,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         int memoryWordSize, 
         int controllerSize, 
         int readHeads,
+        ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? vectorActivationFunction = null) 
-        : base(architecture)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _memorySize = memorySize;
         _memoryWordSize = memoryWordSize;
@@ -414,7 +419,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         _writeWeighting = new Vector<T>(_memorySize);
         _readWeightings = [];
         _readVectors = [];
-            
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
         // Calculate combinedSize (controller output + read vectors)
         int outputSize = architecture.OutputSize;
         int combinedSize = controllerSize + (_readHeads * _memoryWordSize);
@@ -650,12 +656,12 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         // Calculate error/loss
         var flattenedPredictions = output.ToVector();
         var flattenedExpected = expectedOutput.ToVector();
-        
-        // Use Mean Squared Error as the loss function
-        var lossFunction = new MeanSquaredErrorLoss<T>();
-        
+
+        // Calculate and store the loss value
+        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
+
         // Calculate gradients from the loss
-        Vector<T> outputGradients = lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
+        Vector<T> outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
         
         // Backpropagate the error through the network
         Vector<T> inputGradients = Backpropagate(outputGradients);
@@ -1258,7 +1264,31 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         
         return expVector;
     }
-    
+
+    /// <summary>
+    /// Calculates allocation weights based on the usage free vector and precedence vector.
+    /// </summary>
+    /// <param name="usageFree">The vector tracking which memory locations are free.</param>
+    /// <param name="precedenceWeighting">The vector tracking the order of memory writes.</param>
+    /// <returns>A vector of weights for memory allocation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates weights for allocating memory based on which locations are free (available for writing)
+    /// and the order in which memory has been written to previously. It sorts memory locations by their usage and
+    /// allocates more weight to freer locations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This decides where to write new information in memory.
+    /// 
+    /// It works by:
+    /// 1. Considering which memory locations are free or less used
+    /// 2. Prioritizing locations that haven't been written to recently
+    /// 3. Calculating weights that favor writing to unused or old locations
+    /// 4. This prevents important recent information from being overwritten
+    /// 
+    /// This is like finding empty pages in a notebook, or pages with old notes you don't need anymore,
+    /// to write new information.
+    /// </para>
+    /// </remarks>
     /// <summary>
     /// Calculates allocation weights based on the usage free vector and precedence vector.
     /// </summary>
@@ -1285,21 +1315,71 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Vector<T> Allocate(Vector<T> usageFree, Vector<T> precedenceWeighting)
     {
-        // Calculate allocation weights based on usage free vector
-        // This implementation is simplified - a full implementation would sort memory
-        // locations by usage and allocate to the least used locations first
-        
+        // Create a list of indices sorted by usage free values (ascending)
+        var sortedIndices = Enumerable.Range(0, _memorySize)
+            .OrderBy(i => Convert.ToDouble(usageFree[i]))
+            .ToList();
+
+        // Create allocation weights vector
         Vector<T> allocationWeighting = new Vector<T>(_memorySize);
-        
-        // For simplicity, we'll directly use the usage free vector as allocation weighting
+
+        // Initialize allocation weights to zero
         for (int i = 0; i < _memorySize; i++)
         {
-            allocationWeighting[i] = usageFree[i];
+            allocationWeighting[i] = NumOps.Zero;
         }
-        
+
+        // Calculate cumulatively multiplied usage free vector
+        Vector<T> phi = new Vector<T>(_memorySize)
+        {
+            // Initial value for phi
+            [sortedIndices[0]] = NumOps.One
+        };
+
+        // Compute phi values for remaining sorted indices
+        for (int i = 1; i < _memorySize; i++)
+        {
+            int index = sortedIndices[i];
+            int prevIndex = sortedIndices[i - 1];
+
+            phi[index] = NumOps.Multiply(phi[prevIndex], NumOps.Subtract(NumOps.One, usageFree[prevIndex]));
+        }
+
+        // Calculate allocation weights based on phi and usage free
+        for (int i = 0; i < _memorySize; i++)
+        {
+            int index = sortedIndices[i];
+            allocationWeighting[index] = NumOps.Multiply(usageFree[index], phi[index]);
+        }
+
+        // Normalize the allocation weights to ensure they sum to 1
+        T sum = NumOps.Zero;
+        for (int i = 0; i < _memorySize; i++)
+        {
+            sum = NumOps.Add(sum, allocationWeighting[i]);
+        }
+
+        // Avoid division by zero
+        if (!MathHelper.AlmostEqual(sum, NumOps.Zero))
+        {
+            for (int i = 0; i < _memorySize; i++)
+            {
+                allocationWeighting[i] = NumOps.Divide(allocationWeighting[i], sum);
+            }
+        }
+        else
+        {
+            // If all weights are zero, use a uniform distribution
+            T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_memorySize));
+            for (int i = 0; i < _memorySize; i++)
+            {
+                allocationWeighting[i] = uniformWeight;
+            }
+        }
+
         return allocationWeighting;
     }
-    
+
     /// <summary>
     /// Combines content and allocation weightings based on an allocation gate.
     /// </summary>
@@ -2019,6 +2099,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
                 _memoryWordSize,
                 _controllerSize,
                 _readHeads,
+                _lossFunction,
                 _activationFunction
             );
         }
@@ -2030,6 +2111,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
                 _memoryWordSize,
                 _controllerSize,
                 _readHeads,
+                _lossFunction,
                 _vectorActivationFunction
             );
         }

@@ -61,7 +61,8 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// where 0 means "completely different" and 1 means "identical".
     /// </para>
     /// </remarks>
-    public SiameseNetwork(NeuralNetworkArchitecture<T> architecture) : base(architecture)
+    public SiameseNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : 
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _subnetwork = new ConvolutionalNeuralNetwork<T>(architecture);
         int embeddingSize = architecture.GetOutputShape()[0];
@@ -244,25 +245,30 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     {
         // Ensure we're in training mode
         SetTrainingMode(true);
-    
+
         // Validate input shape and expected output shape
         if (input.Shape.Length < 2 || input.Shape[1] != 2)
         {
             throw new ArgumentException(
                 $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese training. Got shape: {string.Join(",", input.Shape)}");
         }
-    
+
         if (expectedOutput.Shape.Length != 2 || expectedOutput.Shape[0] != input.Shape[0] || expectedOutput.Shape[1] != 1)
         {
             throw new ArgumentException(
                 $"Expected output tensor must have shape [batchSize, 1]. Got shape: {string.Join(",", expectedOutput.Shape)}");
         }
-    
+
         int batchSize = input.Shape[0];
-    
+
         // Forward pass to get predictions
         var predictions = Predict(input);
-    
+
+        // Calculate loss using the loss function
+        Vector<T> predictedVector = predictions.ToVector();
+        Vector<T> expectedVector = expectedOutput.ToVector();
+        LastLoss = LossFunction.CalculateLoss(predictedVector, expectedVector);
+
         // Calculate error gradients
         var outputGradients = new Tensor<T>(predictions.Shape);
         for (int b = 0; b < batchSize; b++)
@@ -270,10 +276,10 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
             // Error = expected - predicted
             outputGradients[b, 0] = NumOps.Subtract(expectedOutput[b, 0], predictions[b, 0]);
         }
-    
+
         // Process each pair in the batch for the backward pass
         _subnetwork.SetTrainingMode(true);
-    
+
         for (int b = 0; b < batchSize; b++)
         {
             // Extract the pair - GetSlice returns a tensor
@@ -463,6 +469,6 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new SiameseNetwork<T>(Architecture);
+        return new SiameseNetwork<T>(Architecture, LossFunction);
     }
 }
