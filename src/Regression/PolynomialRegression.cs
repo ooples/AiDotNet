@@ -33,7 +33,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
     /// if you don't have enough data.
     /// </remarks>
     public PolynomialRegression(PolynomialRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _polyOptions = options ?? new PolynomialRegressionOptions<T>();
     }

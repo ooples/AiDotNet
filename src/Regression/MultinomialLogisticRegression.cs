@@ -114,7 +114,7 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     public MultinomialLogisticRegression(MultinomialLogisticRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _options = options ?? new MultinomialLogisticRegressionOptions<T>();
     }

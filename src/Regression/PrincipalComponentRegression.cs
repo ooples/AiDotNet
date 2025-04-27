@@ -90,7 +90,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     public PrincipalComponentRegression(PrincipalComponentRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _options = options ?? new PrincipalComponentRegressionOptions<T>();
         _components = new Matrix<T>(0, 0);

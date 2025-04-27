@@ -102,12 +102,12 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// you choose will affect how well it works for your specific type of data.
     /// </para>
     /// </remarks>
-    public TimeSeriesRegression(TimeSeriesRegressionOptions<T> options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+    public TimeSeriesRegression(TimeSeriesRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
-        _options = options;
+        _options = options ?? new();
         _regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
-        _timeSeriesModel = TimeSeriesModelFactory<T, Matrix<T>, Vector<T>>.CreateModel(options.ModelType, options);
+        _timeSeriesModel = TimeSeriesModelFactory<T, Matrix<T>, Vector<T>>.CreateModel(_options.ModelType, _options);
     }
 
     /// <summary>

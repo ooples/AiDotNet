@@ -85,10 +85,10 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     public BayesianRegression(BayesianRegressionOptions<T>? bayesianOptions = null, 
                               IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(bayesianOptions, regularization)
+        : base(bayesianOptions ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _bayesOptions = bayesianOptions ?? new BayesianRegressionOptions<T>();
-        _posteriorCovariance = new Matrix<T>(0, 0);
+        _posteriorCovariance = Matrix<T>.Empty();
     }
 
     /// <summary>

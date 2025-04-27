@@ -93,7 +93,6 @@ public class EnhancedRegressionExample
                 {
                     UseIntercept = true
                 }))
-                .ConfigureFitnessCalculator(new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>())
                 .Build(features, prices);
 
             // Ridge regression model (with L2 regularization)
@@ -101,11 +100,6 @@ public class EnhancedRegressionExample
             double alpha = 1.0;
             var ridgeModel = modelBuilder
                 .ConfigureDataPreprocessor(dataPreprocessor)
-                .ConfigureRegularization(new L2Regularization<double, Matrix<double>, Vector<double>>(new RegularizationOptions
-                {
-                    Type = RegularizationType.L2,
-                    Strength = alpha
-                }))
                 .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
                 {
                     LearningRate = 0.01,
@@ -117,7 +111,6 @@ public class EnhancedRegressionExample
                 {
                     UseIntercept = true
                 }))
-                .ConfigureFitnessCalculator(new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>())
                 .Build(features, prices);
 
             // 6. Evaluate models on test set

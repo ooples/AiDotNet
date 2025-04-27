@@ -51,52 +51,22 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer);
 
     /// <summary>
-    /// Configures the regularization component for the model.
+    /// Configures the optimization algorithm for the model.
     /// </summary>
     /// <remarks>
-    /// Regularization helps prevent overfitting by adding a penalty for complexity in the model.
+    /// An optimizer determines how the model's parameters are updated during training.
     /// 
-    /// <b>For Beginners:</b> Overfitting happens when a model learns the training data too well, including 
-    /// all its noise and peculiarities, making it perform poorly on new data. Regularization is like 
-    /// adding training wheels that prevent the model from becoming too complex. It's like telling the 
-    /// model "keep it simple" so it learns general patterns rather than memorizing specific examples.
+    /// <b>For Beginners:</b> The optimizer is like the "learning strategy" for your model. It decides:
+    /// - How quickly the model should learn (learning rate)
+    /// - How to adjust the model's parameters to improve predictions
+    /// - When to stop trying to improve further
+    /// 
+    /// Common optimizers include Gradient Descent, Adam, and L-BFGS, each with different 
+    /// strengths and weaknesses.
     /// </remarks>
-    /// <param name="regularization">The regularization implementation to use.</param>
+    /// <param name="optimizationAlgorithm">The optimization algorithm implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRegularization(IRegularization<T, TInput, TOutput> regularization);
-
-    /// <summary>
-    /// Configures the fitness calculator component for the model.
-    /// </summary>
-    /// <remarks>
-    /// A fitness calculator measures how well the model is performing during training.
-    /// 
-    /// <b>For Beginners:</b> The fitness calculator is like a scorekeeper that tells you how well your 
-    /// model is doing. It compares the model's predictions to the actual correct answers and 
-    /// calculates a score. This score helps determine if changes to the model are making it 
-    /// better or worse.
-    /// </remarks>
-    /// <param name="calculator">The fitness calculator implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator);
-
-    /// <summary>
-    /// Configures the fit detector component for the model.
-    /// </summary>
-    /// <remarks>
-    /// A fit detector determines whether the model is underfitting, well-fitted, or overfitting.
-    /// 
-    /// <b>For Beginners:</b> This component checks if your model is learning properly. It's like a 
-    /// teacher who can tell if:
-    /// - Your model is "underfitting" (too simple and missing important patterns)
-    /// - Your model is "just right" (learning the important patterns without memorizing noise)
-    /// - Your model is "overfitting" (memorizing the training data instead of learning general rules)
-    /// 
-    /// This helps you know when to stop training or when to adjust your model's complexity.
-    /// </remarks>
-    /// <param name="detector">The fit detector implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm);
 
     /// <summary>
     /// Configures the prediction model algorithm to use.
@@ -131,24 +101,6 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="model">The prediction model implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model);
-
-    /// <summary>
-    /// Configures the optimization algorithm for the model.
-    /// </summary>
-    /// <remarks>
-    /// An optimizer determines how the model's parameters are updated during training.
-    /// 
-    /// <b>For Beginners:</b> The optimizer is like the "learning strategy" for your model. It decides:
-    /// - How quickly the model should learn (learning rate)
-    /// - How to adjust the model's parameters to improve predictions
-    /// - When to stop trying to improve further
-    /// 
-    /// Common optimizers include Gradient Descent, Adam, and L-BFGS, each with different 
-    /// strengths and weaknesses.
-    /// </remarks>
-    /// <param name="optimizationAlgorithm">The optimization algorithm implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm);
 
     /// <summary>
     /// Configures the data preprocessing component for the model.

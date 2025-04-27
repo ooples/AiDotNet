@@ -47,11 +47,6 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// The ensemble of decision trees and their corresponding weights.
     /// </summary>
     private List<(DecisionTreeRegression<T> Tree, T Weight)> _ensemble;
-    
-    /// <summary>
-    /// Random number generator for creating diverse decision trees.
-    /// </summary>
-    private Random _random;
 
     /// <summary>
     /// Gets the number of decision trees in the ensemble.
@@ -89,12 +84,11 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// for many regression problems.
     /// </para>
     /// </remarks>
-    public AdaBoostR2Regression(AdaBoostR2RegressionOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+    public AdaBoostR2Regression(AdaBoostR2RegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
-        _options = options;
+        _options = options ?? new();
         _ensemble = [];
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
     }
 
     /// <summary>
@@ -148,7 +142,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
                 MaxDepth = _options.MaxDepth,
                 MinSamplesSplit = _options.MinSamplesSplit,
                 MaxFeatures = _options.MaxFeatures,
-                Seed = _random.Next(),
+                Seed = Random.Next(),
                 SplitCriterion = _options.SplitCriterion
             };
 
@@ -538,8 +532,6 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
             tree.Deserialize(Convert.FromBase64String((string)e.Tree));
             return (Tree: tree, Weight: (T)e.Weight);
         })];
-
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
     }
 
     /// <summary>

@@ -38,11 +38,6 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// Collection of individual decision trees that make up the ensemble.
     /// </summary>
     private List<DecisionTreeRegression<T>> _trees;
-    
-    /// <summary>
-    /// Random number generator used for bootstrapping and feature selection.
-    /// </summary>
-    private Random _random;
 
     /// <summary>
     /// Gets the number of trees in the ensemble model.
@@ -124,12 +119,11 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// ```
     /// </para>
     /// </remarks>
-    public ExtremelyRandomizedTreesRegression(ExtremelyRandomizedTreesRegressionOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+    public ExtremelyRandomizedTreesRegression(ExtremelyRandomizedTreesRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
-        _options = options;
+        _options = options ?? new();
         _trees = [];
-        _random = new Random(_options.Seed ?? Environment.TickCount);
     }
 
     /// <summary>
@@ -173,7 +167,7 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
                 MaxDepth = _options.MaxDepth,
                 MinSamplesSplit = _options.MinSamplesSplit,
                 MaxFeatures = _options.MaxFeatures,
-                Seed = _random.Next()
+                Seed = Random.Next()
             }, Regularization);
 
             var (sampledX, sampledY) = SampleWithReplacement(x, y);
@@ -249,7 +243,7 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         var sampledIndices = new List<int>();
         for (int i = 0; i < x.Rows; i++)
         {
-            sampledIndices.Add(_random.Next(0, x.Rows));
+            sampledIndices.Add(Random.Next(0, x.Rows));
         }
 
         var sampledX = new Matrix<T>(sampledIndices.Select(i => x.GetRow(i)).ToList());
@@ -472,8 +466,6 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
             tree.Deserialize(treeData);
             _trees.Add(tree);
         }
-
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
     }
 
     /// <summary>

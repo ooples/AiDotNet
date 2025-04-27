@@ -29,13 +29,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 {
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
-    private IRegularization<T, TInput, TOutput>? _regularization;
-    private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
-    private IFitDetector<T, TInput, TOutput>? _fitDetector;
     private IFullModel<T, TInput, TOutput>? _model;
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
+    private IModelSelector<T, TInput, TOutput>? _modelSelector;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -68,56 +66,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer)
     {
         _normalizer = normalizer;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures regularization to prevent overfitting in the model.
-    /// </summary>
-    /// <param name="regularization">The regularization strategy to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Regularization helps prevent your model from "memorizing" the training data
-    /// instead of learning general patterns. It's like teaching a student to understand the concepts
-    /// rather than just memorizing answers to specific questions. This helps the model perform better
-    /// on new, unseen data.
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRegularization(IRegularization<T, TInput, TOutput> regularization)
-    {
-        _regularization = regularization;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures how to measure the model's performance.
-    /// </summary>
-    /// <param name="calculator">The fitness calculation strategy to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This determines how we score how well our model is doing.
-    /// Different problems might need different scoring methods. For example, when predicting house prices,
-    /// we might care about the average error in dollars, but when predicting if an email is spam,
-    /// we might care more about the percentage of emails correctly classified.
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator)
-    {
-        _fitnessCalculator = calculator;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures how to detect if the model is overfitting or underfitting.
-    /// </summary>
-    /// <param name="detector">The fit detection strategy to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This helps detect if your model is learning too much from the training data
-    /// (overfitting) or not learning enough (underfitting). It's like having a teacher who can tell
-    /// if a student is just memorizing answers or not studying enough.
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector)
-    {
-        _fitDetector = detector;
         return this;
     }
 
@@ -170,6 +118,40 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
+    /// Analyzes the input and output data and provides recommended models for the task.
+    /// </summary>
+    /// <param name="sampleX">A sample of the input data to analyze its structure.</param>
+    /// <param name="sampleY">A sample of the output data to analyze its structure.</param>
+    /// <returns>A ranked list of recommended model types with brief explanations.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Unlike the AutoSelectModel method which chooses a model for you,
+    /// this method gives you recommendations and explanations about which models might work well
+    /// for your specific data. It's like getting advice from an expert about which approaches
+    /// to consider, along with the pros and cons of each option.
+    /// </remarks>
+    public List<ModelRecommendation<T, TInput, TOutput>> GetModelRecommendations(TInput sampleX, TOutput sampleY)
+    {
+        _modelSelector = _modelSelector ?? new DefaultModelSelector<T, TInput, TOutput>();
+        return _modelSelector.GetModelRecommendations(sampleX, sampleY);
+    }
+
+    /// <summary>
+    /// Configures an auto model selector for this builder.
+    /// </summary>
+    /// <param name="modelSelector">The model selector implementation to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> A model selector helps choose the right type of machine learning model
+    /// for your data. This method lets you provide a custom selector that implements your own
+    /// logic for recommending models.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoModelSelector(IModelSelector<T, TInput, TOutput> modelSelector)
+    {
+        _modelSelector = modelSelector;
+        return this;
+    }
+
+    /// <summary>
     /// Configures how to detect and handle outliers in the data.
     /// </summary>
     /// <param name="outlierRemoval">The outlier removal strategy to use.</param>
@@ -215,12 +197,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             throw new ArgumentNullException(nameof(y), "Output vector can't be null");
         if (convertedX.Rows != convertedY.Length)
             throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
-        if (_model == null)
-            throw new InvalidOperationException("Model implementation must be specified");
+        if (_model == null && _modelSelector == null)
+            throw new InvalidOperationException("Model implementation must be specified. This can be done by either using ConfigureModelSelector or ConfigureModel.");
 
         // Use defaults for these interfaces if they aren't set
+        var modelSelector = _modelSelector ?? new DefaultModelSelector<T, TInput, TOutput>();
+        var model = _model ?? modelSelector.SelectModel(x, y);
         var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
-        var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>();
+        var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(model);
         var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
         var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
         var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
@@ -234,7 +218,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Optimize the model
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
-        return new PredictionModelResult<T, TInput, TOutput>(_model, optimizationResult, normInfo);
+        return new PredictionModelResult<T, TInput, TOutput>(model, optimizationResult, normInfo);
     }
 
     /// <summary>

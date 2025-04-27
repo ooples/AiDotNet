@@ -47,7 +47,7 @@ public class MultivariateRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     public MultivariateRegression(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
     }
 

@@ -107,7 +107,7 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </para>
     /// </remarks>
     public GradientBoostingRegression(GradientBoostingRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _options = options ?? new();
         _trees = [];

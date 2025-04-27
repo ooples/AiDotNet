@@ -106,7 +106,7 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     public WeightedRegression(WeightedRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _weights = options?.Weights ?? throw new ArgumentNullException(nameof(options), "Weights must be provided for weighted regression.");
         _order = options.Order;

@@ -81,10 +81,10 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// to the training data.
     /// </para>
     /// </remarks>
-    public RandomForestRegression(RandomForestRegressionOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+    public RandomForestRegression(RandomForestRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
-        _options = options;
+        _options = options ?? new();
         _trees = [];
         _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
     }

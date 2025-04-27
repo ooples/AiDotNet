@@ -43,14 +43,6 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
     private List<DecisionTreeRegression<T>> _trees;
 
     /// <summary>
-    /// Random number generator used for bootstrap sampling.
-    /// </summary>
-    /// <value>
-    /// An instance of the Random class.
-    /// </value>
-    private Random _random;
-
-    /// <summary>
     /// Gets the number of trees in the forest.
     /// </summary>
     /// <value>
@@ -82,12 +74,11 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    public QuantileRegressionForests(QuantileRegressionForestsOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+    public QuantileRegressionForests(QuantileRegressionForestsOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
-        _options = options;
+        _options = options ?? new();
         _trees = [];
-        _random = new Random(_options.Seed ?? Environment.TickCount);
     }
 
     /// <summary>
@@ -125,7 +116,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
                 MaxDepth = _options.MaxDepth,
                 MinSamplesSplit = _options.MinSamplesSplit,
                 MaxFeatures = _options.MaxFeatures,
-                Seed = _random.Next()
+                Seed = Random.Next()
             }, Regularization);
 
             var (sampledX, sampledY) = SampleWithReplacement(x, y);
@@ -230,7 +221,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
         var sampledIndices = new List<int>();
         for (int i = 0; i < x.Rows; i++)
         {
-            sampledIndices.Add(_random.Next(0, x.Rows));
+            sampledIndices.Add(Random.Next(0, x.Rows));
         }
 
         var sampledX = new Matrix<T>(sampledIndices.Select(i => x.GetRow(i)).ToList());
@@ -403,8 +394,6 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
             tree.Deserialize(treeData);
             _trees.Add(tree);
         }
-
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
     }
 
     /// <summary>
@@ -435,31 +424,6 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
-        var newModel = new QuantileRegressionForests<T>(_options, Regularization);
-        
-        // Copy feature importances if they exist
-        if (FeatureImportances != null)
-        {
-            newModel.FeatureImportances = new Vector<T>([.. FeatureImportances]);
-        }
-        
-        // Deep copy all the trees
-        newModel._trees = new List<DecisionTreeRegression<T>>(_trees.Count);
-        foreach (var tree in _trees)
-        {
-            // Create a deep copy of each tree by serializing and deserializing
-            var treeData = tree.Serialize();
-            var treeCopy = new DecisionTreeRegression<T>(new DecisionTreeOptions(), Regularization);
-            treeCopy.Deserialize(treeData);
-            newModel._trees.Add(treeCopy);
-        }
-        
-        // Initialize the random number generator with the same seed if available
-        if (_options.Seed.HasValue)
-        {
-            newModel._random = new Random(_options.Seed.Value);
-        }
-        
-        return newModel;
+        return new QuantileRegressionForests<T>(_options, Regularization);
     }
 }

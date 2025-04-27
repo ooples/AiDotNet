@@ -95,10 +95,10 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// Think of it like teaching a student the principles rather than just memorizing specific examples.
     /// </para>
     /// </remarks>
-    public ConditionalInferenceTreeRegression(ConditionalInferenceTreeOptions options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+    public ConditionalInferenceTreeRegression(ConditionalInferenceTreeOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
-        _options = options;
+        _options = options ?? new();
     }
 
     /// <summary>

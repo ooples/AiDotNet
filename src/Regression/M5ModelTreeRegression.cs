@@ -70,7 +70,7 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// </para>
     /// </remarks>
     public M5ModelTree(M5ModelTreeOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _options = options ?? new M5ModelTreeOptions();
     }

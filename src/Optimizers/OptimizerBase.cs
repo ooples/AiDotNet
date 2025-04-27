@@ -156,11 +156,179 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
-    /// Resets the optimizer state, clearing the model cache.
+    /// Adjusts the parameters (weights) of a model.
     /// </summary>
-    public virtual void Reset()
+    /// <param name="model">The model whose parameters should be adjusted.</param>
+    /// <param name="adjustmentScale">Scale factor for parameter adjustments.</param>
+    /// <param name="signFlipProbability">Probability of flipping a parameter's sign.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is like adjusting the quantities of ingredients in your recipe.
+    /// While keeping the same ingredients, you're changing how much of each one you use to
+    /// find the perfect balance.
+    /// </remarks>
+    protected virtual void AdjustModelParameters(
+        IFullModel<T, TInput, TOutput> model,
+        double adjustmentScale = 0.1,
+        double signFlipProbability = 0.05)
     {
-        ModelCache.ClearCache();
+        // Get current parameters
+        var currentParameters = model.GetParameters();
+
+        // Create new parameters by applying random adjustments
+        var newParameters = AdjustParameters(
+            currentParameters,
+            adjustmentScale * Options.ExplorationRate,
+            signFlipProbability);
+
+        // Apply the new parameters to the model
+        var updatedModel = model.WithParameters(newParameters);
+
+        // Since WithParameters returns a new model, we need to copy its state back to our model
+        CopyModelState(updatedModel, model);
+    }
+
+    /// <summary>
+    /// Applies feature selection to a model.
+    /// </summary>
+    /// <param name="model">The model to apply feature selection to.</param>
+    /// <param name="selectedFeatures">The list of selected feature indices.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is like deciding which ingredients to include in your recipe.
+    /// Some ingredients might not be necessary or might even make the dish worse, so you're
+    /// choosing which ones are truly important.
+    /// </remarks>
+    protected virtual void ApplyFeatureSelection(IFullModel<T, TInput, TOutput> model, List<int> selectedFeatures)
+    {
+        if (model is IFeatureAware featureAwareModel)
+        {
+            // Implementation depends on your IFeatureAware interface
+            // For demonstration purposes (actual implementation will depend on your model interface):
+            ApplyFeaturesToModel(featureAwareModel, selectedFeatures);
+        }
+    }
+
+    /// <summary>
+    /// Applies the selected features to a feature-aware model.
+    /// </summary>
+    /// <param name="model">The feature-aware model.</param>
+    /// <param name="selectedFeatures">The list of selected feature indices.</param>
+    protected virtual void ApplyFeaturesToModel(IFeatureAware model, List<int> selectedFeatures)
+    {
+        // Implementation depends on your IFeatureAware interface
+        // For demonstration purposes:
+        /*
+        if (model is MyFeatureSelectableModel selectableModel)
+        {
+            selectableModel.SetActiveFeatures(selectedFeatures);
+        }
+        */
+    }
+
+    /// <summary>
+    /// Randomly selects a subset of features to use in a model.
+    /// </summary>
+    /// <param name="totalFeatures">The total number of available features.</param>
+    /// <param name="minFeatures">The minimum number of features to select.</param>
+    /// <param name="maxFeatures">The maximum number of features to select.</param>
+    /// <returns>A list of selected feature indices.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is like randomly selecting a subset of ingredients from
+    /// your pantry to include in your recipe experiment.
+    /// </remarks>
+    protected virtual List<int> RandomlySelectFeatures(
+        int totalFeatures,
+        int? minFeatures = null,
+        int? maxFeatures = null)
+    {
+        int min = minFeatures ?? Options.MinimumFeatures;
+        int max = maxFeatures ?? Math.Min(Options.MaximumFeatures, totalFeatures);
+
+        // Ensure min/max values are valid
+        min = Math.Max(1, Math.Min(min, totalFeatures));
+        max = Math.Min(max, totalFeatures);
+
+        // If min > max (due to constraints), set them equal
+        if (min > max)
+        {
+            max = min;
+        }
+
+        var selectedFeatures = new List<int>();
+        int numFeatures = Random.Next(min, max + 1);
+
+        while (selectedFeatures.Count < numFeatures)
+        {
+            int feature = Random.Next(totalFeatures);
+            if (!selectedFeatures.Contains(feature))
+            {
+                selectedFeatures.Add(feature);
+            }
+        }
+
+        return selectedFeatures;
+    }
+
+    /// <summary>
+    /// Copies the state from one model to another.
+    /// </summary>
+    /// <param name="source">The source model.</param>
+    /// <param name="target">The target model.</param>
+    protected virtual void CopyModelState(IFullModel<T, TInput, TOutput> source, IFullModel<T, TInput, TOutput> target)
+    {
+        // Implementation depends on your model interface
+        // For demonstration purposes:
+        /*
+        if (source is IStateCopyable<T, TInput, TOutput> copyableSource &&
+            target is IStateCopyable<T, TInput, TOutput> copyableTarget)
+        {
+            copyableTarget.CopyStateFrom(copyableSource);
+        }
+        else
+        {
+            // Fallback: serialize the source and deserialize to the target
+            byte[] serializedState = source.Serialize();
+            target.Deserialize(serializedState);
+        }
+        */
+
+        // Default implementation: serialize and deserialize
+        byte[] serializedState = source.Serialize();
+        target.Deserialize(serializedState);
+    }
+
+    /// <summary>
+    /// Adjusts a vector of parameters by applying random modifications.
+    /// </summary>
+    /// <param name="parameters">The original parameters.</param>
+    /// <param name="adjustmentScale">Scale factor for parameter adjustments.</param>
+    /// <param name="signFlipProbability">Probability of flipping a parameter's sign.</param>
+    /// <returns>A new vector with adjusted parameters.</returns>
+    protected virtual Vector<T> AdjustParameters(
+        Vector<T> parameters,
+        double adjustmentScale,
+        double signFlipProbability)
+    {
+        var newParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Generate a random adjustment factor
+            double factor = 1.0 + ((Random.NextDouble() * 2.0 - 1.0) * adjustmentScale);
+
+            // Apply the adjustment
+            T originalValue = parameters[i];
+            T newValue = NumOps.Multiply(originalValue, NumOps.FromDouble(factor));
+
+            // Add some probability of the parameter flipping sign
+            if (Random.NextDouble() < signFlipProbability)
+            {
+                newValue = NumOps.Negate(newValue);
+            }
+
+            newParameters[i] = newValue;
+        }
+
+        return newParameters;
     }
 
     /// <summary>
@@ -457,6 +625,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         CurrentMomentum = NumOps.FromDouble(Options.InitialMomentum);
         IterationsWithoutImprovement = 0;
         IterationsWithImprovement = 0;
+    }
+
+    /// <summary>
+    /// Resets the optimizer state, clearing the model cache.
+    /// </summary>
+    public virtual void Reset()
+    {
+        ModelCache.ClearCache();
+        ResetAdaptiveParameters();
     }
 
     /// <summary>

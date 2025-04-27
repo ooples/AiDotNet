@@ -92,11 +92,11 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    protected RegressionBase(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+    protected RegressionBase(RegressionOptions<T> options, IRegularization<T, Matrix<T>, Vector<T>> regularization)
     {
-        Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
+        Regularization = regularization;
         NumOps = MathHelper.GetNumericOperations<T>();
-        Options = options ?? new RegressionOptions<T>();
+        Options = options;
         Coefficients = new Vector<T>(0);
         Intercept = NumOps.Zero;
     }

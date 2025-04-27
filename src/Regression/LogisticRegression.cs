@@ -69,7 +69,7 @@ public class LogisticRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     public LogisticRegression(LogisticRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _options = options ?? new LogisticRegressionOptions<T>();
     }

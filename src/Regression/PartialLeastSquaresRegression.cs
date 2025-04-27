@@ -106,7 +106,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     public PartialLeastSquaresRegression(PartialLeastSquaresRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _options = options ?? new PartialLeastSquaresRegressionOptions<T>();
         _loadings = new Matrix<T>(0, 0);

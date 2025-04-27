@@ -97,12 +97,12 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </summary>
     /// <param name="options">The options for configuring the decision tree.</param>
     /// <param name="regularization">The regularization method to use.</param>
-    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization)
+    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions options, IRegularization<T, Matrix<T>, Vector<T>> regularization)
     {
-        Options = options ?? new();
+        Options = options;
         NumOps = MathHelper.GetNumericOperations<T>();
         FeatureImportances = new Vector<T>(0);
-        Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
+        Regularization = regularization;
     }
 
     /// <summary>

@@ -1,44 +1,46 @@
 ﻿namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements a normal optimization algorithm with adaptive parameters.
+/// Implements a normal optimization algorithm with adaptive parameters that can optimize 
+/// both feature selection and model parameters.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The NormalOptimizer uses a combination of random search and adaptive parameter tuning to find optimal solutions.
-/// It incorporates elements from genetic algorithms but operates on a single solution at a time.
+/// It can optimize feature selection, model parameters (weights), or both, depending on the configuration.
 /// </para>
 /// <para><b>For Beginners:</b>
-/// Imagine you're trying to find the highest peak in a mountain range, but you can't see very far.
-/// This optimizer is like a hiker who starts at random spots, climbs to the nearest peak, and then jumps to another random spot.
-/// The hiker learns from each climb and adjusts their strategy (like how far to jump or how carefully to look around) based on whether they're finding higher peaks or not.
+/// Think of this optimizer like a chef trying to perfect a recipe. It can adjust which ingredients to use 
+/// (feature selection), the amount of each ingredient (parameter weights), or both. With each attempt, 
+/// the optimizer learns from its results and makes smarter adjustments to find the best recipe.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
-    /// <summary>
-    /// Options specific to the normal optimizer, including parameters inherited from genetic algorithms.
-    /// </summary>
-    private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _normalOptions;
+    private IFullModel<T, TInput, TOutput> _model;
+
+    private NormalOptimizerOptions<T, TInput, TOutput> _normalOptions;
 
     /// <summary>
-    /// Initializes a new instance of the NormalOptimizer class.
+    /// Initializes a new instance of the NormalOptimizer class with specific options.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the NormalOptimizer with the provided options and dependencies.
-    /// If no options are provided, it uses default settings.
+    /// This constructor sets up the NormalOptimizer with the provided options which should include a model to optimize.
     /// </para>
     /// <para><b>For Beginners:</b>
-    /// This is like preparing for your hike. You're deciding what equipment to bring, how long you'll hike for,
-    /// and setting up rules for how you'll explore the mountain range.
+    /// This is like telling the chef which dish to prepare (the model), what aspects to focus on improving 
+    /// (ingredients, quantities, or both), and what cooking techniques to use (the options).
     /// </para>
     /// </remarks>
-    /// <param name="options">The optimization options.</param>
-    public NormalOptimizer(GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
-		: base(options ?? new())
-	{
+    /// <param name="options">The optimization options including the model to optimize.</param>
+    /// <param name="optimizationMode">The aspects of the model to optimize (features, parameters, or both).</param>
+    public NormalOptimizer(IFullModel<T, TInput, TOutput> model,
+        NormalOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(options ?? new())
+    {
+        _model = model;
         _normalOptions = options ?? new();
 
         InitializeAdaptiveParameters();
@@ -49,17 +51,17 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method implements the main optimization loop. It generates random solutions,
-    /// evaluates them, and keeps track of the best solution found. It also adapts its parameters
-    /// based on the performance of each solution.
+    /// This method implements the main optimization loop. Based on the optimization mode,
+    /// it may optimize feature selection, model parameters, or both. It generates potential solutions,
+    /// evaluates them, and keeps track of the best solution found while adapting its strategy.
     /// </para>
     /// <para><b>For Beginners:</b>
-    /// This is your actual hike through the mountain range. You're repeatedly:
-    /// 1. Picking a random spot to start from.
-    /// 2. Climbing to the nearest peak and measuring its height.
-    /// 3. Remembering the highest peak you've found so far.
-    /// 4. Adjusting your strategy based on whether you're finding higher peaks or not.
-    /// 5. Deciding whether to keep going or stop if you think you've found the highest peak.
+    /// This is like the chef cooking multiple versions of a dish:
+    /// 1. Creating variations of the recipe (by changing ingredients or quantities)
+    /// 2. Tasting each version and rating it
+    /// 3. Remembering the best version found so far
+    /// 4. Learning from each attempt to make better adjustments next time
+    /// 5. Deciding when the recipe is good enough to stop experimenting
     /// </para>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
@@ -70,14 +72,14 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
 
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
-            Solution = ModelHelper<T, TInput, TOutput>.CreateDefaultModel(),
+            Solution = _model.DeepCopy(),
             FitnessScore = _fitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
         };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
-            var currentSolution = InitializeRandomSolution(inputData.XTrain);
+            var currentSolution = CreateSolution(inputData.XTrain);
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);
@@ -97,227 +99,232 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     }
 
     /// <summary>
+    /// Creates a potential solution based on the optimization mode.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new model variant by either selecting features, adjusting parameters,
+    /// or both, depending on the optimization mode.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like creating a new version of the recipe. Depending on what you're focusing on,
+    /// you might change which ingredients you use, how much of each ingredient you add,
+    /// or both aspects at once.
+    /// </para>
+    /// </remarks>
+    /// <param name="xTrain">Training data used to determine data dimensions.</param>
+    /// <returns>A new potential solution (model variant).</returns>
+    private IFullModel<T, TInput, TOutput> CreateSolution(TInput xTrain)
+    {
+        // Create a deep copy of the model to avoid modifying the original
+        var solution = _model.DeepCopy();
+
+        int numFeatures = GetFeatureCount(xTrain);
+
+        switch (Options.OptimizationMode)
+        {
+            case OptimizationMode.FeatureSelectionOnly:
+                ApplyFeatureSelection(solution, numFeatures);
+                break;
+
+            case OptimizationMode.ParametersOnly:
+                AdjustModelParameters(
+                    solution,
+                    _normalOptions.ParameterAdjustmentScale,
+                    _normalOptions.SignFlipProbability);
+                break;
+
+            case OptimizationMode.Both:
+            default:
+                // With some probability, apply both or just one type of optimization
+                if (Random.NextDouble() < _normalOptions.FeatureSelectionProbability)
+                {
+                    ApplyFeatureSelection(solution, numFeatures);
+                }
+
+                if (Random.NextDouble() < _normalOptions.ParameterAdjustmentProbability)
+                {
+                    AdjustModelParameters(
+                        solution,
+                        _normalOptions.ParameterAdjustmentScale,
+                        _normalOptions.SignFlipProbability);
+                }
+                break;
+        }
+
+        return solution;
+    }
+
+    /// <summary>
+    /// Gets the number of features in the training data.
+    /// </summary>
+    /// <param name="xTrain">The training data.</param>
+    /// <returns>The number of features in the data.</returns>
+    private int GetFeatureCount(TInput xTrain)
+    {
+        // Implementation depends on the specific data type TInput
+        // For Matrix<T>, you would return the number of columns
+        // For demonstration purposes:
+        if (xTrain is Matrix<T> matrix)
+        {
+            return matrix.Columns;
+        }
+
+        // Default fallback
+        return 10;
+    }
+
+    /// <summary>
+    /// Applies feature selection to a model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method selects a subset of features to be used by the model, potentially
+    /// improving its performance by focusing on the most relevant data dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like deciding which ingredients to include in your recipe. Some ingredients
+    /// might not be necessary or might even make the dish worse, so you're experimenting
+    /// with different combinations to find which ones are truly important.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The model to apply feature selection to.</param>
+    /// <param name="totalFeatures">The total number of available features.</param>
+    private void ApplyFeatureSelection(IFullModel<T, TInput, TOutput> model, int totalFeatures)
+    {
+        // Randomly select features
+        var selectedFeatures = RandomlySelectFeatures(
+            totalFeatures,
+            _normalOptions.MinimumFeatures,
+            _normalOptions.MaximumFeatures);
+
+        // Apply the selected features to the model using the base class method
+        base.ApplyFeatureSelection(model, selectedFeatures);
+    }
+
+    /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
     /// </summary>
     /// <remarks>
     /// <para>
     /// This method adjusts various parameters of the optimization process based on the performance
-    /// of the current solution compared to the previous one. It updates feature selection,
-    /// mutation rate, exploration/exploitation balance, population size, and crossover rate.
+    /// of the current solution compared to the previous one.
     /// </para>
     /// <para><b>For Beginners:</b>
-    /// This is like adjusting your hiking strategy based on your recent experiences. If you're finding higher peaks,
-    /// you might decide to look more closely in the areas you're in. If not, you might decide to take bigger jumps
-    /// to new areas or look at different aspects of the landscape.
+    /// This is like adjusting your cooking strategy based on how your recent dishes turned out.
+    /// If your changes led to improvements, you might continue in that direction. If not,
+    /// you might try more dramatic changes to find a better approach.
     /// </para>
     /// </remarks>
     /// <param name="currentStepData">Data from the current optimization step.</param>
     /// <param name="previousStepData">Data from the previous optimization step.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Call the base implementation to update common parameters
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-        // Adaptive feature selection
-        UpdateFeatureSelectionParameters(currentStepData, previousStepData);
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
 
-        // Adaptive mutation rate
-        UpdateMutationRate(currentStepData, previousStepData);
+        bool isImproving = _fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
 
-        // Adaptive exploration vs exploitation balance
-        UpdateExplorationExploitationBalance(currentStepData, previousStepData);
+        // Adaptive feature selection parameters
+        if ((Options.OptimizationMode == OptimizationMode.FeatureSelectionOnly ||
+             Options.OptimizationMode == OptimizationMode.Both))
+        {
+            UpdateFeatureSelectionParameters(isImproving);
+        }
 
-        // Adaptive population size
-        UpdatePopulationSize(currentStepData, previousStepData);
-
-        // Adaptive crossover rate
-        UpdateCrossoverRate(currentStepData, previousStepData);
+        // Adaptive parameter adjustment settings
+        if ((Options.OptimizationMode == OptimizationMode.ParametersOnly ||
+             Options.OptimizationMode == OptimizationMode.Both))
+        {
+            UpdateParameterAdjustmentSettings(isImproving);
+        }
     }
 
     /// <summary>
-    /// Updates the feature selection parameters based on the current and previous optimization steps.
+    /// Updates the feature selection parameters based on whether the solution is improving.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method adjusts the minimum and maximum number of features to consider in the model.
-    /// If the current solution is better, it expands the range of features. Otherwise, it narrows the range.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like deciding whether to pay attention to more or fewer landmarks during your hike.
-    /// If you're finding better views, you might start looking at more things. If not, you might focus on fewer key features.
-    /// </para>
-    /// </remarks>
-    /// <param name="currentStepData">Data from the current optimization step.</param>
-    /// <param name="previousStepData">Data from the previous optimization step.</param>
-    private void UpdateFeatureSelectionParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    private void UpdateFeatureSelectionParameters(bool isImproving)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
+        if (isImproving)
         {
-            Options.MinimumFeatures = Math.Max(1, Options.MinimumFeatures - 1);
-            Options.MaximumFeatures = Math.Min(Options.MaximumFeatures + 1, _normalOptions.MaximumFeatures);
+            // If improving, gradually expand the range of features to consider
+            _normalOptions.MinimumFeatures = Math.Max(1, _normalOptions.MinimumFeatures - 1);
+            _normalOptions.MaximumFeatures = Math.Min(_normalOptions.MaximumFeatures + 1, _normalOptions.AbsoluteMaximumFeatures);
+
+            // Slightly increase the probability of feature selection for future iterations
+            _normalOptions.FeatureSelectionProbability *= 1.02;
         }
         else
         {
-            Options.MinimumFeatures = Math.Min(Options.MinimumFeatures + 1, _normalOptions.MaximumFeatures - 1);
-            Options.MaximumFeatures = Math.Max(Options.MaximumFeatures - 1, Options.MinimumFeatures + 1);
+            // If not improving, narrow the range to focus the search
+            _normalOptions.MinimumFeatures = Math.Min(_normalOptions.MinimumFeatures + 1, _normalOptions.AbsoluteMaximumFeatures - 1);
+            _normalOptions.MaximumFeatures = Math.Max(_normalOptions.MaximumFeatures - 1, _normalOptions.MinimumFeatures + 1);
+
+            // Slightly decrease the probability of feature selection for future iterations
+            _normalOptions.FeatureSelectionProbability *= 0.98;
         }
+
+        // Ensure probabilities stay within bounds
+        _normalOptions.FeatureSelectionProbability = MathHelper.Clamp(
+            _normalOptions.FeatureSelectionProbability,
+            _normalOptions.MinFeatureSelectionProbability,
+            _normalOptions.MaxFeatureSelectionProbability);
     }
 
     /// <summary>
-    /// Updates the exploration vs exploitation balance based on the current and previous optimization steps.
+    /// Updates the parameter adjustment settings based on whether the solution is improving.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method adjusts the exploration rate. If the current solution is better, it decreases exploration
-    /// (favoring exploitation). Otherwise, it increases exploration.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like deciding whether to explore new areas or focus more on the areas you've already found to be good.
-    /// If you're finding better peaks, you might explore less and focus more on the current area. If not, you might decide to look in new places.
-    /// </para>
-    /// </remarks>
-    /// <param name="currentStepData">Data from the current optimization step.</param>
-    /// <param name="previousStepData">Data from the previous optimization step.</param>
-    private void UpdateExplorationExploitationBalance(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    private void UpdateParameterAdjustmentSettings(bool isImproving)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
+        if (isImproving)
         {
-            Options.ExplorationRate *= 0.98; // Decrease exploration if improving
+            // If improving, make smaller adjustments to fine-tune
+            _normalOptions.ParameterAdjustmentScale *= 0.95;
+
+            // Decrease the probability of sign flips when things are going well
+            _normalOptions.SignFlipProbability *= 0.9;
+
+            // Increase the probability of parameter adjustments
+            _normalOptions.ParameterAdjustmentProbability *= 1.02;
         }
         else
         {
-            Options.ExplorationRate *= 1.02; // Increase exploration if not improving
-        }
-        Options.ExplorationRate = MathHelper.Clamp(Options.ExplorationRate, Options.MinExplorationRate, Options.MaxExplorationRate);
-    }
+            // If not improving, make larger adjustments to explore more
+            _normalOptions.ParameterAdjustmentScale *= 1.05;
 
-    /// <summary>
-    /// Updates the mutation rate based on the current and previous optimization steps.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method adjusts the mutation rate. If the current solution is better, it decreases the mutation rate.
-    /// Otherwise, it increases the mutation rate.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like deciding how much to vary your path as you explore. If you're finding better peaks,
-    /// you might make smaller, more careful adjustments. If not, you might make bigger, more random changes to your path.
-    /// </para>
-    /// </remarks>
-    /// <param name="currentStepData">Data from the current optimization step.</param>
-    /// <param name="previousStepData">Data from the previous optimization step.</param>
-    private void UpdateMutationRate(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
-    {
-        if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
-        {
-            _normalOptions.MutationRate *= 0.95; // Decrease mutation rate if improving
-        }
-        else
-        {
-            _normalOptions.MutationRate *= 1.05; // Increase mutation rate if not improving
+            // Increase the probability of sign flips to try more dramatic changes
+            _normalOptions.SignFlipProbability *= 1.1;
+
+            // Slightly decrease the probability of parameter adjustments
+            _normalOptions.ParameterAdjustmentProbability *= 0.98;
         }
 
-        _normalOptions.MutationRate = MathHelper.Clamp(_normalOptions.MutationRate, _normalOptions.MinMutationRate, _normalOptions.MaxMutationRate);
-    }
+        // Ensure values stay within bounds
+        _normalOptions.ParameterAdjustmentScale = MathHelper.Clamp(
+            _normalOptions.ParameterAdjustmentScale,
+            _normalOptions.MinParameterAdjustmentScale,
+            _normalOptions.MaxParameterAdjustmentScale);
 
-    /// <summary>
-    /// Updates the population size based on the current and previous optimization steps.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method adjusts the population size. If the current solution is better, it decreases the population size.
-    /// Otherwise, it increases the population size, always staying within the defined limits.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like deciding how many different paths to try at once. If you're finding better peaks,
-    /// you might focus on fewer paths. If not, you might try more paths to increase your chances of finding a good one.
-    /// </para>
-    /// </remarks>
-    /// <param name="currentStepData">Data from the current optimization step.</param>
-    /// <param name="previousStepData">Data from the previous optimization step.</param>
-    private void UpdatePopulationSize(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
-    {
-        if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
-        {
-            _normalOptions.PopulationSize = Math.Max(_normalOptions.MinPopulationSize, _normalOptions.PopulationSize - 1);
-        }
-        else
-        {
-            _normalOptions.PopulationSize = Math.Min(_normalOptions.PopulationSize + 1, _normalOptions.MaxPopulationSize);
-        }
-    }
+        _normalOptions.SignFlipProbability = MathHelper.Clamp(
+            _normalOptions.SignFlipProbability,
+            _normalOptions.MinSignFlipProbability,
+            _normalOptions.MaxSignFlipProbability);
 
-    /// <summary>
-    /// Updates the crossover rate based on the current and previous optimization steps.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method adjusts the crossover rate. If the current solution is better, it increases the crossover rate.
-    /// Otherwise, it decreases the crossover rate, always staying within the defined limits.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like deciding how often to combine good paths you've found. If you're finding better peaks,
-    /// you might try combining good paths more often. If not, you might try combining them less and explore more independently.
-    /// </para>
-    /// </remarks>
-    /// <param name="currentStepData">Data from the current optimization step.</param>
-    /// <param name="previousStepData">Data from the previous optimization step.</param>
-    private void UpdateCrossoverRate(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
-    {
-        if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
-        {
-            _normalOptions.CrossoverRate *= 1.02; // Increase crossover rate if improving
-        }
-        else
-        {
-            _normalOptions.CrossoverRate *= 0.98; // Decrease crossover rate if not improving
-        }
-
-        _normalOptions.CrossoverRate = MathHelper.Clamp(_normalOptions.CrossoverRate, _normalOptions.MinCrossoverRate, _normalOptions.MaxCrossoverRate);
-    }
-
-    /// <summary>
-    /// Randomly selects a subset of features to use in the model.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method chooses a random number of features between the minimum and maximum allowed,
-    /// and then randomly selects specific features to include.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like deciding which specific landmarks or terrain features you'll use to guide your climb.
-    /// You're randomly picking a set of things to pay attention to, which will influence how you explore the area.
-    /// </para>
-    /// </remarks>
-    /// <param name="totalFeatures">The total number of available features.</param>
-    /// <returns>A list of indices representing the selected features.</returns>
-    private List<int> RandomlySelectFeatures(int totalFeatures)
-    {
-        var selectedFeatures = new List<int>();
-        int numFeatures = Random.Next(Options.MinimumFeatures, Math.Min(Options.MaximumFeatures, totalFeatures) + 1);
-
-        while (selectedFeatures.Count < numFeatures)
-        {
-            int feature = Random.Next(totalFeatures);
-            if (!selectedFeatures.Contains(feature))
-            {
-                selectedFeatures.Add(feature);
-            }
-        }
-
-        return selectedFeatures;
+        _normalOptions.ParameterAdjustmentProbability = MathHelper.Clamp(
+            _normalOptions.ParameterAdjustmentProbability,
+            _normalOptions.MinParameterAdjustmentProbability,
+            _normalOptions.MaxParameterAdjustmentProbability);
     }
 
     /// <summary>
     /// Gets the current optimization algorithm options.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method returns the current set of options used by the NormalOptimizer.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like checking your current hiking plan and equipment list.
-    /// </para>
-    /// </remarks>
     /// <returns>The current optimization algorithm options.</returns>
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
@@ -327,23 +334,13 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <summary>
     /// Updates the optimization algorithm options.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method updates the optimizer's options with a new set of options. It checks if the provided options
-    /// are of the correct type before applying them.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like updating your hiking plan with new information or equipment. You're making sure the new plan
-    /// is compatible with your current approach before adopting it.
-    /// </para>
-    /// </remarks>
     /// <param name="options">The new optimization algorithm options to apply.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the expected type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        if (options is GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> geneticOptions)
+        if (options is NormalOptimizerOptions<T, TInput, TOutput> normalOptions)
         {
-            _normalOptions = geneticOptions;
+            _normalOptions = normalOptions;
         }
         else
         {
@@ -354,16 +351,6 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <summary>
     /// Serializes the current state of the optimizer into a byte array.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method converts the current state of the optimizer, including its options, into a byte array
-    /// that can be stored or transmitted.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like taking a snapshot of your current hiking strategy and equipment setup,
-    /// so you can recreate it exactly later or share it with others.
-    /// </para>
-    /// </remarks>
     /// <returns>A byte array representing the serialized state of the optimizer.</returns>
     public override byte[] Serialize()
     {
@@ -374,6 +361,9 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
             byte[] baseData = base.Serialize();
             writer.Write(baseData.Length);
             writer.Write(baseData);
+
+            // Serialize optimization mode
+            writer.Write((int)Options.OptimizationMode);
 
             // Serialize NormalOptimizerOptions
             string optionsJson = JsonConvert.SerializeObject(_normalOptions);
@@ -386,18 +376,8 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <summary>
     /// Deserializes a byte array to restore the optimizer's state.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method takes a byte array (previously created by the Serialize method) and uses it to
-    /// restore the optimizer's state, including its options.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like using a saved snapshot of a hiking strategy to set up your approach exactly as it was before.
-    /// You're recreating all the details of your previous setup from the saved information.
-    /// </para>
-    /// </remarks>
     /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization fails.</exception>
     public override void Deserialize(byte[] data)
     {
         using (MemoryStream ms = new MemoryStream(data))
@@ -408,9 +388,12 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
             byte[] baseData = reader.ReadBytes(baseDataLength);
             base.Deserialize(baseData);
 
+            // Deserialize optimization mode
+            Options.OptimizationMode = (OptimizationMode)reader.ReadInt32();
+
             // Deserialize NormalOptimizerOptions
             string optionsJson = reader.ReadString();
-            _normalOptions = JsonConvert.DeserializeObject<GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>>(optionsJson)
+            _normalOptions = JsonConvert.DeserializeObject<NormalOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
         }
     }

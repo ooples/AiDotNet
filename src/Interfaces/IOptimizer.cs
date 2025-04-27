@@ -88,4 +88,9 @@ public interface IOptimizer<T, TInput, TOutput> : IModelSerializer
     /// </remarks>
     /// <returns>The configuration options for the optimization algorithm.</returns>
     OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions();
+
+    /// <summary>
+    /// Resets the optimizer to its initial state.
+    /// </summary>
+    void Reset();
 }

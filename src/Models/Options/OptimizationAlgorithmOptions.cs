@@ -66,7 +66,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// <para><b>For Beginners:</b> Features are the characteristics or attributes in your data (like height, weight, color).
     /// This setting defines the minimum number of these characteristics the model should use.</para>
     /// </remarks>
-    public int MinimumFeatures { get; set; }
+    public int MinimumFeatures { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the maximum number of features to consider in the model.
@@ -76,7 +76,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// <para><b>For Beginners:</b> This limits how many characteristics (features) from your data the model can use.
     /// Setting a maximum can help prevent the model from becoming too complex.</para>
     /// </remarks>
-    public int MaximumFeatures { get; set; }
+    public int MaximumFeatures { get; set; } = 10;
 
     /// <summary>
     /// Gets or sets whether to use expression trees for optimization.
@@ -274,6 +274,11 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// and what factors are most important in its predictions.</para>
     /// </remarks>
     public ModelStatsOptions ModelStatsOptions { get; set; } = new();
+
+    /// <summary>
+    /// Optimization mode determining what aspects of the model to optimize.
+    /// </summary>
+    public OptimizationMode OptimizationMode { get; set; }
 
     /// <summary>
     /// Gets or sets the model evaluator to use for assessing model performance.

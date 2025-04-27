@@ -1477,6 +1477,58 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Gets a representative sample of values from the tensor.
+    /// </summary>
+    /// <param name="maxSampleSize">The maximum number of values to include in the sample.</param>
+    /// <returns>An array containing sampled values from the tensor.</returns>
+    /// <remarks>
+    /// This method extracts a representative sample of values from the tensor for analysis purposes.
+    /// It uses a systematic sampling approach to ensure the sample represents different regions of the tensor.
+    /// If the tensor has fewer elements than the requested sample size, all elements are returned.
+    /// </remarks>
+    public Vector<T> GetSample(int maxSampleSize)
+    {
+        // Handle edge cases
+        if (maxSampleSize <= 0)
+        {
+            throw new ArgumentException("Sample size must be positive", nameof(maxSampleSize));
+        }
+
+        // If tensor is smaller than requested sample, return all elements
+        if (Length <= maxSampleSize)
+        {
+            var allValues = new T[Length];
+            for (int i = 0; i < Length; i++)
+            {
+                allValues[i] = GetFlatIndexValue(i);
+            }
+
+            return new Vector<T>(allValues);
+        }
+
+        // For larger tensors, use systematic sampling
+        var result = new T[maxSampleSize];
+
+        // Calculate sampling interval to cover the entire tensor
+        double interval = (double)Length / maxSampleSize;
+
+        // Use systematic sampling with a small random offset for each sample
+        // to avoid potential aliasing with regular patterns in the data
+        var random = new Random(42); // Fixed seed for reproducibility
+
+        for (int i = 0; i < maxSampleSize; i++)
+        {
+            // Calculate index with small random jitter (±10% of interval)
+            int jitter = (int)(random.NextDouble() * 0.2 * interval - 0.1 * interval);
+            int index = Math.Min(Length - 1, Math.Max(0, (int)(i * interval + jitter)));
+
+            result[i] = GetFlatIndexValue(index);
+        }
+
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
     /// Sets the value at the specified flat index in the tensor.
     /// </summary>
     /// <param name="flatIndex">The flat (linear) index into the tensor's data.</param>

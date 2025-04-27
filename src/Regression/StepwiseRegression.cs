@@ -164,7 +164,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
         IFitnessCalculator<T, Matrix<T>, Vector<T>>? fitnessCalculator = null, 
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null, 
         IModelEvaluator<T, Matrix<T>, Vector<T>>? modelEvaluator = null)
-        : base(options, regularization)
+        : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _options = options ?? new StepwiseRegressionOptions<T>();
         _fitnessCalculator = fitnessCalculator ?? new AdjustedRSquaredFitnessCalculator<T, Matrix<T>, Vector<T>>();
