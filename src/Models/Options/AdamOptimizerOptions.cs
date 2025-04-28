@@ -119,4 +119,70 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// allowing it to adapt to changing conditions during training.</para>
     /// </remarks>
     public double MaxBeta2 { get; set; } = 0.9999;
+
+    /// <summary>
+    /// Gets or sets the factor by which to increase the learning rate when the solution is improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When the optimizer is making good progress, this value determines
+    /// how much to increase the learning rate. A value greater than 1.0 means the learning rate will increase.
+    /// For example, 1.05 would increase the learning rate by 5% when the solution is improving.
+    /// </para>
+    /// </remarks>
+    public double LearningRateIncreaseFactor { get; set; } = 1.02;
+
+    /// <summary>
+    /// Gets or sets the factor by which to decrease the learning rate when the solution is not improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When the optimizer is not making good progress, this value determines
+    /// how much to decrease the learning rate. A value less than 1.0 means the learning rate will decrease.
+    /// For example, 0.95 would decrease the learning rate by 5% when the solution is not improving.
+    /// </para>
+    /// </remarks>
+    public double LearningRateDecreaseFactor { get; set; } = 0.98;
+
+    /// <summary>
+    /// Gets or sets the amount by which to increase Beta1 when the solution is improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Beta1 controls how much the optimizer remembers about past gradients.
+    /// Increasing Beta1 means the optimizer will give more weight to past information and less to new information.
+    /// This value determines how much to adjust Beta1 when the solution is improving.
+    /// </para>
+    /// </remarks>
+    public double Beta1IncreaseFactor { get; set; } = 0.001;
+
+    /// <summary>
+    /// Gets or sets the amount by which to decrease Beta1 when the solution is not improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When the optimizer is not making good progress, this value determines
+    /// how much to decrease Beta1. Decreasing Beta1 means the optimizer will give less weight to past information
+    /// and more to new information, which can help it adapt more quickly to new landscapes.
+    /// </para>
+    /// </remarks>
+    public double Beta1DecreaseFactor { get; set; } = 0.002;
+
+    /// <summary>
+    /// Gets or sets the amount by which to increase Beta2 when the solution is improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Beta2 controls how much the optimizer remembers about past squared gradients.
+    /// Increasing Beta2 means the optimizer will give more weight to past squared gradient information and less to new information.
+    /// This value determines how much to adjust Beta2 when the solution is improving.
+    /// </para>
+    /// </remarks>
+    public double Beta2IncreaseFactor { get; set; } = 0.0005;
+
+    /// <summary>
+    /// Gets or sets the amount by which to decrease Beta2 when the solution is not improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When the optimizer is not making good progress, this value determines
+    /// how much to decrease Beta2. Decreasing Beta2 means the optimizer will give less weight to past squared gradient
+    /// information and more to new information, which can help it adapt more quickly.
+    /// </para>
+    /// </remarks>
+    public double Beta2DecreaseFactor { get; set; } = 0.001;
 }

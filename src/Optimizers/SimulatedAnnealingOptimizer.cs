@@ -1,3 +1,5 @@
+namespace AiDotNet.Optimizers;
+
 /// <summary>
 /// Implements the Simulated Annealing optimization algorithm, a probabilistic technique for finding global optima.
 /// </summary>
@@ -89,26 +91,21 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     private T _currentTemperature;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SimulatedAnnealingOptimizer{T}"/> class with the specified options and components.
+    /// Initializes a new instance of the <see cref="SimulatedAnnealingOptimizer{T, TInput, TOutput}"/> class with the specified model and options.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The simulated annealing options, or null to use default options.</param>
-    /// <param name="predictionOptions">The prediction statistics options, or null to use default options.</param>
-    /// <param name="modelOptions">The model statistics options, or null to use default options.</param>
-    /// <param name="modelEvaluator">The model evaluator, or null to use the default evaluator.</param>
-    /// <param name="fitDetector">The fit detector, or null to use the default detector.</param>
-    /// <param name="fitnessCalculator">The fitness calculator, or null to use the default calculator.</param>
-    /// <param name="modelCache">The model cache, or null to use the default cache.</param>
     /// <remarks>
     /// <para>
-    /// This constructor creates a new Simulated Annealing optimizer with the specified options and components.
-    /// If any parameter is null, a default implementation is used. The constructor initializes the random
+    /// This constructor creates a new Simulated Annealing optimizer with the specified model and options.
+    /// If the options parameter is null, default options are used. The constructor initializes the random
     /// number generator, options, and starting temperature.
     /// </para>
     /// <para><b>For Beginners:</b> This is the starting point for creating a new optimizer.
     /// 
     /// Think of it like preparing for a hiking expedition:
+    /// - You provide the model that needs to be optimized (like the mountain to climb)
     /// - You can provide custom settings (options) or use the default ones
-    /// - You can provide specialized tools (evaluators, calculators) or use the basic ones
     /// - It initializes the random number generator for making probabilistic decisions
     /// - It sets the starting temperature to begin the annealing process
     /// 
@@ -116,8 +113,9 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </para>
     /// </remarks>
     public SimulatedAnnealingOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         SimulatedAnnealingOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _random = new Random();
         _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
@@ -131,7 +129,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// <returns>An optimization result containing the best solution found and associated metrics.</returns>
     /// <remarks>
     /// <para>
-    /// This method implements the main Simulated Annealing algorithm. It starts from a random solution and
+    /// This method implements the main Simulated Annealing algorithm. It starts from the provided model and
     /// iteratively generates neighbor solutions. Better solutions are always accepted, while worse solutions
     /// are accepted with a probability that depends on how much worse they are and the current temperature.
     /// The temperature gradually decreases, making the algorithm less likely to accept worse solutions over time.
@@ -141,7 +139,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// <para><b>For Beginners:</b> This is the main search process where the algorithm looks for the best solution.
     /// 
     /// The process works like this:
-    /// 1. Start at a random position on the "landscape"
+    /// 1. Start with the provided model
     /// 2. For each iteration:
     ///    - Generate a nearby position to consider (neighbor solution)
     ///    - Always move there if it's better than the current position
@@ -159,9 +157,18 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         ValidationHelper<T>.ValidateInputData(inputData);
 
         InitializeAdaptiveParameters();
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = currentSolution,
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+
+        // Evaluate the initial solution
+        var initialStepData = EvaluateSolution(currentSolution, inputData);
+        UpdateBestSolution(initialStepData, ref bestStepData);
+        previousStepData = initialStepData;
 
         for (int iteration = 0; iteration < _saOptions.MaxIterations; iteration++)
         {
@@ -172,6 +179,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
             {
                 currentSolution = newSolution;
                 UpdateBestSolution(currentStepData, ref bestStepData);
+                previousStepData = currentStepData;
             }
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -181,8 +189,6 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
             {
                 break;
             }
-
-            previousStepData = currentStepData;
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
@@ -213,8 +219,12 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-        UpdateTemperature(currentStepData.FitnessScore, previousStepData.FitnessScore);
-        UpdateNeighborGenerationParameters(currentStepData.FitnessScore, previousStepData.FitnessScore);
+        // Only update if previous step data has a solution (not the first iteration)
+        if (previousStepData.Solution != null)
+        {
+            UpdateTemperature(currentStepData.FitnessScore, previousStepData.FitnessScore);
+            UpdateNeighborGenerationParameters(currentStepData.FitnessScore, previousStepData.FitnessScore);
+        }
     }
 
     /// <summary>
@@ -241,7 +251,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </remarks>
     private void UpdateTemperature(T currentFitness, T previousFitness)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentFitness, previousFitness))
+        if (FitnessCalculator.IsBetterFitness(currentFitness, previousFitness))
         {
             _currentTemperature = NumOps.Multiply(_currentTemperature, NumOps.FromDouble(_saOptions.CoolingRate));
         }
@@ -250,8 +260,8 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
             _currentTemperature = NumOps.Divide(_currentTemperature, NumOps.FromDouble(_saOptions.CoolingRate));
         }
 
-        _currentTemperature = MathHelper.Clamp(_currentTemperature, 
-            NumOps.FromDouble(_saOptions.MinTemperature), 
+        _currentTemperature = MathHelper.Clamp(_currentTemperature,
+            NumOps.FromDouble(_saOptions.MinTemperature),
             NumOps.FromDouble(_saOptions.MaxTemperature));
     }
 
@@ -279,7 +289,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </remarks>
     private void UpdateNeighborGenerationParameters(T currentFitness, T previousFitness)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentFitness, previousFitness))
+        if (FitnessCalculator.IsBetterFitness(currentFitness, previousFitness))
         {
             _saOptions.NeighborGenerationRange *= 0.95;
         }
@@ -349,13 +359,17 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </remarks>
     private bool AcceptNewSolution(T currentFitness, T newFitness)
     {
-        if (_fitnessCalculator.IsBetterFitness(newFitness, currentFitness))
+        if (FitnessCalculator.IsBetterFitness(newFitness, currentFitness))
         {
             return true;
         }
 
-        var acceptanceProbability = Math.Exp(Convert.ToDouble(NumOps.Divide(
-            NumOps.Subtract(currentFitness, newFitness),
+        var delta = FitnessCalculator.IsHigherScoreBetter
+            ? NumOps.Subtract(currentFitness, newFitness)  // For higher score is better
+            : NumOps.Subtract(newFitness, currentFitness); // For lower score is better
+
+        var acceptanceProbability = Math.Exp(-Convert.ToDouble(NumOps.Divide(
+            delta,
             _currentTemperature
         )));
 
@@ -447,7 +461,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// Generates a new solution by perturbing the coefficients of the current solution.
     /// </summary>
     /// <param name="currentSolution">The current solution to be perturbed.</param>
-    /// <returns>A new ISymbolicModel representing the neighbor solution.</returns>
+    /// <returns>A new IFullModel representing the neighbor solution.</returns>
     /// <remarks>
     /// <para>
     /// This method creates a new solution by adding small random changes (perturbations) to each coefficient

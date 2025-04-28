@@ -1,26 +1,41 @@
+using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Linq;
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Newton's Method optimization algorithm.
+/// Implements an optimization algorithm based on Newton's Method for finding the minimum of a function.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Newton's Method is a powerful optimization algorithm that uses both first and second derivatives of the objective function.
-/// It often converges faster than first-order methods, especially near the optimum, but can be computationally expensive due to the need to compute and invert the Hessian matrix.
+/// Newton's Method uses both first and second-order derivatives (gradient and Hessian) to find the minimum
+/// of a function more efficiently than methods that use only the gradient. This can lead to faster convergence
+/// for smooth, well-behaved functions.
 /// </para>
 /// <para><b>For Beginners:</b>
-/// Imagine you're trying to find the lowest point in a valley. Gradient descent is like rolling a ball and letting it follow the slope.
-/// Newton's Method is like using a telescope to look at the whole valley, predicting where the lowest point is, and jumping directly there.
-/// It's often faster but requires more complex calculations at each step.
+/// Think of Newton's Method like navigating a mountainous landscape to find the lowest valley:
+/// 
+/// - Regular gradient descent just looks at the downhill direction (gradient) at each step
+/// - Newton's Method looks at both the downhill direction AND the shape of the landscape (Hessian matrix)
+/// - This extra information helps you take more intelligent steps and often reach the lowest point faster
+/// - However, it requires more calculations at each step and can sometimes be unstable
+/// 
+/// It's like having both a compass (gradient) AND a detailed topographical map (Hessian) to help you
+/// navigate, rather than just the compass alone.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The type of input data for the model.</typeparam>
+/// <typeparam name="TOutput">The type of output data for the model.</typeparam>
 public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Newton's Method optimizer.
     /// </summary>
-    private NewtonMethodOptimizerOptions<T, TInput, TOutput> _options;
+    private NewtonMethodOptimizerOptions<T, TInput, TOutput> _newtonOptions;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -32,7 +47,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the Newton's Method optimizer with the provided options and dependencies.
+    /// This constructor sets up the Newton's Method optimizer with the provided model and options.
     /// If no options are provided, it uses default settings.
     /// </para>
     /// <para><b>For Beginners:</b>
@@ -40,12 +55,14 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// You're setting up how you'll make decisions and what information you'll use along the way.
     /// </para>
     /// </remarks>
+    /// <param name="model">The machine learning model to optimize.</param>
     /// <param name="options">The Newton's Method-specific optimization options.</param>
     public NewtonMethodOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
-        _options = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
+        _newtonOptions = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -65,7 +82,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        CurrentLearningRate = NumOps.FromDouble(_newtonOptions.InitialLearningRate);
         _iteration = 0;
     }
 
@@ -92,36 +109,55 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             _iteration++;
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var hessian = CalculateHessian(currentSolution, inputData);
-            var direction = CalculateDirection(gradient, hessian);
-            var newSolution = UpdateSolution(currentSolution, direction);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            // Apply different optimization strategies based on optimization mode
+            var modifiedSolution = CreateSolution(inputData.XTrain);
+
+            if (Options.OptimizationMode == OptimizationMode.ParametersOnly ||
+                Options.OptimizationMode == OptimizationMode.Both)
+            {
+                // Newton's Method parameter optimization
+                if (Random.NextDouble() < _newtonOptions.ParameterAdjustmentProbability)
+                {
+                    var gradient = CalculateGradient(modifiedSolution, inputData.XTrain, inputData.YTrain);
+                    var hessian = CalculateHessian(modifiedSolution, inputData);
+                    var direction = CalculateDirection(gradient, hessian);
+                    modifiedSolution = UpdateSolution(modifiedSolution, direction);
+                }
+            }
+
+            var currentStepData = EvaluateSolution(modifiedSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
 
+            // Update adaptive parameters
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            // Check for convergence
+            if (previousStepData.FitnessScore != null &&
+                NumOps.LessThan(
+                    NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, previousStepData.FitnessScore)),
+                    NumOps.FromDouble(_newtonOptions.Tolerance)))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 
@@ -217,24 +253,29 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // f(x+h, y+h)
         parameters[i] = NumOps.Add(originalI, epsilon);
         parameters[j] = NumOps.Add(originalJ, epsilon);
-        var fhh = CalculateLoss(model, inputData);
+        var modelPlusPlus = model.WithParameters(parameters);
+        var fhh = CalculateLoss(modelPlusPlus, inputData);
 
         // f(x+h, y-h)
         parameters[j] = NumOps.Subtract(originalJ, epsilon);
-        var fhm = CalculateLoss(model, inputData);
+        var modelPlusMinus = model.WithParameters(parameters);
+        var fhm = CalculateLoss(modelPlusMinus, inputData);
 
         // f(x-h, y+h)
         parameters[i] = NumOps.Subtract(originalI, epsilon);
         parameters[j] = NumOps.Add(originalJ, epsilon);
-        var fmh = CalculateLoss(model, inputData);
+        var modelMinusPlus = model.WithParameters(parameters);
+        var fmh = CalculateLoss(modelMinusPlus, inputData);
 
         // f(x-h, y-h)
         parameters[j] = NumOps.Subtract(originalJ, epsilon);
-        var fmm = CalculateLoss(model, inputData);
+        var modelMinusMinus = model.WithParameters(parameters);
+        var fmm = CalculateLoss(modelMinusMinus, inputData);
 
         // Reset coefficients
         parameters[i] = originalI;
         parameters[j] = originalJ;
+        model.WithParameters(parameters);
 
         // Calculate second partial derivative
         var numerator = NumOps.Subtract(NumOps.Add(fhh, fmm), NumOps.Add(fhm, fmh));
@@ -244,7 +285,63 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
     /// <summary>
-    /// Updates the current solution based on the calculated direction.
+    /// Creates a potential solution based on the optimization mode.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new model variant by either selecting features, adjusting parameters,
+    /// or both, depending on the optimization mode.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a new version of the solution. Depending on what you're focusing on,
+    /// you might change which features you use, how the model parameters are set,
+    /// or both aspects at once.
+    /// </para>
+    /// </remarks>
+    /// <param name="xTrain">Training data used to determine data dimensions.</param>
+    /// <returns>A new potential solution (model variant).</returns>
+    protected override IFullModel<T, TInput, TOutput> CreateSolution(TInput xTrain)
+    {
+        // Create a deep copy of the model to avoid modifying the original
+        var solution = Model.DeepCopy();
+
+        int numFeatures = InputHelper<T, TInput>.GetInputSize(xTrain);
+
+        switch (Options.OptimizationMode)
+        {
+            case OptimizationMode.FeatureSelectionOnly:
+                ApplyFeatureSelection(solution, numFeatures);
+                break;
+
+            case OptimizationMode.ParametersOnly:
+                AdjustModelParameters(
+                    solution,
+                    _newtonOptions.ParameterAdjustmentScale,
+                    _newtonOptions.SignFlipProbability);
+                break;
+
+            case OptimizationMode.Both:
+            default:
+                // With some probability, apply both or just one type of optimization
+                if (Random.NextDouble() < _newtonOptions.FeatureSelectionProbability)
+                {
+                    ApplyFeatureSelection(solution, numFeatures);
+                }
+
+                if (Random.NextDouble() < _newtonOptions.ParameterAdjustmentProbability)
+                {
+                    AdjustModelParameters(
+                        solution,
+                        _newtonOptions.ParameterAdjustmentScale,
+                        _newtonOptions.SignFlipProbability);
+                }
+                break;
+        }
+
+        return solution;
+    }
+
+    /// <summary>
+    /// Updates the current solution using the calculated direction.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -257,52 +354,156 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </remarks>
     /// <param name="currentSolution">The current solution (model parameters).</param>
     /// <param name="direction">The direction to move in the parameter space.</param>
-    /// <returns>A new ISymbolicModel with updated coefficients.</returns>
+    /// <returns>A new model with updated parameters.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction)
     {
         var parameters = currentSolution.GetParameters();
         var newCoefficients = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
-            newCoefficients[i] = NumOps.Subtract(currentSolution.GetParameters()[i], NumOps.Multiply(CurrentLearningRate, direction[i]));
+            newCoefficients[i] = NumOps.Add(parameters[i], NumOps.Multiply(CurrentLearningRate, direction[i]));
         }
 
         return currentSolution.WithParameters(newCoefficients);
     }
 
     /// <summary>
-    /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
+    /// Updates the adaptive parameters of the Newton's Method optimizer.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method adjusts the learning rate based on the performance of the current step compared to the previous step.
-    /// If the fitness score improves, the learning rate is increased; otherwise, it is decreased.
+    /// This method adjusts the learning rate and other parameters based on the improvement in fitness.
+    /// It's used to fine-tune the algorithm's behavior as the optimization progresses.
     /// </para>
     /// <para><b>For Beginners:</b>
-    /// This is like adjusting your step size based on how well you're doing. If you're making good progress (better fitness score),
-    /// you might take slightly larger steps. If you're not improving, you'll take smaller, more cautious steps.
+    /// This is like adjusting your exploration strategy as you gather more information about the valley.
+    /// If you're making good progress, you might adjust your settings to be more aggressive.
+    /// If you're not improving, you might become more cautious and exploratory.
     /// </para>
     /// </remarks>
-    /// <param name="currentStepData">Data from the current optimization step.</param>
-    /// <param name="previousStepData">Data from the previous optimization step.</param>
+    /// <param name="currentStepData">The current optimization step data.</param>
+    /// <param name="previousStepData">The previous optimization step data.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Call the base implementation to update common parameters
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-        if (_options.UseAdaptiveLearningRate)
-        {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
-            {
-                CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateIncreaseFactor));
-            }
-            else
-            {
-                CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
-            }
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
 
-            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate, 
-                NumOps.FromDouble(_options.MinLearningRate), 
-                NumOps.FromDouble(_options.MaxLearningRate));
+        bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+
+        // Adaptive feature selection parameters
+        if ((Options.OptimizationMode == OptimizationMode.FeatureSelectionOnly ||
+             Options.OptimizationMode == OptimizationMode.Both))
+        {
+            UpdateFeatureSelectionParameters(isImproving);
+        }
+
+        // Adaptive parameter adjustment settings
+        if ((Options.OptimizationMode == OptimizationMode.ParametersOnly ||
+             Options.OptimizationMode == OptimizationMode.Both))
+        {
+            UpdateParameterAdjustmentSettings(isImproving);
+        }
+    }
+
+    /// <summary>
+    /// Updates the feature selection parameters based on whether the solution is improving.
+    /// </summary>
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    private void UpdateFeatureSelectionParameters(bool isImproving)
+    {
+        if (isImproving)
+        {
+            // If improving, gradually expand the range of features to consider
+            _newtonOptions.MinimumFeatures = Math.Max(1, _newtonOptions.MinimumFeatures - 1);
+            _newtonOptions.MaximumFeatures = Math.Min(_newtonOptions.MaximumFeatures + 1, _newtonOptions.AbsoluteMaximumFeatures);
+
+            // Slightly increase the probability of feature selection for future iterations
+            _newtonOptions.FeatureSelectionProbability *= 1.02;
+        }
+        else
+        {
+            // If not improving, narrow the range to focus the search
+            _newtonOptions.MinimumFeatures = Math.Min(_newtonOptions.MinimumFeatures + 1, _newtonOptions.AbsoluteMaximumFeatures - 1);
+            _newtonOptions.MaximumFeatures = Math.Max(_newtonOptions.MaximumFeatures - 1, _newtonOptions.MinimumFeatures + 1);
+
+            // Slightly decrease the probability of feature selection for future iterations
+            _newtonOptions.FeatureSelectionProbability *= 0.98;
+        }
+
+        // Ensure probabilities stay within bounds
+        _newtonOptions.FeatureSelectionProbability = MathHelper.Clamp(
+            _newtonOptions.FeatureSelectionProbability,
+            _newtonOptions.MinFeatureSelectionProbability,
+            _newtonOptions.MaxFeatureSelectionProbability);
+    }
+
+    /// <summary>
+    /// Updates the parameter adjustment settings based on whether the solution is improving.
+    /// </summary>
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    private void UpdateParameterAdjustmentSettings(bool isImproving)
+    {
+        if (isImproving)
+        {
+            // If improving, make smaller adjustments to fine-tune
+            _newtonOptions.ParameterAdjustmentScale *= 0.95;
+
+            // Decrease the probability of sign flips when things are going well
+            _newtonOptions.SignFlipProbability *= 0.9;
+
+            // Increase the probability of parameter adjustments
+            _newtonOptions.ParameterAdjustmentProbability *= 1.02;
+
+            // Adjust learning rate
+            if (_newtonOptions.UseAdaptiveLearningRate)
+            {
+                CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_newtonOptions.LearningRateIncreaseFactor));
+            }
+        }
+        else
+        {
+            // If not improving, make larger adjustments to explore more
+            _newtonOptions.ParameterAdjustmentScale *= 1.05;
+
+            // Increase the probability of sign flips to try more dramatic changes
+            _newtonOptions.SignFlipProbability *= 1.1;
+
+            // Slightly decrease the probability of parameter adjustments
+            _newtonOptions.ParameterAdjustmentProbability *= 0.98;
+
+            // Adjust learning rate
+            if (_newtonOptions.UseAdaptiveLearningRate)
+            {
+                CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_newtonOptions.LearningRateDecreaseFactor));
+            }
+        }
+
+        // Ensure values stay within bounds
+        _newtonOptions.ParameterAdjustmentScale = MathHelper.Clamp(
+            _newtonOptions.ParameterAdjustmentScale,
+            _newtonOptions.MinParameterAdjustmentScale,
+            _newtonOptions.MaxParameterAdjustmentScale);
+
+        _newtonOptions.SignFlipProbability = MathHelper.Clamp(
+            _newtonOptions.SignFlipProbability,
+            _newtonOptions.MinSignFlipProbability,
+            _newtonOptions.MaxSignFlipProbability);
+
+        _newtonOptions.ParameterAdjustmentProbability = MathHelper.Clamp(
+            _newtonOptions.ParameterAdjustmentProbability,
+            _newtonOptions.MinParameterAdjustmentProbability,
+            _newtonOptions.MaxParameterAdjustmentProbability);
+
+        if (_newtonOptions.UseAdaptiveLearningRate)
+        {
+            CurrentLearningRate = MathHelper.Clamp(
+                CurrentLearningRate,
+                NumOps.FromDouble(_newtonOptions.MinLearningRate),
+                NumOps.FromDouble(_newtonOptions.MaxLearningRate));
         }
     }
 
@@ -325,7 +526,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     {
         if (options is NewtonMethodOptimizerOptions<T, TInput, TOutput> newtonOptions)
         {
-            _options = newtonOptions;
+            _newtonOptions = newtonOptions;
         }
         else
         {
@@ -348,7 +549,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <returns>The current optimization algorithm options.</returns>
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
-        return _options;
+        return _newtonOptions;
     }
 
     /// <summary>
@@ -369,13 +570,19 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         using (MemoryStream ms = new MemoryStream())
         using (BinaryWriter writer = new BinaryWriter(ms))
         {
+            // Serialize base class data
             byte[] baseData = base.Serialize();
             writer.Write(baseData.Length);
             writer.Write(baseData);
 
-            string optionsJson = JsonConvert.SerializeObject(_options);
+            // Serialize optimization mode
+            writer.Write((int)Options.OptimizationMode);
+
+            // Serialize NewtonMethodOptimizerOptions
+            string optionsJson = JsonConvert.SerializeObject(_newtonOptions);
             writer.Write(optionsJson);
 
+            // Serialize iteration count
             writer.Write(_iteration);
 
             return ms.ToArray();
@@ -401,14 +608,20 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         using (MemoryStream ms = new MemoryStream(data))
         using (BinaryReader reader = new BinaryReader(ms))
         {
+            // Deserialize base class data
             int baseDataLength = reader.ReadInt32();
             byte[] baseData = reader.ReadBytes(baseDataLength);
             base.Deserialize(baseData);
 
+            // Deserialize optimization mode
+            Options.OptimizationMode = (OptimizationMode)reader.ReadInt32();
+
+            // Deserialize NewtonMethodOptimizerOptions
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<NewtonMethodOptimizerOptions<T, TInput, TOutput>>(optionsJson)
+            _newtonOptions = JsonConvert.DeserializeObject<NewtonMethodOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
+            // Deserialize iteration count
             _iteration = reader.ReadInt32();
         }
     }

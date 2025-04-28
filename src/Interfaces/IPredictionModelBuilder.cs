@@ -69,40 +69,6 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm);
 
     /// <summary>
-    /// Configures the prediction model algorithm to use.
-    /// </summary>
-    /// <remarks>
-    /// This method lets you specify which machine learning algorithm will be used as the core of your predictive model.
-    /// 
-    /// <b>For Beginners:</b> This is where you choose the specific type of AI model for your prediction task.
-    /// You can select from various algorithms depending on your needs:
-    /// 
-    /// - <b>Regression models</b> for predicting numeric values:
-    ///   - Linear regression (for simple straight-line relationships)
-    ///   - Polynomial regression (for curved relationships)
-    ///   - Ridge or Lasso regression (to prevent overfitting)
-    /// 
-    /// - <b>Classification models</b> for categorizing data:
-    ///   - Logistic regression (for yes/no predictions)
-    ///   - Decision trees (for rule-based decisions)
-    ///   - Support vector machines (for complex boundaries)
-    /// 
-    /// - <b>Neural networks</b> for complex pattern recognition:
-    ///   - Simple neural networks (for moderate complexity)
-    ///   - Deep learning models (for highly complex patterns)
-    /// 
-    /// - <b>Time series models</b> for sequential data:
-    ///   - ARIMA (for forecasting trends)
-    ///   - LSTM networks (for long-term patterns)
-    /// 
-    /// Different models excel at different types of problems, so choosing the right one
-    /// depends on your specific data and prediction goals.
-    /// </remarks>
-    /// <param name="model">The prediction model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model);
-
-    /// <summary>
     /// Configures the data preprocessing component for the model.
     /// </summary>
     /// <remarks>

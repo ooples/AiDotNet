@@ -29,11 +29,33 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 {
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
-    private IFullModel<T, TInput, TOutput>? _model;
+    private readonly IFullModel<T, TInput, TOutput>? _model;
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
     private IModelSelector<T, TInput, TOutput>? _modelSelector;
+
+    /// <summary>
+    /// Initializes a new instance of the PredictionModelBuilder class with a required model.
+    /// </summary>
+    /// <param name="model">The model that will be used for predictions.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This constructor requires you to provide the machine learning model
+    /// that will be trained and used for predictions. The model is the core component that learns
+    /// patterns from your data and makes predictions based on those patterns.
+    /// 
+    /// Different types of models are better suited for different types of problems:
+    /// - Linear regression for simple numeric predictions
+    /// - Decision trees for classification tasks
+    /// - Neural networks for complex pattern recognition
+    /// 
+    /// If you're not sure which model to use, consider using the CreateWithAutoModelSelection
+    /// factory method instead, which can automatically select an appropriate model for your data.
+    /// </remarks>
+    public PredictionModelBuilder(IFullModel<T, TInput, TOutput>? model = null)
+    {
+        _model = model;
+    }
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -70,22 +92,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Configures the core algorithm to use for predictions.
-    /// </summary>
-    /// <param name="model">The prediction algorithm to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is the main "brain" of your AI model - the algorithm that will
-    /// learn patterns from your data and make predictions. Different algorithms work better for
-    /// different types of problems, so you can choose the one that fits your needs.
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model)
-    {
-        _model = model;
-        return this;
-    }
-
-    /// <summary>
     /// Configures the optimization algorithm to find the best model parameters.
     /// </summary>
     /// <param name="optimizationAlgorithm">The optimization algorithm to use.</param>
@@ -118,40 +124,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Analyzes the input and output data and provides recommended models for the task.
-    /// </summary>
-    /// <param name="sampleX">A sample of the input data to analyze its structure.</param>
-    /// <param name="sampleY">A sample of the output data to analyze its structure.</param>
-    /// <returns>A ranked list of recommended model types with brief explanations.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Unlike the AutoSelectModel method which chooses a model for you,
-    /// this method gives you recommendations and explanations about which models might work well
-    /// for your specific data. It's like getting advice from an expert about which approaches
-    /// to consider, along with the pros and cons of each option.
-    /// </remarks>
-    public List<ModelRecommendation<T, TInput, TOutput>> GetModelRecommendations(TInput sampleX, TOutput sampleY)
-    {
-        _modelSelector = _modelSelector ?? new DefaultModelSelector<T, TInput, TOutput>();
-        return _modelSelector.GetModelRecommendations(sampleX, sampleY);
-    }
-
-    /// <summary>
-    /// Configures an auto model selector for this builder.
-    /// </summary>
-    /// <param name="modelSelector">The model selector implementation to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> A model selector helps choose the right type of machine learning model
-    /// for your data. This method lets you provide a custom selector that implements your own
-    /// logic for recommending models.
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoModelSelector(IModelSelector<T, TInput, TOutput> modelSelector)
-    {
-        _modelSelector = modelSelector;
-        return this;
-    }
-
-    /// <summary>
     /// Configures how to detect and handle outliers in the data.
     /// </summary>
     /// <param name="outlierRemoval">The outlier removal strategy to use.</param>
@@ -168,7 +140,54 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         return this;
     }
 
-        /// <summary>
+    /// <summary>
+    /// Configures a model selector for generating model recommendations.
+    /// </summary>
+    /// <param name="modelSelector">The model selector implementation to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This configures the component that analyzes your data and recommends
+    /// appropriate models. The model selector doesn't change the model you've already chosen
+    /// when creating this builder, but it allows you to:
+    /// 
+    /// 1. Get recommendations about which models might work well for your data
+    /// 2. Compare your chosen model against what would be automatically selected
+    /// 
+    /// This is useful when you want to explore different options or validate your model choice.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelSelector(IModelSelector<T, TInput, TOutput> modelSelector)
+    {
+        _modelSelector = modelSelector;
+        return this;
+    }
+
+    /// <summary>
+    /// Analyzes the input and output data and provides recommended models for the task.
+    /// </summary>
+    /// <param name="sampleX">A sample of the input data to analyze its structure.</param>
+    /// <param name="sampleY">A sample of the output data to analyze its structure.</param>
+    /// <returns>A ranked list of recommended model types with brief explanations.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method analyzes your data and gives you recommendations about
+    /// which models might work well for your specific task. It doesn't change the model you've 
+    /// already chosen, but gives you insights into alternatives you might want to consider.
+    /// 
+    /// Each recommendation includes:
+    /// - The type of model recommended
+    /// - A confidence score for how well it might perform
+    /// - An explanation of why this model might be appropriate
+    /// - Potential advantages and disadvantages
+    /// 
+    /// This can help you understand the rationale behind model selection and possibly
+    /// discover more effective approaches for your specific data.
+    /// </remarks>
+    public List<ModelRecommendation<T, TInput, TOutput>> GetModelRecommendations(TInput sampleX, TOutput sampleY)
+    {
+        _modelSelector = _modelSelector ?? new DefaultModelSelector<T, TInput, TOutput>();
+        return _modelSelector.GetModelRecommendations(sampleX, sampleY);
+    }
+
+    /// <summary>
     /// Builds a predictive model using the provided input features and output values.
     /// </summary>
     /// <param name="x">The matrix of input features where each row is a data point and each column is a feature.</param>
@@ -176,7 +195,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <returns>A trained predictive model that can be used to make predictions.</returns>
     /// <exception cref="ArgumentNullException">Thrown when input features or output values are null.</exception>
     /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no regression method has been specified.</exception>
     /// <remarks>
     /// <b>For Beginners:</b> This method takes your data (inputs and known outputs) and creates a trained AI model.
     /// Think of it like teaching a student: you provide examples (your data) and the student (the model) learns
@@ -197,12 +215,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             throw new ArgumentNullException(nameof(y), "Output vector can't be null");
         if (convertedX.Rows != convertedY.Length)
             throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
-        if (_model == null && _modelSelector == null)
-            throw new InvalidOperationException("Model implementation must be specified. This can be done by either using ConfigureModelSelector or ConfigureModel.");
 
         // Use defaults for these interfaces if they aren't set
-        var modelSelector = _modelSelector ?? new DefaultModelSelector<T, TInput, TOutput>();
-        var model = _model ?? modelSelector.SelectModel(x, y);
+        var model = _model ?? new DefaultModelSelector<T, TInput, TOutput>().SelectModel(x, y);
         var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
         var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(model);
         var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();

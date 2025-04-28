@@ -50,6 +50,12 @@ public class RegressionExample
             Console.WriteLine("Data prepared. Starting model training...");
 
             // Create and configure the model builder
+            // Use MultipleRegression since we have multiple input features
+            var regressionOptions = new RegressionOptions<double>
+            {
+                UseIntercept = true // Include intercept term (bias)
+            };
+            var model = new MultipleRegression<double>(regressionOptions);
             var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
             // Configure Adam optimizer for training
@@ -62,18 +68,11 @@ public class RegressionExample
                 Epsilon = 1e-8
             };
 
-            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
-
-            // Use MultipleRegression since we have multiple input features
-            var regressionOptions = new RegressionOptions<double>
-            {
-                UseIntercept = true // Include intercept term (bias)
-            };
+            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(model, adamOptions);
 
             // Build a multiple regression model
-            var model = modelBuilder
+            var modelResult = modelBuilder
                 .ConfigureOptimizer(optimizer)
-                .ConfigureModel(new MultipleRegression<double>(regressionOptions))
                 .Build(houseFeatures, housePrices);
 
             Console.WriteLine("Model trained successfully!");
@@ -83,13 +82,13 @@ public class RegressionExample
             var newHouse = new Matrix<double>(newHouseArray);
 
             // Make prediction
-            var predictedPrice = modelBuilder.Predict(newHouse, model);
+            var predictedPrice = modelBuilder.Predict(newHouse, modelResult);
 
             Console.WriteLine($"Predicted price for the test house: ${predictedPrice[0]:N0}");
 
             // Save model for later use
             string modelPath = "house_price_model.bin";
-            modelBuilder.SaveModel(model, modelPath);
+            modelBuilder.SaveModel(modelResult, modelPath);
             Console.WriteLine($"Model saved to {modelPath}");
 
             // Load the model back
@@ -99,7 +98,7 @@ public class RegressionExample
             Console.WriteLine($"Predicted price using loaded model: ${predictedPrice2[0]:N0}");
 
             // Print model coefficients if available
-            if (model is IPredictiveModel<double, Matrix<double>, Vector<double>> predictiveModel)
+            if (modelResult is IPredictiveModel<double, Matrix<double>, Vector<double>> predictiveModel)
             {
                 Console.WriteLine("\nModel Details:");
 

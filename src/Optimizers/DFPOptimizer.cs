@@ -40,22 +40,18 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// <summary>
     /// Initializes a new instance of the DFPOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the DFP algorithm.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the DFP optimizer with its initial configuration.
-    /// You can customize various aspects of how it works, or use default settings.
+    /// You provide the model to optimize and can customize various aspects of how the optimizer works,
+    /// or use default settings if you don't specify options.
     /// </para>
     /// </remarks>
     public DFPOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         DFPOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new DFPOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();
@@ -75,7 +71,14 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
+        base.InitializeAdaptiveParameters();
         _adaptiveLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+
+        if (Model != null)
+        {
+            int dimensions = Model.GetParameters().Length;
+            _inverseHessian = Matrix<T>.CreateIdentity(dimensions);
+        }
     }
 
     /// <summary>
@@ -93,13 +96,15 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _inverseHessian = Matrix<T>.CreateIdentity(currentSolution.GetParameters().Length);
-
-        InitializeAdaptiveParameters();
+        // Initialize the inverse Hessian matrix (moved to InitializeAdaptiveParameters)
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
@@ -115,12 +120,12 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
             if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
             _previousGradient = gradient;
@@ -160,7 +165,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// It uses line search to determine how big of a step to take, then updates the solution accordingly.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, 
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var stepSize = LineSearch(currentSolution, direction, gradient, inputData);
@@ -182,7 +187,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// </remarks>
     private void UpdateInverseHessian(IFullModel<T, TInput, TOutput> currentSolution, IFullModel<T, TInput, TOutput> newSolution, Vector<T> gradient)
     {
-        if (_previousGradient == null)
+        if (_previousGradient == null || _previousGradient.Length == 0)
         {
             _previousGradient = gradient;
             return;
@@ -219,6 +224,10 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
 
         if (_options.UseAdaptiveLearningRate)
         {

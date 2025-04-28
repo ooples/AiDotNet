@@ -1,21 +1,28 @@
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Nelder-Mead optimization algorithm, also known as the downhill simplex method.
+/// Implements the Nelder-Mead optimization algorithm, a derivative-free method for finding the minimum of a function.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
 /// <remarks>
 /// <para>
-/// The Nelder-Mead method is a heuristic search method that can optimize a problem with N variables.
-/// It attempts to minimize a scalar-valued nonlinear function of n real variables using only function values,
-/// without any derivative information.
+/// The Nelder-Mead algorithm is a simplex-based method that does not require derivatives.
+/// It's particularly useful for optimizing functions that are not differentiable or when
+/// gradient information is difficult to obtain.
 /// </para>
 /// <para><b>For Beginners:</b>
-/// Imagine you're trying to find the lowest point in a hilly landscape. The Nelder-Mead method is like
-/// having a group of explorers who work together, moving and reshaping their search pattern to find the lowest point.
-/// They don't need to know which way is downhill; they just compare their positions and adjust accordingly.
+/// Think of the Nelder-Mead method like a team of explorers searching for the lowest point in a landscape:
+/// - Instead of using maps or compasses (gradients), they simply look around and compare heights
+/// - They form a pattern of positions (called a simplex) and move this pattern around
+/// - They reflect away from high ground, expand towards promising areas, contract if they overshoot,
+///   and shrink their search area if they get stuck
+/// 
+/// This approach is especially useful when the landscape is complex or when it's hard to calculate
+/// which direction leads downhill at any given point.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
@@ -53,24 +60,20 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the Nelder-Mead optimizer with the provided options and dependencies.
+    /// This constructor sets up the Nelder-Mead optimizer with the provided model and options.
     /// If no options are provided, it uses default settings.
     /// </para>
     /// <para><b>For Beginners:</b>
     /// This is like preparing your team of explorers before they start searching the landscape.
-    /// You're giving them their initial instructions and tools.
+    /// You're giving them their initial instructions, tools, and a model of the terrain they'll be exploring.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The Nelder-Mead-specific optimization options.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
     public NelderMeadOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new NelderMeadOptimizerOptions<T, TInput, TOutput>();
         _alpha = NumOps.Zero;
@@ -124,14 +127,22 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
+
         var n = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+
+        // Initialize the simplex with variants of the base model
         var simplex = InitializeSimplex(inputData.XTrain, n);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             _iteration++;
 
@@ -179,7 +190,8 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
+                                NumOps.FromDouble(_options.Tolerance)))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
@@ -203,14 +215,20 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// You're placing them at different random spots to begin their search.
     /// </para>
     /// </remarks>
+    /// <param name="input">The input data used to create base models.</param>
     /// <param name="n">The number of dimensions (variables) in the optimization problem.</param>
     /// <returns>A list of initial solutions forming the simplex.</returns>
     private List<IFullModel<T, TInput, TOutput>> InitializeSimplex(TInput input, int n)
     {
         var simplex = new List<IFullModel<T, TInput, TOutput>>();
-        for (int i = 0; i <= n; i++)
+
+        // Add the base model as the first point
+        simplex.Add(Model.DeepCopy());
+
+        // Create n additional variants using CreateSolution
+        for (int i = 1; i <= n; i++)
         {
-            simplex.Add(InitializeRandomSolution(input));
+            simplex.Add(CreateSolution(input));
         }
 
         return simplex;
@@ -231,28 +249,29 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// </remarks>
     /// <param name="simplex">The current simplex (list of solution points).</param>
     /// <param name="n">The number of dimensions (variables) in the optimization problem.</param>
-    /// <returns>A symbolic model representing the centroid of the simplex.</returns>
+    /// <returns>A model representing the centroid of the simplex.</returns>
     private IFullModel<T, TInput, TOutput> CalculateCentroid(List<IFullModel<T, TInput, TOutput>> simplex, int n)
     {
         // Use the first model as a template for creating the new model
         var templateModel = simplex[0];
-        var centroidCoefficients = new Vector<T>(n);
-    
+        var centroidCoefficients = new Vector<T>(templateModel.GetParameters().Length);
+
         // Calculate the sum of all parameters
         for (int i = 0; i < n; i++)
         {
-            for (int j = 0; j < n; j++)
+            var parameters = simplex[i].GetParameters();
+            for (int j = 0; j < parameters.Length; j++)
             {
-                centroidCoefficients[j] = NumOps.Add(centroidCoefficients[j], simplex[i].GetParameters()[j]);
+                centroidCoefficients[j] = NumOps.Add(centroidCoefficients[j], parameters[j]);
             }
         }
-    
+
         // Divide by n to get the average
-        for (int j = 0; j < n; j++)
+        for (int j = 0; j < centroidCoefficients.Length; j++)
         {
             centroidCoefficients[j] = NumOps.Divide(centroidCoefficients[j], NumOps.FromDouble(n));
         }
-    
+
         // Create a new model with the centroid parameters using WithParameters
         return templateModel.WithParameters(centroidCoefficients);
     }
@@ -341,33 +360,34 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     }
 
     /// <summary>
-    /// Performs a vector operation on two symbolic models.
+    /// Performs a vector operation on two models.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method applies a specified operation to each corresponding pair of coefficients in two symbolic models.
+    /// This method applies a specified operation to each corresponding pair of coefficients in two models.
     /// It's used as a helper method for reflection, expansion, contraction, and shrinkage operations.
     /// </para>
     /// <para><b>For Beginners:</b>
     /// This is like having a rule for how to combine the positions of two explorers to find a new position.
     /// </para>
     /// </remarks>
-    /// <param name="a">The first symbolic model.</param>
-    /// <param name="b">The second symbolic model.</param>
+    /// <param name="a">The first model.</param>
+    /// <param name="b">The second model.</param>
     /// <param name="factor">A factor used in the operation.</param>
     /// <param name="operation">The operation to perform on each pair of coefficients.</param>
-    /// <returns>A new symbolic model resulting from the vector operation.</returns>
+    /// <returns>A new model resulting from the vector operation.</returns>
     private IFullModel<T, TInput, TOutput> PerformVectorOperation(IFullModel<T, TInput, TOutput> a, IFullModel<T, TInput, TOutput> b, T factor, Func<T, T, T, T> operation)
     {
-        var parameters = a.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-    
+        var parametersA = a.GetParameters();
+        var parametersB = b.GetParameters();
+        var newCoefficients = new Vector<T>(parametersA.Length);
+
         // Apply the operation to each parameter
-        for (int i = 0; i < parameters.Length; i++)
+        for (int i = 0; i < parametersA.Length; i++)
         {
-            newCoefficients[i] = operation(parameters[i], b.GetParameters()[i], factor);
+            newCoefficients[i] = operation(parametersA[i], parametersB[i], factor);
         }
-    
+
         // Create a new model with the calculated parameters using WithParameters
         return a.WithParameters(newCoefficients);
     }
@@ -388,11 +408,20 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <param name="previousStepData">The previous optimization step data.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Call the base implementation to update common parameters
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
 
         if (_options.UseAdaptiveParameters)
         {
-            var improvement = NumOps.Subtract(currentStepData.FitnessScore, previousStepData.FitnessScore);
+            bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+            var improvement = isImproving ?
+                NumOps.Abs(NumOps.Subtract(currentStepData.FitnessScore, previousStepData.FitnessScore)) :
+                NumOps.Negate(NumOps.Abs(NumOps.Subtract(currentStepData.FitnessScore, previousStepData.FitnessScore)));
+
             var adaptationRate = NumOps.FromDouble(_options.AdaptationRate);
 
             _alpha = NumOps.Add(_alpha, NumOps.Multiply(adaptationRate, improvement));

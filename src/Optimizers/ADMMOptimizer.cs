@@ -3,22 +3,33 @@ namespace AiDotNet.Optimizers;
 /// <summary>
 /// Implements the Alternating Direction Method of Multipliers (ADMM) optimization algorithm.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// ADMM is an algorithm for solving convex optimization problems, particularly useful for large-scale and distributed optimization.
-/// It combines the benefits of dual decomposition and augmented Lagrangian methods.
+/// ADMM is a powerful optimization algorithm that combines the decomposability of dual ascent with
+/// the superior convergence properties of the method of multipliers. It is particularly effective
+/// for distributed optimization and problems with L1 regularization.
 /// </para>
-/// <para><b>For Beginners:</b> ADMM is like solving a complex puzzle by breaking it into smaller, manageable pieces.
-/// It's particularly good at handling problems with constraints or when you want to distribute the computation across multiple processors.
+/// <para><b>For Beginners:</b>
+/// ADMM is like solving a puzzle by breaking it into smaller, more manageable pieces.
+/// Instead of trying to solve a complex optimization problem all at once, ADMM splits it
+/// into simpler sub-problems that are easier to solve. Then it carefully combines these
+/// solutions until they converge to the solution of the original problem.
+/// 
+/// This approach is especially useful for:
+/// - Problems with regularization (preventing overfitting)
+/// - Distributed computing (solving parts of the problem on different computers)
+/// - Large-scale optimization (handling very large datasets efficiently)
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The type of input data for the model.</typeparam>
+/// <typeparam name="TOutput">The type of output data for the model.</typeparam>
 public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the ADMM optimizer.
     /// </summary>
-    private ADMMOptimizerOptions<T, TInput, TOutput> _options;
+    private ADMMOptimizerOptions<T, TInput, TOutput> _admmOptions;
 
     /// <summary>
     /// The current iteration count.
@@ -43,6 +54,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Initializes a new instance of the ADMMOptimizer class.
     /// </summary>
+    /// <param name="model">The machine learning model to optimize.</param>
     /// <param name="options">The options for configuring the ADMM optimizer.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the ADMM optimizer with its initial configuration.
@@ -50,11 +62,12 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </para>
     /// </remarks>
     public ADMMOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         ADMMOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new ADMMOptimizerOptions<T, TInput, TOutput>())
     {
-        _options = options ?? new ADMMOptimizerOptions<T, TInput, TOutput>();
-        _regularization = _options.Regularization;
+        _admmOptions = options ?? new ADMMOptimizerOptions<T, TInput, TOutput>();
+        _regularization = _admmOptions.Regularization ?? GetRegularizationFromOptions(_admmOptions);
         _z = Vector<T>.Empty();
         _u = Vector<T>.Empty();
 
@@ -88,22 +101,29 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var parameters = currentSolution.GetParameters();
+        var parameters = Model.GetParameters();
         _z = new Vector<T>(parameters.Length);
         _u = new Vector<T>(parameters.Length);
 
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             _iteration++;
 
+            // Create a deep copy of the model to avoid modifying the original
+            var currentSolution = Model.DeepCopy();
+
             // ADMM steps
             currentSolution = UpdateX(currentSolution, inputData.XTrain, inputData.YTrain);
+            parameters = currentSolution.GetParameters();
             UpdateZ(parameters);
             UpdateU(parameters);
 
@@ -114,12 +134,12 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
             if (CheckConvergence(parameters))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
             previousStepData = currentStepData;
@@ -146,14 +166,14 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var matrix = ConversionsHelper.ConvertToMatrix<T, TInput>(X);
         var XTranspose = matrix.Transpose();
         var XTX = XTranspose.Multiply(matrix);
-        var rhoI = Matrix<T>.CreateIdentity(XTX.Rows).Multiply(NumOps.FromDouble(_options.Rho));
+        var rhoI = Matrix<T>.CreateIdentity(XTX.Rows).Multiply(NumOps.FromDouble(_admmOptions.Rho));
         var leftSide = XTX.Add(rhoI);
 
         var XTy = XTranspose.Multiply(ConversionsHelper.ConvertToVector<T, TOutput>(y));
         var zMinusU = _z.Subtract(_u);
-        var rhoZMinusU = zMinusU.Multiply(NumOps.FromDouble(_options.Rho));
+        var rhoZMinusU = zMinusU.Multiply(NumOps.FromDouble(_admmOptions.Rho));
         var rightSide = XTy.Add(rhoZMinusU);
-        var newCoefficients = MatrixSolutionHelper.SolveLinearSystem(leftSide, rightSide, _options.DecompositionType);
+        var newCoefficients = MatrixSolutionHelper.SolveLinearSystem(leftSide, rightSide, _admmOptions.DecompositionType);
 
         return currentSolution.WithParameters(newCoefficients);
     }
@@ -170,7 +190,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private void UpdateZ(Vector<T> x)
     {
         var xPlusU = x.Add(_u);
-        var scaledXPlusU = xPlusU.Multiply(NumOps.FromDouble(1.0 / _options.Rho));
+        var scaledXPlusU = xPlusU.Multiply(NumOps.FromDouble(1.0 / _admmOptions.Rho));
         _z = _regularization.Regularize(scaledXPlusU);
     }
 
@@ -206,8 +226,8 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var primalNorm = primalResidual.Norm();
         var dualNorm = dualResidual.Norm();
 
-        return NumOps.LessThan(primalNorm, NumOps.FromDouble(_options.AbsoluteTolerance)) &&
-               NumOps.LessThan(dualNorm, NumOps.FromDouble(_options.AbsoluteTolerance));
+        return NumOps.LessThan(primalNorm, NumOps.FromDouble(_admmOptions.AbsoluteTolerance)) &&
+               NumOps.LessThan(dualNorm, NumOps.FromDouble(_admmOptions.AbsoluteTolerance));
     }
 
     /// <summary>
@@ -222,9 +242,13 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-        if (_options.UseAdaptiveRho)
+        if (_admmOptions.UseAdaptiveRho)
         {
             var primalResidual = currentStepData.Solution.GetParameters().Subtract(_z);
             var dualResidual = _z.Subtract(_z.Subtract(_u));
@@ -232,13 +256,13 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             var primalNorm = primalResidual.Norm();
             var dualNorm = dualResidual.Norm();
 
-            if (NumOps.GreaterThan(primalNorm, NumOps.Multiply(NumOps.FromDouble(_options.AdaptiveRhoFactor), dualNorm)))
+            if (NumOps.GreaterThan(primalNorm, NumOps.Multiply(NumOps.FromDouble(_admmOptions.AdaptiveRhoFactor), dualNorm)))
             {
-                _options.Rho *= _options.AdaptiveRhoIncrease;
+                _admmOptions.Rho *= _admmOptions.AdaptiveRhoIncrease;
             }
-            else if (NumOps.GreaterThan(dualNorm, NumOps.Multiply(NumOps.FromDouble(_options.AdaptiveRhoFactor), primalNorm)))
+            else if (NumOps.GreaterThan(dualNorm, NumOps.Multiply(NumOps.FromDouble(_admmOptions.AdaptiveRhoFactor), primalNorm)))
             {
-                _options.Rho /= _options.AdaptiveRhoDecrease;
+                _admmOptions.Rho /= _admmOptions.AdaptiveRhoDecrease;
             }
         }
     }
@@ -257,7 +281,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         if (options is ADMMOptimizerOptions<T, TInput, TOutput> admmOptions)
         {
-            _options = admmOptions;
+            _admmOptions = admmOptions;
             _regularization = GetRegularizationFromOptions(admmOptions);
         }
         else
@@ -298,7 +322,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
-        return _options;
+        return _admmOptions;
     }
 
     /// <summary>
@@ -319,11 +343,13 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             writer.Write(baseData.Length);
             writer.Write(baseData);
 
-            string optionsJson = JsonConvert.SerializeObject(_options);
+            string optionsJson = JsonConvert.SerializeObject(_admmOptions);
             writer.Write(optionsJson);
 
             writer.Write(_iteration);
+            writer.Write(_z.Length);
             writer.Write(_z.Serialize());
+            writer.Write(_u.Length);
             writer.Write(_u.Serialize());
 
             return ms.ToArray();
@@ -349,14 +375,18 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<ADMMOptimizerOptions<T, TInput, TOutput>>(optionsJson)
+            _admmOptions = JsonConvert.DeserializeObject<ADMMOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();
-            _z = Vector<T>.Deserialize(reader.ReadBytes(reader.ReadInt32()));
-            _u = Vector<T>.Deserialize(reader.ReadBytes(reader.ReadInt32()));
 
-            _regularization = GetRegularizationFromOptions(_options);
+            int zLength = reader.ReadInt32();
+            _z = Vector<T>.Deserialize(reader.ReadBytes(zLength));
+
+            int uLength = reader.ReadInt32();
+            _u = Vector<T>.Deserialize(reader.ReadBytes(uLength));
+
+            _regularization = GetRegularizationFromOptions(_admmOptions);
         }
     }
 
@@ -375,6 +405,6 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
-        return $"{baseKey}_ADMM_{_options.Rho}_{_regularization?.GetType().Name}_{_options.AbsoluteTolerance}_{_iteration}";
+        return $"{baseKey}_ADMM_{_admmOptions.Rho}_{_regularization?.GetType().Name}_{_admmOptions.AbsoluteTolerance}_{_iteration}";
     }
 }

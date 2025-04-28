@@ -1,3 +1,5 @@
+namespace AiDotNet.Optimizers;
+
 /// <summary>
 /// Implements a Proximal Gradient Descent optimization algorithm which combines gradient descent with regularization.
 /// </summary>
@@ -90,29 +92,30 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     private IRegularization<T, TInput, TOutput> _regularization;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProximalGradientDescentOptimizer{T}"/> class with the specified options and components.
+    /// Initializes a new instance of the <see cref="ProximalGradientDescentOptimizer{T, TInput, TOutput}"/> class with the specified model and options.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The proximal gradient descent optimization options, or null to use default options.</param>
     /// <remarks>
     /// <para>
-    /// This constructor creates a new proximal gradient descent optimizer with the specified options and components.
-    /// If any parameter is null, a default implementation is used. The constructor initializes the options,
+    /// This constructor creates a new proximal gradient descent optimizer with the specified model and options.
+    /// If options parameter is null, default options are used. The constructor initializes the options,
     /// regularization strategy, and adaptive parameters.
     /// </para>
     /// <para><b>For Beginners:</b> This is the starting point for creating a new optimizer.
     /// 
     /// Think of it like setting up equipment for a mountain hike:
+    /// - You provide the model that needs to be optimized (like the mountain to climb)
     /// - You can provide custom settings (options) or use the default ones
-    /// - You can provide specialized tools (evaluators, calculators) or use the basic ones
-    /// - You can specify how to enforce boundaries (regularization) or use no boundaries
     /// - It gets everything ready so you can start the optimization process
     /// 
     /// The options control things like how fast to move, when to stop, and how to adapt during the journey.
     /// </para>
     /// </remarks>
     public ProximalGradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _options.Regularization ?? new NoRegularization<T, TInput, TOutput>();
@@ -162,7 +165,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// <para><b>For Beginners:</b> This is the main search process where the algorithm looks for the best solution.
     /// 
     /// The process works like this:
-    /// 1. Start at a random position on the "hill"
+    /// 1. Start with the provided model
     /// 2. For each iteration:
     ///    - Figure out which direction is most downhill (calculate gradient)
     ///    - Take a step in that direction (update solution)
@@ -179,8 +182,12 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = currentSolution,
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
@@ -285,9 +292,9 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-        if (_options.UseAdaptiveLearningRate)
+        if (_options.UseAdaptiveLearningRate && previousStepData.Solution != null)
         {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
             {
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateIncreaseFactor));
             }
@@ -296,8 +303,8 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate, 
-                NumOps.FromDouble(_options.MinLearningRate), 
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
                 NumOps.FromDouble(_options.MaxLearningRate));
         }
     }
@@ -329,6 +336,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         if (options is ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> pgdOptions)
         {
             _options = pgdOptions;
+            _regularization = _options.Regularization ?? new NoRegularization<T, TInput, TOutput>();
         }
         else
         {

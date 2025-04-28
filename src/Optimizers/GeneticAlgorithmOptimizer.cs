@@ -48,18 +48,24 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     /// <summary>
     /// Initializes a new instance of the GeneticAlgorithmOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
+    /// <param name="options">The options for configuring the genetic algorithm.</param>
+    /// <param name="geneticAlgorithm">The genetic algorithm implementation to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the genetic algorithm with its initial settings.
-    /// You can customize various aspects of how it works, or use default settings if you're unsure.
+    /// You provide the model to optimize and can customize various aspects of how the optimizer works,
+    /// or use default settings if you're unsure.
     /// </para>
     /// </remarks>
-    /// <param name="options">The options for configuring the genetic algorithm.</param>
     public GeneticAlgorithmOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null,
         GeneticBase<T, TInput, TOutput>? geneticAlgorithm = null,
         IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,
         IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _geneticOptions = options ?? new GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>();
         _currentCrossoverRate = NumOps.Zero;
@@ -68,10 +74,10 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
         // If no genetic algorithm is provided, create a default StandardGeneticAlgorithm
         if (geneticAlgorithm == null)
         {
-            // Need to provide a model factory - use a simple model as default
-            static IFullModel<T, TInput, TOutput> modelFactory()
+            // Use the provided model as the base for the model factory
+            IFullModel<T, TInput, TOutput> modelFactory()
             {
-                return (IFullModel<T, TInput, TOutput>)new SimpleRegression<T>();
+                return model.DeepCopy();
             }
 
             _geneticAlgorithm = new StandardGeneticAlgorithm<T, TInput, TOutput>(
@@ -100,6 +106,11 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
         AdaptiveParametersHelper<T, TInput, TOutput>.UpdateAdaptiveGeneticParameters(ref _currentCrossoverRate, ref _currentMutationRate,
             currentStepData, previousStepData, _geneticOptions);
     }
@@ -113,8 +124,9 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     /// you'll try new ingredients.
     /// </para>
     /// </remarks>
-    private new void InitializeAdaptiveParameters()
+    protected override void InitializeAdaptiveParameters()
     {
+        base.InitializeAdaptiveParameters();
         _currentCrossoverRate = NumOps.FromDouble(_geneticOptions.CrossoverRate);
         _currentMutationRate = NumOps.FromDouble(_geneticOptions.MutationRate);
     }
@@ -139,6 +151,8 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
+        ValidationHelper<T>.ValidateInputData(inputData);
+
         // Initialize genetic algorithm parameters
         var geneticParams = _geneticAlgorithm.GetGeneticParameters();
         geneticParams.PopulationSize = _geneticOptions.PopulationSize;
@@ -163,7 +177,7 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
             Solution = model,
-            FitnessScore = bestIndividual.GetFitness(),
+            FitnessScore = bestIndividual.GetFitness()
         };
 
         return CreateOptimizationResult(bestStepData, inputData);
@@ -229,6 +243,10 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
         string optionsJson = JsonConvert.SerializeObject(_geneticOptions);
         writer.Write(optionsJson);
 
+        // Serialize adaptive parameters
+        writer.Write(Convert.ToDouble(_currentCrossoverRate));
+        writer.Write(Convert.ToDouble(_currentMutationRate));
+
         // Serialize the genetic algorithm itself
         byte[] geneticAlgorithmData = _geneticAlgorithm.Serialize();
         writer.Write(geneticAlgorithmData.Length);
@@ -262,6 +280,10 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
         _geneticOptions = JsonConvert.DeserializeObject<GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
+        // Deserialize adaptive parameters
+        _currentCrossoverRate = NumOps.FromDouble(reader.ReadDouble());
+        _currentMutationRate = NumOps.FromDouble(reader.ReadDouble());
+
         // Deserialize the genetic algorithm if data is available
         if (reader.BaseStream.Position < reader.BaseStream.Length)
         {
@@ -269,7 +291,5 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
             byte[] geneticAlgorithmData = reader.ReadBytes(geneticAlgorithmDataLength);
             _geneticAlgorithm.Deserialize(geneticAlgorithmData);
         }
-
-        InitializeAdaptiveParameters();
     }
 }

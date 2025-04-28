@@ -1,21 +1,23 @@
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Mini-Batch Gradient Descent optimization algorithm.
+/// Implements the Mini-Batch Gradient Descent optimization algorithm for machine learning models.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
 /// <remarks>
 /// <para>
-/// Mini-Batch Gradient Descent is a variation of gradient descent that splits the training data into small batches
-/// to calculate model error and update model coefficients. This approach strikes a balance between the efficiency
-/// of stochastic gradient descent and the stability of batch gradient descent.
+/// Mini-Batch Gradient Descent is a variation of gradient descent that splits the training data into small batches,
+/// which helps strike a balance between the efficiency of stochastic gradient descent and the stability of batch gradient descent.
 /// </para>
 /// <para><b>For Beginners:</b>
-/// Imagine you're trying to find the bottom of a valley while blindfolded. Mini-Batch Gradient Descent is like taking 
-/// a few steps, checking your position, adjusting your direction, and repeating. It's faster than checking after every 
-/// single step (Stochastic Gradient Descent) but more precise than taking a lot of steps before checking (Batch Gradient Descent).
+/// Think of Mini-Batch Gradient Descent like hiking down a mountain to find the lowest point (valley).
+/// Instead of checking the entire landscape at once (batch gradient descent) or looking at just one spot at a time
+/// (stochastic gradient descent), you look at small areas (mini-batches) to decide which way to step next.
+/// This gives you a good balance between making steady progress and not spending too much time analyzing before each step.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
@@ -34,17 +36,20 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the optimizer with the provided options and dependencies. If no options are provided,
+    /// This constructor sets up the optimizer with the provided model and options. If no options are provided,
     /// it uses default settings. It also initializes a random number generator for shuffling data.
     /// </para>
     /// <para><b>For Beginners:</b>
     /// This is like setting up your hiking gear before starting the journey to find the valley's bottom. You're 
-    /// deciding on your strategy (options) and packing your tools (dependencies) that you'll use along the way.
+    /// deciding on your strategy (options) and packing your tools (the model) that you'll use along the way.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to be optimized.</param>
+    /// <param name="options">Custom options for the Mini-Batch Gradient Descent algorithm.</param>
     public MiniBatchGradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
 
@@ -89,57 +94,68 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        // Initialize with random solution
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
-    
+        ValidationHelper<T>.ValidateInputData(inputData);
+
+        // Initialize with a deep copy of the model and start tracking the best solution
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = currentSolution,
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
+        var previousStepData = EvaluateSolution(currentSolution, inputData);
+
         // Get dimensions
         var batchSize = InputHelper<T, TInput>.GetBatchSize(inputData.XTrain);
-    
+
         // Initialize parameters
         InitializeAdaptiveParameters();
-    
+
         for (int epoch = 0; epoch < Options.MaxIterations; epoch++)
         {
             // Shuffle indices for stochastic gradient descent
             var shuffledIndices = Enumerable.Range(0, batchSize).OrderBy(x => Random.Next()).ToArray();
-        
+
             for (int i = 0; i < batchSize; i += _options.BatchSize)
             {
+                // Create solution using the base class method (handles feature selection and parameter adjustments)
+                var optimizedSolution = CreateSolution(inputData.XTrain);
+
                 // Get batch indices
                 var batchIndices = shuffledIndices.Skip(i).Take(_options.BatchSize).ToArray();
-            
-                // Process batch and calculate gradient using our existing methods
-                var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain, batchIndices);
-            
+
+                // Process batch and calculate gradient
+                var gradient = CalculateGradient(optimizedSolution, inputData.XTrain, inputData.YTrain, batchIndices);
+
                 // Update solution
-                var newSolution = UpdateSolution(currentSolution, gradient);
-            
+                var newSolution = UpdateSolution(optimizedSolution, gradient);
+
                 // Evaluate the solution
                 var currentStepData = EvaluateSolution(newSolution, inputData);
                 UpdateBestSolution(currentStepData, ref bestStepData);
+
+                // Update adaptive parameters
                 UpdateAdaptiveParameters(currentStepData, previousStepData);
-            
+
                 // Check early stopping criteria
                 if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
                 {
                     return CreateOptimizationResult(bestStepData, inputData);
                 }
-            
+
                 // Check convergence
                 if (NumOps.LessThan(
-                    NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), 
+                    NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
                     NumOps.FromDouble(_options.Tolerance)))
                 {
                     return CreateOptimizationResult(bestStepData, inputData);
                 }
-            
+
                 currentSolution = newSolution;
                 previousStepData = currentStepData;
             }
         }
-    
+
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
@@ -158,7 +174,7 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// </remarks>
     /// <param name="currentSolution">The current model solution.</param>
     /// <param name="gradient">The calculated gradient.</param>
-    /// <returns>An updated symbolic model with improved coefficients.</returns>
+    /// <returns>An updated model with improved parameters.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
@@ -188,11 +204,18 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// <param name="previousStepData">Data from the previous optimization step.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Call the base implementation to update common parameters
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
 
         if (_options.UseAdaptiveLearningRate)
         {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+
+            if (isImproving)
             {
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateIncreaseFactor));
             }
@@ -201,8 +224,9 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(_options.MinLearningRate),
-                MathHelper.Min(NumOps.FromDouble(_options.MaxLearningRate), CurrentLearningRate));
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
+                NumOps.FromDouble(_options.MaxLearningRate));
         }
     }
 
@@ -325,7 +349,7 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// situations you've encountered before.
     /// </para>
     /// </remarks>
-    /// <param name="model">The symbolic model being optimized.</param>
+    /// <param name="model">The model being optimized.</param>
     /// <param name="X">The input data matrix.</param>
     /// <param name="y">The target output vector.</param>
     /// <returns>A string representing the unique gradient cache key.</returns>

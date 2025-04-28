@@ -477,44 +477,4 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
 
         return result;
     }
-
-    public void Train(TInput input, TOutput expectedOutput)
-    {
-        throw new NotImplementedException();
-    }
-
-    public ModelMetaData<T> GetModelMetaData()
-    {
-        throw new NotImplementedException();
-    }
-
-    public Vector<T> GetParameters()
-    {
-        throw new NotImplementedException();
-    }
-
-    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        throw new NotImplementedException();
-    }
-
-    public IEnumerable<int> GetActiveFeatureIndices()
-    {
-        throw new NotImplementedException();
-    }
-
-    public bool IsFeatureUsed(int featureIndex)
-    {
-        throw new NotImplementedException();
-    }
-
-    public IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        throw new NotImplementedException();
-    }
-
-    public IFullModel<T, TInput, TOutput> Clone()
-    {
-        throw new NotImplementedException();
-    }
 }

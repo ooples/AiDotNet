@@ -1,21 +1,27 @@
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Momentum optimization algorithm for gradient-based optimization.
+/// Implements an optimization algorithm that uses momentum to accelerate convergence and overcome local minima.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
 /// <remarks>
 /// <para>
-/// The Momentum optimizer is an extension of gradient descent that helps accelerate the optimization process
-/// in relevant directions and dampens oscillations. It does this by adding a fraction of the update vector
-/// of the past time step to the current update vector.
+/// The Momentum optimizer is a variation of gradient descent that adds a fraction of the previous update
+/// to the current one. This helps accelerate convergence and overcome shallow local minima.
 /// </para>
 /// <para><b>For Beginners:</b>
-/// Imagine you're rolling a ball down a hill to find the lowest point. The Momentum optimizer is like giving
-/// that ball some "memory" of its previous movements. This helps it move faster in consistent directions and
-/// resist getting stuck in small bumps or divots along the way.
+/// Imagine rolling a ball down a hill to find the lowest point. Unlike standard gradient descent (which is like
+/// dropping the ball and letting it roll straight down), momentum is like giving the ball some weight so it
+/// builds up speed. This helps it:
+/// - Move faster in consistent directions
+/// - Roll through small bumps and valleys rather than getting stuck
+/// - Find the bottom of the hill more efficiently
+/// 
+/// The "momentum" parameter controls how much the ball remembers its previous direction and speed.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
@@ -56,7 +62,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the optimizer with the provided options and dependencies. If no options are provided,
+    /// This constructor sets up the optimizer with the provided model and options. If no options are provided,
     /// it uses default settings.
     /// </para>
     /// <para><b>For Beginners:</b>
@@ -64,9 +70,12 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// (like its size and bounciness) and the hill (like its steepness and texture).
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to be optimized.</param>
+    /// <param name="options">Custom options for the Momentum algorithm.</param>
     public MomentumOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         MomentumOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new MomentumOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
@@ -111,18 +120,25 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = currentSolution,
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         _velocity = new Vector<T>(currentSolution.GetParameters().Length);
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
+            // Create solution using the base class method (handles feature selection and parameter adjustments)
+            var optimizedSolution = CreateSolution(inputData.XTrain);
+
+            var gradient = CalculateGradient(optimizedSolution, inputData.XTrain, inputData.YTrain);
             _velocity = UpdateVelocity(gradient);
-            var newSolution = UpdateSolution(currentSolution, _velocity);
+            var newSolution = UpdateSolution(optimizedSolution, _velocity);
 
             var currentStepData = EvaluateSolution(newSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
@@ -134,7 +150,8 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
+                                NumOps.FromDouble(_options.Tolerance)))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
@@ -188,7 +205,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </remarks>
     /// <param name="currentSolution">The current model solution.</param>
     /// <param name="velocity">The current velocity vector.</param>
-    /// <returns>An updated symbolic model with improved coefficients.</returns>
+    /// <returns>An updated model with improved parameters.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
     {
         var parameters = currentSolution.GetParameters();
@@ -219,11 +236,18 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <param name="previousStepData">Data from the previous optimization step.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Call the base implementation to update common parameters
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
 
         if (_options.UseAdaptiveLearningRate)
         {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+
+            if (isImproving)
             {
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateIncreaseFactor));
             }
@@ -232,13 +256,16 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(_options.MinLearningRate),
-                MathHelper.Min(NumOps.FromDouble(_options.MaxLearningRate), CurrentLearningRate));
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
+                NumOps.FromDouble(_options.MaxLearningRate));
         }
 
         if (_options.UseAdaptiveMomentum)
         {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+
+            if (isImproving)
             {
                 CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(_options.MomentumIncreaseFactor));
             }
@@ -247,8 +274,9 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(_options.MomentumDecreaseFactor));
             }
 
-            CurrentMomentum = MathHelper.Max(NumOps.FromDouble(_options.MinMomentum),
-                MathHelper.Min(NumOps.FromDouble(_options.MaxMomentum), CurrentMomentum));
+            CurrentMomentum = MathHelper.Clamp(CurrentMomentum,
+                NumOps.FromDouble(_options.MinMomentum),
+                NumOps.FromDouble(_options.MaxMomentum));
         }
     }
 
@@ -373,7 +401,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// situations you've encountered before.
     /// </para>
     /// </remarks>
-    /// <param name="model">The symbolic model being optimized.</param>
+    /// <param name="model">The model being optimized.</param>
     /// <param name="X">The input data matrix.</param>
     /// <param name="y">The target output vector.</param>
     /// <returns>A string representing the unique gradient cache key.</returns>

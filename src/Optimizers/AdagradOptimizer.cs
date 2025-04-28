@@ -19,7 +19,7 @@ namespace AiDotNet.Optimizers;
 /// This can be especially useful when some parts of your data are more important or occur less frequently.
 /// </para>
 /// </remarks>
-public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class AdaGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The configuration options specific to the Adagrad optimizer.
@@ -63,26 +63,26 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// <summary>
     /// Initializes a new instance of the AdagradOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the Adagrad optimizer.</param>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the Adagrad optimizer with the specified options and components.
+    /// This constructor sets up the Adagrad optimizer with the specified model and options.
     /// If no options are provided, it uses default AdagradOptimizerOptions.
     /// </para>
     /// <para><b>For Beginners:</b> This is like setting up your learning assistant with specific instructions.
     /// 
-    /// You can customize:
-    /// - How the assistant learns (options)
-    /// - How it measures its progress (predictionOptions, modelOptions)
-    /// - How it evaluates its performance (modelEvaluator, fitDetector, fitnessCalculator)
-    /// - How it remembers what it has learned (modelCache, gradientCache)
+    /// You provide:
+    /// - model: The specific model you want to improve (like a recipe you want to perfect)
+    /// - options: Special settings for Adagrad (like how fast it should learn)
     /// 
-    /// If you don't specify these, it will use default settings.
+    /// If you don't specify options, it will use default settings.
     /// </para>
     /// </remarks>
-    public AdagradOptimizer(
+    public AdaGradOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         AdagradOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new AdagradOptimizerOptions<T, TInput, TOutput>();
 
@@ -116,54 +116,56 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// <remarks>
     /// <para>
     /// This method implements the main optimization loop of the Adagrad algorithm. It iteratively
-    /// updates the solution based on calculated gradients and accumulated squared gradients.
+    /// creates and evaluates solutions based on the chosen optimization mode.
     /// </para>
     /// <para><b>For Beginners:</b> This is the main learning process of the Adagrad optimizer.
     /// 
-    /// Here's what happens in each iteration:
-    /// 1. Calculate how to improve the current solution (gradient)
-    /// 2. Update the memory of past improvements (accumulated squared gradients)
-    /// 3. Create a new, hopefully better solution
-    /// 4. Check if this new solution is the best so far
-    /// 5. Adjust how the optimizer learns (adaptive parameters)
-    /// 6. Check if we should stop early (if the solution is good enough)
+    /// Here's what happens:
+    /// 1. It starts with the provided model
+    /// 2. In each step (iteration):
+    ///    - It creates a potential solution based on the optimization mode (feature selection, parameter adjustment, or both)
+    ///    - It evaluates the solution to see how good it is
+    ///    - It keeps track of the best solution found so far
+    ///    - It adjusts its approach based on how well it's doing
+    ///    - It decides whether to stop early if the solution is good enough
+    /// 3. It repeats this process until it reaches the maximum number of steps or finds a good enough solution
     /// 
-    /// This process repeats until we reach the maximum number of iterations or find a good enough solution.
+    /// This is like practicing a skill over and over, getting a little better each time, until you're satisfied with your performance.
     /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _accumulatedSquaredGradients = new Vector<T>(currentSolution.GetParameters().Length);
+        var parameters = Model.GetParameters();
+        _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
         InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            UpdateAccumulatedSquaredGradients(gradient);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            var currentSolution = CreateSolution(inputData.XTrain);
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
-
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
             if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 
@@ -226,6 +228,10 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     {
         var parameters = currentSolution.GetParameters();
         var newCoefficients = new Vector<T>(parameters.Length);
+
+        // Update accumulated squared gradients
+        UpdateAccumulatedSquaredGradients(gradient);
+
         for (int i = 0; i < parameters.Length; i++)
         {
             var adaptiveLearningRate = NumOps.Divide(
@@ -248,38 +254,196 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// <param name="previousStepData">The optimization step data for the previous iteration.</param>
     /// <remarks>
     /// <para>
-    /// This method updates the learning rate if adaptive learning rate is enabled in the options.
-    /// It increases or decreases the learning rate based on whether the current solution is better than the previous one.
+    /// This method updates various adaptive parameters based on the performance of the current solution
+    /// compared to the previous one. It can adjust the learning rate, feature selection parameters,
+    /// and parameter adjustment settings.
     /// </para>
-    /// <para><b>For Beginners:</b> This is like adjusting how fast the optimizer learns based on its recent progress.
+    /// <para><b>For Beginners:</b> This is like adjusting how the optimizer learns over time.
     /// 
-    /// If adaptive learning rate is turned on:
-    /// - If the current solution is better, slightly increase the learning rate
-    /// - If the current solution is worse, slightly decrease the learning rate
-    /// - Keep the learning rate within specified limits
+    /// It looks at how well the current solution is doing compared to the previous one:
+    /// - If things are improving, it might make smaller, more careful adjustments
+    /// - If things are not improving, it might try more dramatic changes
     /// 
-    /// This helps the optimizer adapt its learning speed based on how well it's doing,
-    /// potentially making the learning process more efficient.
+    /// This adaptive approach helps the optimizer be more efficient in finding the best solution.
     /// </para>
     /// </remarks>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Call the base implementation to update common parameters
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
+        bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+
+        // Adaptive feature selection parameters
+        if ((_options.OptimizationMode == OptimizationMode.FeatureSelectionOnly ||
+             _options.OptimizationMode == OptimizationMode.Both))
+        {
+            UpdateFeatureSelectionParameters(isImproving);
+        }
+
+        // Adaptive parameter adjustment settings
+        if ((_options.OptimizationMode == OptimizationMode.ParametersOnly ||
+             _options.OptimizationMode == OptimizationMode.Both))
+        {
+            UpdateParameterAdjustmentSettings(isImproving);
+        }
+
+        // Adagrad specific adaptive parameters
         if (_options.UseAdaptiveLearningRate)
         {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
-            {
-                CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateIncreaseFactor));
-            }
-            else
-            {
-                CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
-            }
-
-            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(_options.MinLearningRate),
-                MathHelper.Min(NumOps.FromDouble(_options.MaxLearningRate), CurrentLearningRate));
+            UpdateLearningRate(isImproving);
         }
+    }
+
+    /// <summary>
+    /// Updates the learning rate based on whether the solution is improving.
+    /// </summary>
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the learning rate based on performance improvements.
+    /// It increases the learning rate when the solution is improving and decreases it when it's not.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts how big the steps are that the optimizer takes.
+    /// 
+    /// If the solution is improving:
+    /// - It slightly increases the learning rate, taking slightly bigger steps
+    /// - This helps the optimizer move faster toward better solutions
+    /// 
+    /// If the solution is not improving:
+    /// - It slightly decreases the learning rate, taking smaller, more careful steps
+    /// - This helps the optimizer be more precise when it's near a good solution
+    /// </para>
+    /// </remarks>
+    private void UpdateLearningRate(bool isImproving)
+    {
+        if (isImproving)
+        {
+            CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateIncreaseFactor));
+        }
+        else
+        {
+            CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
+        }
+
+        CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(_options.MinLearningRate),
+            MathHelper.Min(NumOps.FromDouble(_options.MaxLearningRate), CurrentLearningRate));
+    }
+
+    /// <summary>
+    /// Updates the feature selection parameters based on whether the solution is improving.
+    /// </summary>
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the feature selection parameters, such as the minimum and maximum
+    /// number of features to select and the probability of performing feature selection.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts how the optimizer selects ingredients for the recipe.
+    /// 
+    /// If the solution is improving:
+    /// - It might expand the range of ingredients it considers
+    /// - It might be more likely to try changing ingredients in future steps
+    /// 
+    /// If the solution is not improving:
+    /// - It might narrow its focus to a smaller set of ingredients
+    /// - It might be less aggressive about changing ingredients
+    /// </para>
+    /// </remarks>
+    private void UpdateFeatureSelectionParameters(bool isImproving)
+    {
+        if (isImproving)
+        {
+            // If improving, gradually expand the range of features to consider
+            _options.MinimumFeatures = Math.Max(1, _options.MinimumFeatures - 1);
+            _options.MaximumFeatures = Math.Min(_options.MaximumFeatures + 1, _options.AbsoluteMaximumFeatures);
+
+            // Slightly increase the probability of feature selection for future iterations
+            _options.FeatureSelectionProbability *= 1.02;
+        }
+        else
+        {
+            // If not improving, narrow the range to focus the search
+            _options.MinimumFeatures = Math.Min(_options.MinimumFeatures + 1, _options.AbsoluteMaximumFeatures - 1);
+            _options.MaximumFeatures = Math.Max(_options.MaximumFeatures - 1, _options.MinimumFeatures + 1);
+
+            // Slightly decrease the probability of feature selection for future iterations
+            _options.FeatureSelectionProbability *= 0.98;
+        }
+
+        // Ensure probabilities stay within bounds
+        _options.FeatureSelectionProbability = MathHelper.Clamp(
+            _options.FeatureSelectionProbability,
+            _options.MinFeatureSelectionProbability,
+            _options.MaxFeatureSelectionProbability);
+    }
+
+    /// <summary>
+    /// Updates the parameter adjustment settings based on whether the solution is improving.
+    /// </summary>
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the parameter adjustment settings, such as the adjustment scale,
+    /// sign flip probability, and parameter adjustment probability.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts how the optimizer changes the amounts of ingredients.
+    /// 
+    /// If the solution is improving:
+    /// - It might make smaller, more precise adjustments
+    /// - It might be less likely to make dramatic changes (like flipping signs)
+    /// - It might be more likely to adjust parameters in future steps
+    /// 
+    /// If the solution is not improving:
+    /// - It might make larger adjustments to explore more options
+    /// - It might be more willing to try dramatic changes
+    /// - It might adjust its strategy to try something different
+    /// </para>
+    /// </remarks>
+    private void UpdateParameterAdjustmentSettings(bool isImproving)
+    {
+        if (isImproving)
+        {
+            // If improving, make smaller adjustments to fine-tune
+            _options.ParameterAdjustmentScale *= 0.95;
+
+            // Decrease the probability of sign flips when things are going well
+            _options.SignFlipProbability *= 0.9;
+
+            // Increase the probability of parameter adjustments
+            _options.ParameterAdjustmentProbability *= 1.02;
+        }
+        else
+        {
+            // If not improving, make larger adjustments to explore more
+            _options.ParameterAdjustmentScale *= 1.05;
+
+            // Increase the probability of sign flips to try more dramatic changes
+            _options.SignFlipProbability *= 1.1;
+
+            // Slightly decrease the probability of parameter adjustments
+            _options.ParameterAdjustmentProbability *= 0.98;
+        }
+
+        // Ensure values stay within bounds
+        _options.ParameterAdjustmentScale = MathHelper.Clamp(
+            _options.ParameterAdjustmentScale,
+            _options.MinParameterAdjustmentScale,
+            _options.MaxParameterAdjustmentScale);
+
+        _options.SignFlipProbability = MathHelper.Clamp(
+            _options.SignFlipProbability,
+            _options.MinSignFlipProbability,
+            _options.MaxSignFlipProbability);
+
+        _options.ParameterAdjustmentProbability = MathHelper.Clamp(
+            _options.ParameterAdjustmentProbability,
+            _options.MinParameterAdjustmentProbability,
+            _options.MaxParameterAdjustmentProbability);
     }
 
     /// <summary>
@@ -365,6 +529,9 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             writer.Write(baseData.Length);
             writer.Write(baseData);
 
+            // Serialize optimization mode
+            writer.Write((int)_options.OptimizationMode);
+
             string optionsJson = JsonConvert.SerializeObject(_options);
             writer.Write(optionsJson);
 
@@ -402,6 +569,9 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             byte[] baseData = reader.ReadBytes(baseDataLength);
             base.Deserialize(baseData);
 
+            // Deserialize optimization mode
+            _options.OptimizationMode = (OptimizationMode)reader.ReadInt32();
+
             string optionsJson = reader.ReadString();
             _options = JsonConvert.DeserializeObject<AdagradOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
@@ -425,6 +595,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// The label includes:
     /// - Information about the model and data (from the base class)
     /// - Specific settings of the Adagrad optimizer (initial learning rate and epsilon)
+    /// - The optimization mode being used
     /// 
     /// This helps the optimizer quickly find and reuse previous calculations when the same situation occurs again,
     /// which can save time and computational resources.
@@ -433,6 +604,6 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
-        return $"{baseKey}_Adagrad_{_options.InitialLearningRate}_{_options.Epsilon}";
+        return $"{baseKey}_Adagrad_{_options.InitialLearningRate}_{_options.Epsilon}_{_options.OptimizationMode}";
     }
 }

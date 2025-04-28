@@ -58,14 +58,23 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <summary>
     /// Initializes a new instance of the LBFGSOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">Options for the L-BFGS optimizer. If null, default options are used.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This sets up the L-BFGS optimizer with your model and initial settings.
+    /// You provide the model you want to optimize and can customize how the optimizer works,
+    /// or use default settings if you're unsure.
+    /// </para>
+    /// </remarks>
     public LBFGSOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         LBFGSOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
         _s = [];
         _y = [];
+        _iteration = 0;
 
         InitializeAdaptiveParameters();
     }
@@ -73,12 +82,19 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <summary>
     /// Initializes or resets the adaptive parameters used in the optimization process.
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method sets up the initial learning rate and resets the 
+    /// optimizer's memory. It prepares the optimizer to start learning from scratch.
+    /// </para>
+    /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
 
         CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
         _iteration = 0;
+        _s.Clear();
+        _y.Clear();
     }
 
     /// <summary>
@@ -86,14 +102,25 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </summary>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the main method that finds the best solution.
+    /// It works by repeatedly calculating the best direction to move and taking steps
+    /// in that direction, all while keeping track of its path to make better decisions.
+    /// </para>
+    /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
+        // Reset LBFGS memory
         _s.Clear();
         _y.Clear();
         InitializeAdaptiveParameters();
@@ -104,7 +131,12 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         {
             _iteration++;
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var direction = CalculateDirection(gradient);
+
+            // For the first iteration, use steepest descent
+            var direction = _s.Count == 0 ?
+                gradient.Transform(x => NumOps.Negate(x)) :
+                CalculateDirection(gradient);
+
             var newSolution = UpdateSolution(currentSolution, direction, gradient, inputData);
 
             var currentStepData = EvaluateSolution(newSolution, inputData);
@@ -114,15 +146,19 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
             if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
-            UpdateLBFGSMemory(currentSolution.GetParameters(), newSolution.GetParameters(), gradient, previousGradient);
+            // Only update memory if we have a valid previous gradient
+            if (previousGradient.Length > 0)
+            {
+                UpdateLBFGSMemory(currentSolution.GetParameters(), newSolution.GetParameters(), gradient, previousGradient);
+            }
 
             previousGradient = gradient;
             currentSolution = newSolution;
@@ -159,16 +195,50 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         for (int i = _s.Count - 1; i >= 0; i--)
         {
-            alphas[i] = NumOps.Divide(_s[i].DotProduct(q), _y[i].DotProduct(_s[i]));
+            var denom = _y[i].DotProduct(_s[i]);
+            if (NumOps.Equals(denom, NumOps.Zero) || NumOps.LessThanOrEquals(denom, NumOps.Zero))
+            {
+                // Skip this update pair if denominator is zero or negative
+                continue;
+            }
+
+            alphas[i] = NumOps.Divide(_s[i].DotProduct(q), denom);
             q = q.Subtract(_y[i].Multiply(alphas[i]));
         }
 
-        var gamma = NumOps.Divide(_s[_s.Count - 1].DotProduct(_y[_s.Count - 1]), _y[_s.Count - 1].DotProduct(_y[_s.Count - 1]));
+        // Initial Hessian approximation (scaling factor)
+        T gamma;
+        if (_s.Count > 0 && _y.Count > 0)
+        {
+            var ys = _y[_s.Count - 1].DotProduct(_s[_s.Count - 1]);
+            var yy = _y[_s.Count - 1].DotProduct(_y[_s.Count - 1]);
+
+            if (NumOps.GreaterThan(yy, NumOps.Zero) && NumOps.GreaterThan(ys, NumOps.Zero))
+            {
+                gamma = NumOps.Divide(ys, yy);
+            }
+            else
+            {
+                gamma = NumOps.One; // Default scaling if values are invalid
+            }
+        }
+        else
+        {
+            gamma = NumOps.One; // Default scaling for first iteration
+        }
+
         var z = q.Multiply(gamma);
 
         for (int i = 0; i < _s.Count; i++)
         {
-            var beta = NumOps.Divide(_y[i].DotProduct(z), _y[i].DotProduct(_s[i]));
+            var denom = _y[i].DotProduct(_s[i]);
+            if (NumOps.Equals(denom, NumOps.Zero) || NumOps.LessThanOrEquals(denom, NumOps.Zero))
+            {
+                // Skip this update pair if denominator is zero or negative
+                continue;
+            }
+
+            var beta = NumOps.Divide(_y[i].DotProduct(z), denom);
             z = z.Add(_s[i].Multiply(NumOps.Subtract(alphas[i], beta)));
         }
 
@@ -182,19 +252,32 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <param name="newSolution">The current solution vector.</param>
     /// <param name="gradient">The current gradient.</param>
     /// <param name="previousGradient">The previous gradient.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This updates the optimizer's memory with the latest step,
+    /// which helps it make better decisions about which direction to move next.
+    /// </para>
+    /// </remarks>
     private void UpdateLBFGSMemory(Vector<T> oldSolution, Vector<T> newSolution, Vector<T> gradient, Vector<T> previousGradient)
     {
+        if (previousGradient.Length == 0)
+            return;
+
         var s = newSolution.Subtract(oldSolution);
         var y = gradient.Subtract(previousGradient);
 
-        if (_s.Count >= _options.MemorySize)
+        // Check for valid update: s'y should be positive (curvature condition)
+        var sy = s.DotProduct(y);
+        if (NumOps.GreaterThan(sy, NumOps.Zero))
         {
-            _s.RemoveAt(0);
-            _y.RemoveAt(0);
-        }
+            if (_s.Count >= _options.MemorySize)
+            {
+                _s.RemoveAt(0);
+                _y.RemoveAt(0);
+            }
 
-        _s.Add(s);
-        _y.Add(y);
+            _s.Add(s);
+            _y.Add(y);
+        }
     }
 
     /// <summary>
@@ -205,6 +288,11 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <param name="gradient">The current gradient.</param>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The updated solution.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method takes a step in the calculated direction,
+    /// determining the optimal step size through line search.
+    /// </para>
+    /// </remarks>
     private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var step = LineSearch(currentSolution, direction, gradient, inputData);
@@ -234,6 +322,10 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
         if (_options.UseAdaptiveLearningRate)
         {
             if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
@@ -245,8 +337,8 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate, 
-                NumOps.FromDouble(_options.MinLearningRate), 
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
                 NumOps.FromDouble(_options.MaxLearningRate));
         }
     }
@@ -322,15 +414,23 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             writer.Write(optionsJson);
 
             writer.Write(_iteration);
+
+            // Serialize _s list
             writer.Write(_s.Count);
             foreach (var vector in _s)
             {
-                writer.Write(vector.Serialize());
+                byte[] vectorData = vector.Serialize();
+                writer.Write(vectorData.Length);
+                writer.Write(vectorData);
             }
+
+            // Serialize _y list
             writer.Write(_y.Count);
             foreach (var vector in _y)
             {
-                writer.Write(vector.Serialize());
+                byte[] vectorData = vector.Serialize();
+                writer.Write(vectorData.Length);
+                writer.Write(vectorData);
             }
 
             return ms.ToArray();
@@ -367,8 +467,9 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
             _iteration = reader.ReadInt32();
 
+            // Deserialize _s list
             int sCount = reader.ReadInt32();
-            _s = new List<Vector<T>>(sCount);
+            _s.Clear();
             for (int i = 0; i < sCount; i++)
             {
                 int vectorLength = reader.ReadInt32();
@@ -376,8 +477,9 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 _s.Add(Vector<T>.Deserialize(vectorData));
             }
 
+            // Deserialize _y list
             int yCount = reader.ReadInt32();
-            _y = new List<Vector<T>>(yCount);
+            _y.Clear();
             for (int i = 0; i < yCount; i++)
             {
                 int vectorLength = reader.ReadInt32();

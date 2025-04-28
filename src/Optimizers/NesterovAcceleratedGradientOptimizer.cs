@@ -1,27 +1,35 @@
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Nesterov Accelerated Gradient optimization algorithm.
+/// Implements a Nesterov Accelerated Gradient optimization algorithm for machine learning models.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The Nesterov Accelerated Gradient (NAG) is an optimization algorithm that improves upon standard gradient descent.
-/// It introduces a smart prediction of the next position of the parameters, which helps to dampen oscillations and
-/// improve convergence, especially in scenarios with high curvature or small but consistent gradients.
+/// The Nesterov Accelerated Gradient (NAG) method is an extension of standard gradient descent that
+/// incorporates momentum with a "look-ahead" correction. It helps improve convergence rates and can navigate
+/// through ravines in the loss landscape more effectively than standard gradient descent.
 /// </para>
 /// <para><b>For Beginners:</b>
-/// Imagine you're skiing down a hill. Regular gradient descent is like looking at your current position to decide where to go next.
-/// NAG is like looking ahead to where you'll be after your next move, and then deciding how to adjust your path.
-/// This "look-ahead" helps you navigate the slope more efficiently, especially around tricky turns.
+/// Think of this optimizer like skiing down a mountain with momentum and foresight. Unlike regular 
+/// gradient descent (which is like carefully walking downhill step by step), NAG is like skiing:
+/// 
+/// 1. You build up speed (momentum) as you ski downhill
+/// 2. You look ahead to where your momentum will take you
+/// 3. You adjust your direction based on what you see ahead rather than just where you are now
+/// 
+/// This approach helps you reach the bottom (optimal solution) faster and avoid getting stuck in small dips
+/// along the way.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The type of input data for the model.</typeparam>
+/// <typeparam name="TOutput">The type of output data for the model.</typeparam>
 public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Nesterov Accelerated Gradient optimizer.
     /// </summary>
-    private NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> _options;
+    private NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> _nagOptions;
 
     /// <summary>
     /// The velocity vector used in the NAG algorithm.
@@ -33,26 +41,21 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the NAG optimizer with the provided options and dependencies.
+    /// This constructor sets up the NAG optimizer with the provided model and options.
     /// If no options are provided, it uses default settings.
     /// </para>
     /// <para><b>For Beginners:</b>
     /// This is like preparing your skis and gear before you start your descent. You're setting up all the tools and rules you'll use during your optimization journey.
     /// </para>
     /// </remarks>
+    /// <param name="model">The machine learning model to optimize.</param>
     /// <param name="options">The NAG-specific optimization options.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     public NesterovAcceleratedGradientOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
-        _options = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
+        _nagOptions = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -71,8 +74,8 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
-        CurrentMomentum = NumOps.FromDouble(_options.InitialMomentum);
+        CurrentLearningRate = NumOps.FromDouble(_nagOptions.InitialLearningRate);
+        CurrentMomentum = NumOps.FromDouble(_nagOptions.InitialMomentum);
     }
 
     /// <summary>
@@ -98,36 +101,71 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
-
-        _velocity = new Vector<T>(currentSolution.GetParameters().Length);
-        InitializeAdaptiveParameters();
-
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
-            var lookaheadSolution = GetLookaheadSolution(currentSolution);
-            var gradient = CalculateGradient(lookaheadSolution, inputData.XTrain, inputData.YTrain);
-            _velocity = UpdateVelocity(gradient);
-            var newSolution = UpdateSolution(currentSolution, _velocity);
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var currentSolution = Model.DeepCopy();
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+        // Initialize velocity vector with zeros
+        _velocity = new Vector<T>(currentSolution.GetParameters().Length);
+        for (int i = 0; i < _velocity.Length; i++)
+        {
+            _velocity[i] = NumOps.Zero;
+        }
+
+        for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
+        {
+            // Apply different optimization strategies based on optimization mode
+            var modifiedSolution = CreateSolution(inputData.XTrain);
+
+            if (Options.OptimizationMode == OptimizationMode.FeatureSelectionOnly ||
+                Options.OptimizationMode == OptimizationMode.Both)
+            {
+                // Feature selection logic
+                int numFeatures = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+                if (Random.NextDouble() < _nagOptions.FeatureSelectionProbability)
+                {
+                    ApplyFeatureSelection(modifiedSolution, numFeatures);
+                }
+            }
+
+            if (Options.OptimizationMode == OptimizationMode.ParametersOnly ||
+                Options.OptimizationMode == OptimizationMode.Both)
+            {
+                // NAG parameter optimization
+                if (Random.NextDouble() < _nagOptions.ParameterAdjustmentProbability)
+                {
+                    var lookaheadSolution = GetLookaheadSolution(modifiedSolution);
+                    var gradient = CalculateGradient(lookaheadSolution, inputData.XTrain, inputData.YTrain);
+                    _velocity = UpdateVelocity(gradient);
+                    modifiedSolution = UpdateSolution(modifiedSolution, _velocity);
+                }
+            }
+
+            var currentStepData = EvaluateSolution(modifiedSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
 
+            // Update adaptive parameters
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            // Check for convergence
+            if (previousStepData.FitnessScore != null &&
+                NumOps.LessThan(
+                    NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, previousStepData.FitnessScore)),
+                    NumOps.FromDouble(_nagOptions.Tolerance)))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
-            currentSolution = newSolution;
+            currentSolution = modifiedSolution;
             previousStepData = currentStepData;
         }
 
@@ -228,37 +266,106 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <param name="previousStepData">The previous optimization step data.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Call the base implementation to update common parameters
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-        if (_options.UseAdaptiveLearningRate)
-        {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
-            {
-                CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateIncreaseFactor));
-            }
-            else
-            {
-                CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
-            }
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
 
-            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(_options.MinLearningRate),
-                MathHelper.Min(NumOps.FromDouble(_options.MaxLearningRate), CurrentLearningRate));
+        bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+
+        // Adaptive feature selection parameters
+        if ((Options.OptimizationMode == OptimizationMode.FeatureSelectionOnly ||
+             Options.OptimizationMode == OptimizationMode.Both))
+        {
+            UpdateFeatureSelectionParameters(isImproving);
         }
 
-        if (_options.UseAdaptiveMomentum)
+        // Adaptive parameter adjustment settings
+        if ((Options.OptimizationMode == OptimizationMode.ParametersOnly ||
+             Options.OptimizationMode == OptimizationMode.Both))
         {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
-            {
-                CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(_options.MomentumIncreaseFactor));
-            }
-            else
-            {
-                CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(_options.MomentumDecreaseFactor));
-            }
-
-            CurrentMomentum = MathHelper.Max(NumOps.FromDouble(_options.MinMomentum),
-                MathHelper.Min(NumOps.FromDouble(_options.MaxMomentum), CurrentMomentum));
+            UpdateParameterAdjustmentSettings(isImproving);
         }
+    }
+
+    /// <summary>
+    /// Updates the feature selection parameters based on whether the solution is improving.
+    /// </summary>
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    private void UpdateFeatureSelectionParameters(bool isImproving)
+    {
+        if (isImproving)
+        {
+            // If improving, gradually expand the range of features to consider
+            _nagOptions.MinimumFeatures = Math.Max(1, _nagOptions.MinimumFeatures - 1);
+            _nagOptions.MaximumFeatures = Math.Min(_nagOptions.MaximumFeatures + 1, _nagOptions.AbsoluteMaximumFeatures);
+
+            // Slightly increase the probability of feature selection for future iterations
+            _nagOptions.FeatureSelectionProbability *= 1.02;
+        }
+        else
+        {
+            // If not improving, narrow the range to focus the search
+            _nagOptions.MinimumFeatures = Math.Min(_nagOptions.MinimumFeatures + 1, _nagOptions.AbsoluteMaximumFeatures - 1);
+            _nagOptions.MaximumFeatures = Math.Max(_nagOptions.MaximumFeatures - 1, _nagOptions.MinimumFeatures + 1);
+
+            // Slightly decrease the probability of feature selection for future iterations
+            _nagOptions.FeatureSelectionProbability *= 0.98;
+        }
+
+        // Ensure probabilities stay within bounds
+        _nagOptions.FeatureSelectionProbability = MathHelper.Clamp(
+            _nagOptions.FeatureSelectionProbability,
+            _nagOptions.MinFeatureSelectionProbability,
+            _nagOptions.MaxFeatureSelectionProbability);
+    }
+
+    /// <summary>
+    /// Updates the parameter adjustment settings based on whether the solution is improving.
+    /// </summary>
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    private void UpdateParameterAdjustmentSettings(bool isImproving)
+    {
+        if (isImproving)
+        {
+            // If improving, make smaller adjustments to fine-tune
+            _nagOptions.ParameterAdjustmentScale *= 0.95;
+
+            // Increase the momentum for smoother progress
+            CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(_nagOptions.MomentumIncreaseFactor));
+
+            // Increase the probability of parameter adjustments
+            _nagOptions.ParameterAdjustmentProbability *= 1.02;
+        }
+        else
+        {
+            // If not improving, make larger adjustments to explore more
+            _nagOptions.ParameterAdjustmentScale *= 1.05;
+
+            // Decrease the momentum to try different directions
+            CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(_nagOptions.MomentumDecreaseFactor));
+
+            // Slightly decrease the probability of parameter adjustments
+            _nagOptions.ParameterAdjustmentProbability *= 0.98;
+        }
+
+        // Ensure values stay within bounds
+        _nagOptions.ParameterAdjustmentScale = MathHelper.Clamp(
+            _nagOptions.ParameterAdjustmentScale,
+            _nagOptions.MinParameterAdjustmentScale,
+            _nagOptions.MaxParameterAdjustmentScale);
+
+        CurrentMomentum = MathHelper.Clamp(
+            CurrentMomentum,
+            NumOps.FromDouble(_nagOptions.MinMomentum),
+            NumOps.FromDouble(_nagOptions.MaxMomentum));
+
+        _nagOptions.ParameterAdjustmentProbability = MathHelper.Clamp(
+            _nagOptions.ParameterAdjustmentProbability,
+            _nagOptions.MinParameterAdjustmentProbability,
+            _nagOptions.MaxParameterAdjustmentProbability);
     }
 
     /// <summary>
@@ -279,7 +386,7 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     {
         if (options is NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> nagOptions)
         {
-            _options = nagOptions;
+            _nagOptions = nagOptions;
         }
         else
         {
@@ -301,7 +408,7 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <returns>The current optimization algorithm options.</returns>
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
-        return _options;
+        return _nagOptions;
     }
 
     /// <summary>
@@ -322,11 +429,16 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         using (MemoryStream ms = new MemoryStream())
         using (BinaryWriter writer = new BinaryWriter(ms))
         {
+            // Serialize base class data
             byte[] baseData = base.Serialize();
             writer.Write(baseData.Length);
             writer.Write(baseData);
 
-            string optionsJson = JsonConvert.SerializeObject(_options);
+            // Serialize optimization mode
+            writer.Write((int)Options.OptimizationMode);
+
+            // Serialize NesterovAcceleratedGradientOptimizerOptions
+            string optionsJson = JsonConvert.SerializeObject(_nagOptions);
             writer.Write(optionsJson);
 
             return ms.ToArray();
@@ -352,12 +464,17 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         using (MemoryStream ms = new MemoryStream(data))
         using (BinaryReader reader = new BinaryReader(ms))
         {
+            // Deserialize base class data
             int baseDataLength = reader.ReadInt32();
             byte[] baseData = reader.ReadBytes(baseDataLength);
             base.Deserialize(baseData);
 
+            // Deserialize optimization mode
+            Options.OptimizationMode = (OptimizationMode)reader.ReadInt32();
+
+            // Deserialize NesterovAcceleratedGradientOptimizerOptions
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>>(optionsJson)
+            _nagOptions = JsonConvert.DeserializeObject<NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
         }
     }
@@ -380,6 +497,6 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
-        return $"{baseKey}_NAG_{_options.InitialMomentum}_{_options.InitialLearningRate}";
+        return $"{baseKey}_NAG_{_nagOptions.InitialMomentum}_{_nagOptions.InitialLearningRate}";
     }
 }

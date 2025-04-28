@@ -742,4 +742,67 @@ public class ParticleSwarmOptimizationOptions<T, TInput, TOutput> : Optimization
    /// </para>
    /// </remarks>
    public double SocialWeightAdaptationRate { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the rate at which cognitive weight decreases when the solution is not improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When birds aren't finding better food, this controls how quickly they become
+    /// less attracted to their personal best locations, encouraging them to explore new areas.</para>
+    /// </remarks>
+    public double CognitiveWeightDecreaseRate { get; set; } = 0.99;
+
+    /// <summary>
+    /// Gets or sets the rate at which cognitive weight increases when the solution is improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When birds are finding better food, this controls how quickly they become
+    /// more attracted to their personal best locations, helping them focus on promising areas.</para>
+    /// </remarks>
+    public double CognitiveWeightIncreaseRate { get; set; } = 1.01;
+
+    /// <summary>
+    /// Gets or sets the rate at which social weight decreases when the solution is not improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When birds aren't finding better food, this controls how quickly they become
+    /// less attracted to the flock's best location, encouraging more independent exploration.</para>
+    /// </remarks>
+    public double SocialWeightDecreaseRate { get; set; } = 0.99;
+
+    /// <summary>
+    /// Gets or sets the rate at which social weight increases when the solution is improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When birds are finding better food, this controls how quickly they become
+    /// more attracted to the flock's best location, helping the flock converge on promising areas.</para>
+    /// </remarks>
+    public double SocialWeightIncreaseRate { get; set; } = 1.01;
+
+    /// <summary>
+    /// Gets or sets whether to use velocity clamping to prevent particles from moving too quickly.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is like putting a speed limit on the birds. When enabled,
+    /// it prevents birds from flying too fast, which helps them search more thoroughly.</para>
+    /// </remarks>
+    public bool UseVelocityClamping { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the rate at which inertia increases when the solution is improving.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When birds are finding better food, this controls how quickly they become
+    /// more committed to their current flight path, helping them continue in promising directions.</para>
+    /// </remarks>
+    public double InertiaIncreaseRate { get; set; } = 1.01;
+
+    /// <summary>
+    /// Gets or sets the maximum velocity allowed for particles when velocity clamping is enabled.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the actual speed limit for the birds. Higher values allow
+    /// birds to move more quickly through the search space, while lower values force them to move more gradually.</para>
+    /// </remarks>
+    public double MaxVelocity { get; set; } = 1.0;
 }

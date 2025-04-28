@@ -116,7 +116,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         : base(options ?? new(), regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>())
     {
         _gaOptions = gaOptions ?? new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>();
-        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(gaOptions);
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(this, gaOptions);
         _normalizer = normalizer ?? new NoNormalizer<T, Matrix<T>, Vector<T>>();
         _featureSelector = featureSelector ?? new NoFeatureSelector<T, Matrix<T>>();
         _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T, Matrix<T>, Vector<T>>();
@@ -351,7 +351,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         };
 
         // Recreate the optimizer with the deserialized options
-        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(gaOptions);
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(this, gaOptions);
 
         // Update coefficients and intercept
         UpdateCoefficientsAndIntercept();

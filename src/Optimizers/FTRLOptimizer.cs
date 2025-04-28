@@ -51,17 +51,23 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Initializes a new instance of the FTRLOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
+    /// <param name="options">The options for configuring the FTRL algorithm.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the FTRL optimizer with its initial configuration.
-    /// You can customize various aspects of how it works, or use default settings if you're unsure.
+    /// You provide the model to optimize and can customize various aspects of how the optimizer works,
+    /// or use default settings if you're unsure.
     /// </para>
     /// </remarks>
-    /// <param name="options">The options for configuring the FTRL algorithm.</param>
     public FTRLOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         FTRLOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new FTRLOptimizerOptions<T, TInput, TOutput>();
+        _z = null;
+        _n = null;
+        _t = 0;
 
         InitializeAdaptiveParameters();
     }
@@ -80,6 +86,19 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         CurrentLearningRate = NumOps.FromDouble(_options.Alpha);
         _t = 0;
+
+        // Initialize _z and _n if Model is available
+        if (Model != null)
+        {
+            var parameterLength = Model.GetParameters().Length;
+            _z = new Vector<T>(parameterLength);
+            _n = new Vector<T>(parameterLength);
+            for (int i = 0; i < parameterLength; i++)
+            {
+                _n[i] = NumOps.Zero;
+                _z[i] = NumOps.Zero;
+            }
+        }
     }
 
     /// <summary>
@@ -101,14 +120,17 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
-        
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var parameters = currentSolution.GetParameters();
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _z = new Vector<T>(parameters.Length);
-        _n = new Vector<T>(parameters.Length);
+        // _z and _n are now initialized in InitializeAdaptiveParameters
+        // Make sure adaptive parameters are initialized
         InitializeAdaptiveParameters();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
@@ -124,12 +146,12 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
             if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
             currentSolution = newSolution;
@@ -210,6 +232,10 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
         if (_options.UseAdaptiveLearningRate)
         {
             if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
@@ -221,8 +247,8 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate, 
-                NumOps.FromDouble(_options.MinLearningRate), 
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
                 NumOps.FromDouble(_options.MaxLearningRate));
         }
     }
@@ -288,6 +314,30 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             writer.Write(_t);
 
+            // Serialize _z if it exists
+            if (_z != null)
+            {
+                byte[] zData = _z.Serialize();
+                writer.Write(zData.Length);
+                writer.Write(zData);
+            }
+            else
+            {
+                writer.Write(0);
+            }
+
+            // Serialize _n if it exists
+            if (_n != null)
+            {
+                byte[] nData = _n.Serialize();
+                writer.Write(nData.Length);
+                writer.Write(nData);
+            }
+            else
+            {
+                writer.Write(0);
+            }
+
             return ms.ToArray();
         }
     }
@@ -317,6 +367,22 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _t = reader.ReadInt32();
+
+            // Deserialize _z if it exists
+            int zLength = reader.ReadInt32();
+            if (zLength > 0)
+            {
+                byte[] zData = reader.ReadBytes(zLength);
+                _z = Vector<T>.Deserialize(zData);
+            }
+
+            // Deserialize _n if it exists
+            int nLength = reader.ReadInt32();
+            if (nLength > 0)
+            {
+                byte[] nData = reader.ReadBytes(nLength);
+                _n = Vector<T>.Deserialize(nData);
+            }
         }
     }
 

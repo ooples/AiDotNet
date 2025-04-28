@@ -49,37 +49,37 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <summary>
     /// Options for prediction statistics calculations.
     /// </summary>
-    protected readonly PredictionStatsOptions _predictionOptions;
+    protected readonly PredictionStatsOptions PredictionOptions;
 
     /// <summary>
     /// Options for model statistics calculations.
     /// </summary>
-    protected readonly ModelStatsOptions _modelStatsOptions;
+    protected readonly ModelStatsOptions ModelStatsOptions;
 
     /// <summary>
     /// Evaluates the performance of models.
     /// </summary>
-    protected readonly IModelEvaluator<T, TInput, TOutput> _modelEvaluator;
+    protected readonly IModelEvaluator<T, TInput, TOutput> ModelEvaluator;
 
     /// <summary>
     /// Detects the quality of fit for models.
     /// </summary>
-    protected readonly IFitDetector<T, TInput, TOutput> _fitDetector;
+    protected readonly IFitDetector<T, TInput, TOutput> FitDetector;
 
     /// <summary>
     /// Calculates the fitness score of models.
     /// </summary>
-    protected readonly IFitnessCalculator<T, TInput, TOutput> _fitnessCalculator;
+    protected readonly IFitnessCalculator<T, TInput, TOutput> FitnessCalculator;
 
     /// <summary>
     /// Stores the fitness scores of evaluated models.
     /// </summary>
-    protected readonly List<T> _fitnessList;
+    protected readonly List<T> FitnessList;
 
     /// <summary>
     /// Stores information about each optimization iteration.
     /// </summary>
-    protected readonly List<OptimizationIterationInfo<T>> _iterationHistoryList;
+    protected readonly List<OptimizationIterationInfo<T>> IterationHistoryList;
 
     /// <summary>
     /// Caches evaluated models to avoid redundant calculations.
@@ -106,23 +106,27 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </summary>
     protected int IterationsWithImprovement;
 
+    protected readonly IFullModel<T, TInput, TOutput> Model;
+
     /// <summary>
     /// Initializes a new instance of the OptimizerBase class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The optimization algorithm options.</param>
-    protected OptimizerBase(
+    protected OptimizerBase(IFullModel<T, TInput, TOutput> model,
         OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
+        Model = model;
         Random = new();
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new OptimizationAlgorithmOptions<T, TInput, TOutput>();
-        _predictionOptions = Options.PredictionOptions;
-        _modelStatsOptions = Options.ModelStatsOptions;
-        _modelEvaluator = Options.ModelEvaluator;
-        _fitDetector = Options.FitDetector;
-        _fitnessCalculator = Options.FitnessCalculator;
-        _fitnessList = [];
-        _iterationHistoryList = [];
+        PredictionOptions = Options.PredictionOptions;
+        ModelStatsOptions = Options.ModelStatsOptions;
+        ModelEvaluator = Options.ModelEvaluator;
+        FitDetector = Options.FitDetector;
+        FitnessCalculator = Options.FitnessCalculator;
+        FitnessList = [];
+        IterationHistoryList = [];
         ModelCache = Options.ModelCache;
         CurrentLearningRate = NumOps.Zero;
         CurrentMomentum = NumOps.Zero;
@@ -396,7 +400,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         };
 
         var (currentFitnessScore, fitDetectionResult, evaluationData) = TrainAndEvaluateSolution(input);
-        _fitnessList.Add(currentFitnessScore);
+        FitnessList.Add(currentFitnessScore);
 
         var stepData = new OptimizationStepData<T, TInput, TOutput>
         {
@@ -427,9 +431,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);
 
         // Evaluate the trained model
-        var evaluationData = _modelEvaluator.EvaluateModel(input);
-        var fitDetectionResult = _fitDetector.DetectFit(evaluationData);
-        var currentFitnessScore = _fitnessCalculator.CalculateFitnessScore(evaluationData);
+        var evaluationData = ModelEvaluator.EvaluateModel(input);
+        var fitDetectionResult = FitDetector.DetectFit(evaluationData);
+        var currentFitnessScore = FitnessCalculator.CalculateFitnessScore(evaluationData);
 
         return (currentFitnessScore, fitDetectionResult, evaluationData);
     }
@@ -445,7 +449,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var stepData = EvaluateSolution(solution, inputData);
-        return _fitnessCalculator.CalculateFitnessScore(stepData.EvaluationData);
+        return FitnessCalculator.CalculateFitnessScore(stepData.EvaluationData);
     }
 
     /// <summary>
@@ -476,7 +480,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
             bestStepData.Solution,
             bestStepData.FitnessScore,
-            _fitnessList,
+            FitnessList,
             bestStepData.SelectedFeatures,
             new OptimizationResult<T, TInput, TOutput>.DatasetResult
             {
@@ -509,8 +513,92 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictionStats = bestStepData.EvaluationData.TestSet.PredictionStats
             },
             bestStepData.FitDetectionResult,
-            _iterationHistoryList.Count
+            IterationHistoryList.Count
         );
+    }
+
+    /// <summary>
+    /// Applies feature selection to a model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method selects a subset of features to be used by the model, potentially
+    /// improving its performance by focusing on the most relevant data dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like deciding which ingredients to include in your recipe. Some ingredients
+    /// might not be necessary or might even make the dish worse, so you're experimenting
+    /// with different combinations to find which ones are truly important.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The model to apply feature selection to.</param>
+    /// <param name="totalFeatures">The total number of available features.</param>
+    protected virtual void ApplyFeatureSelection(IFullModel<T, TInput, TOutput> model, int totalFeatures)
+    {
+        // Randomly select features
+        var selectedFeatures = RandomlySelectFeatures(
+            totalFeatures,
+            Options.MinimumFeatures,
+            Options.MaximumFeatures);
+
+        // Apply the selected features to the model using the base class method
+        ApplyFeatureSelection(model, selectedFeatures);
+    }
+
+    /// <summary>
+    /// Creates a potential solution based on the optimization mode.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new model variant by either selecting features, adjusting parameters,
+    /// or both, depending on the optimization mode.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a new version of the recipe. Depending on what you're focusing on,
+    /// you might change which ingredients you use, how much of each ingredient you add,
+    /// or both aspects at once.
+    /// </para>
+    /// </remarks>
+    /// <param name="xTrain">Training data used to determine data dimensions.</param>
+    /// <returns>A new potential solution (model variant).</returns>
+    protected virtual IFullModel<T, TInput, TOutput> CreateSolution(TInput xTrain)
+    {
+        // Create a deep copy of the model to avoid modifying the original
+        var solution = Model.DeepCopy();
+
+        int numFeatures = InputHelper<T, TInput>.GetInputSize(xTrain);
+
+        switch (Options.OptimizationMode)
+        {
+            case OptimizationMode.FeatureSelectionOnly:
+                ApplyFeatureSelection(solution, numFeatures);
+                break;
+
+            case OptimizationMode.ParametersOnly:
+                AdjustModelParameters(
+                    solution,
+                    Options.ParameterAdjustmentScale,
+                    Options.SignFlipProbability);
+                break;
+
+            case OptimizationMode.Both:
+            default:
+                // With some probability, apply both or just one type of optimization
+                if (Random.NextDouble() < Options.FeatureSelectionProbability)
+                {
+                    ApplyFeatureSelection(solution, numFeatures);
+                }
+
+                if (Random.NextDouble() < Options.ParameterAdjustmentProbability)
+                {
+                    AdjustModelParameters(
+                        solution,
+                        Options.ParameterAdjustmentScale,
+                        Options.SignFlipProbability);
+                }
+                break;
+        }
+
+        return solution;
     }
 
     /// <summary>
@@ -537,7 +625,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     private void UpdateAndApplyBestSolution(ModelResult<T, TInput, TOutput> currentResult, ref ModelResult<T, TInput, TOutput> bestResult)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentResult.Fitness, bestResult.Fitness))
+        if (FitnessCalculator.IsBetterFitness(currentResult.Fitness, bestResult.Fitness))
         {
             bestResult.Solution = currentResult.Solution;
             bestResult.Fitness = currentResult.Fitness;
@@ -688,7 +776,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     {
         if (Options.UseAdaptiveLearningRate)
         {
-            if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
             {
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(Options.LearningRateDecay));
                 IterationsWithoutImprovement++;
@@ -748,7 +836,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected bool UpdateIterationHistoryAndCheckEarlyStopping(int iteration, OptimizationStepData<T, TInput, TOutput> stepData)
     {
-        _iterationHistoryList.Add(new OptimizationIterationInfo<T>
+        IterationHistoryList.Add(new OptimizationIterationInfo<T>
         {
             Iteration = iteration,
             Fitness = stepData.FitnessScore,
@@ -788,18 +876,18 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual bool ShouldEarlyStop()
     {
-        if (_iterationHistoryList.Count < Options.EarlyStoppingPatience)
+        if (IterationHistoryList.Count < Options.EarlyStoppingPatience)
         {
             return false;
         }
 
-        var recentIterations = _iterationHistoryList.Skip(Math.Max(0, _iterationHistoryList.Count - Options.EarlyStoppingPatience)).ToList();
+        var recentIterations = IterationHistoryList.Skip(Math.Max(0, IterationHistoryList.Count - Options.EarlyStoppingPatience)).ToList();
 
         // Find the best fitness score
-        T bestFitness = _iterationHistoryList[0].Fitness;
-        foreach (var iteration in _iterationHistoryList)
+        T bestFitness = IterationHistoryList[0].Fitness;
+        foreach (var iteration in IterationHistoryList)
         {
-            if (_fitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
+            if (FitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
             {
                 bestFitness = iteration.Fitness;
             }
@@ -809,7 +897,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         bool noImprovement = true;
         foreach (var iteration in recentIterations)
         {
-            if (_fitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
+            if (FitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
             {
                 noImprovement = false;
                 break;

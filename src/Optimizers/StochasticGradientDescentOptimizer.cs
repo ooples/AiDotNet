@@ -27,32 +27,28 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// <summary>
     /// Initializes a new instance of the StochasticGradientDescentOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">Options specific to the SGD optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the SGD optimizer with the specified options and components.
+    /// This constructor sets up the SGD optimizer with the specified model and options.
     /// If no options are provided, default options are used.
     /// </para>
     /// <para><b>For Beginners:</b> This is like setting up your hiker with their gear before the hike:
     /// 
+    /// - You provide the model that needs to be optimized (like the mountain to climb)
     /// - You can give the hiker special instructions (options) for how to search
-    /// - You can provide tools to measure progress (evaluator, fit detector, etc.)
     /// - If you don't provide instructions, the hiker will use a standard set
     /// 
     /// This setup ensures the optimizer is ready to start finding the best solution.
     /// </para>
     /// </remarks>
     public StochasticGradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
-        _options = options ?? new();
+        _options = options ?? new StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>();
     }
 
     /// <summary>
@@ -69,7 +65,7 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </para>
     /// <para><b>For Beginners:</b> This is the main journey of our hiker:
     /// 
-    /// 1. Start at a random point on the hill (initialize random solution)
+    /// 1. Start with the provided model
     /// 2. For each step (iteration):
     ///    - Look around to decide which way is downhill (calculate gradient)
     ///    - Take a step in that direction (update solution)
@@ -83,11 +79,22 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        ValidationHelper<T>.ValidateInputData(inputData);
+
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = currentSolution,
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
+
+        // Evaluate the initial solution
+        var initialStepData = EvaluateSolution(currentSolution, inputData);
+        UpdateBestSolution(initialStepData, ref bestStepData);
+        previousStepData = initialStepData;
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
@@ -122,7 +129,7 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </summary>
     /// <param name="currentSolution">The current solution to update.</param>
     /// <param name="gradient">The calculated gradient.</param>
-    /// <returns>A new ISymbolicModel representing the updated solution.</returns>
+    /// <returns>A new IFullModel representing the updated solution.</returns>
     /// <remarks>
     /// <para>
     /// This method applies the gradient descent update rule, subtracting the gradient multiplied by
@@ -139,8 +146,16 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        Vector<T> updatedCoefficients = currentSolution.GetParameters().Subtract(gradient.Multiply(CurrentLearningRate));
-        return currentSolution.WithParameters(updatedCoefficients);
+        var parameters = currentSolution.GetParameters();
+        var newParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var gradientStep = NumOps.Multiply(gradient[i], CurrentLearningRate);
+            newParameters[i] = NumOps.Subtract(parameters[i], gradientStep);
+        }
+
+        return currentSolution.WithParameters(newParameters);
     }
 
     /// <summary>

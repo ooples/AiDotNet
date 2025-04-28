@@ -66,15 +66,18 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// <summary>
     /// Initializes a new instance of the DifferentialEvolutionOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the Differential Evolution algorithm.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the Differential Evolution optimizer with its initial configuration.
-    /// You can customize various aspects of how it works, or use default settings.
+    /// You provide the model to optimize and can customize various aspects of how the optimizer works,
+    /// or use default settings if you don't specify options.
     /// </para>
     /// </remarks>
     public DifferentialEvolutionOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         DifferentialEvolutionOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _deOptions = options ?? new DifferentialEvolutionOptions<T, TInput, TOutput>();
         _currentCrossoverRate = NumOps.Zero;
@@ -96,6 +99,11 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
         AdaptiveParametersHelper<T, TInput, TOutput>.UpdateAdaptiveGeneticParameters(ref _currentCrossoverRate, ref _currentMutationRate, currentStepData, previousStepData, _deOptions);
     }
 
@@ -107,8 +115,9 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// These rates determine how the algorithm combines and changes solutions during optimization.
     /// </para>
     /// </remarks>
-    private new void InitializeAdaptiveParameters()
+    protected override void InitializeAdaptiveParameters()
     {
+        base.InitializeAdaptiveParameters();
         _currentCrossoverRate = NumOps.FromDouble(_deOptions.CrossoverRate);
         _currentMutationRate = NumOps.FromDouble(_deOptions.MutationRate);
     }
@@ -126,9 +135,16 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
+        ValidationHelper<T>.ValidateInputData(inputData);
+
         int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         var population = InitializePopulation(inputData.XTrain, _deOptions.PopulationSize);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var prevStepData = new OptimizationStepData<T, TInput, TOutput>();
         var currentStepData = new OptimizationStepData<T, TInput, TOutput>();
 
@@ -159,9 +175,9 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// <summary>
     /// Initializes the population for the Differential Evolution algorithm.
     /// </summary>
-    /// <param name="dimensions">The number of dimensions in the problem space.</param>
+    /// <param name="input">The input training data used to determine problem dimensions.</param>
     /// <param name="populationSize">The size of the population to initialize.</param>
-    /// <returns>A list of randomly initialized symbolic models.</returns>
+    /// <returns>A list of randomly initialized models.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method creates the initial set of candidate solutions.
     /// Each solution is a random guess at what might be a good answer to the optimization problem.
@@ -170,7 +186,12 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     private List<IFullModel<T, TInput, TOutput>> InitializePopulation(TInput input, int populationSize)
     {
         var population = new List<IFullModel<T, TInput, TOutput>>();
-        for (int i = 0; i < populationSize; i++)
+
+        // Always include the base model as the first member of the population
+        population.Add(Model.DeepCopy());
+
+        // Create the rest of the population with random variations
+        for (int i = 1; i < populationSize; i++)
         {
             population.Add(InitializeRandomSolution(input));
         }
@@ -298,6 +319,10 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
         string optionsJson = JsonConvert.SerializeObject(_deOptions);
         writer.Write(optionsJson);
 
+        // Serialize current adaptive parameters
+        writer.Write(Convert.ToDouble(_currentCrossoverRate));
+        writer.Write(Convert.ToDouble(_currentMutationRate));
+
         return ms.ToArray();
     }
 
@@ -334,6 +359,8 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
         _deOptions = JsonConvert.DeserializeObject<DifferentialEvolutionOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
-        InitializeAdaptiveParameters();
+        // Deserialize current adaptive parameters
+        _currentCrossoverRate = NumOps.FromDouble(reader.ReadDouble());
+        _currentMutationRate = NumOps.FromDouble(reader.ReadDouble());
     }
 }

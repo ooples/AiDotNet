@@ -3,25 +3,46 @@ global using AiDotNet.GaussianProcesses;
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Represents a Bayesian Optimizer for optimization problems.
+/// Implements a Bayesian Optimization algorithm for efficiently optimizing expensive-to-evaluate functions.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// Bayesian Optimization is a powerful technique for optimizing black-box functions that are expensive to evaluate.
-/// It uses a probabilistic model to make predictions about the function's behavior and decides where to sample next.
+/// Bayesian Optimization is a sequential design strategy for global optimization of black-box functions that
+/// doesn't require derivatives. It's particularly useful when the objective function is expensive to evaluate,
+/// either computationally or financially.
 /// </para>
-/// <para><b>For Beginners:</b> Think of this optimizer as a smart guessing game. It tries to find the best solution
-/// by making educated guesses based on what it has learned from previous attempts. It's particularly useful when
-/// each guess is time-consuming or expensive to evaluate.
+/// <para><b>For Beginners:</b>
+/// Bayesian Optimization is like a smart strategy for finding the highest point of a mountain range in fog:
+/// 
+/// 1. Instead of blindly climbing everywhere, you:
+///    - Take a few initial measurements at different locations
+///    - Build a map (model) predicting what the entire mountain range looks like
+///    - Use that map to decide where to take your next measurement
+///    
+/// 2. After each new measurement:
+///    - Update your map to be more accurate
+///    - Choose a new spot that either:
+///      * Looks promising (high peak on your map)
+///      * Is very uncertain (where your map might be wrong)
+/// 
+/// 3. By balancing exploration (checking uncertain areas) and exploitation (checking promising areas),
+///    you can find the highest peak with surprisingly few measurements.
+/// 
+/// This makes Bayesian Optimization perfect for scenarios where each evaluation is:
+/// - Expensive (takes hours to run)
+/// - Time-consuming (requires physical experiments)
+/// - Limited (you only get a few tries)
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The type of input data for the model.</typeparam>
+/// <typeparam name="TOutput">The type of output data for the model.</typeparam>
 public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options for configuring the Bayesian Optimization algorithm.
     /// </summary>
-    private BayesianOptimizerOptions<T, TInput, TOutput> _options;
+    private BayesianOptimizerOptions<T, TInput, TOutput> _bayesianOptions;
 
     /// <summary>
     /// A matrix storing the points that have been sampled during the optimization process.
@@ -41,23 +62,26 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     /// <summary>
     /// Initializes a new instance of the BayesianOptimizer class.
     /// </summary>
+    /// <param name="model">The machine learning model to optimize.</param>
     /// <param name="options">The options for configuring the Bayesian Optimization algorithm.</param>
-    /// <param name="gaussianProcess"> The Gaussian Process model to use for approximating the objective function.</param>
+    /// <param name="gaussianProcess">The Gaussian Process model to use for approximating the objective function.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the Bayesian Optimizer with its initial configuration.
-    /// You can customize various aspects of how it works, or use default settings. The Gaussian Process
-    /// is a key component that helps the optimizer make predictions about unknown points.
+    /// You provide the model you want to optimize, and you can customize various aspects of how it works,
+    /// or use default settings. The Gaussian Process is a key component that helps the optimizer make
+    /// predictions about unknown points.
     /// </para>
     /// </remarks>
     public BayesianOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         BayesianOptimizerOptions<T, TInput, TOutput>? options = null,
         IGaussianProcess<T>? gaussianProcess = null)
-        : base(options ?? new())
+        : base(model, options ?? new BayesianOptimizerOptions<T, TInput, TOutput>())
     {
-        _options = options ?? new BayesianOptimizerOptions<T, TInput, TOutput>();
+        _bayesianOptions = options ?? new BayesianOptimizerOptions<T, TInput, TOutput>();
         _sampledPoints = Matrix<T>.Empty();
         _sampledValues = Vector<T>.Empty();
-        _gaussianProcess = gaussianProcess ?? new StandardGaussianProcess<T>(_options.KernelFunction);
+        _gaussianProcess = gaussianProcess ?? new StandardGaussianProcess<T>(_bayesianOptions.KernelFunction);
 
         InitializeAdaptiveParameters();
     }
@@ -93,19 +117,27 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
         var inputSize = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
 
         InitializeAdaptiveParameters();
 
         // Initial random sampling
-        _sampledPoints = new Matrix<T>(_options.InitialSamples, inputSize);
-        _sampledValues = new Vector<T>(_options.InitialSamples);
+        _sampledPoints = new Matrix<T>(_bayesianOptions.InitialSamples, inputSize);
+        _sampledValues = new Vector<T>(_bayesianOptions.InitialSamples);
 
-        for (int i = 0; i < _options.InitialSamples; i++)
+        for (int i = 0; i < _bayesianOptions.InitialSamples; i++)
         {
-            var randomSolution = InitializeRandomSolution(inputData.XTrain);
+            // Create a deep copy of the model and randomize its parameters
+            var randomSolution = Model.DeepCopy();
+            var randomParams = GenerateRandomPoint(inputSize);
+            randomSolution = randomSolution.WithParameters(randomParams);
+
             var stepData = EvaluateSolution(randomSolution, inputData);
             UpdateBestSolution(stepData, ref bestStepData);
             var parameters = randomSolution.GetParameters();
@@ -119,15 +151,14 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
             _sampledValues[i] = stepData.FitnessScore;
         }
 
-        for (int iteration = _options.InitialSamples; iteration < _options.MaxIterations; iteration++)
+        for (int iteration = _bayesianOptions.InitialSamples; iteration < Options.MaxIterations; iteration++)
         {
             // Fit Gaussian Process to observed data
             _gaussianProcess.Fit(_sampledPoints, _sampledValues);
 
             // Find next point to sample using acquisition function
             var nextPoint = OptimizeAcquisitionFunction(inputSize);
-            var baseSolution = InitializeRandomSolution(inputData.XTrain);
-            var currentSolution = baseSolution.WithParameters(nextPoint);
+            var currentSolution = Model.DeepCopy().WithParameters(nextPoint);
 
             var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
@@ -186,7 +217,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         Vector<T> bestPoint = Vector<T>.Empty();
         T bestValue = NumOps.MinValue;
 
-        for (int i = 0; i < _options.AcquisitionOptimizationSamples; i++)
+        for (int i = 0; i < _bayesianOptions.AcquisitionOptimizationSamples; i++)
         {
             var candidatePoint = GenerateRandomPoint(dimensions);
             var acquisitionValue = CalculateAcquisitionFunction(candidatePoint);
@@ -216,7 +247,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         var point = new T[dimensions];
         for (int i = 0; i < dimensions; i++)
         {
-            point[i] = NumOps.FromDouble(Random.NextDouble() * (_options.UpperBound - _options.LowerBound) + _options.LowerBound);
+            point[i] = NumOps.FromDouble(Random.NextDouble() * (_bayesianOptions.UpperBound - _bayesianOptions.LowerBound) + _bayesianOptions.LowerBound);
         }
 
         return new Vector<T>(point);
@@ -238,10 +269,10 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         var (mean, variance) = _gaussianProcess.Predict(point);
         var stdDev = NumOps.Sqrt(variance);
 
-        switch (_options.AcquisitionFunction)
+        switch (_bayesianOptions.AcquisitionFunction)
         {
             case AcquisitionFunctionType.UpperConfidenceBound:
-                return NumOps.Add(mean, NumOps.Multiply(NumOps.FromDouble(_options.ExplorationFactor), stdDev));
+                return NumOps.Add(mean, NumOps.Multiply(NumOps.FromDouble(_bayesianOptions.ExplorationFactor), stdDev));
             case AcquisitionFunctionType.ExpectedImprovement:
                 var maxObservedValue = _sampledValues.Max();
                 var improvement = NumOps.Subtract(mean, maxObservedValue);
@@ -251,6 +282,27 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
             default:
                 throw new NotImplementedException("Unsupported acquisition function.");
         }
+    }
+
+    /// <summary>
+    /// Updates the adaptive parameters based on the current and previous optimization steps.
+    /// </summary>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts how the algorithm behaves based on whether it's improving
+    /// or not. It can change various parameters to help find better solutions more efficiently.
+    /// </para>
+    /// </remarks>
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
+    {
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
+        base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Additional Bayesian-specific parameter updates could be added here if needed
     }
 
     /// <summary>
@@ -267,8 +319,8 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     {
         if (options is BayesianOptimizerOptions<T, TInput, TOutput> bayesianOptions)
         {
-            _options = bayesianOptions;
-            _gaussianProcess.UpdateKernel(_options.KernelFunction);
+            _bayesianOptions = bayesianOptions;
+            _gaussianProcess.UpdateKernel(_bayesianOptions.KernelFunction);
         }
         else
         {
@@ -285,7 +337,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     /// </remarks>
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
-        return _options;
+        return _bayesianOptions;
     }
 
     /// <summary>
@@ -306,7 +358,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
             writer.Write(baseData.Length);
             writer.Write(baseData);
 
-            string optionsJson = JsonConvert.SerializeObject(_options);
+            string optionsJson = JsonConvert.SerializeObject(_bayesianOptions);
             writer.Write(optionsJson);
 
             // Serialize _sampledPoints
@@ -335,6 +387,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     /// Restores the state of the optimizer from a byte array.
     /// </summary>
     /// <param name="data">The byte array containing the serialized state of the optimizer.</param>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method takes a saved state of the Bayesian Optimizer (in the form of a byte array)
     /// and uses it to restore the optimizer to that state. It's like loading a saved game, bringing back all the
@@ -351,7 +404,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<BayesianOptimizerOptions<T, TInput, TOutput>>(optionsJson)
+            _bayesianOptions = JsonConvert.DeserializeObject<BayesianOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             // Deserialize _sampledPoints
@@ -374,7 +427,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
                 _sampledValues[i] = NumOps.FromDouble(reader.ReadDouble());
             }
 
-            _gaussianProcess = new StandardGaussianProcess<T>(_options.KernelFunction);
+            _gaussianProcess = new StandardGaussianProcess<T>(_bayesianOptions.KernelFunction);
         }
     }
 }

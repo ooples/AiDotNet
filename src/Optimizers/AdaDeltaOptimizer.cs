@@ -82,28 +82,28 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     private Vector<T>? _accumulatedSquaredUpdates;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="AdaDeltaOptimizer{T}"/> class.
+    /// Initializes a new instance of the <see cref="AdaDeltaOptimizer{T, TInput, TOutput}"/> class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the AdaDelta optimizer.</param>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the AdaDelta optimizer with the specified options and components.
+    /// This constructor sets up the AdaDelta optimizer with the specified model and options.
     /// If no options are provided, default AdaDelta options are used.
     /// </para>
     /// <para><b>For Beginners:</b> This is like setting up your learning assistant (the optimizer) with specific instructions.
     /// 
-    /// You can customize how it works by providing different options and tools:
+    /// You provide:
+    /// - model: The specific model you want to improve (like a recipe you want to perfect)
     /// - options: Special settings for AdaDelta (like how much it remembers from past steps)
-    /// - predictionOptions and modelOptions: Rules for measuring how well the model is doing
-    /// - modelEvaluator, fitDetector, fitnessCalculator: Different ways to check the model's performance
-    /// - modelCache and gradientCache: Places to store information to speed up learning
     /// 
-    /// If you don't provide these, the optimizer will use default settings.
+    /// If you don't provide options, the optimizer will use default settings.
     /// </para>
     /// </remarks>
     public AdaDeltaOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         AdaDeltaOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new AdaDeltaOptimizerOptions<T, TInput, TOutput>();
 
@@ -143,11 +143,12 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <para><b>For Beginners:</b> This is the main learning process of the optimizer.
     /// 
     /// Here's what happens:
-    /// 1. It starts with a random guess for the best solution
+    /// 1. It starts with the provided model
     /// 2. In each step (iteration):
-    ///    - It calculates how to improve the current solution
-    ///    - It updates the solution using the AdaDelta method
-    ///    - It checks if the new solution is better than the previous best
+    ///    - It creates a potential solution based on the optimization mode (feature selection, parameter adjustment, or both)
+    ///    - It evaluates the solution to see how good it is
+    ///    - It keeps track of the best solution found so far
+    ///    - It adjusts its approach based on how well it's doing
     ///    - It decides whether to stop early if the solution is good enough
     /// 3. It repeats this process until it reaches the maximum number of steps or finds a good enough solution
     /// 
@@ -158,9 +159,13 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var currentSolution = Model.DeepCopy();
         var parameters = currentSolution.GetParameters();
 
         _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
@@ -169,25 +174,22 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
-
+            var newSolution = CreateSolution(inputData.XTrain);
             var currentStepData = EvaluateSolution(newSolution, inputData);
-            UpdateBestSolution(currentStepData, ref bestStepData);
 
+            UpdateBestSolution(currentStepData, ref bestStepData);
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
             if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 
@@ -195,7 +197,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     }
 
     /// <summary>
-    /// Updates the current solution using the AdaDelta update rule.
+    /// Updates the solution using the AdaDelta update rule.
     /// </summary>
     /// <param name="currentSolution">The current solution (model parameters).</param>
     /// <param name="gradient">The computed gradient for the current solution.</param>
@@ -248,7 +250,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         return currentSolution.WithParameters(newCoefficients);
     }
 
-        /// <summary>
+    /// <summary>
     /// Updates the adaptive parameters of the AdaDelta optimizer.
     /// </summary>
     /// <param name="currentStepData">The optimization step data for the current iteration.</param>
@@ -256,33 +258,192 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <remarks>
     /// <para>
     /// This method updates the adaptive parameters of the AdaDelta optimizer, specifically the rho value
-    /// if adaptive rho is enabled in the options.
+    /// if adaptive rho is enabled in the options. It also handles updating feature selection parameters
+    /// and parameter adjustment settings based on the optimization mode.
     /// </para>
     /// <para><b>For Beginners:</b> This method adjusts how the optimizer learns over time.
     /// 
-    /// If adaptive rho is turned on:
-    /// - If the current solution is better than the previous one, it slightly increases rho
-    /// - If the current solution is worse, it slightly decreases rho
+    /// It looks at how well the current solution is doing compared to the previous one:
+    /// - If things are improving, it might make smaller, more careful adjustments
+    /// - If things are not improving, it might try more dramatic changes
     /// 
-    /// Rho controls how much the optimizer remembers from past steps. Adjusting it helps the optimizer
-    /// adapt to the current state of learning, potentially making it more efficient.
+    /// This adaptive approach helps the optimizer be more efficient in finding the best solution.
     /// </para>
     /// </remarks>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Call the base implementation to update common parameters
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
+        bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+
+        // Adaptive feature selection parameters
+        if ((_options.OptimizationMode == OptimizationMode.FeatureSelectionOnly ||
+             _options.OptimizationMode == OptimizationMode.Both))
+        {
+            UpdateFeatureSelectionParameters(isImproving);
+        }
+
+        // Adaptive parameter adjustment settings
+        if ((_options.OptimizationMode == OptimizationMode.ParametersOnly ||
+             _options.OptimizationMode == OptimizationMode.Both))
+        {
+            UpdateParameterAdjustmentSettings(isImproving);
+        }
+
+        // AdaDelta specific adaptive parameters
         if (_options.UseAdaptiveRho)
         {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
-            {
-                _options.Rho = Math.Min(_options.Rho * _options.RhoIncreaseFactor, _options.MaxRho);
-            }
-            else
-            {
-                _options.Rho = Math.Max(_options.Rho * _options.RhoDecreaseFactor, _options.MinRho);
-            }
+            UpdateRhoParameter(isImproving);
         }
+    }
+
+    /// <summary>
+    /// Updates the rho parameter based on whether the solution is improving.
+    /// </summary>
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the rho parameter (decay rate) based on performance improvements.
+    /// A higher rho means more weight on past gradients, while a lower rho emphasizes recent gradients more.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts how much the optimizer "remembers" from past steps.
+    /// 
+    /// If the solution is improving:
+    /// - It increases rho, making the optimizer rely more on its past experience
+    /// - This helps stabilize learning when things are going well
+    /// 
+    /// If the solution is not improving:
+    /// - It decreases rho, making the optimizer focus more on recent information
+    /// - This helps adapt more quickly when the current approach isn't working
+    /// </para>
+    /// </remarks>
+    private void UpdateRhoParameter(bool isImproving)
+    {
+        if (isImproving)
+        {
+            _options.Rho = Math.Min(_options.Rho * _options.RhoIncreaseFactor, _options.MaxRho);
+        }
+        else
+        {
+            _options.Rho = Math.Max(_options.Rho * _options.RhoDecreaseFactor, _options.MinRho);
+        }
+    }
+
+    /// <summary>
+    /// Updates the feature selection parameters based on whether the solution is improving.
+    /// </summary>
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the feature selection parameters, such as the minimum and maximum
+    /// number of features to select and the probability of performing feature selection.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts how the optimizer selects ingredients for the recipe.
+    /// 
+    /// If the solution is improving:
+    /// - It might expand the range of ingredients it considers
+    /// - It might be more likely to try changing ingredients in future steps
+    /// 
+    /// If the solution is not improving:
+    /// - It might narrow its focus to a smaller set of ingredients
+    /// - It might be less aggressive about changing ingredients
+    /// </para>
+    /// </remarks>
+    private void UpdateFeatureSelectionParameters(bool isImproving)
+    {
+        if (isImproving)
+        {
+            // If improving, gradually expand the range of features to consider
+            _options.MinimumFeatures = Math.Max(1, _options.MinimumFeatures - 1);
+            _options.MaximumFeatures = Math.Min(_options.MaximumFeatures + 1, _options.AbsoluteMaximumFeatures);
+
+            // Slightly increase the probability of feature selection for future iterations
+            _options.FeatureSelectionProbability *= 1.02;
+        }
+        else
+        {
+            // If not improving, narrow the range to focus the search
+            _options.MinimumFeatures = Math.Min(_options.MinimumFeatures + 1, _options.AbsoluteMaximumFeatures - 1);
+            _options.MaximumFeatures = Math.Max(_options.MaximumFeatures - 1, _options.MinimumFeatures + 1);
+
+            // Slightly decrease the probability of feature selection for future iterations
+            _options.FeatureSelectionProbability *= 0.98;
+        }
+
+        // Ensure probabilities stay within bounds
+        _options.FeatureSelectionProbability = MathHelper.Clamp(
+            _options.FeatureSelectionProbability,
+            _options.MinFeatureSelectionProbability,
+            _options.MaxFeatureSelectionProbability);
+    }
+
+    /// <summary>
+    /// Updates the parameter adjustment settings based on whether the solution is improving.
+    /// </summary>
+    /// <param name="isImproving">Indicates whether the solution is improving.</param>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the parameter adjustment settings, such as the adjustment scale,
+    /// sign flip probability, and parameter adjustment probability.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts how the optimizer changes the amounts of ingredients.
+    /// 
+    /// If the solution is improving:
+    /// - It might make smaller, more precise adjustments
+    /// - It might be less likely to make dramatic changes (like flipping signs)
+    /// - It might be more likely to adjust parameters in future steps
+    /// 
+    /// If the solution is not improving:
+    /// - It might make larger adjustments to explore more options
+    /// - It might be more willing to try dramatic changes
+    /// - It might adjust its strategy to try something different
+    /// </para>
+    /// </remarks>
+    private void UpdateParameterAdjustmentSettings(bool isImproving)
+    {
+        if (isImproving)
+        {
+            // If improving, make smaller adjustments to fine-tune
+            _options.ParameterAdjustmentScale *= 0.95;
+
+            // Decrease the probability of sign flips when things are going well
+            _options.SignFlipProbability *= 0.9;
+
+            // Increase the probability of parameter adjustments
+            _options.ParameterAdjustmentProbability *= 1.02;
+        }
+        else
+        {
+            // If not improving, make larger adjustments to explore more
+            _options.ParameterAdjustmentScale *= 1.05;
+
+            // Increase the probability of sign flips to try more dramatic changes
+            _options.SignFlipProbability *= 1.1;
+
+            // Slightly decrease the probability of parameter adjustments
+            _options.ParameterAdjustmentProbability *= 0.98;
+        }
+
+        // Ensure values stay within bounds
+        _options.ParameterAdjustmentScale = MathHelper.Clamp(
+            _options.ParameterAdjustmentScale,
+            _options.MinParameterAdjustmentScale,
+            _options.MaxParameterAdjustmentScale);
+
+        _options.SignFlipProbability = MathHelper.Clamp(
+            _options.SignFlipProbability,
+            _options.MinSignFlipProbability,
+            _options.MaxSignFlipProbability);
+
+        _options.ParameterAdjustmentProbability = MathHelper.Clamp(
+            _options.ParameterAdjustmentProbability,
+            _options.MinParameterAdjustmentProbability,
+            _options.MaxParameterAdjustmentProbability);
     }
 
     /// <summary>
@@ -362,6 +523,9 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             writer.Write(baseData.Length);
             writer.Write(baseData);
 
+            // Serialize optimization mode
+            writer.Write((int)_options.OptimizationMode);
+
             string optionsJson = JsonConvert.SerializeObject(_options);
             writer.Write(optionsJson);
 
@@ -397,6 +561,9 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             byte[] baseData = reader.ReadBytes(baseDataLength);
             base.Deserialize(baseData);
 
+            // Deserialize optimization mode
+            _options.OptimizationMode = (OptimizationMode)reader.ReadInt32();
+
             string optionsJson = reader.ReadString();
             _options = JsonConvert.DeserializeObject<AdaDeltaOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
@@ -428,6 +595,6 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
-        return $"{baseKey}_AdaDelta_{_options.Rho}_{_options.Epsilon}";
+        return $"{baseKey}_AdaDelta_{_options.Rho}_{_options.Epsilon}_{_options.OptimizationMode}";
     }
 }

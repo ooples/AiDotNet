@@ -1,27 +1,31 @@
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Levenberg-Marquardt optimization algorithm for non-linear least squares problems.
+/// Implements the Levenberg-Marquardt optimization algorithm, which combines gradient descent and Gauss-Newton methods.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
 /// <remarks>
 /// <para>
-/// The Levenberg-Marquardt algorithm is a popular method for solving non-linear least squares problems. It combines 
-/// the Gauss-Newton algorithm and the method of gradient descent, providing a robust solution that works well in 
-/// many situations.
+/// The Levenberg-Marquardt algorithm is a powerful optimization technique that interpolates between the Gauss-Newton
+/// method and gradient descent. It's particularly effective for non-linear least squares problems.
 /// </para>
 /// <para><b>For Beginners:</b>
-/// This optimizer is like a smart problem-solver that's really good at fitting curves to data points. It's especially 
-/// useful when the relationship between your inputs and outputs isn't a straight line. It works by making small 
-/// adjustments to its guess, getting closer to the best solution with each step.
+/// Think of this optimizer as a smart navigator that can switch between two different strategies:
+/// - When far from the solution, it acts like a cautious hiker, taking small steps in the steepest downhill direction (gradient descent)
+/// - When close to the solution, it acts like a math wizard, using knowledge about the shape of the terrain to take more direct steps (Gauss-Newton)
+/// 
+/// The algorithm automatically balances between these approaches using a "damping factor" that it adjusts as it goes.
+/// This makes it very effective for many types of problems, especially when fitting models to data.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Levenberg-Marquardt algorithm.
     /// </summary>
-    private LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> _options;
+    private LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> _lmOptions;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -38,21 +42,22 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the optimizer with the provided options and dependencies. If no options are provided, 
+    /// This constructor sets up the optimizer with the provided model and options. If no options are provided, 
     /// it uses default settings.
     /// </para>
     /// <para><b>For Beginners:</b>
-    /// This is where we set up our smart problem-solver. We can give it special instructions (options) on how to work, 
-    /// or let it use its default settings. We also give it tools (like modelEvaluator and fitDetector) that it needs 
-    /// to do its job well.
+    /// This is where we set up our smart problem-solver. We give it the model it needs to optimize and can also
+    /// provide special instructions (options) on how to work, or let it use its default settings.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">Custom options for the Levenberg-Marquardt algorithm.</param>
     public LevenbergMarquardtOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
-        _options = options ?? new LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>();
+        _lmOptions = options ?? new LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>();
         _dampingFactor = NumOps.Zero;
 
         InitializeAdaptiveParameters();
@@ -76,7 +81,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        _dampingFactor = NumOps.FromDouble(_options.InitialDampingFactor);
+        _dampingFactor = NumOps.FromDouble(_lmOptions.InitialDampingFactor);
         _iteration = 0;
     }
 
@@ -102,35 +107,43 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        InitializeAdaptiveParameters();
-
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             _iteration++;
+
+            // Create solution using base class method that handles feature selection and parameter adjustments
+            var currentSolution = CreateSolution(inputData.XTrain);
+
+            // Apply LM-specific optimization
             var jacobian = CalculateJacobian(currentSolution, inputData.XTrain);
             var residuals = CalculateResiduals(currentSolution, inputData.XTrain, inputData.YTrain);
             var newSolution = UpdateSolution(currentSolution, jacobian, residuals);
 
             var currentStepData = EvaluateSolution(newSolution, inputData);
+
             UpdateBestSolution(currentStepData, ref bestStepData);
 
+            // Update adaptive parameters
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
+                                NumOps.FromDouble(_lmOptions.Tolerance)))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                break;
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 
@@ -157,19 +170,19 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     {
         // Get batch size (number of examples)
         int m = InputHelper<T, TInput>.GetBatchSize(X);
-    
+
         // Get number of parameters
         int n = model.GetParameters().Length;
-    
+
         // Create the Jacobian matrix
         var jacobian = new Matrix<T>(m, n);
-    
+
         // For each example and each parameter, calculate the partial derivative
         for (int i = 0; i < m; i++)
         {
             // Get the i-th example from the input batch
             var exampleX = InputHelper<T, TInput>.GetItem(X, i);
-        
+
             for (int j = 0; j < n; j++)
             {
                 // Calculate the partial derivative of the model output with respect to parameter j
@@ -177,7 +190,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
                 jacobian[i, j] = CalculatePartialDerivative(model, exampleX, j);
             }
         }
-    
+
         return jacobian;
     }
 
@@ -224,7 +237,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
         model.WithParameters(parameters);
 
         // Calculate the central difference approximation of the derivative
-        return NumOps.Divide(NumOps.Subtract(yPlus, yMinus), NumOps.FromDouble(2 * 1e-8));
+        return NumOps.Divide(NumOps.Subtract(yPlus, yMinus), NumOps.Multiply(epsilon, NumOps.FromDouble(2.0)));
     }
 
     /// <summary>
@@ -246,8 +259,10 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <returns>A vector of residuals.</returns>
     private Vector<T> CalculateResiduals(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
-        var predictions = ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(X));
-        return ConversionsHelper.ConvertToVector<T, TOutput>(y).Subtract(predictions);
+        var predictions = model.Predict(X);
+        var predVector = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
+        var actualVector = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+        return actualVector.Subtract(predVector);
     }
 
     /// <summary>
@@ -267,7 +282,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <param name="currentSolution">The current model solution.</param>
     /// <param name="jacobian">The Jacobian matrix of the current solution.</param>
     /// <param name="residuals">The residuals (errors) of the current solution.</param>
-    /// <returns>An updated symbolic model with improved coefficients.</returns>
+    /// <returns>An updated model with improved parameters.</returns>
     private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Matrix<T> jacobian, Vector<T> residuals)
     {
         var jTj = jacobian.Transpose().Multiply(jacobian);
@@ -277,8 +292,9 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
         var lhs = jTj.Add(diagonal.Multiply(_dampingFactor));
         var delta = SolveLinearSystem(lhs, jTr);
 
-        var newCoefficients = currentSolution.GetParameters().Add(delta);
-        return currentSolution.WithParameters(newCoefficients);
+        var currentParams = currentSolution.GetParameters();
+        var newParams = currentParams.Add(delta);
+        return currentSolution.WithParameters(newParams);
     }
 
     /// <summary>
@@ -302,10 +318,10 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <returns>The solution vector of the linear system.</returns>
     private Vector<T> SolveLinearSystem(Matrix<T> lhs, Vector<T> jTr)
     {
-        if (_options.CustomDecomposition != null)
+        if (_lmOptions.CustomDecomposition != null)
         {
             // Use the custom decomposition if provided
-            return _options.CustomDecomposition.Solve(jTr);
+            return _lmOptions.CustomDecomposition.Solve(jTr);
         }
         else
         {
@@ -340,22 +356,29 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <param name="previousStepData">Data from the previous optimization step.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Call the base implementation to update common parameters
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-        if (_options.UseAdaptiveDampingFactor)
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
+        if (_lmOptions.UseAdaptiveDampingFactor)
         {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+
+            if (isImproving)
             {
-                _dampingFactor = NumOps.Multiply(_dampingFactor, NumOps.FromDouble(_options.DampingFactorDecreaseFactor));
+                _dampingFactor = NumOps.Multiply(_dampingFactor, NumOps.FromDouble(_lmOptions.DampingFactorDecreaseFactor));
             }
             else
             {
-                _dampingFactor = NumOps.Multiply(_dampingFactor, NumOps.FromDouble(_options.DampingFactorIncreaseFactor));
+                _dampingFactor = NumOps.Multiply(_dampingFactor, NumOps.FromDouble(_lmOptions.DampingFactorIncreaseFactor));
             }
 
-            _dampingFactor = MathHelper.Clamp(_dampingFactor, 
-                NumOps.FromDouble(_options.MinDampingFactor), 
-                NumOps.FromDouble(_options.MaxDampingFactor));
+            _dampingFactor = MathHelper.Clamp(_dampingFactor,
+                NumOps.FromDouble(_lmOptions.MinDampingFactor),
+                NumOps.FromDouble(_lmOptions.MaxDampingFactor));
         }
     }
 
@@ -379,7 +402,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     {
         if (options is LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> lmOptions)
         {
-            _options = lmOptions;
+            _lmOptions = lmOptions;
         }
         else
         {
@@ -402,7 +425,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <returns>The current options of the Levenberg-Marquardt optimizer.</returns>
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
-        return _options;
+        return _lmOptions;
     }
 
     /// <summary>
@@ -429,7 +452,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
             writer.Write(baseData.Length);
             writer.Write(baseData);
 
-            string optionsJson = JsonConvert.SerializeObject(_options);
+            string optionsJson = JsonConvert.SerializeObject(_lmOptions);
             writer.Write(optionsJson);
 
             writer.Write(_iteration);
@@ -465,7 +488,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
             base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>>(optionsJson)
+            _lmOptions = JsonConvert.DeserializeObject<LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();

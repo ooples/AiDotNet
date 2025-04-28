@@ -18,8 +18,21 @@
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
-    private IFullModel<T, TInput, TOutput> _model;
-
+    /// <summary>
+    /// The specific configuration options for the normal optimization algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the detailed settings that control how the normal optimizer behaves,
+    /// including parameters like adjustment scales, probabilities for different operations,
+    /// and bounds for adaptive parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// These are the specific rules the chef follows when experimenting with the recipe.
+    /// They control things like how much the chef can change ingredient amounts, how often to try
+    /// removing ingredients, and how the chef should adjust their approach based on previous results.
+    /// </para>
+    /// </remarks>
     private NormalOptimizerOptions<T, TInput, TOutput> _normalOptions;
 
     /// <summary>
@@ -38,9 +51,8 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <param name="optimizationMode">The aspects of the model to optimize (features, parameters, or both).</param>
     public NormalOptimizer(IFullModel<T, TInput, TOutput> model,
         NormalOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
-        _model = model;
         _normalOptions = options ?? new();
 
         InitializeAdaptiveParameters();
@@ -72,8 +84,8 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
 
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
-            Solution = _model.DeepCopy(),
-            FitnessScore = _fitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
         };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
@@ -96,110 +108,6 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
-    }
-
-    /// <summary>
-    /// Creates a potential solution based on the optimization mode.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new model variant by either selecting features, adjusting parameters,
-    /// or both, depending on the optimization mode.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like creating a new version of the recipe. Depending on what you're focusing on,
-    /// you might change which ingredients you use, how much of each ingredient you add,
-    /// or both aspects at once.
-    /// </para>
-    /// </remarks>
-    /// <param name="xTrain">Training data used to determine data dimensions.</param>
-    /// <returns>A new potential solution (model variant).</returns>
-    private IFullModel<T, TInput, TOutput> CreateSolution(TInput xTrain)
-    {
-        // Create a deep copy of the model to avoid modifying the original
-        var solution = _model.DeepCopy();
-
-        int numFeatures = GetFeatureCount(xTrain);
-
-        switch (Options.OptimizationMode)
-        {
-            case OptimizationMode.FeatureSelectionOnly:
-                ApplyFeatureSelection(solution, numFeatures);
-                break;
-
-            case OptimizationMode.ParametersOnly:
-                AdjustModelParameters(
-                    solution,
-                    _normalOptions.ParameterAdjustmentScale,
-                    _normalOptions.SignFlipProbability);
-                break;
-
-            case OptimizationMode.Both:
-            default:
-                // With some probability, apply both or just one type of optimization
-                if (Random.NextDouble() < _normalOptions.FeatureSelectionProbability)
-                {
-                    ApplyFeatureSelection(solution, numFeatures);
-                }
-
-                if (Random.NextDouble() < _normalOptions.ParameterAdjustmentProbability)
-                {
-                    AdjustModelParameters(
-                        solution,
-                        _normalOptions.ParameterAdjustmentScale,
-                        _normalOptions.SignFlipProbability);
-                }
-                break;
-        }
-
-        return solution;
-    }
-
-    /// <summary>
-    /// Gets the number of features in the training data.
-    /// </summary>
-    /// <param name="xTrain">The training data.</param>
-    /// <returns>The number of features in the data.</returns>
-    private int GetFeatureCount(TInput xTrain)
-    {
-        // Implementation depends on the specific data type TInput
-        // For Matrix<T>, you would return the number of columns
-        // For demonstration purposes:
-        if (xTrain is Matrix<T> matrix)
-        {
-            return matrix.Columns;
-        }
-
-        // Default fallback
-        return 10;
-    }
-
-    /// <summary>
-    /// Applies feature selection to a model.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method selects a subset of features to be used by the model, potentially
-    /// improving its performance by focusing on the most relevant data dimensions.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like deciding which ingredients to include in your recipe. Some ingredients
-    /// might not be necessary or might even make the dish worse, so you're experimenting
-    /// with different combinations to find which ones are truly important.
-    /// </para>
-    /// </remarks>
-    /// <param name="model">The model to apply feature selection to.</param>
-    /// <param name="totalFeatures">The total number of available features.</param>
-    private void ApplyFeatureSelection(IFullModel<T, TInput, TOutput> model, int totalFeatures)
-    {
-        // Randomly select features
-        var selectedFeatures = RandomlySelectFeatures(
-            totalFeatures,
-            _normalOptions.MinimumFeatures,
-            _normalOptions.MaximumFeatures);
-
-        // Apply the selected features to the model using the base class method
-        base.ApplyFeatureSelection(model, selectedFeatures);
     }
 
     /// <summary>
@@ -227,7 +135,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         if (previousStepData.Solution == null)
             return;
 
-        bool isImproving = _fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+        bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
 
         // Adaptive feature selection parameters
         if ((Options.OptimizationMode == OptimizationMode.FeatureSelectionOnly ||

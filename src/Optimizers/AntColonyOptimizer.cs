@@ -1,21 +1,31 @@
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Ant Colony Optimization algorithm for solving optimization problems.
+/// Implements an Ant Colony Optimization algorithm for finding optimal solutions in machine learning models.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-/// <typeparam name="TInput">The type of input data structure.</typeparam>
-/// <typeparam name="TOutput">The type of output data structure.</typeparam>
 /// <remarks>
 /// <para>
-/// Ant Colony Optimization is inspired by the behavior of ants in finding paths between their colony and food sources.
-/// It uses virtual "ants" to explore the solution space and find optimal solutions.
+/// Ant Colony Optimization (ACO) is a nature-inspired metaheuristic that mimics the foraging behavior of ants
+/// to find optimal paths through a search space. In this optimizer, virtual "ants" construct solutions
+/// by probabilistically choosing features based on pheromone levels and problem-specific heuristics.
 /// </para>
-/// <para><b>For Beginners:</b> Think of this algorithm as a group of ants searching for the best path to food.
-/// Each ant leaves a trail (pheromone) that other ants can follow. Over time, the best paths get stronger trails,
-/// leading to better solutions.
+/// <para><b>For Beginners:</b>
+/// Ant Colony Optimization is inspired by how real ants find food. When ants discover food, they leave a 
+/// chemical trail (pheromone) that other ants can follow. The more ants follow a path, the stronger the 
+/// trail becomes, leading more ants to that path. This creates a positive feedback loop that helps the 
+/// colony find the shortest path to food.
+/// 
+/// Similarly, this algorithm uses virtual "ants" that:
+/// - Build different solutions to your optimization problem
+/// - Leave "pheromone trails" on the good parts of these solutions
+/// - Use these trails to guide future solutions toward promising areas
+/// 
+/// Over time, the best paths accumulate more pheromone, leading the optimization to converge on high-quality solutions.
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The type of input data for the model.</typeparam>
+/// <typeparam name="TOutput">The type of output data for the model.</typeparam>
 public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
@@ -36,19 +46,23 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     /// <summary>
     /// Initializes a new instance of the AntColonyOptimizer class.
     /// </summary>
+    /// <param name="model">The machine learning model to optimize.</param>
     /// <param name="options">The options for configuring the Ant Colony Optimization algorithm.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the Ant Colony Optimizer with its initial configuration.
-    /// You can customize various aspects of how it works, or use default settings.
+    /// You provide the model you want to optimize, and you can customize various aspects of how it works,
+    /// or use default settings.
     /// </para>
     /// </remarks>
-    public AntColonyOptimizer(AntColonyOptimizationOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+    public AntColonyOptimizer(
+        IFullModel<T, TInput, TOutput> model,
+        AntColonyOptimizationOptions<T, TInput, TOutput>? options = null)
+        : base(model, options ?? new AntColonyOptimizationOptions<T, TInput, TOutput>())
     {
         _antColonyOptions = options ?? new AntColonyOptimizationOptions<T, TInput, TOutput>();
         _currentPheromoneEvaporationRate = NumOps.Zero;
         _currentPheromoneIntensity = NumOps.Zero;
-        
+
         InitializeAdaptiveParameters();
     }
 
@@ -63,6 +77,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
+        base.InitializeAdaptiveParameters();
         _currentPheromoneEvaporationRate = NumOps.FromDouble(_antColonyOptions.InitialPheromoneEvaporationRate);
         _currentPheromoneIntensity = NumOps.FromDouble(_antColonyOptions.InitialPheromoneIntensity);
     }
@@ -79,6 +94,10 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     /// </remarks>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
         UpdatePheromoneEvaporationRate(currentStepData, previousStepData);
@@ -99,7 +118,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     private void UpdatePheromoneEvaporationRate(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         double currentRate = Convert.ToDouble(_currentPheromoneEvaporationRate);
-    
+
         if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             currentRate *= _antColonyOptions.PheromoneEvaporationRateIncrease;
@@ -127,7 +146,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     private void UpdatePheromoneIntensity(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         double currentIntensity = Convert.ToDouble(_currentPheromoneIntensity);
-    
+
         if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             currentIntensity *= _antColonyOptions.PheromoneIntensityIncrease;
@@ -155,9 +174,16 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
+        ValidationHelper<T>.ValidateInputData(inputData);
+
         int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         var pheromones = InitializePheromones(dimensions);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var prevStepData = new OptimizationStepData<T, TInput, TOutput>();
         var currentStepData = new OptimizationStepData<T, TInput, TOutput>();
 
@@ -171,7 +197,6 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
                 solutions.Add(solution);
 
                 currentStepData = EvaluateSolution(solution, inputData);
-                _fitnessList.Add(currentStepData.FitnessScore);
                 UpdateBestSolution(currentStepData, ref bestStepData);
             }
 
@@ -229,11 +254,11 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     private IFullModel<T, TInput, TOutput> ConstructSolution(Matrix<T> pheromones, TInput xTrain)
     {
         var dimensions = InputHelper<T, TInput>.GetInputSize(xTrain);
-        
-        // Create a base model with InitializeRandomSolution
-        var model = InitializeRandomSolution(xTrain);
+
+        // Create a deep copy of the model
+        var model = Model.DeepCopy();
         var parameters = new Vector<T>(dimensions);
-        
+
         var visited = new bool[dimensions];
         int current = Random.Next(dimensions);
         visited[current] = true;
@@ -244,12 +269,12 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
             if (next == -1) break; // No more unvisited features
 
             var coefficient = NumOps.Multiply(
-                _currentPheromoneIntensity, 
+                _currentPheromoneIntensity,
                 InputHelper<T, TInput>.GetElement(xTrain, current, next)
             );
 
             parameters[next] = coefficient;
-            
+
             visited[next] = true;
             current = next;
         }
@@ -334,7 +359,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
             for (int j = 0; j < pheromones.Columns; j++)
             {
                 pheromones[i, j] = NumOps.Multiply(
-                    pheromones[i, j], 
+                    pheromones[i, j],
                     NumOps.Subtract(NumOps.One, _currentPheromoneEvaporationRate)
                 );
             }
@@ -345,8 +370,8 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         {
             var model = solutions[k];
             var parameters = model.GetParameters();
-            var deposit = NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, _fitnessList[k]));
-            
+            var deposit = NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, FitnessList[k]));
+
             for (int i = 0; i < parameters.Length; i++)
             {
                 for (int j = 0; j < parameters.Length; j++)
@@ -354,7 +379,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
                     if (i != j)
                     {
                         pheromones[i, j] = NumOps.Add(
-                            pheromones[i, j], 
+                            pheromones[i, j],
                             NumOps.Multiply(deposit, NumOps.Abs(parameters[i]))
                         );
                     }
@@ -417,7 +442,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         // Serialize AntColonyOptimizerOptions
         string optionsJson = JsonConvert.SerializeObject(_antColonyOptions);
         writer.Write(optionsJson);
-        
+
         // Serialize adaptive parameters
         writer.Write(Convert.ToDouble(_currentPheromoneEvaporationRate));
         writer.Write(Convert.ToDouble(_currentPheromoneIntensity));
@@ -449,7 +474,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         string optionsJson = reader.ReadString();
         _antColonyOptions = JsonConvert.DeserializeObject<AntColonyOptimizationOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-            
+
         // Deserialize adaptive parameters
         _currentPheromoneEvaporationRate = NumOps.FromDouble(reader.ReadDouble());
         _currentPheromoneIntensity = NumOps.FromDouble(reader.ReadDouble());

@@ -218,7 +218,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     public NeuralNetworkARIMAModel(NeuralNetworkARIMAOptions<T>? options = null) : base(options ?? new())
     {
         _nnarimaOptions = options ?? new NeuralNetworkARIMAOptions<T>();
-        _optimizer = _nnarimaOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
+        _optimizer = _nnarimaOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
         _arParameters = Vector<T>.Empty();
         _maParameters = Vector<T>.Empty();
         _residuals = Vector<T>.Empty();

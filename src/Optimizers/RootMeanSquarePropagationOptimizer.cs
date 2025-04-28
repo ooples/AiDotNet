@@ -1,3 +1,5 @@
+namespace AiDotNet.Optimizers;
+
 /// <summary>
 /// Implements the Root Mean Square Propagation (RMSProp) optimization algorithm, an adaptive learning rate method.
 /// </summary>
@@ -91,20 +93,21 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     private RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RootMeanSquarePropagationOptimizer{T}"/> class with the specified options and components.
+    /// Initializes a new instance of the <see cref="RootMeanSquarePropagationOptimizer{T, TInput, TOutput}"/> class with the specified model and options.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The RMSProp optimization options, or null to use default options.</param>
     /// <remarks>
     /// <para>
-    /// This constructor creates a new RMSProp optimizer with the specified options and components.
-    /// If any parameter is null, a default implementation is used. The constructor initializes
+    /// This constructor creates a new RMSProp optimizer with the specified model and options.
+    /// If the options parameter is null, default options are used. The constructor initializes
     /// the iteration counter, squared gradient vector, and options.
     /// </para>
     /// <para><b>For Beginners:</b> This is the starting point for creating a new optimizer.
     /// 
     /// Think of it like preparing for a hiking expedition:
+    /// - You provide the model that needs to be optimized (like the mountain to climb)
     /// - You can provide custom settings (options) or use the default ones
-    /// - You can provide specialized tools (evaluators, calculators) or use the basic ones
     /// - It initializes everything the optimizer needs to start working
     /// - The squared gradient starts empty because there's no history yet
     /// - The step counter starts at zero because no steps have been taken
@@ -113,12 +116,13 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// </para>
     /// </remarks>
     public RootMeanSquarePropagationOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
-        _options = options ?? new();
+        _options = options ?? new RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>();
     }
 
     /// <summary>
@@ -128,7 +132,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// <returns>An optimization result containing the best solution found and associated metrics.</returns>
     /// <remarks>
     /// <para>
-    /// This method implements the main RMSProp algorithm. It starts from a random solution and
+    /// This method implements the main RMSProp algorithm. It starts from the provided model and
     /// iteratively improves it by calculating the gradient, applying momentum, updating the solution
     /// based on the adaptive learning rates, and evaluating the new solution. The process continues
     /// until either the maximum number of iterations is reached, early stopping criteria are met,
@@ -137,7 +141,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// <para><b>For Beginners:</b> This is the main search process where the algorithm looks for the best solution.
     /// 
     /// The process works like this:
-    /// 1. Start at a random position on the "landscape"
+    /// 1. Start with the provided model
     /// 2. Initialize the squared gradient history and step counter
     /// 3. For each iteration:
     ///    - Figure out which direction is most uphill (calculate gradient)
@@ -156,8 +160,12 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = currentSolution,
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         _squaredGradient = new Vector<T>(currentSolution.GetParameters().Length);
@@ -226,11 +234,11 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         {
             var squaredGrad = NumOps.Multiply(gradient[i], gradient[i]);
             _squaredGradient[i] = NumOps.Add(NumOps.Multiply(NumOps.FromDouble(_options.Decay), _squaredGradient[i]), NumOps.Multiply(NumOps.FromDouble(1 - _options.Decay), squaredGrad));
-            
+
             var adaptiveLearningRate = CurrentLearningRate;
             var denominator = NumOps.Add(NumOps.Sqrt(_squaredGradient[i]), NumOps.FromDouble(_options.Epsilon));
             var update = NumOps.Divide(NumOps.Multiply(adaptiveLearningRate, gradient[i]), denominator);
-            
+
             parameters[i] = NumOps.Subtract(parameters[i], update);
         }
 
@@ -268,6 +276,8 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
+        var newParameters = new Vector<T>(parameters.Length);
+
         for (int i = 0; i < gradient.Length; i++)
         {
             var gradientSquared = NumOps.Multiply(gradient[i], gradient[i]);
@@ -281,10 +291,10 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
                 NumOps.Add(NumOps.Sqrt(_squaredGradient[i]), NumOps.FromDouble(_options.Epsilon))
             );
 
-            parameters[i] = NumOps.Subtract(parameters[i], update);
+            newParameters[i] = NumOps.Subtract(parameters[i], update);
         }
 
-        return currentSolution;
+        return currentSolution.WithParameters(newParameters);
     }
 
     /// <summary>
@@ -343,6 +353,40 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         base.Reset();
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
+    }
+
+    /// <summary>
+    /// Updates the optimizer's options with the provided options.
+    /// </summary>
+    /// <param name="options">The options to apply to this optimizer.</param>
+    /// <exception cref="ArgumentException">Thrown when the options are not of the expected type.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method overrides the base implementation to update the RMSProp-specific options.
+    /// It checks that the provided options are of the correct type (RootMeanSquarePropagationOptimizerOptions)
+    /// and throws an exception if they are not.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates the settings that control how the optimizer works.
+    /// 
+    /// It's like changing the game settings:
+    /// - You provide a set of options to use
+    /// - The method checks that these are the right kind of options for an RMSProp optimizer
+    /// - If they are, it applies these new settings
+    /// - If not, it lets you know there's a problem
+    /// 
+    /// This ensures that only appropriate settings are used with this specific optimizer.
+    /// </para>
+    /// </remarks>
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
+        if (options is RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> rmspropOptions)
+        {
+            _options = rmspropOptions;
+        }
+        else
+        {
+            throw new ArgumentException("Invalid options type. Expected RootMeanSquarePropagationOptimizerOptions.");
+        }
     }
 
     /// <summary>

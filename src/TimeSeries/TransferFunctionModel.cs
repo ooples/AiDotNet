@@ -97,7 +97,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     public TransferFunctionModel(TransferFunctionOptions<T, Matrix<T>, Vector<T>>? options = null) : base(options ?? new())
     {
         _tfOptions = options ?? new TransferFunctionOptions<T, Matrix<T>, Vector<T>>();
-        _optimizer = _tfOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
+        _optimizer = _tfOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
         _y = Vector<T>.Empty();
         _arParameters = Vector<T>.Empty();
         _maParameters = Vector<T>.Empty();

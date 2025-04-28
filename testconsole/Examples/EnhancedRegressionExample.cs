@@ -76,22 +76,22 @@ public class EnhancedRegressionExample
             Console.WriteLine("\nTraining multiple regression models...");
 
             // 5. Create a model builder
-            var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
+            var model = new MultipleRegression<double>(new RegressionOptions<double>
+            {
+                UseIntercept = true
+            });
+            var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>(model);
 
             // Linear regression model
             Console.WriteLine("\n1. Training Multiple Linear Regression model...");
             var linearModel = modelBuilder
                 .ConfigureDataPreprocessor(dataPreprocessor)
-                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
+                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(model, new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
                 {
                     LearningRate = 0.01,
                     MaxIterations = 2000,
                     Tolerance = 1e-6,
                     UseAdaptiveLearningRate = true
-                }))
-                .ConfigureModel(new MultipleRegression<double>(new RegressionOptions<double>
-                {
-                    UseIntercept = true
                 }))
                 .Build(features, prices);
 
@@ -100,16 +100,12 @@ public class EnhancedRegressionExample
             double alpha = 1.0;
             var ridgeModel = modelBuilder
                 .ConfigureDataPreprocessor(dataPreprocessor)
-                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
+                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(model, new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
                 {
                     LearningRate = 0.01,
                     MaxIterations = 2000,
                     Tolerance = 1e-6,
                     UseAdaptiveLearningRate = true
-                }))
-                .ConfigureModel(new MultipleRegression<double>(new RegressionOptions<double>
-                {
-                    UseIntercept = true
                 }))
                 .Build(features, prices);
 

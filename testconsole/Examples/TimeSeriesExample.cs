@@ -44,6 +44,14 @@ public class TimeSeriesExample
             Console.WriteLine("Data prepared. Starting model training...");
 
             // Create and configure the model builder
+            // Configure time series model (e.g., Prophet-like model)
+            var timeSeriesOptions = new ProphetOptions<double, Matrix<double>, Vector<double>>
+            {
+                SeasonalPeriods = [7],  // Weekly seasonality (using List<int> instead of double[])
+                ChangePointPriorScale = 0.05,           // Control flexibility of the trend (this is the correct property)
+                ForecastHorizon = 30                    // Forecast 30 days ahead
+            };
+            var model = new ProphetModel<double, Matrix<double>, Vector<double>>(timeSeriesOptions);
             var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
             // Configure optimizer
@@ -52,20 +60,11 @@ public class TimeSeriesExample
                 LearningRate = 0.01,
                 MaxIterations = 1000
             };
-            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
-
-            // Configure time series model (e.g., Prophet-like model)
-            var timeSeriesOptions = new ProphetOptions<double, Matrix<double>, Vector<double>>
-            {
-                SeasonalPeriods = [7],  // Weekly seasonality (using List<int> instead of double[])
-                ChangePointPriorScale = 0.05,           // Control flexibility of the trend (this is the correct property)
-                ForecastHorizon = 30                    // Forecast 30 days ahead
-            };
+            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(model, adamOptions);
 
             // Build the time series model
-            var model = modelBuilder
+            var modelResult = modelBuilder
                 .ConfigureOptimizer(optimizer)
-                .ConfigureModel(new ProphetModel<double, Matrix<double>, Vector<double>>(timeSeriesOptions))
                 .Build(timeFeatures, priceVector);
 
             Console.WriteLine("Model trained successfully!");
@@ -75,7 +74,7 @@ public class TimeSeriesExample
             var futureFeatures = new Matrix<double>([.. futureDates.Select(d => new[] { d })]);
 
             // Make forecast
-            var forecast = modelBuilder.Predict(futureFeatures, model);
+            var forecast = modelBuilder.Predict(futureFeatures, modelResult);
 
             Console.WriteLine("\nForecast for the next 30 days:");
             for (int i = 0; i < Math.Min(10, forecast.Length); i++)
@@ -86,7 +85,7 @@ public class TimeSeriesExample
 
             // Save model for later use
             string modelPath = "stock_forecast_model.bin";
-            modelBuilder.SaveModel(model, modelPath);
+            modelBuilder.SaveModel(modelResult, modelPath);
             Console.WriteLine($"\nModel saved to {modelPath}");
 
             // Load the model back
@@ -100,7 +99,7 @@ public class TimeSeriesExample
             }
 
             // Visualize components if available
-            if (model is ProphetModel<double, Matrix<double>, Vector<double>> prophetModel)
+            if (modelResult is ProphetModel<double, Matrix<double>, Vector<double>> prophetModel)
             {
                 Console.WriteLine("\nModel Components Analysis available in ProphetModel");
                 Console.WriteLine("(Implementation would show trend, seasonality components)");

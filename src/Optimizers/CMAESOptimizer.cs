@@ -3,24 +3,41 @@ namespace AiDotNet.Optimizers;
 /// <summary>
 /// Implements the Covariance Matrix Adaptation Evolution Strategy (CMA-ES) optimization algorithm.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// CMA-ES is a powerful optimization algorithm for non-linear, non-convex optimization problems.
-/// It is particularly effective for problems with up to about 100 dimensions and is known for its
-/// robustness and ability to handle complex fitness landscapes.
+/// CMA-ES is a state-of-the-art evolutionary algorithm for difficult non-linear non-convex optimization problems.
+/// It adapts the covariance matrix of a multivariate normal distribution to efficiently explore the search space.
 /// </para>
-/// <para><b>For Beginners:</b> CMA-ES is like an advanced search algorithm that tries to find the best solution
-/// by learning from previous attempts. It's especially good at solving complex problems where the relationship
-/// between inputs and outputs isn't straightforward.
+/// <para><b>For Beginners:</b>
+/// CMA-ES is like having a smart search party that explores a landscape to find the highest peak:
+/// 
+/// 1. The search party starts by exploring randomly in all directions
+/// 2. As they find promising areas, they:
+///    - Focus more of their efforts in those directions
+///    - Adjust how widely they spread out based on the terrain
+///    - Learn which directions tend to lead uphill together
+/// 
+/// The key features that make CMA-ES powerful:
+/// - It automatically adapts to the shape of the landscape
+/// - It handles difficult terrains with many false peaks
+/// - It balances exploration (trying new areas) and exploitation (focusing on good areas)
+/// - It doesn't require gradient information (useful when the landscape is rough)
+/// 
+/// CMA-ES is especially good for:
+/// - Problems with complex, non-linear relationships
+/// - Problems where many parameters interact in complicated ways
+/// - Problems where other methods get stuck in local optima
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The type of input data for the model.</typeparam>
+/// <typeparam name="TOutput">The type of output data for the model.</typeparam>
 public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the CMA-ES optimization algorithm.
     /// </summary>
-    private CMAESOptimizerOptions<T, TInput, TOutput> _options;
+    private CMAESOptimizerOptions<T, TInput, TOutput> _cmaesOptions;
 
     /// <summary>
     /// The current population of candidate solutions.
@@ -55,23 +72,20 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     /// <summary>
     /// Initializes a new instance of the CMAESOptimizer class.
     /// </summary>
+    /// <param name="model">The machine learning model to optimize.</param>
     /// <param name="options">The options for configuring the CMA-ES algorithm.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the CMA-ES optimizer with its initial configuration.
-    /// You can customize various aspects of how it works, or use default settings.
+    /// You provide the model you want to optimize, and you can customize various aspects of how it works,
+    /// or use default settings.
     /// </para>
     /// </remarks>
     public CMAESOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         CMAESOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new CMAESOptimizerOptions<T, TInput, TOutput>())
     {
-        _options = options ?? new CMAESOptimizerOptions<T, TInput, TOutput>();
+        _cmaesOptions = options ?? new CMAESOptimizerOptions<T, TInput, TOutput>();
         _population = Matrix<T>.Empty();
         _mean = Vector<T>.Empty();
         _C = Matrix<T>.Empty();
@@ -98,7 +112,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         _C = Matrix<T>.Empty();
         _pc = Vector<T>.Empty();
         _ps = Vector<T>.Empty();
-        _sigma = NumOps.FromDouble(_options.InitialStepSize);
+        _sigma = NumOps.FromDouble(_cmaesOptions.InitialStepSize);
     }
 
     /// <summary>
@@ -116,21 +130,26 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
         int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
-        var initialSolution = InitializeRandomSolution(inputData.XTrain);
-        _mean = initialSolution.GetParameters();
+
+        // Initialize with the provided model's parameters
+        _mean = Model.GetParameters();
         _C = Matrix<T>.CreateIdentity(dimensions);
         _pc = new Vector<T>(dimensions);
         _ps = new Vector<T>(dimensions);
 
         // Keep track of our current best model to use as a template
-        var currentBestModel = initialSolution;
+        var currentBestModel = Model.DeepCopy();
 
-        for (int generation = 0; generation < _options.MaxGenerations; generation++)
+        for (int generation = 0; generation < _cmaesOptions.MaxGenerations; generation++)
         {
             var population = GeneratePopulation();
 
@@ -153,7 +172,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             // Update our current best model if this solution is better
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, bestStepData.FitnessScore))
+            if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, bestStepData.FitnessScore))
             {
                 currentBestModel = currentSolution;
             }
@@ -165,7 +184,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
                 break;
             }
 
-            if (NumOps.LessThan(_sigma, NumOps.FromDouble(_options.StopTolerance)))
+            if (NumOps.LessThan(_sigma, NumOps.FromDouble(_cmaesOptions.StopTolerance)))
             {
                 break;
             }
@@ -188,9 +207,9 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     private Matrix<T> GeneratePopulation()
     {
         int dimensions = _mean.Length;
-        var population = new Matrix<T>(_options.PopulationSize, dimensions);
+        var population = new Matrix<T>(_cmaesOptions.PopulationSize, dimensions);
 
-        for (int i = 0; i < _options.PopulationSize; i++)
+        for (int i = 0; i < _cmaesOptions.PopulationSize; i++)
         {
             var sample = GenerateMultivariateNormalSample(dimensions);
             for (int j = 0; j < dimensions; j++)
@@ -271,7 +290,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     {
         var fitnessValues = new Vector<T>(population.Rows);
         IFullModel<T, TInput, TOutput>? bestModel = null;
-        T bestFitness = NumOps.MinValue;
+        T bestFitness = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue;
 
         for (int i = 0; i < population.Rows; i++)
         {
@@ -281,7 +300,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
             fitnessValues[i] = stepData.FitnessScore;
 
             // Keep track of the best model in this population
-            if (bestModel == null || NumOps.GreaterThan(stepData.FitnessScore, bestFitness))
+            if (bestModel == null || FitnessCalculator.IsBetterFitness(stepData.FitnessScore, bestFitness))
             {
                 bestModel = solution;
                 bestFitness = stepData.FitnessScore;
@@ -305,7 +324,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     private void UpdateDistribution(Matrix<T> population, Vector<T> fitnessValues)
     {
         int dimensions = _mean.Length;
-        int lambda = _options.PopulationSize;
+        int lambda = _cmaesOptions.PopulationSize;
         int mu = lambda / 2;
 
         // Sort and select the best individuals
@@ -368,7 +387,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         T hsig = NumOps.LessThan(
             NumOps.Divide(
                 _ps.Norm(),
-                NumOps.Sqrt(NumOps.Subtract(NumOps.One, NumOps.Power(NumOps.Subtract(NumOps.One, cs), NumOps.FromDouble(2 * _options.MaxGenerations))))
+                NumOps.Sqrt(NumOps.Subtract(NumOps.One, NumOps.Power(NumOps.Subtract(NumOps.One, cs), NumOps.FromDouble(2 * _cmaesOptions.MaxGenerations))))
             ),
             NumOps.FromDouble(1.4 + 2 / (dimensions + 1.0))
         ) ? NumOps.One : NumOps.Zero;
@@ -383,7 +402,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
             .Add(artmp.Transpose().Multiply(weights.CreateDiagonal()).Multiply(artmp).Multiply(cmu));
 
         // Update step size
-        T damps = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2), 
+        T damps = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2),
             MathHelper.Max(NumOps.Zero, NumOps.Subtract(NumOps.Sqrt(NumOps.Divide(NumOps.Subtract(muEff, NumOps.One), NumOps.FromDouble(dimensions + 1))), NumOps.One))
         ));
         damps = NumOps.Add(damps, cs);
@@ -400,6 +419,27 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     }
 
     /// <summary>
+    /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
+    /// </summary>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts how the algorithm behaves based on whether it's improving
+    /// or not. It can change various parameters to help find better solutions more efficiently.
+    /// </para>
+    /// </remarks>
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
+    {
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
+        base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Additional CMA-ES-specific parameter updates could be added here if needed
+    }
+
+    /// <summary>
     /// Updates the options for the CMA-ES optimizer.
     /// </summary>
     /// <param name="options">The new options to be set.</param>
@@ -413,7 +453,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     {
         if (options is CMAESOptimizerOptions<T, TInput, TOutput> cmaesOptions)
         {
-            _options = cmaesOptions;
+            _cmaesOptions = cmaesOptions;
         }
         else
         {
@@ -432,7 +472,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     /// </remarks>
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
-        return _options;
+        return _cmaesOptions;
     }
 
     /// <summary>
@@ -453,7 +493,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         writer.Write(baseData.Length);
         writer.Write(baseData);
 
-        string optionsJson = JsonConvert.SerializeObject(_options);
+        string optionsJson = JsonConvert.SerializeObject(_cmaesOptions);
         writer.Write(optionsJson);
 
         // Serialize CMA-ES specific data
@@ -487,7 +527,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         base.Deserialize(baseData);
 
         string optionsJson = reader.ReadString();
-        _options = JsonConvert.DeserializeObject<CMAESOptimizerOptions<T, TInput, TOutput>>(optionsJson)
+        _cmaesOptions = JsonConvert.DeserializeObject<CMAESOptimizerOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
         // Deserialize CMA-ES specific data

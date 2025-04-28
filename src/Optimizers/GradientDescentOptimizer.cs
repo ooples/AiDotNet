@@ -34,19 +34,38 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <summary>
     /// Initializes a new instance of the GradientDescentOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
+    /// <param name="options">Options for the Gradient Descent optimizer.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the Gradient Descent optimizer with its initial settings.
+    /// You provide the model to optimize and can customize various aspects of how the optimizer works.
     /// It's like preparing for your hike by choosing your starting point, deciding how big your steps
     /// will be, and how you'll adjust your path to avoid getting stuck in small dips.
     /// </para>
     /// </remarks>
-    /// <param name="options">Options for the Gradient Descent optimizer.</param>
     public GradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         GradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
+        : base(model, options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
     {
         _gdOptions = options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _gdOptions.Regularization ?? CreateRegularization(_gdOptions);
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
+    /// Initializes the adaptive parameters used in Gradient Descent.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method sets up the initial learning rate and other parameters
+    /// that will be adjusted during optimization based on performance.
+    /// </para>
+    /// </remarks>
+    protected override void InitializeAdaptiveParameters()
+    {
+        base.InitializeAdaptiveParameters();
+        // Any additional GD-specific parameter initialization can be added here
     }
 
     /// <summary>
@@ -54,7 +73,7 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> This is the heart of the Gradient Descent algorithm. It:
-    /// 1. Starts with a random solution
+    /// 1. Starts with the provided model as the initial solution
     /// 2. Calculates how to improve the solution (the gradient)
     /// 3. Updates the solution by taking a step in the direction of improvement
     /// 4. Repeats this process many times
@@ -68,10 +87,17 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = EvaluateSolution(currentSolution, inputData);
-        var previousStepData = bestStepData;
-        InitializeAdaptiveParameters();
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = Model.DeepCopy(),
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
+
+        // Evaluate the initial solution
+        var initialStepData = EvaluateSolution(currentSolution, inputData);
+        UpdateBestSolution(initialStepData, ref bestStepData);
+        OptimizationStepData<T, TInput, TOutput>? previousStepData = initialStepData;
 
         for (int iteration = 0; iteration < _gdOptions.MaxIterations; iteration++)
         {
@@ -87,6 +113,13 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            {
+                break;
+            }
+
+            // Check for convergence
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(currentStepData.FitnessScore, previousStepData.FitnessScore)),
+                NumOps.FromDouble(_gdOptions.Tolerance)))
             {
                 break;
             }
@@ -109,13 +142,35 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <param name="gradient">The calculated gradient.</param>
     /// <returns>The updated solution.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(
-        IFullModel<T, TInput, TOutput> currentSolution, 
+        IFullModel<T, TInput, TOutput> currentSolution,
         Vector<T> gradient)
     {
         Vector<T> currentParams = currentSolution.GetParameters();
         Vector<T> updatedParams = currentParams.Subtract(gradient.Multiply(CurrentLearningRate));
 
         return currentSolution.WithParameters(updatedParams);
+    }
+
+    /// <summary>
+    /// Updates the adaptive parameters based on optimization progress.
+    /// </summary>
+    /// <param name="currentStepData">Data from the current optimization step.</param>
+    /// <param name="previousStepData">Data from the previous optimization step.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts the learning rate and other parameters
+    /// based on how well the optimization is progressing. If we're making good progress,
+    /// we might take bigger steps. If we're struggling, we might take smaller steps.
+    /// </para>
+    /// </remarks>
+    protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
+    {
+        base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
+
+        // Any additional GD-specific parameter updates can be added here
     }
 
     /// <summary>

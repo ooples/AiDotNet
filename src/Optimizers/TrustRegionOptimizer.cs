@@ -54,10 +54,23 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// <summary>
     /// Initializes a new instance of the TrustRegionOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">Options for configuring the Trust Region optimizer.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor initializes a new TrustRegionOptimizer with the specified model and options.
+    /// The model parameter is required and provides the starting point for optimization.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as setting up an optimization journey:
+    /// - The model is like your starting position on a map
+    /// - The options are like your travel preferences (how fast to go, which paths to take, etc.)
+    /// - Together, they determine how the optimizer will search for the best solution
+    /// </para>
+    /// </remarks>
     public TrustRegionOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         TrustRegionOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new TrustRegionOptimizerOptions<T, TInput, TOutput>();
         _trustRegionRadius = NumOps.Zero;
@@ -85,8 +98,8 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = EvaluateSolution(currentSolution, inputData);
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
@@ -283,14 +296,14 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
             z = zNext;
             var rNext = r.Add(Hd.Multiply(alpha));
             var beta = NumOps.Divide(rNext.DotProduct(rNext), r.DotProduct(r));
-        
+
             var dNext = rNext.Clone();
             for (int j = 0; j < dNext.Length; j++)
             {
                 dNext[j] = NumOps.Negate(dNext[j]);
             }
             d = dNext.Add(d.Multiply(beta));
-        
+
             r = rNext;
 
             if (NumOps.LessThan(r.Norm(), NumOps.Multiply(NumOps.FromDouble(_options.CGTolerance), g0)))
@@ -449,12 +462,13 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-        if (_options.UseAdaptiveTrustRegionRadius)
+        if (_options.UseAdaptiveTrustRegionRadius && previousStepData.Solution != null)
         {
             var improvement = NumOps.Subtract(currentStepData.FitnessScore, previousStepData.FitnessScore);
             var adaptationRate = NumOps.FromDouble(_options.AdaptationRate);
 
-            if (NumOps.GreaterThan(improvement, NumOps.Zero))
+            // Only adjust if there's a valid previous step
+            if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
             {
                 _trustRegionRadius = NumOps.Multiply(_trustRegionRadius, NumOps.Add(NumOps.One, adaptationRate));
             }

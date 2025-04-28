@@ -1,19 +1,26 @@
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Nesterov-accelerated Adaptive Moment Estimation (Nadam) optimization algorithm.
+/// Implements the Nadam (Nesterov-accelerated Adaptive Moment Estimation) optimization algorithm.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
 /// <remarks>
 /// <para>
-/// Nadam combines the ideas of Adam (adaptive learning rates) and Nesterov accelerated gradient (NAG).
-/// It adapts the learning rates of each parameter and incorporates momentum using Nesterov's method.
+/// Nadam combines the benefits of Adam (adaptive learning rates) with Nesterov momentum.
+/// It's especially effective for deep learning and other complex optimization problems.
 /// </para>
 /// <para><b>For Beginners:</b>
-/// Imagine you're rolling a smart ball down a hill. This ball can adjust its speed for different parts of the hill (adaptive learning rates),
-/// and it can look ahead to anticipate slopes (Nesterov's method). This combination helps it find the lowest point more efficiently.
+/// Think of Nadam as a "smart ball" rolling down a hill to find the lowest point:
+/// - It remembers its past movement (momentum) to help roll through small bumps
+/// - It adjusts its speed differently for each direction (adaptive learning rates)
+/// - It can "look ahead" to anticipate where it's going (Nesterov acceleration)
+/// 
+/// These features help it find the bottom of the hill more efficiently than simpler methods,
+/// particularly on complex, bumpy landscapes with many hills and valleys.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
@@ -41,7 +48,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This constructor sets up the Nadam optimizer with the provided options and dependencies.
+    /// This constructor sets up the Nadam optimizer with the provided model and options.
     /// If no options are provided, it uses default settings.
     /// </para>
     /// <para><b>For Beginners:</b>
@@ -49,10 +56,12 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// and deciding how it will adapt during its journey.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The Nadam-specific optimization options.</param>
     public NadamOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         NadamOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new NadamOptimizerOptions<T, TInput, TOutput>();
 
@@ -98,20 +107,29 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var currentSolution = Model.DeepCopy();
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = currentSolution,
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+        };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+
         var parameters = currentSolution.GetParameters();
         _m = new Vector<T>(parameters.Length);
         _v = new Vector<T>(parameters.Length);
 
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             _t++;
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+
+            // Create solution using the base class method (handles feature selection and parameter adjustments)
+            var optimizedSolution = CreateSolution(inputData.XTrain);
+
+            var gradient = CalculateGradient(optimizedSolution, inputData.XTrain, inputData.YTrain);
+            var newSolution = UpdateSolution(optimizedSolution, gradient);
 
             var currentStepData = EvaluateSolution(newSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
@@ -123,7 +141,8 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
+                                NumOps.FromDouble(_options.Tolerance)))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
@@ -150,7 +169,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </remarks>
     /// <param name="currentSolution">The current model solution.</param>
     /// <param name="gradient">The calculated gradient.</param>
-    /// <returns>An updated symbolic model with improved coefficients.</returns>
+    /// <returns>An updated model with improved parameters.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
@@ -202,11 +221,18 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <param name="previousStepData">Data from the previous optimization step.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // Call the base implementation to update common parameters
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+        // Skip if previous step data is null (first iteration)
+        if (previousStepData.Solution == null)
+            return;
 
         if (_options.UseAdaptiveLearningRate)
         {
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            bool isImproving = FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore);
+
+            if (isImproving)
             {
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateIncreaseFactor));
             }
@@ -215,8 +241,8 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate, 
-                NumOps.FromDouble(_options.MinLearningRate), 
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
                 NumOps.FromDouble(_options.MaxLearningRate));
         }
     }
@@ -344,7 +370,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// remember and quickly recall how it should move in similar situations, making the whole process more efficient.
     /// </para>
     /// </remarks>
-    /// <param name="model">The current symbolic model.</param>
+    /// <param name="model">The current model being optimized.</param>
     /// <param name="X">The input feature matrix.</param>
     /// <param name="y">The target vector.</param>
     /// <returns>A string that uniquely identifies the current gradient calculation scenario.</returns>
