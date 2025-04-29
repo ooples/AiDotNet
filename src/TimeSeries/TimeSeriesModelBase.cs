@@ -80,6 +80,24 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     protected INumericOperations<T> NumOps { get; private set; }
 
     /// <summary>
+    /// Set of feature indices that have been explicitly marked as active.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This set contains feature indices that have been explicitly set as active through
+    /// the SetActiveFeatureIndices method, overriding the automatic determination based
+    /// on feature importance.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This tracks which past time periods (lags) have been manually selected as
+    /// important for the model, regardless of their calculated importance based on
+    /// the model's parameters.
+    /// </para>
+    /// </remarks>
+    private HashSet<int>? _explicitlySetActiveFeatures;
+
+    /// <summary>
     /// Gets or sets the trained model parameters.
     /// </summary>
     /// <remarks>
@@ -125,7 +143,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// Lower numbers mean better predictions. They're like a scorecard for the model's performance.
     /// </para>
     /// </remarks>
-    protected Dictionary<string, T> LastEvaluationMetrics { get; private set; } = new Dictionary<string, T>();
+    protected Dictionary<string, T> LastEvaluationMetrics { get; private set; } = [];
 
     /// <summary>
     /// Initializes a new instance of the TimeSeriesModelBase class with the specified options.
@@ -164,7 +182,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         
         Options = options;
         NumOps = MathHelper.GetNumericOperations<T>();
-        ModelParameters = new Vector<T>(0); // Initialize with empty vector
+        ModelParameters = Vector<T>.Empty();
     }
 
     /// <summary>
@@ -942,36 +960,53 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// </remarks>
     public virtual IEnumerable<int> GetActiveFeatureIndices()
     {
+        var activeIndices = new List<int>();
+
         if (!IsTrained)
         {
-            throw new InvalidOperationException("The model must be trained before getting active feature indices.");
-        }
-        
-        List<int> activeIndices = new List<int>();
-        
-        // Consider common lag patterns based on model configuration
-        for (int lag = 1; lag <= Options.LagOrder; lag++)
-        {
-            if (IsFeatureUsed(lag))
+            // If not trained, return potential features based on configuration
+            for (int lag = 1; lag <= Options.LagOrder; lag++)
             {
                 activeIndices.Add(lag);
             }
-        }
-        
-        // If seasonal, also include seasonal lags
-        if (Options.SeasonalPeriod > 0)
-        {
-            for (int s = 1; s <= 4; s++) // Consider up to 4 seasonal lags
+
+            if (Options.SeasonalPeriod > 0)
             {
-                int seasonalLag = s * Options.SeasonalPeriod;
-                if (seasonalLag <= Options.LagOrder && IsFeatureUsed(seasonalLag))
+                for (int s = 1; s <= 4; s++)
                 {
-                    activeIndices.Add(seasonalLag);
+                    int seasonalLag = s * Options.SeasonalPeriod;
+                    if (seasonalLag <= Options.LagOrder)
+                    {
+                        activeIndices.Add(seasonalLag);
+                    }
                 }
             }
         }
-        
-        return activeIndices;
+        else
+        {
+            // Original trained model logic
+            for (int lag = 1; lag <= Options.LagOrder; lag++)
+            {
+                if (IsFeatureUsed(lag))
+                {
+                    activeIndices.Add(lag);
+                }
+            }
+
+            if (Options.SeasonalPeriod > 0)
+            {
+                for (int s = 1; s <= 4; s++)
+                {
+                    int seasonalLag = s * Options.SeasonalPeriod;
+                    if (seasonalLag <= Options.LagOrder && IsFeatureUsed(seasonalLag))
+                    {
+                        activeIndices.Add(seasonalLag);
+                    }
+                }
+            }
+        }
+
+        return activeIndices.Distinct().OrderBy(i => i);
     }
 
     /// <summary>
@@ -1005,6 +1040,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// </remarks>
     public virtual bool IsFeatureUsed(int featureIndex)
     {
+        // Check if the feature is explicitly set as active first
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Contains(featureIndex))
+        {
+            return true;
+        }
+
         if (!IsTrained)
         {
             throw new InvalidOperationException("The model must be trained before checking feature usage.");
@@ -1350,14 +1391,14 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         }
         
         // Create a working copy of the history that we can extend
-        List<T> extendedHistory = new List<T>(history.Length + steps);
+        var extendedHistory = new List<T>(history.Length + steps);
         for (int i = 0; i < history.Length; i++)
         {
             extendedHistory.Add(history[i]);
         }
         
         // Generate forecasts one step at a time
-        Vector<T> forecasts = new Vector<T>(steps);
+        var forecasts = new Vector<T>(steps);
         for (int step = 0; step < steps; step++)
         {
             // Prepare input features for this forecast step
@@ -1415,7 +1456,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
             featureCount += Options.SeasonalPeriod;
         }
         
-        Vector<T> features = new Vector<T>(featureCount);
+        var features = new Vector<T>(featureCount);
         int featureIndex = 0;
         
         // Add lag features
@@ -1449,5 +1490,52 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         }
         
         return features;
+    }
+
+    /// <summary>
+    /// Sets which features (lags) should be considered active in the model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to mark as active.</param>
+    /// <exception cref="ArgumentNullException">Thrown when featureIndices is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any feature index is negative.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method explicitly specifies which features (lags) should be considered active
+    /// in the model, overriding the automatic determination based on feature importance.
+    /// Any features not included in the provided collection will be considered inactive,
+    /// regardless of their importance based on model parameters.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method lets you manually select which past time periods (lags) the model
+    /// should consider when making predictions. For example, if you know from domain
+    /// expertise that values from 1, 7, and 30 days ago are most important for predicting
+    /// your time series, you can explicitly set these lags as active using this method,
+    /// regardless of what the model would automatically determine.
+    /// </para>
+    /// </remarks>
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices), "Feature indices cannot be null.");
+        }
+
+        // Initialize the set if it doesn't exist
+        _explicitlySetActiveFeatures ??= [];
+
+        // Clear existing explicitly set features
+        _explicitlySetActiveFeatures.Clear();
+
+        // Add the new feature indices
+        foreach (var index in featureIndices)
+        {
+            if (index < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices), $"Feature index {index} cannot be negative.");
+            }
+
+            _explicitlySetActiveFeatures.Add(index);
+        }
     }
 }

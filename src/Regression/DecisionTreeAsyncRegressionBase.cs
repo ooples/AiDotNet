@@ -30,6 +30,21 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
+    /// Set of feature indices that have been explicitly marked as active.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This field stores which input features have been manually
+    /// selected as important for the decision tree model, overriding the automatic detection
+    /// based on the trained tree structure.
+    /// 
+    /// When this is set, it takes precedence over the features actually used in the tree.
+    /// This can be useful for feature selection experiments or when you want to force the
+    /// model to consider specific features as important.
+    /// </para>
+    /// </remarks>
+    private HashSet<int>? _explicitlySetActiveFeatures;
+
+    /// <summary>
     /// Gets or sets the root node of the decision tree.
     /// </summary>
     protected DecisionTreeNode<T>? Root;
@@ -489,8 +504,16 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </remarks>
     public virtual IEnumerable<int> GetActiveFeatureIndices()
     {
+        // If we have explicitly set active features, return those
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0)
+        {
+            return _explicitlySetActiveFeatures.OrderBy(i => i);
+        }
+
+        // Otherwise, continue with the existing implementation
         var activeFeatures = new HashSet<int>();
         CollectActiveFeatures(Root, activeFeatures);
+
         return activeFeatures;
     }
 
@@ -517,6 +540,18 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </remarks>
     public virtual bool IsFeatureUsed(int featureIndex)
     {
+        // If feature index is explicitly set as active, return true immediately
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Contains(featureIndex))
+        {
+            return true;
+        }
+
+        // If explicitly set active features exist but don't include this index, it's not used
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0)
+        {
+            return false;
+        }
+
         return IsFeatureUsedInSubtree(Root, featureIndex);
     }
 
@@ -753,5 +788,58 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
             clone.Right = DeepCloneNode(node.Right);
     
         return clone;
+    }
+
+    /// <summary>
+    /// Sets which features should be considered active in the model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to mark as active.</param>
+    /// <exception cref="ArgumentNullException">Thrown when featureIndices is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any feature index is negative.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method explicitly specifies which features should be considered active in the
+    /// decision tree model, overriding the automatic determination based on the tree structure.
+    /// Any features not included in the provided collection will be considered inactive,
+    /// regardless of whether they are used in decision nodes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you manually tell the model which input features
+    /// are important, regardless of what the decision tree actually learned during training.
+    /// 
+    /// For example, if you have features like age, income, and education level, you can use
+    /// this method to specify that only age and education level should be considered active,
+    /// even if the trained tree also uses income for some decisions.
+    /// 
+    /// This is useful for:
+    /// - Testing how the model performs with a specific set of features
+    /// - Forcing the model to focus on features you believe are important
+    /// - Comparing different feature sets without retraining the model
+    /// - Implementing manual feature selection techniques
+    /// </para>
+    /// </remarks>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices), "Feature indices cannot be null.");
+        }
+
+        // Initialize the hash set if it doesn't exist
+        _explicitlySetActiveFeatures ??= [];
+
+        // Clear existing explicitly set features
+        _explicitlySetActiveFeatures.Clear();
+
+        // Add the new feature indices
+        foreach (var index in featureIndices)
+        {
+            if (index < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {index} cannot be negative.");
+            }
+
+            _explicitlySetActiveFeatures.Add(index);
+        }
     }
 }

@@ -31,7 +31,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// how many neurons are in each layer, and how they're connected. Think of it as the blueprint for your network.
     /// </remarks>
     public readonly NeuralNetworkArchitecture<T> Architecture;
-    
+
+    /// <summary>
+    /// Set of feature indices that have been explicitly marked as active.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This set contains feature indices that have been explicitly set as active through
+    /// the SetActiveFeatureIndices method, overriding the automatic determination based
+    /// on feature importance.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tracks which parts of your input data have been manually
+    /// selected as important for the neural network, regardless of what the network would
+    /// automatically determine based on weights.
+    /// </para>
+    /// </remarks>
+    private HashSet<int>? _explicitlySetActiveFeatures;
+
     /// <summary>
     /// Mathematical operations for the numeric type T.
     /// </summary>
@@ -1157,6 +1174,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </remarks>
     public virtual bool IsFeatureUsed(int featureIndex)
     {
+        // If feature index is explicitly set as active, return true immediately
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Contains(featureIndex))
+        {
+            return true;
+        }
+
+        // If explicitly set active features exist but don't include this index, it's not used
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0)
+        {
+            return false;
+        }
+
         // If feature index is out of range, it's not used
         if (Layers.Count == 0 || featureIndex < 0 || featureIndex >= Layers[0].GetInputShape()[0])
             return false;
@@ -1241,4 +1270,69 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </para>
     /// </remarks>
     protected abstract IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance();
+
+    /// <summary>
+    /// Sets which input features should be considered active in the neural network.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to mark as active.</param>
+    /// <exception cref="ArgumentNullException">Thrown when featureIndices is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any feature index is negative or exceeds the input dimension.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method explicitly specifies which input features should be considered active
+    /// in the neural network, overriding the automatic determination based on weights.
+    /// Any features not included in the provided collection will be considered inactive,
+    /// regardless of their weights in the network.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method lets you manually select which parts of your input data
+    /// the neural network should pay attention to. For example, if your inputs include various 
+    /// measurements or features, you can tell the network to focus only on specific ones
+    /// that you know are important based on your domain knowledge.
+    /// 
+    /// This can be useful for:
+    /// - Forcing the network to use features you know are important
+    /// - Ignoring features you know are irrelevant or noisy
+    /// - Testing how the network performs with different feature subsets
+    /// - Implementing feature selection techniques
+    /// </para>
+    /// </remarks>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices), "Feature indices cannot be null.");
+        }
+
+        // Initialize the hash set if it doesn't exist
+        _explicitlySetActiveFeatures ??= [];
+
+        // Clear existing explicitly set features
+        _explicitlySetActiveFeatures.Clear();
+
+        // Get the input dimension to validate feature indices
+        int inputDimension = 0;
+        if (Layers.Count > 0)
+        {
+            inputDimension = Layers[0].GetInputShape()[0];
+        }
+
+        // Add the new feature indices
+        foreach (var index in featureIndices)
+        {
+            if (index < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {index} cannot be negative.");
+            }
+
+            if (inputDimension > 0 && index >= inputDimension)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {index} exceeds the input dimension {inputDimension}.");
+            }
+
+            _explicitlySetActiveFeatures.Add(index);
+        }
+    }
 }

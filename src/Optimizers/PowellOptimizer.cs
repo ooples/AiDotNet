@@ -468,8 +468,10 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
                 break;
 
             // Create a new feature set with an additional feature
-            var augmentedFeatures = new List<int>(featureIndices);
-            augmentedFeatures.Add(missingFeatures[i]);
+            var augmentedFeatures = new List<int>(featureIndices)
+            {
+                missingFeatures[i]
+            };
 
             // Apply and evaluate
             var augmentedSolution = solution.DeepCopy();

@@ -38,7 +38,7 @@ public class TimeSeriesExample
             }
 
             // Convert to Matrix/Vector format
-            var timeFeatures = new Matrix<double>(dates.Select(d => new[] { d }).ToArray());
+            var timeFeatures = new Matrix<double>([.. dates.Select(d => new[] { d })]);
             var priceVector = new Vector<double>(prices);
 
             Console.WriteLine("Data prepared. Starting model training...");

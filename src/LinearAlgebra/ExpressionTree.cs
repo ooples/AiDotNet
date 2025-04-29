@@ -987,6 +987,68 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Sets which features should be considered active in the expression tree.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to mark as active.</param>
+    /// <exception cref="ArgumentNullException">Thrown when featureIndices is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any feature index is negative or exceeds the available features.</exception>
+    /// <exception cref="NotSupportedException">Thrown because expression trees don't support direct feature selection.</exception>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method isn't fully supported for expression trees because their structure
+    /// directly determines which features are used. Expression trees represent mathematical formulas where
+    /// the variables in the formula correspond to features. The structure of the formula (the tree) determines
+    /// which features (variables) are included, so you can't simply mark certain features as active or inactive
+    /// without changing the formula itself.
+    /// 
+    /// If you need to control which features are used, consider:
+    /// 1. Creating a new expression tree that only uses the desired features
+    /// 2. Using feature selection techniques before training
+    /// 3. Using a different model type that supports direct feature selection
+    /// </remarks>
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices), "Feature indices cannot be null.");
+        }
+
+        // Validate all indices before operation
+        List<int> indices = [.. featureIndices];
+
+        // Find the highest feature index currently used in the tree
+        int maxAvailableFeature = -1;
+        foreach (int index in GetActiveFeatureIndices())
+        {
+            maxAvailableFeature = Math.Max(maxAvailableFeature, index);
+        }
+
+        // Check for invalid indices
+        foreach (int index in indices)
+        {
+            if (index < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {index} cannot be negative.");
+            }
+
+            if (index > maxAvailableFeature && maxAvailableFeature >= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {index} exceeds the maximum available feature index {maxAvailableFeature}.");
+            }
+        }
+
+        // For expression trees, we cannot simply set active features without modifying the tree structure
+        // This would require restructuring the entire tree, which is a complex operation
+
+        throw new NotSupportedException(
+            "Setting active features directly is not supported for expression trees. " +
+            "The active features are determined by the structure of the expression tree itself. " +
+            "To change which features are used, you need to modify the tree structure or create a new expression tree."
+        );
+    }
+
+    /// <summary>
     /// Gets a vector containing all coefficient values in this expression tree.
     /// </summary>
     /// <remarks>
@@ -1017,7 +1079,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             }
 
             CollectCoefficients(this);
-            return new Vector<T>(coefficients.ToArray());
+            return new Vector<T>([.. coefficients]);
         }
     }
 }

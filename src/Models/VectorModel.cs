@@ -806,4 +806,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         return DeepCopy();
     }
+
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        throw new NotImplementedException();
+    }
 }

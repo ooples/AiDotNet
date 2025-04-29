@@ -12,16 +12,61 @@
 public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
 {
     /// <summary>
-    /// Initializes a new matrix with the specified number of rows and columns.
+    /// Creates an empty matrix with zero rows and columns.
     /// </summary>
-    /// <param name="rows">The number of rows in the matrix.</param>
-    /// <param name="columns">The number of columns in the matrix.</param>
+    /// <returns>A new empty matrix.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This creates an empty matrix with the specified size.
-    /// For example, Matrix(3, 4) creates a matrix with 3 rows and 4 columns.</para>
+    /// <para><b>For Beginners:</b> This creates a matrix with no elements.
+    /// It's useful as a placeholder or when you need to represent the absence of data.</para>
     /// </remarks>
-    public Matrix(int rows, int columns) : base(rows, columns)
+    public new static Matrix<T> Empty()
     {
+        // Create a singleton empty matrix instance if it doesn't exist yet
+        _emptyMatrix ??= new Matrix<T>(0, 0)
+        {
+            IsEmpty = true
+        };
+
+        return _emptyMatrix;
+    }
+
+    // Static field to hold the singleton empty matrix instance
+    private static Matrix<T>? _emptyMatrix;
+
+    /// <summary>
+    /// Gets a value indicating whether this matrix is empty.
+    /// </summary>
+    public new bool IsEmpty { get; private set; }
+
+    /// <summary>
+    /// Gets the number of rows in the matrix.
+    /// </summary>
+    /// <remarks>
+    /// <para>For empty matrices, this will return 0.</para>
+    /// </remarks>
+    public new int Rows => IsEmpty ? 0 : base.Rows;
+
+    /// <summary>
+    /// Gets the number of columns in the matrix.
+    /// </summary>
+    /// <remarks>
+    /// <para>For empty matrices, this will return 0.</para>
+    /// </remarks>
+    public new int Columns => IsEmpty ? 0 : base.Columns;
+
+    /// <summary>
+    /// Initializes a new instance of the Matrix class with the specified dimensions.
+    /// </summary>
+    /// <param name="rows">The number of rows.</param>
+    /// <param name="columns">The number of columns.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates an empty matrix with the given dimensions.
+    /// All elements will be initialized to their default values (0 for numeric types).</para>
+    /// </remarks>
+    public Matrix(int rows, int columns) : base(rows > 0 ? rows : 1, columns > 0 ? columns : 1)
+    {
+        // Mark as empty if either dimension is 0
+        IsEmpty = rows == 0 || columns == 0;
     }
 
     /// <summary>
@@ -564,19 +609,6 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Creates an empty matrix with zero rows and columns.
-    /// </summary>
-    /// <returns>A new empty matrix.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> An empty matrix has no elements at all. It's useful as a starting point
-    /// when you need to build a matrix from scratch or represent the absence of data.</para>
-    /// </remarks>
-    public new static Matrix<T> Empty()
-    {
-        return new Matrix<T>(0, 0);
     }
 
     /// <summary>

@@ -22,6 +22,36 @@ namespace AiDotNet.LinearAlgebra;
 public class Tensor<T> : TensorBase<T>, IEnumerable<T>
 {
     /// <summary>
+    /// Creates an empty tensor with zero elements.
+    /// </summary>
+    /// <returns>A new empty tensor.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a tensor with no elements.
+    /// It's useful as a placeholder or when you need to represent the absence of data.</para>
+    /// </remarks>
+    public static Tensor<T> Empty()
+    {
+        // Create a singleton empty tensor instance if it doesn't exist yet
+        if (_emptyTensor == null)
+        {
+            _emptyTensor = new Tensor<T>([])
+            {
+                IsEmpty = true
+            };
+        }
+
+        return _emptyTensor;
+    }
+
+    // Static field to hold the singleton empty tensor instance
+    private static Tensor<T>? _emptyTensor;
+
+    /// <summary>
+    /// Gets a value indicating whether this tensor is empty.
+    /// </summary>
+    public bool IsEmpty { get; private set; }
+
+    /// <summary>
     /// Creates a new tensor with the specified dimensions, initialized with default values.
     /// </summary>
     /// <param name="dimensions">An array specifying the size of each dimension.</param>
@@ -34,8 +64,10 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// - new Tensor&lt;float&gt;([2, 3]) creates a 2×3 matrix of zeros
     /// </para>
     /// </remarks>
-    public Tensor(int[] dimensions) : base(dimensions)
+    public Tensor(int[] dimensions) : base(dimensions != null && dimensions.Length > 0 ? dimensions : [1])
     {
+        // Mark as empty if shape is empty or contains a zero dimension
+        IsEmpty = dimensions == null || dimensions.Length == 0 || dimensions.Any(dim => dim == 0);
     }
 
     /// <summary>
@@ -1878,26 +1910,13 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     public static Tensor<T> FromScalar(T value)
     {
         // Create a new tensor with shape [1] (a single-element tensor)
-        var tensor = new Tensor<T>([1]);
-
-        // Set the first (and only) element to the provided value
-        tensor[0] = value;
+        var tensor = new Tensor<T>([1])
+        {
+            // Set the first (and only) element to the provided value
+            [0] = value
+        };
 
         return tensor;
-    }
-
-    /// <summary>
-    /// Creates an empty tensor with no dimensions.
-    /// </summary>
-    /// <returns>An empty tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> An empty tensor is a tensor with no elements. It's like an empty array or list.
-    /// This is different from a tensor filled with zeros, which would have a specific shape and contain zero values.
-    /// Empty tensors are useful as placeholders or when you need to build a tensor incrementally.</para>
-    /// </remarks>
-    public static Tensor<T> Empty()
-    {
-        return new Tensor<T>([]);
     }
 
     /// <summary>

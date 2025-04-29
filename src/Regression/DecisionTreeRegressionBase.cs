@@ -38,7 +38,26 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// </para>
     /// </remarks>
     protected readonly INumericOperations<T> NumOps;
-    
+
+    /// <summary>
+    /// Set of feature indices that have been explicitly marked as active.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores feature indices that have been explicitly set as active through
+    /// the SetActiveFeatureIndices method, overriding the automatic determination based
+    /// on the tree structure.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tracks which input features have been manually
+    /// selected as important for the decision tree model, regardless of what features
+    /// are actually used in the tree's decision nodes.
+    /// 
+    /// When set, these manually selected features take precedence over the automatic
+    /// feature detection based on the tree structure.
+    /// </para>
+    /// </remarks>
+    private HashSet<int>? _explicitlySetActiveFeatures;
+
     /// <summary>
     /// The root node of the decision tree.
     /// </summary>
@@ -582,8 +601,16 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// </remarks>
     public virtual IEnumerable<int> GetActiveFeatureIndices()
     {
+        // If we have explicitly set active features, return those
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0)
+        {
+            return _explicitlySetActiveFeatures.OrderBy(i => i);
+        }
+
+        // Otherwise, continue with the existing implementation
         var activeFeatures = new HashSet<int>();
         CollectActiveFeatures(Root, activeFeatures);
+
         return activeFeatures;
     }
 
@@ -610,6 +637,18 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// </remarks>
     public virtual bool IsFeatureUsed(int featureIndex)
     {
+        // If feature index is explicitly set as active, return true immediately
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Contains(featureIndex))
+        {
+            return true;
+        }
+
+        // If explicitly set active features exist but don't include this index, it's not used
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0)
+        {
+            return false;
+        }
+
         return IsFeatureUsedInSubtree(Root, featureIndex);
     }
 
@@ -846,5 +885,60 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
             clone.Right = DeepCloneNode(node.Right);
     
         return clone;
+    }
+
+    /// <summary>
+    /// Sets which features should be considered active in the model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to mark as active.</param>
+    /// <exception cref="ArgumentNullException">Thrown when featureIndices is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any feature index is negative.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method explicitly specifies which features should be considered active in the
+    /// decision tree model, overriding the automatic determination based on the tree structure.
+    /// Any features not included in the provided collection will be considered inactive,
+    /// regardless of whether they are used in decision nodes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you manually tell the model which input features
+    /// are important, regardless of what the decision tree actually learned during training.
+    /// 
+    /// For example, if you have 10 features but want to focus on only features 2, 5, and 7,
+    /// you can use this method to specify exactly those features. After setting these features:
+    /// - Only these specific features will be reported as active by GetActiveFeatureIndices()
+    /// - Only these features will return true when checked with IsFeatureUsed()
+    /// - This selection will persist when the model is saved and loaded
+    /// 
+    /// This can be useful for:
+    /// - Feature selection experiments (testing different feature subsets)
+    /// - Simplifying model interpretation
+    /// - Ensuring consistency across different models
+    /// - Highlighting specific features you know are important from domain expertise
+    /// </para>
+    /// </remarks>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices), "Feature indices cannot be null.");
+        }
+
+        // Initialize the hash set if it doesn't exist
+        _explicitlySetActiveFeatures ??= [];
+
+        // Clear existing explicitly set features
+        _explicitlySetActiveFeatures.Clear();
+
+        // Add the new feature indices
+        foreach (var index in featureIndices)
+        {
+            if (index < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {index} cannot be negative.");
+            }
+
+            _explicitlySetActiveFeatures.Add(index);
+        }
     }
 }

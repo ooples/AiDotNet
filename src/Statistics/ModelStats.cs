@@ -460,7 +460,15 @@ public class ModelStats<T, TInput, TOutput>
     /// </remarks>
     public static ModelStats<T, TInput, TOutput> Empty()
     {
-        return new ModelStats<T, TInput, TOutput>(new());
+        var emptyInputs = new ModelStatsInputs<T, TInput, TOutput>
+        {
+            Coefficients = Vector<T>.Empty(),
+            FeatureCount = 0,
+            FitFunction = null
+        };
+
+        // Create a ModelStats instance with empty inputs
+        return new ModelStats<T, TInput, TOutput>(emptyInputs);
     }
 
     /// <summary>
@@ -471,6 +479,7 @@ public class ModelStats<T, TInput, TOutput>
     /// <para>
     /// This private method performs all the statistical calculations to populate the various measures in the ModelStats object.
     /// It uses helper methods from the StatisticsHelper class to compute each measure.
+    /// It handles empty or null inputs gracefully by returning early with all metrics set to their default values.
     /// </para>
     /// <para><b>For Beginners:</b> This method is like the teacher grading your AI model's report card.
     /// It goes through each measure (grade) one by one:
@@ -478,25 +487,54 @@ public class ModelStats<T, TInput, TOutput>
     /// - Using the data you provided (actual values and predictions)
     /// - Filling in all the statistics that help you understand your model's performance
     /// 
+    /// If you provide empty data, all metrics will remain at their default zero values.
+    /// 
     /// You don't call this method directly; it's automatically used when creating a new ModelStats object.
     /// </para>
     /// </remarks>
     private void CalculateModelStats(ModelStatsInputs<T, TInput, TOutput> inputs)
     {
+        // Early return if inputs, XMatrix, Actual, or Predicted are null
+        if (inputs == null || inputs.XMatrix == null || inputs.Actual == null || inputs.Predicted == null)
+        {
+            // All metrics remain at their initialized zero/default values
+            return;
+        }
+
         // Convert input matrix to Matrix<T> for statistical calculations
         Matrix<T> matrix = ConversionsHelper.ConvertToMatrix<T, TInput>(inputs.XMatrix);
-    
+
         // Convert actual and predicted values to Vector<T> for statistical calculations
         Vector<T> actual = ConversionsHelper.ConvertToVector<T, TOutput>(inputs.Actual);
         Vector<T> predicted = ConversionsHelper.ConvertToVector<T, TOutput>(inputs.Predicted);
-    
+
+        // Return early if any of the converted data structures are empty
+        if (matrix.IsEmpty || actual.IsEmpty || predicted.IsEmpty ||
+            matrix.Rows == 0 || matrix.Columns == 0 || actual.Length == 0 || predicted.Length == 0)
+        {
+            // All metrics remain at their initialized zero/default values
+            return;
+        }
+
+        // Validate that actual and predicted vectors have the same length
+        if (actual.Length != predicted.Length)
+        {
+            throw new ArgumentException("Actual and predicted vectors must have the same length.");
+        }
+
+        // Validate that matrix rows match the number of samples in actual/predicted
+        if (matrix.Rows != actual.Length)
+        {
+            throw new ArgumentException("Number of rows in the feature matrix must match the length of actual/predicted vectors.");
+        }
+
         // Convert coefficients if available
         Vector<T> coefficients = Vector<T>.Empty();
         if (inputs.Coefficients != null)
         {
             coefficients = ConversionsHelper.ConvertToVector<T, object>(inputs.Coefficients);
         }
-    
+
         var featureCount = inputs.FeatureCount;
 
         // Calculate all statistical metrics using the converted data types
@@ -545,7 +583,6 @@ public class ModelStats<T, TInput, TOutput>
         HammingDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Hamming);
         MahalanobisDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Mahalanobis, CovarianceMatrix);
     }
-
     /// <summary>
     /// Retrieves the value of a specific metric.
     /// </summary>

@@ -80,10 +80,8 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void PerformStandardSTL(Vector<T> y)
     {
-        Vector<T> detrended = y;
-
         // Step 1: Detrending
-        detrended = SubtractVectors(y, _trend);
+        Vector<T> detrended = SubtractVectors(y, _trend);
 
         // Step 2: Cycle-subseries Smoothing
         _seasonal = CycleSubseriesSmoothing(detrended, _stlOptions.SeasonalPeriod, _stlOptions.SeasonalLoessWindow);

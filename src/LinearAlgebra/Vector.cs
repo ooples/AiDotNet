@@ -14,6 +14,41 @@ namespace AiDotNet.LinearAlgebra;
 public class Vector<T> : VectorBase<T>, IEnumerable<T>
 {
     /// <summary>
+    /// Creates an empty vector with zero elements.
+    /// </summary>
+    /// <returns>A new empty vector.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a vector with no elements.
+    /// It's useful as a placeholder or when you need to represent the absence of data.</para>
+    /// </remarks>
+    public new static Vector<T> Empty()
+    {
+        // Create a singleton empty vector instance if it doesn't exist yet
+        _emptyVector ??= new Vector<T>(0)
+        {
+            IsEmpty = true
+        };
+
+        return _emptyVector;
+    }
+
+    // Static field to hold the singleton empty vector instance
+    private static Vector<T>? _emptyVector;
+
+    /// <summary>
+    /// Gets a value indicating whether this vector is empty.
+    /// </summary>
+    public new bool IsEmpty { get; private set; }
+
+    /// <summary>
+    /// Gets the length of the vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>For empty vectors, this will return 0.</para>
+    /// </remarks>
+    public new int Length => IsEmpty ? 0 : base.Length;
+
+    /// <summary>
     /// Initializes a new instance of the Vector class with the specified length.
     /// </summary>
     /// <param name="length">The length of the vector.</param>
@@ -21,8 +56,10 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <para><b>For Beginners:</b> This creates an empty vector with the given size.
     /// All elements will be initialized to their default values (0 for numeric types).</para>
     /// </remarks>
-    public Vector(int length) : base(length)
+    public Vector(int length) : base(length > 0 ? length : 1)
     {
+        // Mark as empty if length is 0
+        IsEmpty = length == 0;
     }
 
     /// <summary>
@@ -215,19 +252,6 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public override VectorBase<T> Ones(int size)
     {
         return new Vector<T>(Enumerable.Repeat(_numOps.One, size));
-    }
-
-    /// <summary>
-    /// Creates an empty vector with zero elements.
-    /// </summary>
-    /// <returns>A new empty vector.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This creates a vector with no elements (length of 0).
-    /// It's useful as a starting point when you need to build a vector by adding elements.</para>
-    /// </remarks>
-    public new static Vector<T> Empty()
-    {
-        return new Vector<T>(0);
     }
 
     /// <summary>

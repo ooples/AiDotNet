@@ -381,7 +381,13 @@ public class BasicStats<T>
     /// </remarks>
     public static BasicStats<T> Empty()
     {
-        return new BasicStats<T>(new());
+        // Create properly initialized empty inputs
+        var emptyInputs = new BasicStatsInputs<T>
+        {
+            Values = Vector<T>.Empty()
+        };
+
+        return new BasicStats<T>(emptyInputs);
     }
 
     /// <summary>
@@ -408,7 +414,14 @@ public class BasicStats<T>
     private void CalculateStats(Vector<T> values)
     {
         N = values.Length;
-        if (N == 0) return;
+
+        // Return early if the vector is empty
+        if (N == 0 || values.IsEmpty)
+        {
+            // All metrics remain at their initialized zero values
+            return;
+        }
+
         Mean = values.Average();
         Variance = values.Variance();
         StandardDeviation = _numOps.Sqrt(Variance);

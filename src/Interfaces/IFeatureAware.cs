@@ -14,4 +14,10 @@ public interface IFeatureAware
     /// Checks if a specific feature is used by this model.
     /// </summary>
     bool IsFeatureUsed(int featureIndex);
+
+    /// <summary>
+    /// Sets which feature indices should be considered active for this model.
+    /// </summary>
+    /// <param name="featureIndices">The collection of feature indices to activate.</param>
+    void SetActiveFeatureIndices(IEnumerable<int> featureIndices);
 }

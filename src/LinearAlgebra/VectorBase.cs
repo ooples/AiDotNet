@@ -37,7 +37,7 @@ public abstract class VectorBase<T>
     /// </remarks>
     protected VectorBase(int length)
     {
-        if (length <= 0)
+        if (length < 0)
             throw new ArgumentException("Length must be positive", nameof(length));
     
         _data = new T[length];

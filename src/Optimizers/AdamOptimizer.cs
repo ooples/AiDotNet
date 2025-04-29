@@ -117,9 +117,6 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        var parameters = Model.GetParameters();
-        _m = new Vector<T>(parameters.Length);
-        _v = new Vector<T>(parameters.Length);
         _t = 0;
 
         InitializeAdaptiveParameters();
@@ -145,6 +142,10 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             previousStepData = currentStepData;
         }
+
+        var parameters = Model.GetParameters();
+        _m = new Vector<T>(parameters.Length);
+        _v = new Vector<T>(parameters.Length);
 
         return CreateOptimizationResult(bestStepData, inputData);
     }

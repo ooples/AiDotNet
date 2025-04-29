@@ -136,9 +136,22 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         // Initialize model components
         _trend = NumOps.FromDouble(_prophetOptions.InitialTrendValue);
         _seasonalComponents = new Vector<T>(_prophetOptions.SeasonalPeriods.Sum());
-        _holidayComponents = new Vector<T>(_prophetOptions.Holidays.Count);
+
+        // Handle potentially empty holiday collection
+        if (_prophetOptions.Holidays != null && _prophetOptions.Holidays.Count > 0)
+        {
+            _holidayComponents = new Vector<T>(_prophetOptions.Holidays.Count);
+        }
+        else
+        {
+            // Create an empty vector for holidays
+            _holidayComponents = Vector<T>.Empty();
+        }
+
         _changepoint = NumOps.FromDouble(_prophetOptions.InitialChangepointValue);
-        _regressors = new Vector<T>(_prophetOptions.RegressorCount);
+        _regressors = _prophetOptions.RegressorCount > 0
+            ? new Vector<T>(_prophetOptions.RegressorCount)
+            : Vector<T>.Empty();
     }
 
     /// <summary>

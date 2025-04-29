@@ -110,4 +110,36 @@ public interface IModelCache<T, TInput, TOutput>
     /// - Gives you a clean slate for a new training session
     /// </remarks>
     void ClearCache();
+
+    /// <summary>
+    /// Generates a unique cache key based on the model and input data characteristics.
+    /// </summary>
+    /// <remarks>
+    /// This method creates a unique identifier that represents both the model's current state
+    /// and the characteristics of the input data being processed.
+    /// 
+    /// <b>For Beginners:</b> This is like creating a unique filename that describes both what you're saving and when.
+    /// 
+    /// The cache key is important because:
+    /// - It ensures we only retrieve cached results that match our current situation
+    /// - It prevents mixing up results from different models or datasets
+    /// - It allows the system to identify when previous calculations can be reused
+    /// 
+    /// For example:
+    /// - If you train the same model on two different datasets, each gets a different key
+    /// - If you modify your model's parameters, it gets a new key
+    /// - This ensures you never accidentally use calculations from the wrong context
+    /// 
+    /// The key typically combines:
+    /// - Information about the model's structure and parameters
+    /// - Characteristics of the dataset (size, features, etc.)
+    /// - Sometimes, information about the specific training phase
+    /// 
+    /// This automatic key generation makes the caching system more reliable and easier to use
+    /// than if you had to manually create unique identifiers yourself.
+    /// </remarks>
+    /// <param name="model">The machine learning model being trained or evaluated.</param>
+    /// <param name="inputData">The data being used for training or evaluation.</param>
+    /// <returns>A unique string identifier that represents this specific model-data combination.</returns>
+    string GenerateCacheKey(IFullModel<T, TInput, TOutput> model, OptimizationInputData<T, TInput, TOutput> inputData);
 }

@@ -37,6 +37,24 @@ public abstract class RegressionBase<T> : IRegression<T>
     protected INumericOperations<T> NumOps { get; private set; }
 
     /// <summary>
+    /// Set of feature indices that have been explicitly marked as active.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores feature indices that have been explicitly set as active through
+    /// the SetActiveFeatureIndices method, overriding the automatic determination based
+    /// on non-zero coefficients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tracks which input features have been manually
+    /// selected as important for the regression model, regardless of their coefficient values.
+    /// 
+    /// When set, these manually selected features take precedence over the automatic
+    /// feature detection based on non-zero coefficients.
+    /// </para>
+    /// </remarks>
+    private HashSet<int>? _explicitlySetActiveFeatures;
+
+    /// <summary>
     /// Gets the regression options.
     /// </summary>
     /// <value>
@@ -486,6 +504,20 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </remarks>
     public virtual IEnumerable<int> GetActiveFeatureIndices()
     {
+        // If we have explicitly set active features, return those
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0)
+        {
+            // Order the features and yield each one individually
+            foreach (int featureIndex in _explicitlySetActiveFeatures.OrderBy(i => i))
+            {
+                yield return featureIndex;
+            }
+
+            // Exit early - we only want to return the explicitly set features
+            yield break;
+        }
+
+        // Otherwise, continue with the existing implementation
         for (int i = 0; i < Coefficients.Length; i++)
         {
             // If the coefficient is not zero (using a threshold for floating-point comparison)
@@ -524,10 +556,22 @@ public abstract class RegressionBase<T> : IRegression<T>
     {
         if (featureIndex < 0 || featureIndex >= Coefficients.Length)
         {
-            throw new ArgumentOutOfRangeException(nameof(featureIndex), 
+            throw new ArgumentOutOfRangeException(nameof(featureIndex),
                 $"Feature index must be between 0 and {Coefficients.Length - 1}");
         }
-    
+
+        // If feature index is explicitly set as active, return true immediately
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Contains(featureIndex))
+        {
+            return true;
+        }
+
+        // If explicitly set active features exist but don't include this index, it's not used
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0)
+        {
+            return false;
+        }
+
         return !NumOps.Equals(Coefficients[featureIndex], NumOps.Zero);
     }
 
@@ -610,5 +654,60 @@ public abstract class RegressionBase<T> : IRegression<T>
     {
         // By default, Clone behaves the same as DeepCopy
         return DeepCopy();
+    }
+
+    /// <summary>
+    /// Sets which features should be considered active in the model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to mark as active.</param>
+    /// <exception cref="ArgumentNullException">Thrown when featureIndices is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any feature index is outside the valid range.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method explicitly specifies which features should be considered active in the
+    /// regression model, overriding the automatic determination based on non-zero coefficients.
+    /// Any features not included in the provided collection will be considered inactive,
+    /// regardless of their coefficient values.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you manually tell the model which input features
+    /// are important, regardless of what the model learned during training.
+    /// 
+    /// For example, if you have 10 features but want to focus on only features 2, 5, and 7,
+    /// you can use this method to specify exactly those features. After setting these features:
+    /// - Only these specific features will be reported as active by GetActiveFeatureIndices()
+    /// - Only these features will return true when checked with IsFeatureUsed()
+    /// - This selection will persist when the model is saved and loaded
+    /// 
+    /// This can be useful for:
+    /// - Feature selection experiments (testing different feature subsets)
+    /// - Simplifying model interpretation
+    /// - Ensuring consistency across different models
+    /// - Highlighting specific features you know are important from domain expertise
+    /// </para>
+    /// </remarks>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices), "Feature indices cannot be null.");
+        }
+
+        // Initialize the hash set if it doesn't exist
+        _explicitlySetActiveFeatures ??= [];
+
+        // Clear existing explicitly set features
+        _explicitlySetActiveFeatures.Clear();
+
+        // Add the new feature indices
+        foreach (var index in featureIndices)
+        {
+            if (index < 0 || index >= Coefficients.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {index} must be between 0 and {Coefficients.Length - 1}");
+            }
+
+            _explicitlySetActiveFeatures.Add(index);
+        }
     }
 }

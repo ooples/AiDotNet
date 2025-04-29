@@ -517,14 +517,37 @@ public class PredictionStats<T>
     /// </summary>
     /// <returns>A PredictionStats instance with all metrics initialized to zero.</returns>
     /// <remarks>
-    /// For Beginners:
+    /// <para>
+    /// This method creates a PredictionStats object with all metrics initialized to their default values.
+    /// The BestDistributionFit property is also properly initialized to an empty result.
+    /// </para>
+    /// <para><b>For Beginners:</b>
     /// This static method creates a PredictionStats object where all metrics are set to zero.
     /// It's useful when you need a placeholder or default instance, or when you want to
     /// compare against a baseline of "perfect predictions."
+    /// 
+    /// The method ensures that all properties, including complex ones like BestDistributionFit,
+    /// are properly initialized to avoid null reference exceptions when accessing them.
+    /// </para>
     /// </remarks>
     public static PredictionStats<T> Empty()
     {
-        return new PredictionStats<T>(new());
+        var emptyStats = new PredictionStats<T>(new PredictionStatsInputs<T>
+        {
+            // Initialize with empty vectors to ensure proper handling
+            Actual = Vector<T>.Empty(),
+            Predicted = Vector<T>.Empty(),
+            ConfidenceLevel = 0.95, // Default confidence level
+            NumberOfParameters = 0,
+            LearningCurveSteps = 0,
+            PredictionType = PredictionType.Regression // Default prediction type
+        })
+        {
+            // Ensure BestDistributionFit is properly initialized
+            BestDistributionFit = new DistributionFitResult<T>()
+        };
+
+        return emptyStats;
     }
 
     /// <summary>
@@ -537,8 +560,11 @@ public class PredictionStats<T>
     /// <param name="learningCurveSteps">Number of steps to use when calculating the learning curve.</param>
     /// <param name="predictionType">The type of prediction (regression, binary classification, etc.).</param>
     /// <remarks>
-    /// For Beginners:
+    /// <para>
     /// This private method does the actual work of calculating all the prediction statistics.
+    /// It handles empty inputs gracefully by returning early with all metrics set to their default values.
+    /// </para>
+    /// <para><b>For Beginners:</b> This private method does the actual work of calculating all the prediction statistics.
     /// 
     /// - actual: These are the true values you're trying to predict
     /// - predicted: These are your model's predictions
@@ -548,10 +574,27 @@ public class PredictionStats<T>
     /// - predictionType: This tells the method whether you're doing regression (predicting numbers) or classification (predicting categories)
     /// 
     /// The method calculates various metrics like intervals, correlation coefficients, and performance metrics,
-    /// storing the results in the corresponding properties.
+    /// storing the results in the corresponding properties. If you provide empty data,
+    /// all metrics will remain at their default zero values.
+    /// </para>
     /// </remarks>
     private void CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters, T confidenceLevel, int learningCurveSteps, PredictionType predictionType)
     {
+        // Return early if either vector is empty, null, or has zero length
+        if (actual == null || predicted == null ||
+            actual.IsEmpty || predicted.IsEmpty ||
+            actual.Length == 0 || predicted.Length == 0)
+        {
+            // All metrics remain at their initialized zero values
+            return;
+        }
+
+        // Validate that vectors have the same length
+        if (actual.Length != predicted.Length)
+        {
+            throw new ArgumentException("Actual and predicted vectors must have the same length.");
+        }
+
         BestDistributionFit = StatisticsHelper<T>.DetermineBestFitDistribution(predicted);
 
         MeanPredictionError = StatisticsHelper<T>.CalculateMeanPredictionError(actual, predicted);

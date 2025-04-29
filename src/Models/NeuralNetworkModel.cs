@@ -46,7 +46,26 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </para>
     /// </remarks>
     public NeuralNetworkBase<T> Network { get; }
-    
+
+    /// <summary>
+    /// Set of feature indices that have been explicitly marked as active.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores feature indices that have been explicitly set as active through
+    /// the SetActiveFeatureIndices method, overriding the automatic determination based
+    /// on the neural network's architecture.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tracks which input features have been manually
+    /// selected as important for the neural network model, regardless of what features
+    /// the network might actually use in its internal calculations.
+    /// 
+    /// When set, these manually selected features take precedence over the automatic
+    /// feature detection which for neural networks typically includes all input features.
+    /// </para>
+    /// </remarks>
+    private HashSet<int>? _explicitlySetActiveFeatures;
+
     /// <summary>
     /// Gets the architecture of the neural network.
     /// </summary>
@@ -292,11 +311,17 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
         if (featureIndex < 0 || featureIndex >= FeatureCount)
         {
-            throw new ArgumentOutOfRangeException(nameof(featureIndex), 
+            throw new ArgumentOutOfRangeException(nameof(featureIndex),
                 $"Feature index must be between 0 and {FeatureCount - 1}");
         }
-        
-        // Neural networks typically use all input features in some capacity
+
+        // If we have explicitly set active features, check those
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0)
+        {
+            return _explicitlySetActiveFeatures.Contains(featureIndex);
+        }
+
+        // Otherwise, neural networks typically use all input features in some capacity
         return true;
     }
 
@@ -750,7 +775,13 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public IEnumerable<int> GetActiveFeatureIndices()
     {
-        // Neural networks typically use all input features
+        // If we have explicitly set active features, return those
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0)
+        {
+            return _explicitlySetActiveFeatures.OrderBy(i => i);
+        }
+
+        // Otherwise, neural networks typically use all input features
         // Return indices for all features from 0 to FeatureCount-1
         return Enumerable.Range(0, FeatureCount);
     }
@@ -819,5 +850,63 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     public IFullModel<T, Tensor<T>, Tensor<T>> Clone()
     {
         return DeepCopy();
+    }
+
+    /// <summary>
+    /// Sets which features should be considered active in the model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to mark as active.</param>
+    /// <exception cref="ArgumentNullException">Thrown when featureIndices is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any feature index is negative or greater than the feature count.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method explicitly specifies which features should be considered active in the neural network model,
+    /// overriding the default behavior where all features are considered active. Any features not included
+    /// in the provided collection will be considered inactive, even though neural networks typically
+    /// use all input features to some extent.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you manually specify which input features
+    /// the model should consider important, overriding the default neural network behavior
+    /// where all features are typically used.
+    /// 
+    /// For example, if you have 10 features but want to focus on only features 2, 5, and 7,
+    /// you can use this method to specify exactly those features. After setting these features:
+    /// - Only these specific features will be reported as active by GetActiveFeatureIndices()
+    /// - Only these features will return true when checked with IsFeatureUsed()
+    /// 
+    /// This can be useful for:
+    /// - Feature selection experiments (testing different feature subsets)
+    /// - Simplifying model interpretation
+    /// - Ensuring consistency across different models
+    /// - Highlighting specific features you know are important from domain expertise
+    /// 
+    /// Note that this doesn't actually modify the neural network's internal calculations -
+    /// it just changes what features the model reports as being active.
+    /// </para>
+    /// </remarks>
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices), "Feature indices cannot be null.");
+        }
+
+        // Initialize the hash set if it doesn't exist
+        _explicitlySetActiveFeatures ??= [];
+
+        // Clear existing explicitly set features
+        _explicitlySetActiveFeatures.Clear();
+
+        // Add the new feature indices
+        foreach (var index in featureIndices)
+        {
+            if (index < 0 || index >= FeatureCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {index} must be between 0 and {FeatureCount - 1}.");
+            }
+
+            _explicitlySetActiveFeatures.Add(index);
+        }
     }
 }

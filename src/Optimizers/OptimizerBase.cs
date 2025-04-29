@@ -1,6 +1,7 @@
 global using AiDotNet.Models.Inputs;
 global using AiDotNet.Evaluation;
 global using AiDotNet.Caching;
+using System;
 
 namespace AiDotNet.Optimizers;
 
@@ -186,46 +187,6 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         // Apply the new parameters to the model
         var updatedModel = model.WithParameters(newParameters);
-
-        // Since WithParameters returns a new model, we need to copy its state back to our model
-        CopyModelState(updatedModel, model);
-    }
-
-    /// <summary>
-    /// Applies feature selection to a model.
-    /// </summary>
-    /// <param name="model">The model to apply feature selection to.</param>
-    /// <param name="selectedFeatures">The list of selected feature indices.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is like deciding which ingredients to include in your recipe.
-    /// Some ingredients might not be necessary or might even make the dish worse, so you're
-    /// choosing which ones are truly important.
-    /// </remarks>
-    protected virtual void ApplyFeatureSelection(IFullModel<T, TInput, TOutput> model, List<int> selectedFeatures)
-    {
-        if (model is IFeatureAware featureAwareModel)
-        {
-            // Implementation depends on your IFeatureAware interface
-            // For demonstration purposes (actual implementation will depend on your model interface):
-            ApplyFeaturesToModel(featureAwareModel, selectedFeatures);
-        }
-    }
-
-    /// <summary>
-    /// Applies the selected features to a feature-aware model.
-    /// </summary>
-    /// <param name="model">The feature-aware model.</param>
-    /// <param name="selectedFeatures">The list of selected feature indices.</param>
-    protected virtual void ApplyFeaturesToModel(IFeatureAware model, List<int> selectedFeatures)
-    {
-        // Implementation depends on your IFeatureAware interface
-        // For demonstration purposes:
-        /*
-        if (model is MyFeatureSelectableModel selectableModel)
-        {
-            selectableModel.SetActiveFeatures(selectedFeatures);
-        }
-        */
     }
 
     /// <summary>
@@ -273,31 +234,23 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
-    /// Copies the state from one model to another.
+    /// Applies the selected features to a model.
     /// </summary>
-    /// <param name="source">The source model.</param>
-    /// <param name="target">The target model.</param>
-    protected virtual void CopyModelState(IFullModel<T, TInput, TOutput> source, IFullModel<T, TInput, TOutput> target)
+    /// <param name="model">The model to apply feature selection to.</param>
+    /// <param name="selectedFeatures">The list of selected feature indices.</param>
+    protected virtual void ApplyFeatureSelection(IFullModel<T, TInput, TOutput> model, List<int> selectedFeatures)
     {
-        // Implementation depends on your model interface
-        // For demonstration purposes:
-        /*
-        if (source is IStateCopyable<T, TInput, TOutput> copyableSource &&
-            target is IStateCopyable<T, TInput, TOutput> copyableTarget)
-        {
-            copyableTarget.CopyStateFrom(copyableSource);
-        }
-        else
-        {
-            // Fallback: serialize the source and deserialize to the target
-            byte[] serializedState = source.Serialize();
-            target.Deserialize(serializedState);
-        }
-        */
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
 
-        // Default implementation: serialize and deserialize
-        byte[] serializedState = source.Serialize();
-        target.Deserialize(serializedState);
+        if (selectedFeatures == null || selectedFeatures.Count == 0)
+            throw new ArgumentException("At least one feature must be selected.", nameof(selectedFeatures));
+
+        // Apply features if model supports it
+        if (model is IFeatureAware featureAwareModel)
+        {
+            featureAwareModel.SetActiveFeatureIndices(selectedFeatures);
+        }
     }
 
     /// <summary>
@@ -345,16 +298,16 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         IFullModel<T, TInput, TOutput> solution, 
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        string cacheKey = solution.GetHashCode().ToString();
-        var cachedStepData = GetCachedStepData(cacheKey);
-    
+        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
+
         if (cachedStepData != null)
         {
             return cachedStepData;
         }
 
         var stepData = PrepareAndEvaluateSolution(solution, inputData);
-        CacheStepData(cacheKey, stepData);
+        ModelCache.CacheStepData(cacheKey, stepData);
 
         return stepData;
     }
@@ -366,23 +319,27 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="inputData">The input data for evaluation.</param>
     /// <returns>The evaluation results for the solution.</returns>
     protected OptimizationStepData<T, TInput, TOutput> PrepareAndEvaluateSolution(
-        IFullModel<T, TInput, TOutput> solution, 
+        IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        string cacheKey = solution.GetHashCode().ToString();
-        var cachedStepData = GetCachedStepData(cacheKey);
-    
-        if (cachedStepData != null)
-        {
-            return cachedStepData;
-        }
+        // Step 1: Generate random feature selection independent of model state
+        var selectedFeaturesIndices = RandomlySelectFeatures(
+            InputHelper<T, TInput>.GetInputSize(inputData.XTrain),
+            Options.MinimumFeatures,
+            Options.MaximumFeatures);
 
-        var selectedFeatures = ModelHelper<T, TInput, TOutput>.GetColumnVectors(inputData.XTrain, 
-            [.. solution.GetActiveFeatureIndices()]);
-        var XTrainSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(inputData.XTrain, selectedFeatures);
-        var XValSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(inputData.XValidation, selectedFeatures);
-        var XTestSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(inputData.XTest, selectedFeatures);
+        // Step 2: Apply feature selection to input data
+        var selectedFeatures = ModelHelper<T, TInput, TOutput>.GetColumnVectors(
+            inputData.XTrain, [.. selectedFeaturesIndices]);
 
+        var XTrainSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+            inputData.XTrain, selectedFeatures);
+        var XValSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+            inputData.XValidation, selectedFeatures);
+        var XTestSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+            inputData.XTest, selectedFeatures);
+
+        // Step 3: Create input data with selected features
         var subsetInputData = new OptimizationInputData<T, TInput, TOutput>
         {
             XTrain = XTrainSubset,
@@ -393,18 +350,26 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             YTest = inputData.YTest
         };
 
+        // Step 4: Apply feature info to model (if supported)
+        ApplyFeatureSelection(solution, selectedFeaturesIndices);
+
+        // Step 5: Create evaluation input
         var input = new ModelEvaluationInput<T, TInput, TOutput>
         {
             Model = solution,
             InputData = subsetInputData
         };
 
-        var (currentFitnessScore, fitDetectionResult, evaluationData) = TrainAndEvaluateSolution(input);
+        // Step 6: Train and evaluate
+        var (currentFitnessScore, fitDetectionResult, evaluationData) =
+            TrainAndEvaluateSolution(input);
+
         FitnessList.Add(currentFitnessScore);
 
+        // Step 7: Create and return step data
         var stepData = new OptimizationStepData<T, TInput, TOutput>
         {
-            Solution = solution,
+            Solution = solution.DeepCopy(),  // Now trained, so DeepCopy works
             SelectedFeatures = selectedFeatures,
             XTrainSubset = XTrainSubset,
             XValSubset = XValSubset,
@@ -414,9 +379,30 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             EvaluationData = evaluationData
         };
 
-        CacheStepData(cacheKey, stepData);
-
         return stepData;
+    }
+
+    private List<int> GenerateFeatureSelection(TInput input)
+    {
+        int totalFeatures = InputHelper<T, TInput>.GetInputSize(input);
+
+        int minFeatures = Math.Max(1, totalFeatures / 4);
+        int maxFeatures = Math.Max(2, totalFeatures * 3 / 4);
+        var featuresToSelect = Random.Next(minFeatures, maxFeatures + 1);
+
+        // Generate random selection
+        List<int> allIndices = [.. Enumerable.Range(0, totalFeatures)];
+        var selectedIndices = new List<int>();
+
+        // Select random features without replacement
+        for (int i = 0; i < featuresToSelect && allIndices.Count > 0; i++)
+        {
+            int randomIndex = Random.Next(allIndices.Count);
+            selectedIndices.Add(allIndices[randomIndex]);
+            allIndices.RemoveAt(randomIndex);
+        }
+
+        return selectedIndices;
     }
 
     /// <summary>

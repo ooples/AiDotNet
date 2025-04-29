@@ -318,7 +318,15 @@ public class ErrorStats<T>
     /// </remarks>
     public static ErrorStats<T> Empty()
     {
-        return new ErrorStats<T>(new());
+        // Create properly initialized empty inputs
+        var emptyInputs = new ErrorStatsInputs<T>
+        {
+            Actual = Vector<T>.Empty(),
+            Predicted = Vector<T>.Empty(),
+            FeatureCount = 0
+        };
+
+        return new ErrorStats<T>(emptyInputs);
     }
 
     /// <summary>
@@ -328,8 +336,11 @@ public class ErrorStats<T>
     /// <param name="predicted">Vector of predicted values from your model.</param>
     /// <param name="numberOfParameters">Number of features or parameters in your model.</param>
     /// <remarks>
-    /// For Beginners:
+    /// <para>
     /// This private method does the actual work of calculating all the error metrics.
+    /// It handles empty inputs gracefully by returning early with all metrics set to their default values.
+    /// </para>
+    /// <para><b>For Beginners:</b> This private method does the actual work of calculating all the error metrics.
     /// 
     /// - actual: These are the true values you're trying to predict
     /// - predicted: These are your model's predictions
@@ -337,10 +348,27 @@ public class ErrorStats<T>
     ///   for metrics that account for model complexity (like AIC, BIC)
     /// 
     /// The method calculates each error metric using specialized helper methods and 
-    /// stores the results in the corresponding properties.
+    /// stores the results in the corresponding properties. If you provide empty data,
+    /// all metrics will remain at their default zero values.
+    /// </para>
     /// </remarks>
     private void CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters)
     {
+        // Return early if either vector is empty or null
+        if (actual == null || predicted == null ||
+            actual.IsEmpty || predicted.IsEmpty ||
+            actual.Length == 0 || predicted.Length == 0)
+        {
+            // All metrics remain at their initialized zero values
+            return;
+        }
+
+        // Validate that vectors have the same length
+        if (actual.Length != predicted.Length)
+        {
+            throw new ArgumentException("Actual and predicted vectors must have the same length.");
+        }
+
         int n = actual.Length;
 
         // Calculate basic error metrics
@@ -371,7 +399,7 @@ public class ErrorStats<T>
         AICAlt = StatisticsHelper<T>.CalculateAICAlternative(n, numberOfParameters, RSS);
 
         // Populate error list
-        ErrorList = [..StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
+        ErrorList = [.. StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
     }
 
     /// <summary>
