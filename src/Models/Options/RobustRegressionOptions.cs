@@ -226,5 +226,5 @@ public class RobustRegressionOptions<T> : RegressionOptions<T>
     /// good prior information about what the solution should look like.
     /// </para>
     /// </remarks>
-    public IRegression<T>? InitialRegression { get; set; }
+    public IRegressionModel<T>? InitialRegression { get; set; }
 }

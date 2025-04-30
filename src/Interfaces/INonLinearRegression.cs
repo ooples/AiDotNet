@@ -30,7 +30,7 @@ namespace AiDotNet.Interfaces;
 /// through the functionality inherited from IFullModel.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface INonLinearRegression<T> : IRegression<T>
+public interface INonLinearRegression<T> : IRegressionModel<T>
 {
     // This interface inherits all methods and properties from IFullModel<T>
     // No additional methods or properties are defined at this level

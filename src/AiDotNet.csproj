@@ -47,7 +47,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Folder Include="Caching\" />
 	  <Folder Include="GaussianProcesses\" />
 	  <Folder Include="Exceptions\" />
 	  <Folder Include="Validation\" />

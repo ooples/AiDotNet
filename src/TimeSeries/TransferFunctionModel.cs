@@ -172,14 +172,13 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void OptimizeParameters(Matrix<T> x, Vector<T> y)
     {
-        var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>
-        {
-            XTrain = x,
-            YTrain = y
-        };
+        // Get the cached input data (whether we just created it or it was already there)
+        var optimizationData = DefaultInputCache.GetDefaultInputData<T, Matrix<T>, Vector<T>>();
 
-        OptimizationResult<T, Matrix<T>, Vector<T>> result = _optimizer.Optimize(inputData);
-        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
+        // Use the cached data for optimization
+        var optimizationResult = _optimizer.Optimize(optimizationData);
+
+        UpdateModelParameters(optimizationResult.BestSolution?.GetParameters() ?? Vector<T>.Empty());
     }
 
     /// <summary>

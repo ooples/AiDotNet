@@ -108,6 +108,42 @@ public static class ModelHelper<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Determines if the model is a classification model.
+    /// </summary>
+    public static bool IsClassificationModel(IFullModel<T, TInput, TOutput> model)
+    {
+        // Check if model implements classification interfaces
+        return model is IClassificationModel<T>;
+    }
+
+    /// <summary>
+    /// Determines if the model is a regression model.
+    /// </summary>
+    public static bool IsRegressionModel(IFullModel<T, TInput, TOutput> model)
+    {
+        // Check if model implements regression interfaces
+        return model is IRegressionModel<T>;
+    }
+
+    /// <summary>
+    /// Determines if the model is a time series model.
+    /// </summary>
+    public static bool IsTimeSeriesModel(IFullModel<T, TInput, TOutput> model)
+    {
+        // Check if model implements time series interfaces
+        return model is ITimeSeriesModel<T>;
+    }
+
+    /// <summary>
+    /// Determines if the model is a neural network model.
+    /// </summary>
+    public static bool IsNeuralNetworkModel(IFullModel<T, TInput, TOutput> model)
+    {
+        // Check if model implements neural network interfaces
+        return model is INeuralNetworkModel<T>;
+    }
+
+    /// <summary>
     /// Gets column vectors from the input data based on the specified indices.
     /// </summary>
     /// <param name="input">The input data from which to extract columns.</param>

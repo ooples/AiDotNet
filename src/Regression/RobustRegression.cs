@@ -102,7 +102,7 @@ public class RobustRegression<T> : RegressionBase<T>
         x = Regularization.Regularize(x);
 
         // Initial regression estimate
-        IRegression<T> initialRegression = _options.InitialRegression ?? new MultipleRegression<T>();
+        IRegressionModel<T> initialRegression = _options.InitialRegression ?? new MultipleRegression<T>();
         initialRegression.Train(x, y);
         Vector<T> parameters = initialRegression.GetParameters();
 

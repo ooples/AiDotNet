@@ -313,11 +313,16 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
-    /// Prepares and evaluates a solution, creating subsets of data based on selected features.
+    /// Prepares and evaluates a solution, applying feature selection before checking the cache.
     /// </summary>
     /// <param name="solution">The solution to evaluate.</param>
     /// <param name="inputData">The input data for evaluation.</param>
     /// <returns>The evaluation results for the solution.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method prepares a model with a specific set of features,
+    /// checks if we've already trained this exact configuration before, and if not,
+    /// trains and evaluates the model with the selected features.
+    /// </remarks>
     protected OptimizationStepData<T, TInput, TOutput> PrepareAndEvaluateSolution(
         IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
@@ -328,7 +333,19 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             Options.MinimumFeatures,
             Options.MaximumFeatures);
 
-        // Step 2: Apply feature selection to input data
+        // Step 2: Apply feature selection to the model BEFORE we check the cache
+        ApplyFeatureSelection(solution, selectedFeaturesIndices);
+
+        // Step 3: Generate cache key based on the selected features and check cache
+        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
+
+        if (cachedStepData != null)
+        {
+            return cachedStepData;
+        }
+
+        // Step 4: Apply feature selection to input data
         var selectedFeatures = ModelHelper<T, TInput, TOutput>.GetColumnVectors(
             inputData.XTrain, [.. selectedFeaturesIndices]);
 
@@ -339,7 +356,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         var XTestSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
             inputData.XTest, selectedFeatures);
 
-        // Step 3: Create input data with selected features
+        // Step 5: Create input data with selected features
         var subsetInputData = new OptimizationInputData<T, TInput, TOutput>
         {
             XTrain = XTrainSubset,
@@ -350,23 +367,20 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             YTest = inputData.YTest
         };
 
-        // Step 4: Apply feature info to model (if supported)
-        ApplyFeatureSelection(solution, selectedFeaturesIndices);
-
-        // Step 5: Create evaluation input
+        // Step 6: Create evaluation input
         var input = new ModelEvaluationInput<T, TInput, TOutput>
         {
             Model = solution,
             InputData = subsetInputData
         };
 
-        // Step 6: Train and evaluate
+        // Step 7: Train and evaluate
         var (currentFitnessScore, fitDetectionResult, evaluationData) =
             TrainAndEvaluateSolution(input);
 
         FitnessList.Add(currentFitnessScore);
 
-        // Step 7: Create and return step data
+        // Step 8: Create and store step data
         var stepData = new OptimizationStepData<T, TInput, TOutput>
         {
             Solution = solution.DeepCopy(),  // Now trained, so DeepCopy works
@@ -379,30 +393,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             EvaluationData = evaluationData
         };
 
+        // Step 9: Cache the results
+        ModelCache.CacheStepData(cacheKey, stepData);
+
         return stepData;
-    }
-
-    private List<int> GenerateFeatureSelection(TInput input)
-    {
-        int totalFeatures = InputHelper<T, TInput>.GetInputSize(input);
-
-        int minFeatures = Math.Max(1, totalFeatures / 4);
-        int maxFeatures = Math.Max(2, totalFeatures * 3 / 4);
-        var featuresToSelect = Random.Next(minFeatures, maxFeatures + 1);
-
-        // Generate random selection
-        List<int> allIndices = [.. Enumerable.Range(0, totalFeatures)];
-        var selectedIndices = new List<int>();
-
-        // Select random features without replacement
-        for (int i = 0; i < featuresToSelect && allIndices.Count > 0; i++)
-        {
-            int randomIndex = Random.Next(allIndices.Count);
-            selectedIndices.Add(allIndices[randomIndex]);
-            allIndices.RemoveAt(randomIndex);
-        }
-
-        return selectedIndices;
     }
 
     /// <summary>

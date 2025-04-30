@@ -684,98 +684,716 @@ public enum ModelType
     /// </remarks>
     DeepBeliefNetwork,
 
+    /// <summary>
+    /// A neural network architecture that uses skip connections to allow training of very deep networks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Residual Neural Networks solve a problem that occurs when neural networks get too deep 
+    /// (have too many layers). Normally, adding more layers should make a network smarter, but in practice, very 
+    /// deep networks become harder to train. ResNets use "shortcut connections" that let information skip ahead, 
+    /// allowing the network to learn which information should take the shortcut and which needs more processing. 
+    /// This is like having both an express lane and a local lane on a highway - some information can take the 
+    /// fast route while other information needs to stop at every exit.
+    /// </para>
+    /// </remarks>
     ResidualNeuralNetwork,
 
+    /// <summary>
+    /// A type of autoencoder that learns to generate new data similar to the training data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Variational Autoencoders learn to compress data (like images) into a compact form and 
+    /// then reconstruct it. What makes them special is they learn a smooth, continuous representation where 
+    /// similar inputs are close together. This allows you to generate new data by sampling from this space. 
+    /// For example, a VAE trained on faces could generate new, realistic faces that don't belong to any real 
+    /// person, or you could blend characteristics from different faces by moving through this learned space.
+    /// </para>
+    /// </remarks>
     VariationalAutoencoder,
 
+    /// <summary>
+    /// A neural network architecture that better preserves spatial hierarchies between features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Capsule Networks improve on traditional neural networks by preserving information about 
+    /// position and orientation of features. Regular networks might recognize a face if it has eyes, nose, and mouth, 
+    /// regardless of their arrangement. Capsule Networks also care about the spatial relationships - eyes above nose, 
+    /// nose above mouth. This makes them better at understanding 3D objects from different viewpoints and less likely 
+    /// to be fooled by images where the parts are present but arranged incorrectly.
+    /// </para>
+    /// </remarks>
     CapsuleNetwork,
 
+    /// <summary>
+    /// A neural network that leverages quantum computing principles for processing information.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Quantum Neural Networks combine principles from quantum computing with neural networks. 
+    /// While traditional computers use bits (0 or 1), quantum computers use qubits that can exist in multiple states 
+    /// simultaneously. This allows quantum neural networks to explore many possible solutions at once, potentially 
+    /// solving certain complex problems much faster than classical approaches. This is an emerging field at the 
+    /// intersection of quantum physics and machine learning.
+    /// </para>
+    /// </remarks>
     QuantumNeuralNetwork,
 
+    /// <summary>
+    /// A type of unsupervised neural network that organizes data based on similarity.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Self-Organizing Maps learn to arrange data so that similar items are placed close together. 
+    /// Imagine organizing books on shelves so that similar topics are near each other - that's what SOMs do with data. 
+    /// They create a "map" where each location represents a particular pattern, and similar patterns are placed nearby. 
+    /// This makes them useful for visualizing high-dimensional data, discovering clusters, and finding relationships 
+    /// between different data points.
+    /// </para>
+    /// </remarks>
     SelfOrganizingMap,
 
+    /// <summary>
+    /// A neural network model inspired by how neurons process information in a liquid.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Liquid State Machines are inspired by how signals ripple through a liquid. When you drop 
+    /// a stone in water, it creates ripples that spread and interact in complex ways. Similarly, these networks 
+    /// process information by letting it "ripple" through a collection of randomly connected neurons. This approach 
+    /// is particularly good at processing time-varying inputs like speech or video, where the timing and sequence 
+    /// of information matters.
+    /// </para>
+    /// </remarks>
     LiquidStateMachine,
 
+    /// <summary>
+    /// A recurrent neural network that can store and retrieve patterns.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hopfield Networks are designed to store and recall patterns, similar to how human memory 
+    /// works. You can train the network to "remember" certain patterns, and then when given a partial or noisy version 
+    /// of a pattern, it can recover the complete original pattern. It's like recognizing a song from just hearing a few 
+    /// notes, or recognizing a friend's face even when they're partially obscured. These networks are useful for pattern 
+    /// completion, noise reduction, and content-addressable memory.
+    /// </para>
+    /// </remarks>
     HopfieldNetwork,
 
+    /// <summary>
+    /// A neural network designed to work with graph-structured data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Graph Neural Networks are specialized for data that has connections between elements, like 
+    /// social networks, molecules, or road systems. While traditional neural networks work well with grid-like data 
+    /// (images) or sequences (text), GNNs can understand and process the relationships between entities in a graph. 
+    /// They learn by passing information along the connections in the graph, allowing each node to gather information 
+    /// from its neighbors. This makes them powerful for tasks like predicting interactions between proteins, 
+    /// recommending friends on social media, or analyzing traffic patterns.
+    /// </para>
+    /// </remarks>
     GraphNeuralNetwork,
 
+    /// <summary>
+    /// A neural network with a fast, one-pass learning algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Extreme Learning Machines offer a shortcut to training neural networks. Traditional networks 
+    /// require many iterations to learn, which can be time-consuming. ELMs randomly assign the connections in the hidden 
+    /// layer and only train the output layer, which can be done in one quick step. This is like building a team where you 
+    /// randomly assign roles to most members but carefully select the team leaders. While this approach sacrifices some 
+    /// accuracy, it can be thousands of times faster to train, making it useful for applications where speed is critical 
+    /// or for providing quick initial solutions.
+    /// </para>
+    /// </remarks>
     ExtremeLearningMachine,
 
+    /// <summary>
+    /// A neural network architecture that combines neural networks with external memory systems.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Differentiable Neural Computers combine a neural network with a memory matrix that it can 
+    /// read from and write to. This is similar to how your computer has both a processor (CPU) and memory (RAM). The 
+    /// neural network learns how to store information in the memory and how to retrieve it when needed. This gives the 
+    /// system the ability to remember facts and use them later, making it particularly good at tasks that require 
+    /// reasoning with stored information, like answering questions about a story or navigating complex environments.
+    /// </para>
+    /// </remarks>
     DifferentiableNeuralComputer,
 
+    /// <summary>
+    /// A recurrent neural network where the internal connections are fixed and only output connections are trained.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Echo State Networks use a clever shortcut to make recurrent neural networks easier to train. 
+    /// They create a large, randomly connected "reservoir" of neurons that transforms inputs in complex ways. Only the 
+    /// connections from this reservoir to the output are trained, which is much simpler than training all connections. 
+    /// It's like having a complex but fixed system of pipes and valves (the reservoir) that processes water flow in 
+    /// intricate ways, and you only need to learn how to read the resulting patterns. This approach works well for 
+    /// time series prediction, speech recognition, and other sequential data problems.
+    /// </para>
+    /// </remarks>
     EchoStateNetwork,
 
+    /// <summary>
+    /// A neural network architecture used in reinforcement learning to learn optimal action policies.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Deep Q-Networks learn to make sequences of decisions to maximize a reward. They're used in 
+    /// reinforcement learning, where an agent learns by interacting with an environment. The network predicts the 
+    /// "value" of taking each possible action in a given situation, allowing the agent to choose the best action. 
+    /// It's like learning to play chess by estimating how good each possible move is. DQNs have been used to master 
+    /// video games, control robots, and optimize complex systems like data center cooling.
+    /// </para>
+    /// </remarks>
     DeepQNetwork,
 
+    /// <summary>
+    /// A framework consisting of two neural networks that compete with each other to generate realistic data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Generative Adversarial Networks consist of two neural networks competing against each other: 
+    /// a generator that creates fake data (like images) and a discriminator that tries to distinguish real data from 
+    /// fakes. As they train, the generator gets better at creating convincing fakes, and the discriminator gets better 
+    /// at spotting them. It's like a counterfeiter and detective constantly improving to outdo each other. This 
+    /// competition drives both to improve until the generator creates data so realistic that it's hard to distinguish 
+    /// from real data. GANs have created remarkably realistic images, videos, and even music.
+    /// </para>
+    /// </remarks>
     GenerativeAdversarialNetwork,
 
+    /// <summary>
+    /// A neural network architecture that combines neural networks with external memory access mechanisms.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Neural Turing Machines combine neural networks with an external memory that they can read 
+    /// from and write to in a precise way. This is inspired by how computers use memory and how humans can store and 
+    /// retrieve information. The network learns to control where to store information, what to store, and how to retrieve 
+    /// it later. This gives it the ability to learn algorithms - step-by-step procedures for solving problems - rather 
+    /// than just pattern recognition. NTMs can learn tasks like copying sequences, sorting numbers, or even simple 
+    /// programming-like tasks.
+    /// </para>
+    /// </remarks>
     NeuralTuringMachine,
 
+    /// <summary>
+    /// A method for evolving neural networks through genetic algorithms.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NEAT (NeuroEvolution of Augmenting Topologies) uses principles from evolution to design 
+    /// neural networks. Instead of manually designing the network structure, NEAT starts with simple networks and 
+    /// gradually makes them more complex through a process similar to natural selection. Networks that perform better 
+    /// are more likely to "reproduce" and pass on their characteristics. Over many generations, this can discover 
+    /// innovative network designs that human engineers might not think of. NEAT is particularly useful for reinforcement 
+    /// learning problems like game playing or robot control.
+    /// </para>
+    /// </remarks>
     NEAT,
 
+    /// <summary>
+    /// A neural network architecture designed to store and retrieve information from an external memory.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Memory Networks are designed to improve how neural networks handle information that needs
+    /// to be remembered over time. They combine neural networks with an external memory component that can be read
+    /// from and written to. This allows the network to store facts, context, or other information and retrieve it
+    /// when needed. Memory Networks are particularly useful for tasks like answering questions about a story, where
+    /// the network needs to remember details from earlier parts of the text to answer questions correctly.
+    /// </para>
+    /// </remarks>
     MemoryNetwork,
 
+    /// <summary>
+    /// A specialized recurrent neural network architecture for processing sequential data with long-term dependencies.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> LSTM Neural Networks are a special type of recurrent neural network designed to remember
+    /// information for long periods of time. Regular neural networks struggle to connect information from far apart
+    /// in a sequence. LSTMs solve this with a "cell state" that acts like a conveyor belt of information, allowing
+    /// relevant information to flow through many steps while filtering out irrelevant details. This makes them
+    /// excellent for tasks like language translation, speech recognition, and time series prediction where context
+    /// from much earlier can be important.
+    /// </para>
+    /// </remarks>
     LSTMNeuralNetwork,
 
+    /// <summary>
+    /// A neural network inspired by the structure and function of the neocortex in the human brain.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hierarchical Temporal Memory Networks are inspired by how the human neocortex processes
+    /// information. They learn patterns in a hierarchical way, with higher levels learning more abstract patterns
+    /// based on the patterns detected at lower levels. HTM Networks are particularly good at finding patterns in
+    /// time-based data and can learn continuously without forgetting previous patterns. They're designed to
+    /// recognize anomalies, make predictions, and understand sequences in data, similar to how our brains process
+    /// sensory information.
+    /// </para>
+    /// </remarks>
     HTMNetwork,
 
+    /// <summary>
+    /// A general-purpose computational model inspired by the structure and function of biological neural networks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Neural Networks are computing systems inspired by the human brain. They consist of
+    /// interconnected "neurons" that process information and learn patterns from data. Each connection has a
+    /// "weight" that strengthens or weakens the signal between neurons, and these weights are adjusted during
+    /// training to improve performance. Neural networks can learn to recognize patterns, classify data, make
+    /// predictions, and solve complex problems without being explicitly programmed with rules. They're the
+    /// foundation of many modern AI systems.
+    /// </para>
+    /// </remarks>
     NeuralNetwork,
 
+    /// <summary>
+    /// A neural network architecture for 3D scene understanding and representation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Occupancy Networks represent 3D objects or scenes by learning which points in space
+    /// are inside or outside an object. This is like having a detailed 3D model where you can check any point
+    /// in space to see if it's part of the object. Unlike traditional 3D representations that use fixed grids
+    /// or point clouds, Occupancy Networks can represent shapes at any resolution. They're useful for 3D
+    /// reconstruction, shape generation, and scene understanding in applications like robotics, virtual reality,
+    /// and computer-aided design.
+    /// </para>
+    /// </remarks>
     OccupancyNetwork,
 
+    /// <summary>
+    /// A stochastic neural network that can learn a probability distribution over its inputs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Restricted Boltzmann Machines learn patterns in data by trying to recreate the input
+    /// from scratch. They consist of two layers of neurons - visible and hidden - with connections between layers
+    /// but not within layers (that's the "restricted" part). RBMs can learn to recognize patterns and extract
+    /// features without supervision. They're like a simplified version of Deep Boltzmann Machines and are often
+    /// used as building blocks for deeper networks. RBMs have been applied to problems like recommendation systems,
+    /// feature extraction, and dimensionality reduction.
+    /// </para>
+    /// </remarks>
     RestrictedBoltzmannMachine,
 
+    /// <summary>
+    /// A neural network model that mimics the behavior of biological neurons more closely than traditional artificial neurons.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Spiking Neural Networks more closely mimic how real neurons in the brain communicate.
+    /// While traditional neural networks use continuous values, spiking networks use discrete "spikes" or pulses
+    /// of activity. Neurons accumulate input until they reach a threshold, then fire a spike. This approach is
+    /// more biologically realistic and potentially more energy-efficient. SNNs are particularly interesting for
+    /// neuromorphic computing (brain-inspired hardware), real-time processing of sensory data, and understanding
+    /// how the brain processes information.
+    /// </para>
+    /// </remarks>
     SpikingNeuralNetwork,
 
+    /// <summary>
+    /// A basic neural network architecture where information flows in one direction from input to output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Feed Forward Networks are the simplest type of neural network, where information
+    /// travels in only one direction - from input to output, with no loops or cycles. Data passes through
+    /// multiple layers of neurons, with each layer processing the information and passing it to the next.
+    /// This straightforward architecture makes them easier to understand and train compared to more complex
+    /// networks. They're effective for many tasks like classification, regression, and pattern recognition
+    /// where the input is fixed and doesn't depend on previous inputs or states.
+    /// </para>
+    /// </remarks>
     FeedForwardNetwork,
 
+    /// <summary>
+    /// A model that represents relationships as straight lines.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Linear models represent relationships as straight lines (or their higher-dimensional
+    /// equivalents). They assume that the output changes proportionally with changes in the input. For example,
+    /// if doubling an input doubles the output, that's a linear relationship. These models are simple,
+    /// interpretable, and computationally efficient. While they can't capture complex curved relationships on
+    /// their own, they form the foundation of many more sophisticated models and can be surprisingly effective
+    /// for many real-world problems.
+    /// </para>
+    /// </remarks>
     Linear,
+
+    /// <summary>
+    /// A model that uses polynomial functions to represent non-linear relationships.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Polynomial models use curved lines (like parabolas) instead of straight lines to
+    /// represent relationships in data. They can capture more complex patterns where the rate of change varies.
+    /// For example, a plant's growth might accelerate then slow down over time, forming an S-curve. Polynomial
+    /// models can represent these curved relationships by including squared terms (x²), cubed terms (x³), and
+    /// so on. They're more flexible than linear models but need to be used carefully to avoid overfitting.
+    /// </para>
+    /// </remarks>
     Polynomial,
+
+    /// <summary>
+    /// A model that discovers mathematical expressions to describe relationships in data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Symbolic models try to find actual mathematical formulas that explain your data.
+    /// Instead of just fitting parameters to a pre-defined equation, they search for the equation itself.
+    /// For example, they might discover that your data follows "y = sin(x) + x²" rather than just giving
+    /// you numbers. This provides insights into the underlying relationships and can be more interpretable
+    /// than black-box models. Symbolic models are particularly useful when you want to understand the
+    /// mathematical laws governing a system.
+    /// </para>
+    /// </remarks>
     Symbolic,
+
+    /// <summary>
+    /// A model that uses decision trees or tree-based ensembles for prediction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Tree-Based models make predictions by following a series of yes/no questions,
+    /// similar to a flowchart. They split the data based on features, creating a tree-like structure.
+    /// For example, to predict house prices: "Is the area > 2000 sq ft? If yes, is it in neighborhood A?
+    /// If no, is it older than 20 years?" and so on. Tree-based models include single decision trees and
+    /// powerful ensembles like Random Forests and Gradient Boosted Trees. They're flexible, handle different
+    /// types of data well, and can capture complex interactions between features.
+    /// </para>
+    /// </remarks>
     TreeBased,
 
+    /// <summary>
+    /// An extension of ARIMA that includes external variables in the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ARIMAX Models extend ARIMA by including external factors that might influence
+    /// your time series. For example, when forecasting ice cream sales, an ARIMA model might only look at
+    /// past sales patterns, but an ARIMAX model could also consider temperature, holidays, or marketing
+    /// campaigns. This often improves predictions by incorporating known influences. It's like forecasting
+    /// traffic not just based on historical patterns but also considering if there's a major concert or
+    /// sporting event happening.
+    /// </para>
+    /// </remarks>
     ARIMAXModel,
 
+    /// <summary>
+    /// A time series model that combines autoregressive and moving average components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ARMA Models combine two approaches for time series forecasting: they look at
+    /// how past values of the series influence future values (the AR part) and how past prediction errors
+    /// affect future values (the MA part). This combination often works better than either approach alone.
+    /// It's like predicting tomorrow's weather based both on weather patterns from recent days and on how
+    /// accurate your previous forecasts were. ARMA models work best for stationary time series, where the
+    /// statistical properties don't change over time.
+    /// </para>
+    /// </remarks>
     ARMAModel,
 
+    /// <summary>
+    /// A time series model where future values depend on past values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Autoregressive (AR) Models predict future values based on past values in the
+    /// time series. They assume that what happens next depends on what happened before. For example, tomorrow's
+    /// temperature is likely related to today's temperature. The "order" of an AR model (like AR(3)) tells you
+    /// how many past time periods it considers - AR(3) looks at the three most recent values. These models are
+    /// relatively simple but effective for many time series where recent history influences the future.
+    /// </para>
+    /// </remarks>
     ARModel,
 
+
+    /// <summary>
+    /// A flexible time series model that combines Bayesian methods with structural components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Bayesian Structural Time Series Models combine several components to model time series data. 
+    /// They can include trends, seasonality, and the effects of external factors. What makes them special is their 
+    /// Bayesian approach, which provides uncertainty estimates and allows you to incorporate prior knowledge. 
+    /// These models are particularly useful for forecasting with limited data, understanding which factors 
+    /// influence your time series, and measuring the impact of interventions like marketing campaigns.
+    /// </para>
+    /// </remarks>
     BayesianStructuralTimeSeriesModel,
 
+    /// <summary>
+    /// A hybrid model combining regression with ARIMA error correction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Dynamic Regression with ARIMA Errors combines two powerful approaches. The regression 
+    /// part models relationships between your time series and external factors (like how temperature affects 
+    /// ice cream sales). The ARIMA part then models the errors from this regression, capturing patterns that 
+    /// the regression missed. It's like having two specialists working together - one focusing on known 
+    /// relationships and the other catching any remaining patterns. This hybrid approach often outperforms 
+    /// either method used alone.
+    /// </para>
+    /// </remarks>
     DynamicRegressionWithARIMAErrors,
 
+    /// <summary>
+    /// A time series forecasting method that gives more weight to recent observations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Exponential Smoothing Models forecast by averaging past values, but giving more 
+    /// weight to recent observations. Imagine predicting tomorrow's temperature by looking at the past week, 
+    /// but considering yesterday's temperature more important than last week's. These models can capture 
+    /// trends (values consistently increasing or decreasing) and seasonality (regular patterns like higher 
+    /// sales during holidays). They're intuitive, computationally simple, and work well for many business 
+    /// forecasting problems.
+    /// </para>
+    /// </remarks>
     ExponentialSmoothingModel,
 
+    /// <summary>
+    /// A model designed to capture volatility clustering in financial time series.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GARCH Models are specialized for financial data where volatility (the amount of 
+    /// fluctuation) tends to cluster - periods of high volatility are followed by more high volatility, 
+    /// and calm periods tend to persist as well. Think of stock markets having "nervous" periods with 
+    /// big swings up and down, followed by "calm" periods with smaller changes. GARCH models capture 
+    /// this pattern, making them valuable for risk management, option pricing, and financial forecasting.
+    /// </para>
+    /// </remarks>
     GARCHModel,
 
+    /// <summary>
+    /// A recurrent neural network architecture with gating mechanisms for efficient sequence processing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GRU Neural Networks are a type of recurrent neural network designed for sequential 
+    /// data like text or time series. They're similar to LSTM networks but with a simpler structure that 
+    /// makes them faster to train while still capturing long-term patterns. GRUs use "gates" that control 
+    /// what information to keep or forget, allowing them to learn which parts of the sequence are important. 
+    /// They're widely used for language processing, speech recognition, and time series forecasting.
+    /// </para>
+    /// </remarks>
     GRUNeuralNetwork,
 
+    /// <summary>
+    /// A neural network architecture designed to compare and find similarities between inputs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Siamese Networks are specialized for comparing two inputs to determine how similar 
+    /// they are. They process both inputs through identical sub-networks (hence the name "Siamese," like 
+    /// Siamese twins) and then measure the distance between the outputs. This is useful for tasks like 
+    /// facial recognition (is this the same person?), signature verification, or finding similar products. 
+    /// They're particularly valuable when you have many categories with few examples of each.
+    /// </para>
+    /// </remarks>
     SiameseNetwork,
 
+    /// <summary>
+    /// A time series model that assesses the impact of specific events or interventions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Intervention Analysis Models measure how specific events affect a time series. 
+    /// For example, how did a new policy, marketing campaign, or competitor's action impact your sales? 
+    /// These models separate the normal pattern of your time series from the effects of the intervention, 
+    /// allowing you to quantify the impact. It's like measuring how much a medicine improves health by 
+    /// comparing patient outcomes before and after treatment, while accounting for other factors.
+    /// </para>
+    /// </remarks>
     InterventionAnalysisModel,
 
+    /// <summary>
+    /// A flexible forecasting model that handles multiple seasonal patterns.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TBATS Models are designed for time series with complex seasonal patterns. While 
+    /// simple models might handle yearly patterns (like holiday sales spikes), TBATS can simultaneously 
+    /// model multiple seasonal patterns of different lengths. For example, retail data might show weekly 
+    /// patterns (busier on weekends), monthly patterns (busier after payday), and yearly patterns (holiday 
+    /// seasons). TBATS can capture all these overlapping cycles, making it powerful for complex forecasting 
+    /// problems.
+    /// </para>
+    /// </remarks>
     TBATSModel,
 
+    /// <summary>
+    /// A method that breaks down a time series into trend, seasonal, and remainder components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> STL Decomposition breaks a time series into three parts: the overall trend 
+    /// (long-term direction), seasonal patterns (regular cycles), and remainder (what's left after 
+    /// removing trend and seasonality). It's like separating a music recording into bass, melody, and 
+    /// percussion. This decomposition helps you understand what's driving your time series and can 
+    /// improve forecasting by modeling each component separately. It's particularly useful for 
+    /// visualizing and interpreting time series data.
+    /// </para>
+    /// </remarks>
     STLDecomposition,
 
+    /// <summary>
+    /// A model that captures relationships between multiple related time series.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Vector Autoregression Models analyze multiple time series that influence each 
+    /// other. For example, how prices, advertising, and competitor actions all affect sales. Unlike 
+    /// simpler models that look at each series separately, VAR models capture how each series affects 
+    /// the others. It's like modeling an ecosystem where changes in one species affect others. This 
+    /// makes VAR models powerful for understanding complex systems and forecasting interrelated variables.
+    /// </para>
+    /// </remarks>
     VARModel,
 
+    /// <summary>
+    /// A flexible time series model that represents observed data in terms of unobserved components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Unobserved Components Models break down a time series into underlying components 
+    /// that aren't directly observable, such as trend, cycle, seasonal patterns, and irregular fluctuations. 
+    /// It's like a detective inferring underlying motives from observed behaviors. These models are 
+    /// particularly useful for economic data, where concepts like "potential GDP" or "natural rate of 
+    /// unemployment" can't be directly measured but can be estimated from observable data.
+    /// </para>
+    /// </remarks>
     UnobservedComponentsModel,
 
+    /// <summary>
+    /// A model that describes how input changes propagate through a system over time.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Transfer Function Models describe how changes in an input variable affect an 
+    /// output variable over time. For example, how a change in advertising budget affects sales in the 
+    /// following weeks. These models capture both the magnitude of the effect (how much sales increase) 
+    /// and its timing (immediate boost, gradual increase, delayed response, etc.). They're particularly 
+    /// useful for understanding cause-and-effect relationships in time series data.
+    /// </para>
+    /// </remarks>
     TransferFunctionModel,
 
+    /// <summary>
+    /// A flexible framework for modeling time series data using hidden states.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> State Space Models represent a time series using hidden "states" that evolve 
+    /// over time. Think of it like tracking a car's position when you can only see its speed - the 
+    /// position is the hidden state that you infer from observable data. These models are very flexible 
+    /// and can represent many time series patterns. They're particularly useful for tracking systems 
+    /// that change over time, filtering noisy data, and forecasting complex time series.
+    /// </para>
+    /// </remarks>
     StateSpaceModel,
 
+    /// <summary>
+    /// A comprehensive time series model that handles non-stationary data with trends and seasonality.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ARIMA Models combine three powerful techniques for time series forecasting: 
+    /// they use past values (AR), past forecast errors (MA), and differences between consecutive 
+    /// observations (I for "Integrated") to handle data with trends. ARIMA is like a Swiss Army knife 
+    /// for time series - versatile and effective for many forecasting problems. The model is specified 
+    /// as ARIMA(p,d,q), where p, d, and q control how many past values, differences, and errors to use.
+    /// </para>
+    /// </remarks>
     ARIMAModel,
 
+    /// <summary>
+    /// A time series model where future values depend on past forecast errors.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Moving Average (MA) Models predict future values based on past forecast errors 
+    /// rather than past values themselves. They assume that if recent forecasts were too high or too low, 
+    /// that information can help improve future forecasts. It's like adjusting your aim in a game based 
+    /// on whether your previous shots were too high or too low. MA models are particularly good at 
+    /// handling short-term, irregular fluctuations in time series data.
+    /// </para>
+    /// </remarks>
     MAModel,
 
+    /// <summary>
+    /// An extension of ARIMA that also captures seasonal patterns in data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Seasonal ARIMA Models extend ARIMA to handle regular patterns that repeat at 
+    /// fixed intervals, like higher retail sales during holidays or increased ice cream consumption in 
+    /// summer. SARIMA adds seasonal components to the standard ARIMA model, allowing it to capture both 
+    /// short-term dependencies and longer seasonal patterns. It's specified with additional parameters 
+    /// that control the seasonal aspects of the model, making it powerful for data with clear seasonal effects.
+    /// </para>
+    /// </remarks>
     SARIMAModel,
 
+    /// <summary>
+    /// A frequency-domain approach to analyzing time series data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Spectral Analysis Models examine time series data in terms of cycles and frequencies 
+    /// rather than time. It's like breaking down a musical chord into individual notes - the model identifies 
+    /// which cycles (daily, weekly, monthly, etc.) are present in your data and how strong each one is. This 
+    /// approach is particularly useful for finding hidden periodicities in complex data, understanding cyclical 
+    /// behavior, and filtering out noise. It's widely used in fields like signal processing, economics, and 
+    /// climate science.
+    /// </para>
+    /// </remarks>
     SpectralAnalysisModel,
 
+    /// <summary>
+    /// A decomposable time series forecasting model developed by Facebook.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Prophet is a forecasting model designed by Facebook to handle time series with 
+    /// strong seasonal effects and multiple seasons. It's particularly good with data that has holidays, 
+    /// seasonal patterns, and trend changes. Prophet automatically decomposes your data into trend, seasonality, 
+    /// and holiday effects, making it easier to understand what's driving changes in your time series. It's 
+    /// designed to be robust to missing data and outliers, and requires minimal manual tuning, making it 
+    /// accessible for non-experts.
+    /// </para>
+    /// </remarks>
     ProphetModel,
 
+    /// <summary>
+    /// A hybrid model combining neural networks with ARIMA for time series forecasting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Neural Network ARIMA combines the pattern-recognition power of neural networks 
+    /// with the time series expertise of ARIMA models. ARIMA is good at capturing linear relationships and 
+    /// temporal dependencies, while neural networks excel at learning complex, non-linear patterns. By 
+    /// combining them, this hybrid approach can capture both types of patterns in your data. It's like 
+    /// having both a statistics expert and a pattern recognition expert working together on your forecasting 
+    /// problem, often resulting in more accurate predictions than either approach alone.
+    /// </para>
+    /// </remarks>
     NeuralNetworkARIMA
 }

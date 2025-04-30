@@ -26,7 +26,7 @@ namespace AiDotNet.Regression;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class RegressionBase<T> : IRegression<T>
+public abstract class RegressionBase<T> : IRegressionModel<T>
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.

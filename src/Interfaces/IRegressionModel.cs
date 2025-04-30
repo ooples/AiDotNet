@@ -18,6 +18,6 @@
 /// Unlike classification algorithms (which predict categories), regression algorithms predict
 /// numeric values on a continuous scale.
 /// </remarks>
-public interface IRegression<T> : IFullModel<T, Matrix<T>, Vector<T>>
+public interface IRegressionModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
 }

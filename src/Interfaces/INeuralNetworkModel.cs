@@ -28,7 +28,7 @@ namespace AiDotNet.Interfaces;
 /// This interface provides the essential methods needed to work with neural networks in AiDotNet.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface INeuralNetwork<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+public interface INeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>
     /// Updates the internal parameters (weights and biases) of the neural network.

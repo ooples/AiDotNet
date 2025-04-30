@@ -868,18 +868,14 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         // Use the user-defined optimizer if provided, otherwise use LBFGSOptimizer as default
         var optimizer = _ucOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
 
-        // Prepare the optimization input data
-        var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>
-        {
-            XTrain = x,
-            YTrain = y
-        };
+        // Get the cached input data (whether we just created it or it was already there)
+        var optimizationData = DefaultInputCache.GetDefaultInputData<T, Matrix<T>, Vector<T>>();
 
-        // Run optimization
-        var result = optimizer.Optimize(inputData);
+        // Use the cached data for optimization
+        var optimizationResult = optimizer.Optimize(optimizationData);
 
         // Update model parameters with optimized values
-        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
+        UpdateModelParameters(optimizationResult.BestSolution?.GetParameters() ?? Vector<T>.Empty());
     }
 
     /// <summary>

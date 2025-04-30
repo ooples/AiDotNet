@@ -38,7 +38,7 @@ namespace AiDotNet.TimeSeries;
 /// - Website traffic prediction
 /// </para>
 /// </remarks>
-public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
+public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IGradientTransformable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Configuration options for the time series model.
@@ -144,6 +144,8 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// </para>
     /// </remarks>
     protected Dictionary<string, T> LastEvaluationMetrics { get; private set; } = [];
+
+    protected Random Random = new();
 
     /// <summary>
     /// Initializes a new instance of the TimeSeriesModelBase class with the specified options.
@@ -735,6 +737,58 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new InvalidOperationException("Failed to deserialize model data. The data may be corrupted or incompatible with this model version.", ex);
         }
+    }
+
+    /// <summary>
+    /// Base implementation of IGradientTransformable for time series models.
+    /// </summary>
+    /// <param name="input">The input matrix.</param>
+    /// <param name="predictionGradient">The gradient with respect to predictions.</param>
+    /// <returns>The gradient with respect to model parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This base implementation provides a standard gradient transformation for time series models.
+    /// More complex models like ProphetModel should override this method with their specific implementations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method transforms gradients from predictions (one per time point)
+    /// to parameters (one per model coefficient). It's like translating "how wrong each prediction is"
+    /// into "how much to adjust each model parameter".
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> TransformGradient(Matrix<T> input, Vector<T> predictionGradient)
+    {
+        // Get current parameters
+        Vector<T> parameters = GetParameters();
+        int paramCount = parameters.Length;
+        var parameterGradient = new Vector<T>(paramCount);
+
+        // For simple linear time series models: X^T * prediction_gradient
+        Matrix<T> transposedInput = input.Transpose();
+
+        // Create prediction gradient as a column vector
+        Matrix<T> predictionGradientMatrix = Matrix<T>.FromVector(predictionGradient);
+
+        // Matrix multiplication gives us parameter gradients for coefficients
+        Matrix<T> paramGradMatrix = transposedInput * predictionGradientMatrix;
+
+        // Extract the column vector
+        Vector<T> coefficientGradients = paramGradMatrix.GetColumn(0);
+
+        // Copy coefficient gradients
+        int coefficientCount = Math.Min(coefficientGradients.Length, paramCount);
+        for (int i = 0; i < coefficientCount; i++)
+        {
+            parameterGradient[i] = coefficientGradients[i];
+        }
+
+        // Additional parameters (beyond coefficients) get zero gradients
+        // Derived classes should override this method to handle these properly
+        for (int i = coefficientCount; i < paramCount; i++)
+        {
+            parameterGradient[i] = NumOps.Zero;
+        }
+
+        return parameterGradient;
     }
 
     /// <summary>

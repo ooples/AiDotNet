@@ -132,53 +132,44 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     }
 
     /// <summary>
-    /// Generates a unique cache key that combines model parameters and data characteristics.
+    /// Generates a unique cache key based on feature selection and input data characteristics.
     /// </summary>
-    /// <param name="model">The model being evaluated.</param>
+    /// <param name="model">The model being evaluated (pre-training).</param>
     /// <param name="inputData">The data used for evaluation.</param>
     /// <returns>A unique string identifier for caching.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method creates a unique ID that represents a specific combination of
+    /// selected features and training data. It allows us to recognize if we've already trained a model
+    /// with this exact feature set before, so we don't have to repeat the training process.
+    /// </remarks>
     public string GenerateCacheKey(IFullModel<T, TInput, TOutput> model, OptimizationInputData<T, TInput, TOutput> inputData)
     {
         if (model == null) throw new ArgumentNullException(nameof(model));
         if (inputData == null) throw new ArgumentNullException(nameof(inputData));
 
-        var modelKey = GetModelFingerprint(model);
-        var dataKey = GetDataFingerprint(inputData);
-
-        return $"{modelKey}_{dataKey}";
-    }
-
-    /// <summary>
-    /// Creates a fingerprint of the model's current state.
-    /// </summary>
-    /// <param name="model">The model to fingerprint.</param>
-    /// <returns>A string representation of the model's state.</returns>
-    private string GetModelFingerprint(IFullModel<T, TInput, TOutput> model)
-    {
-        var parameters = model.GetParameters();
-        var activeFeatures = model.GetActiveFeatureIndices();
-
+        // Focus on active features and model type for the cache key
         using var sha = SHA256.Create();
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
 
-        // Write model type
+        // Write model type (different model types should have different caches)
         writer.Write(model.GetType().FullName ?? "UnknownType");
 
-        // Write parameters
-        foreach (var param in parameters)
-        {
-            writer.Write(Convert.ToString(param) ?? "null");
-        }
-
-        // Write active features
+        // Write selected features (the primary component for our cache key)
+        var activeFeatures = model.GetActiveFeatureIndices().OrderBy(f => f).ToList();
+        writer.Write(activeFeatures.Count);
         foreach (var feature in activeFeatures)
         {
             writer.Write(feature);
         }
 
+        // Include basic data characteristics (dimensions and sample values)
+        var dataFingerprint = GetDataFingerprint(inputData);
+        writer.Write(dataFingerprint);
+
         ms.Flush();
         var hash = sha.ComputeHash(ms.ToArray());
+
         return Convert.ToBase64String(hash);
     }
 
@@ -195,14 +186,14 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
 
         // Include data dimensions
         var trainColumns = InputHelper<T, TInput>.GetInputSize(data.XTrain);
-        var trainRows = InputHelper<T, TOutput>.GetBatchSize(data.YTrain);
+        var trainRows = InputHelper<T, TInput>.GetBatchSize(data.XTrain);
         writer.Write(trainRows);
         writer.Write(trainColumns);
 
         if (data.XValidation != null && data.YValidation != null)
         {
             var validateColumns = InputHelper<T, TInput>.GetInputSize(data.XValidation);
-            var validateRows = InputHelper<T, TOutput>.GetBatchSize(data.YValidation);
+            var validateRows = InputHelper<T, TInput>.GetBatchSize(data.XValidation);
             writer.Write(validateRows);
             writer.Write(validateColumns);
         }

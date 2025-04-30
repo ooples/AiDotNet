@@ -261,7 +261,7 @@ public class NeuralNetworkARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// and let the system create an appropriate network automatically.
     /// </para>
     /// </remarks>
-    public INeuralNetwork<T>? NeuralNetwork { get; set; }
+    public INeuralNetworkModel<T>? NeuralNetwork { get; set; }
 
     /// <summary>
     /// Gets or sets the optimizer to use for training the neural network component.

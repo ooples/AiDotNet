@@ -11,7 +11,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
 {
     /// <summary>
     /// The collection of layers that make up this neural network.

@@ -35,7 +35,7 @@ namespace AiDotNet.Interfaces;
 /// - Easy to interpret (you can see exactly how each feature affects the prediction)
 /// - Often surprisingly effective despite their simplicity
 /// </remarks>
-public interface ILinearRegression<T> : IRegression<T>
+public interface ILinearRegression<T> : IRegressionModel<T>
 {
     /// <summary>
     /// Gets the weights (coefficients) assigned to each input feature in the linear model.

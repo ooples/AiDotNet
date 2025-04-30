@@ -194,7 +194,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// they can solve problems neither could handle alone.
     /// </para>
     /// </remarks>
-    private readonly INeuralNetwork<T> _neuralNetwork;
+    private readonly INeuralNetworkModel<T> _neuralNetwork;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NeuralNetworkARIMAModel{T}"/> class.
@@ -341,14 +341,13 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void OptimizeParameters(Matrix<T> x, Vector<T> y)
     {
-        var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>
-        {
-            XTrain = x,
-            YTrain = y
-        };
+        // Get the cached input data (whether we just created it or it was already there)
+        var optimizationData = DefaultInputCache.GetDefaultInputData<T, Matrix<T>, Vector<T>>();
 
-        OptimizationResult<T, Matrix<T>, Vector<T>> result = _optimizer.Optimize(inputData);
-        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
+        // Use the cached data for optimization
+        var optimizationResult = _optimizer.Optimize(optimizationData);
+
+        UpdateModelParameters(optimizationResult.BestSolution?.GetParameters() ?? Vector<T>.Empty());
     }
 
     /// <summary>
@@ -821,7 +820,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
             ExogenousVariables = _nnarimaOptions.ExogenousVariables,
             Optimizer = _nnarimaOptions.Optimizer,
             // Clone the neural network if possible, otherwise use null to let constructor create a default
-            NeuralNetwork = _nnarimaOptions.NeuralNetwork?.Clone() as INeuralNetwork<T>
+            NeuralNetwork = _nnarimaOptions.NeuralNetwork?.Clone() as INeuralNetworkModel<T>
         };
     
         // Return a new instance with the copied options
