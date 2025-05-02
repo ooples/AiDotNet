@@ -110,7 +110,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         // Add remaining random particles
         for (int i = 1; i < _psoOptions.SwarmSize; i++)
         {
-            swarm.Add(InitializeRandomSolution(inputData.XTrain));
+            swarm.Add(CreateSolution(inputData.XTrain));
         }
 
         // Initialize velocities for each particle

@@ -529,7 +529,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 
         // Create a parameter placeholder model that implements IFullModel
         var placeholderModel = new ParameterPlaceholderModel<T, Matrix<T>, Vector<T>>(
-            initialParameters, null, activeFeatures, customPredict);
+            initialParameters, null, activeFeatures, customPredict, this);
 
         // Use the user-defined optimizer if provided, otherwise use LFGSOptimizer as default
         var optimizer = _prophetOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(placeholderModel);

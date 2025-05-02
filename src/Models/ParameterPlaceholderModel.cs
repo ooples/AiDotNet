@@ -89,7 +89,7 @@ public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInpu
             : [.. Enumerable.Range(0, initialParameters.Length)];
 
         // Initialize metadata
-        _metadata = new ModelMetaData<T>
+        _metadata = _originalModel != null ? _originalModel.GetModelMetaData() :  new ModelMetaData<T>
         {
             FeatureCount = initialParameters.Length,
             Complexity = _activeFeatures.Count,
@@ -100,6 +100,8 @@ public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInpu
                 { "ActiveFeatureCount", _activeFeatures.Count }
             }
         };
+
+        Console.WriteLine();
     }
 
     // [Other methods remain the same]
@@ -318,7 +320,9 @@ public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInpu
         return new ParameterPlaceholderModel<T, TInput, TOutput>(
             GetParameters(),
             _evaluationFunction,
-            _activeFeatures);
+            _activeFeatures,
+            _customPredict,
+            _originalModel);
     }
 
     /// <summary>
@@ -343,28 +347,11 @@ public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInpu
     /// </summary>
     /// <returns>Metadata about the model.</returns>
     /// <remarks>
-    /// <para>
-    /// This method returns metadata about the placeholder model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This provides information about the model,
-    /// such as the number of parameters and active features.
-    /// </para>
-    /// </remarks>
-    public ModelMetaData<T> GetModelMetadata()
-    {
-        return _metadata;
-    }
-
-    /// <summary>
-    /// Returns metadata about the parameters and model.
-    /// </summary>
-    /// <returns>Metadata about the model.</returns>
-    /// <remarks>
     /// Same as GetModelMetadata but with different method name to satisfy interface requirements.
     /// </remarks>
     public ModelMetaData<T> GetModelMetaData()
     {
-        return GetModelMetadata();
+        return _metadata;
     }
 
     /// <summary>

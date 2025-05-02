@@ -3,7 +3,7 @@
 /// <summary>
 /// Represents statistics about the evolutionary process.
 /// </summary>
-public class EvolutionStats<T, TInput, TOutput>
+public class GeneticStats<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the current generation number.
@@ -60,7 +60,7 @@ public class EvolutionStats<T, TInput, TOutput>
     /// </summary>
     public int GenerationsSinceImprovement { get; set; }
 
-    public EvolutionStats(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
+    public GeneticStats(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         BestFitness = fitnessCalculator.IsHigherScoreBetter ? numOps.MinValue : numOps.MaxValue;

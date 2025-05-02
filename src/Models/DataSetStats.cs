@@ -41,7 +41,7 @@ public class DataSetStats<T, TInput, TOutput>
     /// <remarks>
     /// [Existing remarks for ErrorStats]
     /// </remarks>
-    public ErrorStats<T> ErrorStats { get; set; } = ErrorStats<T>.Empty();
+    public ErrorStats<T> ErrorStats { get; set; } = ErrorStats<T>.Empty(ModelType.None);
     
     /// <summary>
     /// Gets or sets the basic descriptive statistics for the actual target values.
@@ -68,7 +68,7 @@ public class DataSetStats<T, TInput, TOutput>
     /// <remarks>
     /// [Existing remarks for PredictionStats]
     /// </remarks>
-    public PredictionStats<T> PredictionStats { get; set; } = PredictionStats<T>.Empty();
+    public PredictionStats<T> PredictionStats { get; set; } = PredictionStats<T>.Empty(ModelType.None);
     
     /// <summary>
     /// Gets or sets the predicted values.

@@ -175,7 +175,7 @@ public class HeteroscedasticityFitDetector<T, TInput, TOutput> : FitDetectorBase
             Predicted = auxiliaryRegression.Predict(X),
             NumberOfParameters = X.Columns,
         };
-        var predictionStats = new PredictionStats<T>(predictionStatsInputs);
+        var predictionStats = new PredictionStats<T>(predictionStatsInputs, evaluationData.ModelStats.Model?.GetModelMetaData().ModelType ?? ModelType.None);
 
         return NumOps.Multiply(NumOps.FromDouble(X.Rows), predictionStats.R2);
     }
@@ -242,7 +242,7 @@ public class HeteroscedasticityFitDetector<T, TInput, TOutput> : FitDetectorBase
             NumberOfParameters = augmentedX.Columns,
         };
 
-        var predictionStats = new PredictionStats<T>(predictionStatsInputs);
+        var predictionStats = new PredictionStats<T>(predictionStatsInputs, evaluationData.ModelStats.Model?.GetModelMetaData().ModelType ?? ModelType.None);
 
         return NumOps.Multiply(NumOps.FromDouble(X.Rows), predictionStats.R2);
     }

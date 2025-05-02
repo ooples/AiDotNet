@@ -104,13 +104,13 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     /// <param name="validationOutput">Optional validation output data.</param>
     /// <param name="stopCriteria">Optional function that determines when to stop evolution.</param>
     /// <returns>Statistics about the evolutionary process.</returns>
-    EvolutionStats<T, TInput, TOutput> Evolve(
+    GeneticStats<T, TInput, TOutput> Evolve(
         int generations, 
         TInput trainingInput, 
         TOutput trainingOutput, 
         TInput? validationInput = default, 
         TOutput? validationOutput = default, 
-        Func<EvolutionStats<T, TInput, TOutput>, bool>? stopCriteria = null);
+        Func<GeneticStats<T, TInput, TOutput>, bool>? stopCriteria = null);
     
     /// <summary>
     /// Performs crossover between two parent individuals to produce offspring.
@@ -164,7 +164,7 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     /// population diversity, and fitness distribution.
     /// </summary>
     /// <returns>Statistics about the current evolutionary state.</returns>
-    EvolutionStats<T, TInput, TOutput> GetEvolutionStats(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator);
+    GeneticStats<T, TInput, TOutput> GetEvolutionStats(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator);
     
     /// <summary>
     /// Configures the genetic algorithm parameters.

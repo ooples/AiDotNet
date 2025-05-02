@@ -173,13 +173,13 @@ public class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
     /// based on how well the plants are doing.
     /// </para>
     /// </remarks>
-    public override EvolutionStats<T, TInput, TOutput> Evolve(
+    public override GeneticStats<T, TInput, TOutput> Evolve(
         int generations,
         TInput trainingInput,
         TOutput trainingOutput,
         TInput? validationInput = default,
         TOutput? validationOutput = default,
-        Func<EvolutionStats<T, TInput, TOutput>, bool>? stopCriteria = null)
+        Func<GeneticStats<T, TInput, TOutput>, bool>? stopCriteria = null)
     {
         // Initialize rates from genetic parameters
         _currentMutationRate = GeneticParams.MutationRate;

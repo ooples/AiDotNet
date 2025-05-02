@@ -151,6 +151,37 @@ public class DistributionFitResult<T>
     public Dictionary<string, T> Parameters { get; set; }
 
     /// <summary>
+    /// Gets or sets the p-value from the goodness-of-fit test.
+    /// </summary>
+    /// <value>A numeric value representing the p-value of the goodness-of-fit test, initialized to zero.</value>
+    /// <remarks>
+    /// <para>
+    /// This property represents the p-value from a statistical test that evaluates how well the distribution fits the data.
+    /// The p-value is a probability value between 0 and 1, where higher values (typically > 0.05) indicate that the data
+    /// is consistent with the fitted distribution. A low p-value suggests that the data significantly differs from the
+    /// distribution. Common tests used to calculate this p-value include the Kolmogorov-Smirnov test, the Anderson-Darling
+    /// test, or the Chi-squared test. Unlike the GoodnessOfFit property, higher p-values indicate better fit.
+    /// </para>
+    /// <para><b>For Beginners:</b> This value tells you how likely it is that your data comes from the fitted distribution.
+    /// 
+    /// The p-value:
+    /// - Is a probability between 0 and 1
+    /// - Higher values (typically > 0.05) suggest your data is consistent with the distribution
+    /// - Lower values suggest your data differs significantly from the distribution
+    /// 
+    /// This is important because:
+    /// - It helps you determine if the distribution is a statistically valid model for your data
+    /// - It provides a standardized way to assess fit quality across different distributions
+    /// - It has a clear interpretation: the probability of observing your data if it truly came from the distribution
+    /// 
+    /// For example, if the p-value is 0.8, there's an 80% chance that the differences between your data
+    /// and the distribution are due to random chance, suggesting a good fit. If the p-value is 0.01,
+    /// there's only a 1% chance, suggesting your data likely doesn't follow this distribution.
+    /// </para>
+    /// </remarks>
+    public T PValue { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the DistributionFitResult class with default values.
     /// </summary>
     /// <param name="ops">Optional numeric operations provider for type T. If null, default operations will be used.</param>
@@ -184,10 +215,11 @@ public class DistributionFitResult<T>
     /// used internally by the distribution fitting process.
     /// </para>
     /// </remarks>
-    public DistributionFitResult(INumericOperations<T>? ops = null)
+    public DistributionFitResult()
     {
-        _ops = ops ?? MathHelper.GetNumericOperations<T>();
+        _ops = MathHelper.GetNumericOperations<T>();
         GoodnessOfFit = _ops.Zero;
         Parameters = [];
+        PValue = _ops.Zero;
     }
 }

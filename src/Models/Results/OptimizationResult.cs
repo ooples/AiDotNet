@@ -705,8 +705,8 @@ public class OptimizationResult<T, TInput, TOutput>
         public DatasetResult()
         {
             (X, Y, Predictions) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
-            ErrorStats = ErrorStats<T>.Empty();
-            PredictionStats = PredictionStats<T>.Empty();
+            ErrorStats = ErrorStats<T>.Empty(ModelType.None);
+            PredictionStats = PredictionStats<T>.Empty(ModelType.None);
             ActualBasicStats = BasicStats<T>.Empty();
             PredictedBasicStats = BasicStats<T>.Empty();
         }

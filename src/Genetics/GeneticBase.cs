@@ -77,7 +77,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <summary>
     /// The current evolution statistics.
     /// </summary>
-    protected EvolutionStats<T, TInput, TOutput> CurrentStats { get; set; }
+    protected GeneticStats<T, TInput, TOutput> CurrentStats { get; set; }
 
     protected INumericOperations<T> NumOps { get; set; } = MathHelper.GetNumericOperations<T>();
 
@@ -94,7 +94,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
         CrossoverOperators = [];
         MutationOperators = [];
         EvolutionStopwatch = new Stopwatch();
-        CurrentStats = new EvolutionStats<T, TInput, TOutput>(fitnessCalculator);
+        CurrentStats = new GeneticStats<T, TInput, TOutput>(fitnessCalculator);
         ModelEvaluator = modelEvaluator ?? throw new ArgumentNullException(nameof(modelEvaluator));
 
         // Register default operators
@@ -352,7 +352,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     public void SetFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
     {
         FitnessCalculator = fitnessCalculator ?? throw new ArgumentNullException(nameof(fitnessCalculator));
-        CurrentStats = new EvolutionStats<T, TInput, TOutput>(fitnessCalculator);
+        CurrentStats = new GeneticStats<T, TInput, TOutput>(fitnessCalculator);
     }
 
     /// <summary>
@@ -440,13 +440,13 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <param name="validationOutput">Optional validation output data.</param>
     /// <param name="stopCriteria">Optional function that determines when to stop evolution.</param>
     /// <returns>Statistics about the evolutionary process.</returns>
-    public virtual EvolutionStats<T, TInput, TOutput> Evolve(
+    public virtual GeneticStats<T, TInput, TOutput> Evolve(
         int generations,
         TInput trainingInput,
         TOutput trainingOutput,
         TInput? validationInput = default,
         TOutput? validationOutput = default,
-        Func<EvolutionStats<T, TInput, TOutput>, bool>? stopCriteria = null)
+        Func<GeneticStats<T, TInput, TOutput>, bool>? stopCriteria = null)
     {
         // Initialize population if it's empty
         if (Population.Count == 0)
@@ -456,7 +456,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
 
         // Reset evolution tracking
         EvolutionStopwatch.Restart();
-        CurrentStats = new EvolutionStats<T, TInput, TOutput>(FitnessCalculator);
+        CurrentStats = new GeneticStats<T, TInput, TOutput>(FitnessCalculator);
         CurrentStats.Generation = 0;
 
         // Initial evaluation of the population
@@ -1203,7 +1203,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// Gets statistics about the current evolutionary state.
     /// </summary>
     /// <returns>Statistics about the current evolutionary state.</returns>
-    public virtual EvolutionStats<T, TInput, TOutput> GetEvolutionStats(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
+    public virtual GeneticStats<T, TInput, TOutput> GetEvolutionStats(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
     {
         UpdateEvolutionStats();
         return CurrentStats;

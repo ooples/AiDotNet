@@ -83,9 +83,9 @@ public class CrossValidationResult<T>
         var maeValues = new Vector<T>([.. foldResults.Select(r => r.ValidationErrors.MAE)]);
 
         // Use our existing BasicStats class to calculate statistics across folds
-        R2Stats = new BasicStats<T>(new BasicStatsInputs<T> { Values = r2Values });
-        RMSEStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = rmseValues });
-        MAEStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = maeValues });
+        R2Stats = new BasicStats<T>(r2Values);
+        RMSEStats = new BasicStats<T>(rmseValues);
+        MAEStats = new BasicStats<T>(maeValues);
 
         // Aggregate feature importance scores across folds
         FeatureImportanceStats = AggregateFeatureImportance(foldResults);
@@ -122,10 +122,7 @@ public class CrossValidationResult<T>
                 .ToArray();
 
             // Calculate statistics for this feature using our existing BasicStats class
-            result[feature] = new BasicStats<T>(new BasicStatsInputs<T>
-            {
-                Values = new Vector<T>(values)
-            });
+            result[feature] = new BasicStats<T>(values);
         }
 
         return result;
@@ -151,21 +148,18 @@ public class CrossValidationResult<T>
             var values = FoldResults.Select(fold => 
             {
                 // Try to get the metric from ValidationPredictionStats
-                if (fold.ValidationPredictionStats.HasMetric(metricType))
+                if (fold.ValidationPredictionStats.IsValidMetric(metricType))
                     return fold.ValidationPredictionStats.GetMetric(metricType);
             
                 // If not found, try to get it from ValidationErrors
-                if (fold.ValidationErrors.HasMetric(metricType))
+                if (fold.ValidationErrors.IsValidMetric(metricType))
                     return fold.ValidationErrors.GetMetric(metricType);
             
                 // If still not found, throw an exception
                 throw new ArgumentException($"Metric '{metricType}' not found in fold results", nameof(metricType));
             }).ToArray();
 
-            return new BasicStats<T>(new BasicStatsInputs<T>
-            {
-                Values = new Vector<T>(values)
-            });
+            return new BasicStats<T>(values);
         }
         catch (ArgumentException ex)
         {

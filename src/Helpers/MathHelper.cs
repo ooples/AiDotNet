@@ -676,6 +676,80 @@ public static class MathHelper
     }
 
     /// <summary>
+    /// Returns positive infinity for the specified numeric type.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for which to return positive infinity.</typeparam>
+    /// <returns>A value representing positive infinity for the specified type.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Infinity represents a value that is larger than any finite number.
+    /// This method provides a way to get the positive infinity value for different numeric types
+    /// (like double, float, decimal) in a consistent way.
+    /// 
+    /// In mathematics and computing, infinity is used to represent unbounded values or the result
+    /// of operations like division by zero.
+    /// </para>
+    /// </remarks>
+    public static T PositiveInfinity<T>()
+    {
+        var numOps = GetNumericOperations<T>();
+
+        // For floating-point types, return their specific infinity representation
+        if (typeof(T) == typeof(double))
+            return (T)(object)double.PositiveInfinity;
+        if (typeof(T) == typeof(float))
+            return (T)(object)float.PositiveInfinity;
+
+        // For other types, return the maximum value as an approximation of infinity
+        if (typeof(T) == typeof(decimal))
+            return (T)(object)decimal.MaxValue;
+        if (typeof(T) == typeof(int))
+            return (T)(object)int.MaxValue;
+        if (typeof(T) == typeof(long))
+            return (T)(object)long.MaxValue;
+
+        // Default fallback using the numeric operations
+        return numOps.MaxValue;
+    }
+
+    /// <summary>
+    /// Returns negative infinity for the specified numeric type.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for which to return negative infinity.</typeparam>
+    /// <returns>A value representing negative infinity for the specified type.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Negative infinity represents a value that is smaller than any finite number.
+    /// This method provides a way to get the negative infinity value for different numeric types
+    /// (like double, float, decimal) in a consistent way.
+    /// 
+    /// In mathematics and computing, negative infinity is used to represent unbounded negative values
+    /// or the result of certain operations like dividing a negative number by zero.
+    /// </para>
+    /// </remarks>
+    public static T NegativeInfinity<T>()
+    {
+        var numOps = GetNumericOperations<T>();
+
+        // For floating-point types, return their specific negative infinity representation
+        if (typeof(T) == typeof(double))
+            return (T)(object)double.NegativeInfinity;
+        if (typeof(T) == typeof(float))
+            return (T)(object)float.NegativeInfinity;
+
+        // For other types, return the minimum value as an approximation of negative infinity
+        if (typeof(T) == typeof(decimal))
+            return (T)(object)decimal.MinValue;
+        if (typeof(T) == typeof(int))
+            return (T)(object)int.MinValue;
+        if (typeof(T) == typeof(long))
+            return (T)(object)long.MinValue;
+
+        // Default fallback using the numeric operations
+        return numOps.MinValue;
+    }
+
+    /// <summary>
     /// Calculates the sine of an angle.
     /// </summary>
     /// <typeparam name="T">The numeric type to use for calculations.</typeparam>

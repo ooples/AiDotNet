@@ -86,7 +86,8 @@ public class FoldResult<T>
         Dictionary<string, T>? featureImportance = null,
         TimeSpan? trainingTime = null,
         TimeSpan? evaluationTime = null,
-        int featureCount = 0)
+        int featureCount = 0,
+        ModelType modelType = ModelType.None)
     {
         FoldIndex = foldIndex;
         ActualValues = validationActual;
@@ -97,14 +98,14 @@ public class FoldResult<T>
             Actual = trainingActual, 
             Predicted = trainingPredicted,
             FeatureCount = featureCount
-        });
+        }, modelType);
         
         ValidationErrors = new ErrorStats<T>(new ErrorStatsInputs<T> 
         { 
             Actual = validationActual, 
             Predicted = validationPredicted,
             FeatureCount = featureCount
-        });
+        }, modelType);
         
         ValidationPredictionStats = new PredictionStats<T>(new PredictionStatsInputs<T>
         {
@@ -113,7 +114,7 @@ public class FoldResult<T>
             NumberOfParameters = featureCount,
             ConfidenceLevel = 0.95,
             LearningCurveSteps = 5
-        });
+        }, modelType);
         
         FeatureImportance = featureImportance ?? [];
         TrainingTime = trainingTime ?? TimeSpan.Zero;

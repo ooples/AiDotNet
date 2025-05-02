@@ -285,12 +285,14 @@ public static class ModelHelper<T, TInput, TOutput>
         int totalFeatures)
     {
         // Create a vector with the total number of features
-        Vector<T> coefficients = new Vector<T>(totalFeatures);
+        var coefficients = new Vector<T>(totalFeatures);
+
         // Initialize all features with very small values (effectively disabling them)
         for (int i = 0; i < totalFeatures; i++)
         {
             coefficients[i] = _numOps.FromDouble(_random.NextDouble() * 0.0001); // Near-zero initialization
         }
+
         // Set meaningful values for active features
         foreach (int index in activeFeatures)
         {

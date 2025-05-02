@@ -193,7 +193,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
         // Create the rest of the population with random variations
         for (int i = 1; i < populationSize; i++)
         {
-            population.Add(InitializeRandomSolution(input));
+            population.Add(CreateSolution(input));
         }
 
         return population;

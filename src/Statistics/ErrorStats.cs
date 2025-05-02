@@ -1,34 +1,55 @@
 ﻿namespace AiDotNet.Statistics;
 
 /// <summary>
-/// Calculates and stores various error metrics for evaluating prediction model performance.
+/// Provides comprehensive error statistics for model evaluation, calculating only metrics
+/// that are appropriate for the specific model type.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations (e.g., float, double, decimal).</typeparam>
-/// <remarks>
-/// <para>
-/// This class provides a comprehensive set of error metrics to assess how well predicted values 
-/// match actual values.
-/// </para>
-/// 
-/// <para>
-/// For Beginners:
-/// When building AI or machine learning models, you need ways to measure how accurate your predictions are.
-/// Think of these metrics like different ways to score a test:
-/// - Some look at the average error (MAE, MSE)
-/// - Some look at percentage differences (MAPE, SMAPE)
-/// - Some help detect if your model is consistently overestimating or underestimating (MeanBiasError)
-/// - Some are specialized for specific types of predictions (AUCROC, AUCPR for classification)
-/// 
-/// The "T" in ErrorStats&lt;T&gt; means this class works with different number types like decimal, 
-/// double, or float without needing separate implementations for each.
-/// </para>
-/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[Serializable]
 public class ErrorStats<T>
 {
     /// <summary>
     /// Provides mathematical operations for the generic type T.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
+
+    /// <summary>
+    /// The type of model being evaluated.
+    /// </summary>
+    public ModelType ModelType { get; private set; }
+
+    /// <summary>
+    /// Number of features or parameters in the model.
+    /// </summary>
+    private readonly int _numberOfParameters;
+
+    /// <summary>
+    /// Dictionary to store calculated metrics.
+    /// </summary>
+    private readonly Dictionary<MetricType, T> _metrics = new();
+
+    /// <summary>
+    /// Set of metrics that have been calculated.
+    /// </summary>
+    private readonly HashSet<MetricType> _calculatedMetrics = new();
+
+    /// <summary>
+    /// Set of metrics valid for this model type.
+    /// </summary>
+    private readonly HashSet<MetricType> _validMetrics = new();
+
+    /// <summary>
+    /// List of individual prediction errors (residuals).
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// ErrorList contains the difference between each predicted value and the corresponding actual value.
+    /// This lets you examine individual errors, create visualizations like histograms,
+    /// or perform additional analyses beyond summary statistics.
+    /// </remarks>
+    public List<T> ErrorList { get; private set; } = [];
+
+    #region Property Accessors for Backward Compatibility
 
     /// <summary>
     /// Mean Absolute Error - The average absolute difference between predicted and actual values.
@@ -38,7 +59,7 @@ public class ErrorStats<T>
     /// MAE measures the average size of errors without considering their direction (positive or negative).
     /// Lower values indicate better accuracy. If MAE = 5, your predictions are off by 5 units on average.
     /// </remarks>
-    public T MAE { get; private set; }
+    public T MAE => GetMetric(MetricType.MAE);
 
     /// <summary>
     /// Mean Squared Error - The average of squared differences between predicted and actual values.
@@ -48,7 +69,7 @@ public class ErrorStats<T>
     /// MSE squares the errors before averaging them, which penalizes large errors more heavily than small ones.
     /// Lower values indicate better accuracy. Because of squaring, the value is not in the same units as your data.
     /// </remarks>
-    public T MSE { get; private set; }
+    public T MSE => GetMetric(MetricType.MSE);
 
     /// <summary>
     /// Root Mean Squared Error - The square root of the Mean Squared Error.
@@ -59,7 +80,7 @@ public class ErrorStats<T>
     /// It's often preferred over MSE for interpretation because it's in the same units as your data.
     /// Like MAE, lower values indicate better accuracy.
     /// </remarks>
-    public T RMSE { get; private set; }
+    public T RMSE => GetMetric(MetricType.RMSE);
 
     /// <summary>
     /// Mean Absolute Percentage Error - The average percentage difference between predicted and actual values.
@@ -70,7 +91,7 @@ public class ErrorStats<T>
     /// MAPE = 10 means that, on average, your predictions are off by 10% from the actual values.
     /// Note: MAPE can be problematic when actual values are close to zero.
     /// </remarks>
-    public T MAPE { get; private set; }
+    public T MAPE => GetMetric(MetricType.MAPE);
 
     /// <summary>
     /// Mean Bias Error - The average of prediction errors (predicted - actual).
@@ -81,7 +102,7 @@ public class ErrorStats<T>
     /// underestimate (negative value). Ideally, it should be close to zero, indicating no systematic bias.
     /// Unlike MAE, this doesn't take the absolute value, so positive and negative errors can cancel out.
     /// </remarks>
-    public T MeanBiasError { get; private set; }
+    public T MeanBiasError => GetMetric(MetricType.MeanBiasError);
 
     /// <summary>
     /// Median Absolute Error - The middle value of all absolute differences between predicted and actual values.
@@ -92,7 +113,7 @@ public class ErrorStats<T>
     /// This makes it less sensitive to outliers (extreme errors) than MAE.
     /// For example, if you have errors of [1, 2, 100], the median is 2, while the mean would be 34.3.
     /// </remarks>
-    public T MedianAbsoluteError { get; private set; }
+    public T MedianAbsoluteError => GetMetric(MetricType.MedianAbsoluteError);
 
     /// <summary>
     /// Maximum Error - The largest absolute difference between any predicted and actual value.
@@ -102,7 +123,7 @@ public class ErrorStats<T>
     /// MaxError tells you the worst-case error in your predictions.
     /// It can help you understand the potential maximum impact of prediction errors.
     /// </remarks>
-    public T MaxError { get; private set; }
+    public T MaxError => GetMetric(MetricType.MaxError);
 
     /// <summary>
     /// Theil's U Statistic - A measure of forecast accuracy relative to a naive forecasting method.
@@ -115,7 +136,7 @@ public class ErrorStats<T>
     /// Values greater than 1 mean your model performs worse than the naive approach.
     /// This is especially useful for time series forecasting evaluation.
     /// </remarks>
-    public T TheilUStatistic { get; private set; }
+    public T TheilUStatistic => GetMetric(MetricType.TheilUStatistic);
 
     /// <summary>
     /// Durbin-Watson Statistic - Detects autocorrelation in prediction errors.
@@ -130,7 +151,7 @@ public class ErrorStats<T>
     /// 
     /// Autocorrelation in errors suggests your model might be missing important patterns in the data.
     /// </remarks>
-    public T DurbinWatsonStatistic { get; private set; }
+    public T DurbinWatsonStatistic => GetMetric(MetricType.DurbinWatsonStatistic);
 
     /// <summary>
     /// Sample Standard Error - An estimate of the standard deviation of prediction errors, adjusted for model complexity.
@@ -141,7 +162,7 @@ public class ErrorStats<T>
     /// how many parameters (features) your model uses. It's useful for constructing confidence intervals
     /// around predictions and is adjusted downward based on the number of parameters in your model.
     /// </remarks>
-    public T SampleStandardError { get; private set; }
+    public T SampleStandardError => GetMetric(MetricType.SampleStandardError);
 
     /// <summary>
     /// Population Standard Error - The standard deviation of prediction errors without adjustment for model complexity.
@@ -152,7 +173,7 @@ public class ErrorStats<T>
     /// SampleStandardError, it doesn't adjust for model complexity. It gives you an idea of the
     /// typical size of the errors your model makes.
     /// </remarks>
-    public T PopulationStandardError { get; private set; }
+    public T PopulationStandardError => GetMetric(MetricType.PopulationStandardError);
 
     /// <summary>
     /// Akaike Information Criterion - A measure that balances model accuracy and complexity.
@@ -165,7 +186,7 @@ public class ErrorStats<T>
     /// Think of it like buying a car: You want good performance (accuracy) but don't want to 
     /// pay too much (complexity). AIC helps you find the best balance.
     /// </remarks>
-    public T AIC { get; private set; }
+    public T AIC => GetMetric(MetricType.AIC);
 
     /// <summary>
     /// Bayesian Information Criterion - Similar to AIC but penalizes model complexity more strongly.
@@ -178,7 +199,7 @@ public class ErrorStats<T>
     /// 
     /// BIC is more cautious about adding complexity than AIC, like a budget-conscious car buyer.
     /// </remarks>
-    public T BIC { get; private set; }
+    public T BIC => GetMetric(MetricType.BIC);
 
     /// <summary>
     /// Alternative Akaike Information Criterion - A variant of AIC with a different penalty term.
@@ -189,7 +210,7 @@ public class ErrorStats<T>
     /// model complexity. It's particularly useful when sample sizes are small.
     /// Like AIC and BIC, lower values are better.
     /// </remarks>
-    public T AICAlt { get; private set; }
+    public T AICAlt => GetMetric(MetricType.AICAlt);
 
     /// <summary>
     /// Residual Sum of Squares - The sum of squared differences between predicted and actual values.
@@ -200,18 +221,7 @@ public class ErrorStats<T>
     /// (which is just RSS divided by the number of observations).
     /// Lower values indicate a better fit. It's used in calculating metrics like AIC and BIC.
     /// </remarks>
-    public T RSS { get; private set; }
-
-    /// <summary>
-    /// List of individual prediction errors (residuals).
-    /// </summary>
-    /// <remarks>
-    /// For Beginners:
-    /// ErrorList contains the difference between each predicted value and the corresponding actual value.
-    /// This lets you examine individual errors, create visualizations like histograms,
-    /// or perform additional analyses beyond summary statistics.
-    /// </remarks>
-    public List<T> ErrorList { get; private set; } = [];
+    public T RSS => GetMetric(MetricType.RSS);
 
     /// <summary>
     /// Area Under the Precision-Recall Curve - Measures classification accuracy focusing on positive cases.
@@ -225,7 +235,7 @@ public class ErrorStats<T>
     /// Recall measures what fraction of actual positives your model identified.
     /// AUCPR considers how these trade off across different threshold settings.
     /// </remarks>
-    public T AUCPR { get; private set; }
+    public T AUCPR => GetMetric(MetricType.AUCPR);
 
     /// <summary>
     /// Area Under the Receiver Operating Characteristic Curve - Measures classification accuracy across thresholds.
@@ -239,7 +249,7 @@ public class ErrorStats<T>
     /// 
     /// It measures how well your model can distinguish between classes across different threshold settings.
     /// </remarks>
-    public T AUCROC { get; private set; }
+    public T AUCROC => GetMetric(MetricType.AUCROC);
 
     /// <summary>
     /// Symmetric Mean Absolute Percentage Error - A variant of MAPE that handles zero or near-zero values better.
@@ -252,7 +262,7 @@ public class ErrorStats<T>
     /// SMAPE treats positive and negative errors more symmetrically than MAPE,
     /// which can be important in some forecasting applications.
     /// </remarks>
-    public T SMAPE { get; private set; }
+    public T SMAPE => GetMetric(MetricType.SMAPE);
 
     /// <summary>
     /// Mean Squared Logarithmic Error - Penalizes underestimates more than overestimates.
@@ -265,58 +275,84 @@ public class ErrorStats<T>
     /// MSLE penalizes underestimation (predicting too low) more heavily than overestimation.
     /// This is useful in scenarios where underestimating would be more problematic, like inventory forecasting.
     /// </remarks>
-    public T MeanSquaredLogError { get; private set; }
+    public T MeanSquaredLogError => GetMetric(MetricType.MeanSquaredLogError);
+
+    #endregion
+
+    #region Constructors
 
     /// <summary>
-    /// Creates a new ErrorStats instance and calculates all error metrics.
+    /// Creates a new ErrorStats instance and calculates appropriate error metrics based on the model type.
     /// </summary>
     /// <param name="inputs">The inputs containing actual and predicted values.</param>
+    /// <param name="modelType">The type of model being evaluated.</param>
     /// <remarks>
     /// For Beginners:
-    /// This constructor takes your actual values (ground truth) and predicted values,
-    /// then calculates all the error metrics in one step.
+    /// This constructor takes your actual values (ground truth), predicted values,
+    /// and the type of model you're evaluating. It then calculates only the error metrics
+    /// that are appropriate for that type of model.
     /// </remarks>
-    internal ErrorStats(ErrorStatsInputs<T> inputs)
+    internal ErrorStats(ErrorStatsInputs<T> inputs, ModelType modelType)
     {
+        if (inputs == null)
+            throw new ArgumentNullException(nameof(inputs));
+
         _numOps = MathHelper.GetNumericOperations<T>();
+        ModelType = modelType;
+        _numberOfParameters = inputs.FeatureCount;
 
-        // Initialize all variables to zero
-        MAE = _numOps.Zero;
-        MSE = _numOps.Zero;
-        RMSE = _numOps.Zero;
-        MAPE = _numOps.Zero;
-        MeanBiasError = _numOps.Zero;
-        MedianAbsoluteError = _numOps.Zero;
-        MeanSquaredLogError = _numOps.Zero;
-        MaxError = _numOps.Zero;
-        TheilUStatistic = _numOps.Zero;
-        DurbinWatsonStatistic = _numOps.Zero;
-        SampleStandardError = _numOps.Zero;
-        PopulationStandardError = _numOps.Zero;
-        AIC = _numOps.Zero;
-        BIC = _numOps.Zero;
-        AICAlt = _numOps.Zero;
-        RSS = _numOps.Zero;
-        AUCPR = _numOps.Zero;
-        AUCROC = _numOps.Zero;
-        SMAPE = _numOps.Zero;
+        // Determine which metrics are valid for this model type
+        DetermineValidMetrics();
 
-        ErrorList = [];
-
-        CalculateErrorStats(inputs.Actual, inputs.Predicted, inputs.FeatureCount);
+        // Calculate all valid metrics
+        if (inputs.Actual != null && inputs.Predicted != null &&
+            !inputs.Actual.IsEmpty && !inputs.Predicted.IsEmpty)
+        {
+            CalculateValidMetrics(inputs.Actual, inputs.Predicted);
+        }
     }
 
     /// <summary>
-    /// Creates an empty ErrorStats instance with all metrics set to zero.
+    /// Creates a new ErrorStats instance and calculates appropriate error metrics based on the model type.
     /// </summary>
-    /// <returns>An ErrorStats instance with all metrics initialized to zero.</returns>
+    /// <param name="inputs">The inputs containing actual and predicted values.</param>
+    /// <param name="modelType">The type of model being evaluated.</param>
+    /// <param name="progress">Optional progress reporting.</param>
+    /// <param name="cancellationToken">Optional cancellation token.</param>
+    internal ErrorStats(ErrorStatsInputs<T> inputs, ModelType modelType,
+                       IProgress<double>? progress = null,
+                       CancellationToken cancellationToken = default)
+    {
+        if (inputs == null)
+            throw new ArgumentNullException(nameof(inputs));
+
+        _numOps = MathHelper.GetNumericOperations<T>();
+        ModelType = modelType;
+        _numberOfParameters = inputs.FeatureCount;
+
+        // Determine which metrics are valid for this model type
+        DetermineValidMetrics();
+
+        // Calculate all valid metrics
+        if (inputs.Actual != null && inputs.Predicted != null &&
+            !inputs.Actual.IsEmpty && !inputs.Predicted.IsEmpty)
+        {
+            CalculateValidMetrics(inputs.Actual, inputs.Predicted, progress, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Creates an empty ErrorStats instance with appropriate metrics set to zero based on model type.
+    /// </summary>
+    /// <param name="modelType">The type of model.</param>
+    /// <returns>An ErrorStats instance with appropriate metrics initialized to zero.</returns>
     /// <remarks>
     /// For Beginners:
-    /// This static method creates an ErrorStats object where all metrics are set to zero.
-    /// It's useful when you need a placeholder or default instance, or when you want to
-    /// compare against a baseline of "no errors."
+    /// This static method creates an ErrorStats object where all metrics that are appropriate
+    /// for the specified model type are set to zero. It's useful when you need a placeholder
+    /// or default instance, or when you want to compare against a baseline of "no errors."
     /// </remarks>
-    public static ErrorStats<T> Empty()
+    public static ErrorStats<T> Empty(ModelType modelType)
     {
         // Create properly initialized empty inputs
         var emptyInputs = new ErrorStatsInputs<T>
@@ -326,93 +362,358 @@ public class ErrorStats<T>
             FeatureCount = 0
         };
 
-        return new ErrorStats<T>(emptyInputs);
+        return new ErrorStats<T>(emptyInputs, modelType);
     }
 
+    #endregion
+
+    #region Core Calculation Methods
+
     /// <summary>
-    /// Calculates all error metrics based on actual and predicted values.
+    /// Determines which metrics are valid for the current model type.
     /// </summary>
-    /// <param name="actual">Vector of actual values (ground truth).</param>
-    /// <param name="predicted">Vector of predicted values from your model.</param>
-    /// <param name="numberOfParameters">Number of features or parameters in your model.</param>
-    /// <remarks>
-    /// <para>
-    /// This private method does the actual work of calculating all the error metrics.
-    /// It handles empty inputs gracefully by returning early with all metrics set to their default values.
-    /// </para>
-    /// <para><b>For Beginners:</b> This private method does the actual work of calculating all the error metrics.
-    /// 
-    /// - actual: These are the true values you're trying to predict
-    /// - predicted: These are your model's predictions
-    /// - numberOfParameters: This is how many input features your model uses, which is needed 
-    ///   for metrics that account for model complexity (like AIC, BIC)
-    /// 
-    /// The method calculates each error metric using specialized helper methods and 
-    /// stores the results in the corresponding properties. If you provide empty data,
-    /// all metrics will remain at their default zero values.
-    /// </para>
-    /// </remarks>
-    private void CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters)
+    private void DetermineValidMetrics()
     {
-        // Return early if either vector is empty or null
-        if (actual == null || predicted == null ||
-            actual.IsEmpty || predicted.IsEmpty ||
-            actual.Length == 0 || predicted.Length == 0)
+        // Get all possible metric types
+        var allMetricTypes = Enum.GetValues(typeof(MetricType))
+                                .Cast<MetricType>()
+                                .Where(mt => ErrorStats<T>.IsErrorStatisticMetric(mt));
+
+        // Check each metric type for validity with current model type
+        foreach (var metricType in allMetricTypes)
         {
-            // All metrics remain at their initialized zero values
-            return;
+            if (ModelTypeHelper.IsValidMetric(ModelType, metricType))
+            {
+                _validMetrics.Add(metricType);
+            }
         }
-
-        // Validate that vectors have the same length
-        if (actual.Length != predicted.Length)
-        {
-            throw new ArgumentException("Actual and predicted vectors must have the same length.");
-        }
-
-        int n = actual.Length;
-
-        // Calculate basic error metrics
-        MAE = StatisticsHelper<T>.CalculateMeanAbsoluteError(actual, predicted);
-        RSS = StatisticsHelper<T>.CalculateResidualSumOfSquares(actual, predicted);
-        MSE = StatisticsHelper<T>.CalculateMeanSquaredError(actual, predicted);
-        RMSE = _numOps.Sqrt(MSE);
-        MAPE = StatisticsHelper<T>.CalculateMeanAbsolutePercentageError(actual, predicted);
-        MedianAbsoluteError = StatisticsHelper<T>.CalculateMedianAbsoluteError(actual, predicted);
-        MaxError = StatisticsHelper<T>.CalculateMaxError(actual, predicted);
-        AUCPR = StatisticsHelper<T>.CalculatePrecisionRecallAUC(actual, predicted);
-        AUCROC = StatisticsHelper<T>.CalculateROCAUC(actual, predicted);
-        SMAPE = StatisticsHelper<T>.CalculateSymmetricMeanAbsolutePercentageError(actual, predicted);
-        MeanSquaredLogError = StatisticsHelper<T>.CalculateMeanSquaredLogError(actual, predicted);
-
-        // Calculate standard errors
-        SampleStandardError = StatisticsHelper<T>.CalculateSampleStandardError(actual, predicted, numberOfParameters);
-        PopulationStandardError = StatisticsHelper<T>.CalculatePopulationStandardError(actual, predicted);
-
-        // Calculate bias and autocorrelation metrics
-        MeanBiasError = StatisticsHelper<T>.CalculateMeanBiasError(actual, predicted);
-        TheilUStatistic = StatisticsHelper<T>.CalculateTheilUStatistic(actual, predicted);
-        DurbinWatsonStatistic = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(actual, predicted);
-
-        // Calculate information criteria
-        AIC = StatisticsHelper<T>.CalculateAIC(n, numberOfParameters, RSS);
-        BIC = StatisticsHelper<T>.CalculateBIC(n, numberOfParameters, RSS);
-        AICAlt = StatisticsHelper<T>.CalculateAICAlternative(n, numberOfParameters, RSS);
-
-        // Populate error list
-        ErrorList = [.. StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
     }
 
     /// <summary>
-    /// Retrieves the value of a specific error metric.
+    /// Determines if a metric type is an error statistic metric.
+    /// </summary>
+    /// <param name="metricType">The metric type to check.</param>
+    /// <returns>True if the metric is an error statistic; otherwise, false.</returns>
+    public static bool IsErrorStatisticMetric(MetricType metricType)
+    {
+        // Define which metrics are considered error statistics
+        return metricType switch
+        {
+            // Core error metrics
+            MetricType.MAE => true,
+            MetricType.MSE => true,
+            MetricType.RMSE => true,
+            MetricType.MAPE => true,
+            MetricType.MeanBiasError => true,
+            MetricType.MedianAbsoluteError => true,
+            MetricType.MaxError => true,
+
+            // Advanced error metrics
+            MetricType.TheilUStatistic => true,
+            MetricType.DurbinWatsonStatistic => true,
+            MetricType.SampleStandardError => true,
+            MetricType.PopulationStandardError => true,
+
+            // Model comparison metrics based on errors
+            MetricType.AIC => true,
+            MetricType.BIC => true,
+            MetricType.AICAlt => true,
+            MetricType.RSS => true,
+
+            // Classification error metrics
+            MetricType.AUCPR => true,
+            MetricType.AUCROC => true,
+
+            // Alternative error metrics
+            MetricType.SMAPE => true,
+            MetricType.MeanSquaredLogError => true,
+
+            // For any other metric type
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Calculates all metrics that are valid for the current model type.
+    /// </summary>
+    private void CalculateValidMetrics(Vector<T> actual, Vector<T> predicted,
+                                      IProgress<double>? progress = null,
+                                      CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Validate inputs
+            if (actual.Length != predicted.Length)
+            {
+                throw new ArgumentException("Actual and predicted vectors must have the same length.");
+            }
+
+            // Calculate residuals for all model types
+            ErrorList = [..StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
+
+            // Check for cancellation
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Report initial progress
+            progress?.Report(0);
+
+            // Calculate each valid metric
+            int total = _validMetrics.Count;
+            int completed = 0;
+
+            // Decide whether to use parallel or sequential calculation based on data size
+            if (actual.Length > 10000 && total > 5)
+            {
+                // For large datasets with many metrics, parallel calculation may be more efficient
+                var options = new ParallelOptions
+                {
+                    CancellationToken = cancellationToken,
+                    MaxDegreeOfParallelism = Environment.ProcessorCount
+                };
+
+                var metrics = new Dictionary<MetricType, T>();
+                var syncLock = new object();
+
+                Parallel.ForEach(_validMetrics, options, metricType =>
+                {
+                    var value = CalculateMetricValue(metricType, actual, predicted);
+
+                    lock (syncLock)
+                    {
+                        metrics[metricType] = value;
+                        completed++;
+                        progress?.Report((double)completed / total);
+                    }
+                });
+
+                // After parallel calculation, update the dictionary
+                foreach (var kv in metrics)
+                {
+                    _metrics[kv.Key] = kv.Value;
+                    _calculatedMetrics.Add(kv.Key);
+                }
+            }
+            else
+            {
+                // For smaller datasets, sequential calculation is simpler and may be fast enough
+                foreach (var metricType in _validMetrics)
+                {
+                    // Check for cancellation
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var value = CalculateMetricValue(metricType, actual, predicted);
+                    _metrics[metricType] = value;
+                    _calculatedMetrics.Add(metricType);
+
+                    completed++;
+                    progress?.Report((double)completed / total);
+                }
+            }
+
+            // After calculating primary metrics, calculate dependent ones
+            CalculateDependentMetrics();
+        }
+        catch (OperationCanceledException)
+        {
+            // Propagate cancellation
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Wrap in a custom exception with context information
+            throw new ErrorStatsException($"Error calculating metrics for model type {ModelType}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Calculates metrics that depend on other metrics, ensuring proper calculation order.
+    /// </summary>
+    private void CalculateDependentMetrics()
+    {
+        int n = 0;
+        if (ErrorList != null && ErrorList.Count > 0)
+        {
+            n = ErrorList.Count;
+        }
+
+        // RMSE depends on MSE
+        if (_calculatedMetrics.Contains(MetricType.MSE) &&
+            _validMetrics.Contains(MetricType.RMSE) &&
+            !_calculatedMetrics.Contains(MetricType.RMSE))
+        {
+            var mse = _metrics[MetricType.MSE];
+            _metrics[MetricType.RMSE] = _numOps.Sqrt(mse);
+            _calculatedMetrics.Add(MetricType.RMSE);
+        }
+
+        // AIC, BIC, and AICAlt depend on RSS and sample size
+        if (_calculatedMetrics.Contains(MetricType.RSS) && n > 0)
+        {
+            var rss = _metrics[MetricType.RSS];
+
+            // AIC calculation
+            if (_validMetrics.Contains(MetricType.AIC) && !_calculatedMetrics.Contains(MetricType.AIC))
+            {
+                _metrics[MetricType.AIC] = StatisticsHelper<T>.CalculateAIC(n, _numberOfParameters, rss);
+                _calculatedMetrics.Add(MetricType.AIC);
+            }
+
+            // BIC calculation
+            if (_validMetrics.Contains(MetricType.BIC) && !_calculatedMetrics.Contains(MetricType.BIC))
+            {
+                _metrics[MetricType.BIC] = StatisticsHelper<T>.CalculateBIC(n, _numberOfParameters, rss);
+                _calculatedMetrics.Add(MetricType.BIC);
+            }
+
+            // AICAlt calculation
+            if (_validMetrics.Contains(MetricType.AICAlt) && !_calculatedMetrics.Contains(MetricType.AICAlt))
+            {
+                _metrics[MetricType.AICAlt] = StatisticsHelper<T>.CalculateAICAlternative(n, _numberOfParameters, rss);
+                _calculatedMetrics.Add(MetricType.AICAlt);
+            }
+        }
+
+        // PopulationStandardError could be optimized if MSE is already calculated
+        if (_calculatedMetrics.Contains(MetricType.MSE) &&
+            _validMetrics.Contains(MetricType.PopulationStandardError) &&
+            !_calculatedMetrics.Contains(MetricType.PopulationStandardError) &&
+            n > 0)
+        {
+            var mse = _metrics[MetricType.MSE];
+            _metrics[MetricType.PopulationStandardError] = _numOps.Sqrt(mse);
+            _calculatedMetrics.Add(MetricType.PopulationStandardError);
+        }
+
+        // SampleStandardError could be optimized if PopulationStandardError is already calculated
+        if (_calculatedMetrics.Contains(MetricType.PopulationStandardError) &&
+            _validMetrics.Contains(MetricType.SampleStandardError) &&
+            !_calculatedMetrics.Contains(MetricType.SampleStandardError) &&
+            n > _numberOfParameters)
+        {
+            var popStdErr = _metrics[MetricType.PopulationStandardError];
+            var correctionFactor = _numOps.FromDouble((double)(n) / (n - _numberOfParameters));
+            correctionFactor = _numOps.Sqrt(correctionFactor);
+            _metrics[MetricType.SampleStandardError] = _numOps.Multiply(popStdErr, correctionFactor);
+            _calculatedMetrics.Add(MetricType.SampleStandardError);
+        }
+
+        // Check if we need to update any other dependent metrics based on our error list
+        if (ErrorList != null && ErrorList.Count > 0 && !_calculatedMetrics.Contains(MetricType.MaxError) &&
+            _validMetrics.Contains(MetricType.MaxError))
+        {
+            // Calculate MaxError from the error list if we have it
+            var maxError = _numOps.Zero;
+            bool first = true;
+
+            foreach (var error in ErrorList)
+            {
+                var absError = _numOps.Abs(error);
+                if (first || _numOps.GreaterThan(absError, maxError))
+                {
+                    maxError = absError;
+                    first = false;
+                }
+            }
+
+            _metrics[MetricType.MaxError] = maxError;
+            _calculatedMetrics.Add(MetricType.MaxError);
+        }
+    }
+
+    /// <summary>
+    /// Calculates the value of a specific metric.
+    /// </summary>
+    private T CalculateMetricValue(MetricType metricType, Vector<T> actual, Vector<T> predicted)
+    {
+        try
+        {
+            switch (metricType)
+            {
+                case MetricType.MAE:
+                    return StatisticsHelper<T>.CalculateMeanAbsoluteError(actual, predicted);
+
+                case MetricType.MSE:
+                    return StatisticsHelper<T>.CalculateMeanSquaredError(actual, predicted);
+
+                case MetricType.RMSE:
+                    var mse = StatisticsHelper<T>.CalculateMeanSquaredError(actual, predicted);
+                    return _numOps.Sqrt(mse);
+
+                case MetricType.MAPE:
+                    return StatisticsHelper<T>.CalculateMeanAbsolutePercentageError(actual, predicted);
+
+                case MetricType.MeanBiasError:
+                    return StatisticsHelper<T>.CalculateMeanBiasError(actual, predicted);
+
+                case MetricType.MedianAbsoluteError:
+                    return StatisticsHelper<T>.CalculateMedianAbsoluteError(actual, predicted);
+
+                case MetricType.MaxError:
+                    return StatisticsHelper<T>.CalculateMaxError(actual, predicted);
+
+                case MetricType.TheilUStatistic:
+                    return StatisticsHelper<T>.CalculateTheilUStatistic(actual, predicted);
+
+                case MetricType.DurbinWatsonStatistic:
+                    return StatisticsHelper<T>.CalculateDurbinWatsonStatistic(actual, predicted);
+
+                case MetricType.SampleStandardError:
+                    return StatisticsHelper<T>.CalculateSampleStandardError(actual, predicted, _numberOfParameters);
+
+                case MetricType.PopulationStandardError:
+                    return StatisticsHelper<T>.CalculatePopulationStandardError(actual, predicted);
+
+                case MetricType.AIC:
+                    var rss = StatisticsHelper<T>.CalculateResidualSumOfSquares(actual, predicted);
+                    return StatisticsHelper<T>.CalculateAIC(actual.Length, _numberOfParameters, rss);
+
+                case MetricType.BIC:
+                    rss = StatisticsHelper<T>.CalculateResidualSumOfSquares(actual, predicted);
+                    return StatisticsHelper<T>.CalculateBIC(actual.Length, _numberOfParameters, rss);
+
+                case MetricType.AICAlt:
+                    rss = StatisticsHelper<T>.CalculateResidualSumOfSquares(actual, predicted);
+                    return StatisticsHelper<T>.CalculateAICAlternative(actual.Length, _numberOfParameters, rss);
+
+                case MetricType.RSS:
+                    return StatisticsHelper<T>.CalculateResidualSumOfSquares(actual, predicted);
+
+                case MetricType.AUCPR:
+                    return StatisticsHelper<T>.CalculatePrecisionRecallAUC(actual, predicted);
+
+                case MetricType.AUCROC:
+                    return StatisticsHelper<T>.CalculateROCAUC(actual, predicted);
+
+                case MetricType.SMAPE:
+                    return StatisticsHelper<T>.CalculateSymmetricMeanAbsolutePercentageError(actual, predicted);
+
+                case MetricType.MeanSquaredLogError:
+                    return StatisticsHelper<T>.CalculateMeanSquaredLogError(actual, predicted);
+
+                default:
+                    throw new NotImplementedException($"Calculation for metric {metricType} is not implemented.");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Wrap in a custom exception with context information
+            throw new ErrorStatsException($"Error calculating metric {metricType}", ex);
+        }
+    }
+
+    #endregion
+
+    #region Public API Methods
+
+    /// <summary>
+    /// Gets the value of a specific metric.
     /// </summary>
     /// <param name="metricType">The type of metric to retrieve.</param>
     /// <returns>The value of the requested metric.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the requested metric is not valid for the current model type.</exception>
     /// <remarks>
-    /// <para>
-    /// This method allows you to retrieve any of the calculated error metrics by specifying the desired metric type.
-    /// It provides a flexible way to access individual metrics without needing to reference specific properties.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is like a vending machine for error metrics.
+    /// For Beginners:
+    /// This method is like a vending machine for error metrics.
     /// 
     /// You tell it which error metric you want (using the MetricType), and it gives you the value.
     /// For example:
@@ -421,79 +722,140 @@ public class ErrorStats<T>
     /// 
     /// This is useful when you want to work with different error metrics in a flexible way,
     /// especially if you don't know in advance which metric you'll need.
-    /// </para>
     /// </remarks>
-    /// <exception cref="ArgumentException">Thrown when an unsupported MetricType is provided.</exception>
     public T GetMetric(MetricType metricType)
     {
-        return metricType switch
+        if (!IsValidMetric(metricType))
         {
-            MetricType.MAE => MAE,
-            MetricType.MSE => MSE,
-            MetricType.RMSE => RMSE,
-            MetricType.MAPE => MAPE,
-            MetricType.MeanBiasError => MeanBiasError,
-            MetricType.MedianAbsoluteError => MedianAbsoluteError,
-            MetricType.MaxError => MaxError,
-            MetricType.TheilUStatistic => TheilUStatistic,
-            MetricType.DurbinWatsonStatistic => DurbinWatsonStatistic,
-            MetricType.SampleStandardError => SampleStandardError,
-            MetricType.PopulationStandardError => PopulationStandardError,
-            MetricType.AIC => AIC,
-            MetricType.BIC => BIC,
-            MetricType.AICAlt => AICAlt,
-            MetricType.AUCPR => AUCPR,
-            MetricType.AUCROC => AUCROC,
-            MetricType.SMAPE => SMAPE,
-            MetricType.MeanSquaredLogError => MeanSquaredLogError,
-            _ => throw new ArgumentException($"Metric {metricType} is not available in ErrorStats.", nameof(metricType)),
-        };
+            throw new InvalidOperationException($"Metric {metricType} is not valid for model type {ModelType}.");
+        }
+
+        return _metrics.TryGetValue(metricType, out var value) ? value : _numOps.Zero;
     }
 
     /// <summary>
-    /// Checks if a specific metric is available in this ErrorStats instance.
+    /// Tries to get the value of a specific metric.
     /// </summary>
-    /// <param name="metricType">The type of metric to check for.</param>
-    /// <returns>True if the metric is available, false otherwise.</returns>
+    /// <param name="metricType">The type of metric to retrieve.</param>
+    /// <param name="value">The value of the requested metric if successful.</param>
+    /// <returns>True if the metric was successfully retrieved; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is a safer version of GetMetric that won't throw an exception if the metric
+    /// is invalid or hasn't been calculated. Instead, it returns false and sets the output
+    /// value to zero. This pattern is commonly used in production code to avoid exceptions.
+    /// </para>
+    /// </remarks>
+    public bool TryGetMetric(MetricType metricType, out double value)
+    {
+        if (!IsValidMetric(metricType))
+        {
+            value = Convert.ToDouble(_numOps.Zero);
+            return false;
+        }
+
+        if (_metrics.TryGetValue(metricType, out var metricValue))
+        {
+            value = Convert.ToDouble(metricValue);
+            return true;
+        }
+
+        value = Convert.ToDouble(_numOps.Zero);
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if a specific metric is valid for the current model type.
+    /// </summary>
+    /// <param name="metricType">The type of metric to check.</param>
+    /// <returns>True if the metric is valid for the current model type; otherwise, false.</returns>
     /// <remarks>
     /// For Beginners:
-    /// This method allows you to check if a particular metric is available before trying to get its value.
-    /// It's useful when you're not sure if a specific metric was calculated for this set of errors.
-    /// 
-    /// For example:
-    /// <code>
-    /// if (stats.HasMetric(MetricType.MAE))
-    /// {
-    ///     var maeValue = stats.GetMetric(MetricType.MAE);
-    ///     // Use maeValue...
-    /// }
-    /// </code>
-    /// 
-    /// This prevents errors that might occur if you try to access a metric that wasn't calculated.
+    /// This method allows you to check if a particular metric is valid for your model type
+    /// before trying to get its value. It helps prevent errors by letting you know in advance
+    /// whether a metric makes sense for your model.
     /// </remarks>
-    public bool HasMetric(MetricType metricType)
+    public bool IsValidMetric(MetricType metricType)
     {
-        return metricType switch
-        {
-            MetricType.MAE => true,
-            MetricType.MSE => true,
-            MetricType.RMSE => true,
-            MetricType.MAPE => true,
-            MetricType.MeanBiasError => true,
-            MetricType.MedianAbsoluteError => true,
-            MetricType.MaxError => true,
-            MetricType.TheilUStatistic => true,
-            MetricType.DurbinWatsonStatistic => true,
-            MetricType.SampleStandardError => true,
-            MetricType.PopulationStandardError => true,
-            MetricType.AIC => true,
-            MetricType.BIC => true,
-            MetricType.AICAlt => true,
-            MetricType.AUCPR => true,
-            MetricType.AUCROC => true,
-            MetricType.SMAPE => true,
-            MetricType.MeanSquaredLogError => true,
-            _ => false,
-        };
+        return _validMetrics.Contains(metricType);
     }
+
+    /// <summary>
+    /// Checks if a specific metric has been calculated.
+    /// </summary>
+    /// <param name="metricType">The type of metric to check.</param>
+    /// <returns>True if the metric has been calculated; otherwise, false.</returns>
+    public bool IsCalculatedMetric(MetricType metricType)
+    {
+        return _calculatedMetrics.Contains(metricType);
+    }
+
+    /// <summary>
+    /// Gets all metric types that are valid for the current model type.
+    /// </summary>
+    /// <returns>An array of valid metric types.</returns>
+    /// <remarks>
+    /// For Beginners:
+    /// This method gives you a list of all metrics that make sense for your model type.
+    /// It's useful when you want to explore which evaluation metrics you could use,
+    /// especially if you're not familiar with all the available options.
+    /// </remarks>
+    public MetricType[] GetValidMetricTypes()
+    {
+        return [.. _validMetrics];
+    }
+
+    /// <summary>
+    /// Gets all metric types that have been calculated.
+    /// </summary>
+    /// <returns>An array of calculated metric types.</returns>
+    public MetricType[] GetCalculatedMetricTypes()
+    {
+        return [.. _calculatedMetrics];
+    }
+
+    /// <summary>
+    /// Gets a dictionary of all calculated metrics.
+    /// </summary>
+    /// <returns>A dictionary mapping metric types to their values.</returns>
+    /// <remarks>
+    /// For Beginners:
+    /// This method gives you all calculated metrics in one go. It's useful when you
+    /// want to work with multiple metrics at once, perhaps to compare them or display
+    /// them in a report.
+    /// </remarks>
+    public Dictionary<MetricType, T> GetAllCalculatedMetrics()
+    {
+        return new Dictionary<MetricType, T>(_metrics);
+    }
+
+    #endregion
+
+    #region Serialization
+
+    /// <summary>
+    /// Serializes the error stats to JSON.
+    /// </summary>
+    /// <returns>A JSON string representing the error stats.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method converts the error statistics into a JSON string format, which is easy to
+    /// store in files or databases, or to send over networks. It's useful when you need to
+    /// save your results or share them with other applications.
+    /// </para>
+    /// </remarks>
+    public string ToJson()
+    {
+        var result = new Dictionary<string, object>
+        {
+            ["ModelType"] = ModelType.ToString(),
+            ["Metrics"] = _metrics.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value),
+            ["ValidMetrics"] = _validMetrics.Select(m => m.ToString()).ToArray(),
+            ["CalculatedMetrics"] = _calculatedMetrics.Select(m => m.ToString()).ToArray()
+        };
+
+        return JsonConvert.SerializeObject(result);
+    }
+
+    #endregion
 }

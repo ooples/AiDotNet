@@ -22,10 +22,38 @@ namespace AiDotNet.Statistics;
 /// This information helps you improve your model and decide if it's ready to use in real-world situations.
 /// </para>
 /// </remarks>
+[Serializable]
 public class ModelStats<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Provides mathematical operations for the generic type T.
+    /// </summary>
     private readonly INumericOperations<T> _numOps;
+
+    /// <summary>
+    /// Configuration options for statistical calculations.
+    /// </summary>
     private readonly ModelStatsOptions _options;
+
+    /// <summary>
+    /// The type of model being evaluated.
+    /// </summary>
+    public ModelType ModelType { get; private set; }
+
+    /// <summary>
+    /// Dictionary to store calculated metrics.
+    /// </summary>
+    private readonly Dictionary<MetricType, T> _metrics = [];
+
+    /// <summary>
+    /// Set of metrics that have been calculated.
+    /// </summary>
+    private readonly HashSet<MetricType> _calculatedMetrics = [];
+
+    /// <summary>
+    /// Set of metrics valid for this model type.
+    /// </summary>
+    private readonly HashSet<MetricType> _validMetrics = [];
 
     /// <summary>
     /// Gets the number of features (input variables) used in the model.
@@ -79,7 +107,7 @@ public class ModelStats<T, TInput, TOutput>
     /// (typically above 30) suggests that your model might be unstable and sensitive to small data changes.
     /// </para>
     /// </remarks>
-    public T ConditionNumber { get; private set; }
+    public T ConditionNumber => GetMetric(MetricType.ConditionNumber);
 
     /// <summary>
     /// Gets the log pointwise predictive density, a measure of prediction accuracy.
@@ -89,7 +117,7 @@ public class ModelStats<T, TInput, TOutput>
     /// Higher values generally indicate better predictions. It's particularly useful when comparing different models.
     /// </para>
     /// </remarks>
-    public T LogPointwisePredictiveDensity { get; private set; }
+    public T LogPointwisePredictiveDensity => GetMetric(MetricType.LogPointwisePredictiveDensity);
 
     /// <summary>
     /// Gets the leave-one-out predictive densities for each data point.
@@ -109,7 +137,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It's used in statistical tests to determine if your model is significantly better than a simpler alternative.
     /// </para>
     /// </remarks>
-    public T ObservedTestStatistic { get; private set; }
+    public T ObservedTestStatistic => GetMetric(MetricType.ObservedTestStatistic);
 
     /// <summary>
     /// Gets samples from the posterior predictive distribution.
@@ -129,7 +157,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It helps in comparing different models, with higher values generally indicating better models.
     /// </para>
     /// </remarks>
-    public T MarginalLikelihood { get; private set; }
+    public T MarginalLikelihood => GetMetric(MetricType.MarginalLikelihood);
 
     /// <summary>
     /// Gets the marginal likelihood of a reference (simpler) model.
@@ -139,7 +167,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It's used as a comparison point to see how much better your more complex model performs.
     /// </para>
     /// </remarks>
-    public T ReferenceModelMarginalLikelihood { get; private set; }
+    public T ReferenceModelMarginalLikelihood => GetMetric(MetricType.ReferenceModelMarginalLikelihood);
 
     /// <summary>
     /// Gets the log-likelihood of the model.
@@ -149,7 +177,7 @@ public class ModelStats<T, TInput, TOutput>
     /// Higher values mean your model fits the data better. It's often used in more advanced statistical techniques.
     /// </para>
     /// </remarks>
-    public T LogLikelihood { get; private set; }
+    public T LogLikelihood => GetMetric(MetricType.LogLikelihood);
 
     /// <summary>
     /// Gets the effective number of parameters in the model.
@@ -160,7 +188,7 @@ public class ModelStats<T, TInput, TOutput>
     /// (using more complexity than needed to explain the data).
     /// </para>
     /// </remarks>
-    public T EffectiveNumberOfParameters { get; private set; }
+    public T EffectiveNumberOfParameters => GetMetric(MetricType.EffectiveNumberOfParameters);
 
     /// <summary>
     /// Gets the actual (observed) values from the dataset.
@@ -200,7 +228,7 @@ public class ModelStats<T, TInput, TOutput>
     /// Lower values indicate predictions that are closer to the actual values.
     /// </para>
     /// </remarks>
-    public T EuclideanDistance { get; private set; }
+    public T EuclideanDistance => GetMetric(MetricType.EuclideanDistance);
 
     /// <summary>
     /// Gets the Manhattan distance between actual and predicted values.
@@ -210,7 +238,7 @@ public class ModelStats<T, TInput, TOutput>
     /// horizontally or vertically (like navigating city blocks). Lower values indicate better predictions.
     /// </para>
     /// </remarks>
-    public T ManhattanDistance { get; private set; }
+    public T ManhattanDistance => GetMetric(MetricType.ManhattanDistance);
 
     /// <summary>
     /// Gets the cosine similarity between actual and predicted values.
@@ -220,7 +248,7 @@ public class ModelStats<T, TInput, TOutput>
     /// ignoring their magnitude. Values closer to 1 indicate more similar directions.
     /// </para>
     /// </remarks>
-    public T CosineSimilarity { get; private set; }
+    public T CosineSimilarity => GetMetric(MetricType.CosineSimilarity);
 
     /// <summary>
     /// Gets the Jaccard similarity between actual and predicted values.
@@ -230,7 +258,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It's especially useful for binary (yes/no) predictions. Values closer to 1 indicate more overlap.
     /// </para>
     /// </remarks>
-    public T JaccardSimilarity { get; private set; }
+    public T JaccardSimilarity => GetMetric(MetricType.JaccardSimilarity);
 
     /// <summary>
     /// Gets the Hamming distance between actual and predicted values.
@@ -240,7 +268,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It's most useful for categorical predictions. Lower values indicate fewer differences.
     /// </para>
     /// </remarks>
-    public T HammingDistance { get; private set; }
+    public T HammingDistance => GetMetric(MetricType.HammingDistance);
 
     /// <summary>
     /// Gets the Mahalanobis distance between actual and predicted values.
@@ -250,7 +278,7 @@ public class ModelStats<T, TInput, TOutput>
     /// are related to each other. It can be more meaningful than simpler distances when your features are correlated.
     /// </para>
     /// </remarks>
-    public T MahalanobisDistance { get; private set; }
+    public T MahalanobisDistance => GetMetric(MetricType.MahalanobisDistance);
 
     /// <summary>
     /// Gets the mutual information between actual and predicted values.
@@ -260,7 +288,7 @@ public class ModelStats<T, TInput, TOutput>
     /// Higher values mean your predictions are more informative and closely related to the actual values.
     /// </para>
     /// </remarks>
-    public T MutualInformation { get; private set; }
+    public T MutualInformation => GetMetric(MetricType.MutualInformation);
 
     /// <summary>
     /// Gets the normalized mutual information between actual and predicted values.
@@ -270,7 +298,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It's easier to interpret across different datasets. Values closer to 1 indicate better predictions.
     /// </para>
     /// </remarks>
-        public T NormalizedMutualInformation { get; private set; }
+    public T NormalizedMutualInformation => GetMetric(MetricType.NormalizedMutualInformation);
 
     /// <summary>
     /// Gets the variation of information between actual and predicted values.
@@ -281,7 +309,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It's particularly useful when comparing different clustering results.
     /// </para>
     /// </remarks>
-    public T VariationOfInformation { get; private set; }
+    public T VariationOfInformation => GetMetric(MetricType.VariationOfInformation);
 
     /// <summary>
     /// Gets the silhouette score, a measure of how similar an object is to its own cluster compared to other clusters.
@@ -294,7 +322,7 @@ public class ModelStats<T, TInput, TOutput>
     /// - Values close to -1 mean some data points might be in the wrong group
     /// </para>
     /// </remarks>
-    public T SilhouetteScore { get; private set; }
+    public T SilhouetteScore => GetMetric(MetricType.SilhouetteScore);
 
     /// <summary>
     /// Gets the Calinski-Harabasz index, a measure of cluster separation.
@@ -305,7 +333,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It's useful when comparing different ways of grouping your data.
     /// </para>
     /// </remarks>
-    public T CalinskiHarabaszIndex { get; private set; }
+    public T CalinskiHarabaszIndex => GetMetric(MetricType.CalinskiHarabaszIndex);
 
     /// <summary>
     /// Gets the Davies-Bouldin index, a measure of the average similarity between each cluster and its most similar cluster.
@@ -316,7 +344,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It's particularly useful when you're not sure how many groups to divide your data into.
     /// </para>
     /// </remarks>
-    public T DaviesBouldinIndex { get; private set; }
+    public T DaviesBouldinIndex => GetMetric(MetricType.DaviesBouldinIndex);
 
     /// <summary>
     /// Gets the Mean Average Precision, a measure of ranking quality.
@@ -327,7 +355,7 @@ public class ModelStats<T, TInput, TOutput>
     /// For example, in a search engine, it would measure how well the most relevant results are placed at the top.
     /// </para>
     /// </remarks>
-    public T MeanAveragePrecision { get; private set; }
+    public T MeanAveragePrecision => GetMetric(MetricType.MeanAveragePrecision);
 
     /// <summary>
     /// Gets the Normalized Discounted Cumulative Gain, a measure of ranking quality that takes the position of correct items into account.
@@ -337,7 +365,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It ranges from 0 to 1, where 1 is perfect. It's often used in search engines or recommendation systems to ensure the most relevant items appear first.
     /// </para>
     /// </remarks>
-    public T NormalizedDiscountedCumulativeGain { get; private set; }
+    public T NormalizedDiscountedCumulativeGain => GetMetric(MetricType.NormalizedDiscountedCumulativeGain);
 
     /// <summary>
     /// Gets the Mean Reciprocal Rank, a statistic measuring the performance of a system that produces a list of possible responses to a query.
@@ -348,7 +376,7 @@ public class ModelStats<T, TInput, TOutput>
     /// or search engines to measure how quickly a user might find the right answer.
     /// </para>
     /// </remarks>
-    public T MeanReciprocalRank { get; private set; }
+    public T MeanReciprocalRank => GetMetric(MetricType.MeanReciprocalRank);
 
     /// <summary>
     /// Gets the Auto-Correlation Function, which measures the correlation between a time series and a lagged version of itself.
@@ -379,10 +407,11 @@ public class ModelStats<T, TInput, TOutput>
     public Vector<T> PartialAutoCorrelationFunction { get; private set; }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ModelStats{T}"/> class with the specified inputs and options.
+    /// Initializes a new instance of the <see cref="ModelStats{T, TInput, TOutput}"/> class with the specified inputs and options.
     /// </summary>
     /// <param name="inputs">The input data and model information.</param>
     /// <param name="options">Optional configuration settings for statistical calculations.</param>
+    /// <param name="modelType">The type of model being evaluated.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new ModelStats object, initializes all statistical measures,
@@ -398,40 +427,20 @@ public class ModelStats<T, TInput, TOutput>
     /// The constructor then fills out all the different measures (grades) for your model.
     /// </para>
     /// </remarks>
-    internal ModelStats(ModelStatsInputs<T, TInput, TOutput> inputs, ModelStatsOptions? options = null)
+    internal ModelStats(ModelStatsInputs<T, TInput, TOutput> inputs, ModelStatsOptions? options = null, ModelType modelType = ModelType.LinearRegression)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new ModelStatsOptions(); // Use default options if not provided
+        ModelType = modelType;
+
         FeatureCount = inputs.FeatureCount;
-        ConditionNumber = _numOps.Zero;
         VIFList = [];
         CorrelationMatrix = Matrix<T>.Empty();
         CovarianceMatrix = Matrix<T>.Empty();
         AutoCorrelationFunction = Vector<T>.Empty();
         PartialAutoCorrelationFunction = Vector<T>.Empty();
-        MeanAveragePrecision = _numOps.Zero;
-        NormalizedDiscountedCumulativeGain = _numOps.Zero;
-        MeanReciprocalRank = _numOps.Zero;
-        SilhouetteScore = _numOps.Zero;
-        CalinskiHarabaszIndex = _numOps.Zero;
-        DaviesBouldinIndex = _numOps.Zero;
-        MutualInformation = _numOps.Zero;
-        NormalizedMutualInformation = _numOps.Zero;
-        VariationOfInformation = _numOps.Zero;
-        EuclideanDistance = _numOps.Zero;
-        ManhattanDistance = _numOps.Zero;
-        CosineSimilarity = _numOps.Zero;
-        JaccardSimilarity = _numOps.Zero;
-        HammingDistance = _numOps.Zero;
-        MahalanobisDistance = _numOps.Zero;
-        LogPointwisePredictiveDensity = _numOps.Zero;
         LeaveOneOutPredictiveDensities = [];
-        ObservedTestStatistic = _numOps.Zero;
         PosteriorPredictiveSamples = [];
-        MarginalLikelihood = _numOps.Zero;
-        ReferenceModelMarginalLikelihood = _numOps.Zero;
-        LogLikelihood = _numOps.Zero;
-        EffectiveNumberOfParameters = _numOps.Zero;
         Actual = inputs.Actual;
         Predicted = inputs.Predicted;
         Features = inputs.XMatrix;
@@ -439,12 +448,17 @@ public class ModelStats<T, TInput, TOutput>
         FeatureNames = inputs.FeatureNames ?? [];
         FeatureValues = inputs.FeatureValues ?? [];
 
+        // Determine which metrics are valid for this model type
+        DetermineValidMetrics();
+
+        // Calculate valid metrics
         CalculateModelStats(inputs);
     }
 
     /// <summary>
-    /// Creates an empty instance of the <see cref="ModelStats{T}"/> class.
+    /// Creates an empty instance of the <see cref="ModelStats{T, TInput, TOutput}"/> class.
     /// </summary>
+    /// <param name="modelType">The type of model.</param>
     /// <returns>An empty ModelStats object.</returns>
     /// <remarks>
     /// <para>
@@ -458,7 +472,7 @@ public class ModelStats<T, TInput, TOutput>
     /// - You're creating a template for future model evaluations
     /// </para>
     /// </remarks>
-    public static ModelStats<T, TInput, TOutput> Empty()
+    public static ModelStats<T, TInput, TOutput> Empty(ModelType modelType = ModelType.None)
     {
         var emptyInputs = new ModelStatsInputs<T, TInput, TOutput>
         {
@@ -467,8 +481,87 @@ public class ModelStats<T, TInput, TOutput>
             FitFunction = null
         };
 
-        // Create a ModelStats instance with empty inputs
-        return new ModelStats<T, TInput, TOutput>(emptyInputs);
+        // Create a ModelStats instance with empty inputs and specified model type
+        return new ModelStats<T, TInput, TOutput>(emptyInputs, null, modelType);
+    }
+
+    /// <summary>
+    /// Determines which metrics are valid for the current model type.
+    /// </summary>
+    private void DetermineValidMetrics()
+    {
+        // Determine valid metrics for the current model type
+        var allMetricTypes = Enum.GetValues(typeof(MetricType))
+                                .Cast<MetricType>()
+                                .Where(mt => ModelStats<T, TInput, TOutput>.IsModelStatisticMetric(mt));
+
+        foreach (var metricType in allMetricTypes)
+        {
+            if (ModelTypeHelper.IsValidMetric(ModelType, metricType))
+            {
+                _validMetrics.Add(metricType);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Determines if a metric type is a model statistic metric.
+    /// </summary>
+    /// <param name="metricType">The metric type to check.</param>
+    /// <returns>True if the metric is a model statistic; otherwise, false.</returns>
+    public static bool IsModelStatisticMetric(MetricType metricType)
+    {
+        // Define which metrics are considered model statistics
+        return metricType switch
+        {
+            // Matrix metrics
+            MetricType.CorrelationMatrix => true,
+            MetricType.CovarianceMatrix => true,
+            MetricType.VIF => true,
+
+            // Model stability metrics
+            MetricType.ConditionNumber => true,
+
+            // Distance metrics between actual and predicted values
+            MetricType.EuclideanDistance => true,
+            MetricType.ManhattanDistance => true,
+            MetricType.CosineSimilarity => true,
+            MetricType.JaccardSimilarity => true,
+            MetricType.HammingDistance => true,
+            MetricType.MahalanobisDistance => true,
+
+            // Information theory metrics
+            MetricType.MutualInformation => true,
+            MetricType.NormalizedMutualInformation => true,
+            MetricType.VariationOfInformation => true,
+
+            // Bayesian and probabilistic metrics
+            MetricType.LogPointwisePredictiveDensity => true,
+            MetricType.ObservedTestStatistic => true,
+            MetricType.MarginalLikelihood => true,
+            MetricType.ReferenceModelMarginalLikelihood => true,
+            MetricType.LogLikelihood => true,
+            MetricType.EffectiveNumberOfParameters => true,
+            MetricType.LeaveOneOutPredictiveDensities => true,
+            MetricType.PosteriorPredictiveSamples => true,
+
+            // Clustering quality metrics
+            MetricType.SilhouetteScore => true,
+            MetricType.CalinskiHarabaszIndex => true,
+            MetricType.DaviesBouldinIndex => true,
+
+            // Ranking metrics
+            MetricType.MeanAveragePrecision => true,
+            MetricType.NormalizedDiscountedCumulativeGain => true,
+            MetricType.MeanReciprocalRank => true,
+
+            // Time series correlation functions
+            MetricType.AutoCorrelationFunction => true,
+            MetricType.PartialAutoCorrelationFunction => true,
+
+            // For any other metric type
+            _ => false,
+        };
     }
 
     /// <summary>
@@ -535,16 +628,204 @@ public class ModelStats<T, TInput, TOutput>
             coefficients = ConversionsHelper.ConvertToVector<T, object>(inputs.Coefficients);
         }
 
+        // Calculate metrics based on model category
+        CalculateBasicMetrics(matrix, actual, predicted, inputs);
+        CalculateModelSpecificMetrics(matrix, actual, predicted, coefficients, inputs);
+        CalculateDependentMetrics(matrix, actual, predicted);
+    }
+
+    /// <summary>
+    /// Calculates basic metrics that are common across many model types.
+    /// </summary>
+    private void CalculateBasicMetrics(Matrix<T> matrix, Vector<T> actual, Vector<T> predicted, ModelStatsInputs<T, TInput, TOutput> inputs)
+    {
+        // Calculate basic metrics based on valid metrics for the model type
+        if (_validMetrics.Contains(MetricType.CorrelationMatrix))
+        {
+            CorrelationMatrix = StatisticsHelper<T>.CalculateCorrelationMatrix(matrix, _options);
+        }
+
+        if (_validMetrics.Contains(MetricType.CovarianceMatrix))
+        {
+            CovarianceMatrix = StatisticsHelper<T>.CalculateCovarianceMatrix(matrix);
+        }
+
+        if (_validMetrics.Contains(MetricType.VIF))
+        {
+            VIFList = StatisticsHelper<T>.CalculateVIF(matrix, _options);
+            _calculatedMetrics.Add(MetricType.VIF);
+        }
+
+        if (_validMetrics.Contains(MetricType.ConditionNumber))
+        {
+            _metrics[MetricType.ConditionNumber] = StatisticsHelper<T>.CalculateConditionNumber(matrix, _options);
+            _calculatedMetrics.Add(MetricType.ConditionNumber);
+        }
+
+        // Distance metrics
+        if (_validMetrics.Contains(MetricType.EuclideanDistance))
+        {
+            _metrics[MetricType.EuclideanDistance] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Euclidean);
+            _calculatedMetrics.Add(MetricType.EuclideanDistance);
+        }
+
+        if (_validMetrics.Contains(MetricType.ManhattanDistance))
+        {
+            _metrics[MetricType.ManhattanDistance] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Manhattan);
+            _calculatedMetrics.Add(MetricType.ManhattanDistance);
+        }
+
+        if (_validMetrics.Contains(MetricType.CosineSimilarity))
+        {
+            _metrics[MetricType.CosineSimilarity] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Cosine);
+            _calculatedMetrics.Add(MetricType.CosineSimilarity);
+        }
+
+        if (_validMetrics.Contains(MetricType.JaccardSimilarity))
+        {
+            _metrics[MetricType.JaccardSimilarity] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Jaccard);
+            _calculatedMetrics.Add(MetricType.JaccardSimilarity);
+        }
+
+        if (_validMetrics.Contains(MetricType.HammingDistance))
+        {
+            _metrics[MetricType.HammingDistance] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Hamming);
+            _calculatedMetrics.Add(MetricType.HammingDistance);
+        }
+
+        if (_validMetrics.Contains(MetricType.MahalanobisDistance))
+        {
+            _metrics[MetricType.MahalanobisDistance] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Mahalanobis, CovarianceMatrix);
+            _calculatedMetrics.Add(MetricType.MahalanobisDistance);
+        }
+    }
+
+    /// <summary>
+    /// Calculates metrics that are specific to certain model types.
+    /// </summary>
+    private void CalculateModelSpecificMetrics(Matrix<T> matrix, Vector<T> actual, Vector<T> predicted, Vector<T> coefficients, ModelStatsInputs<T, TInput, TOutput> inputs)
+    {
+        var modelCategory = ModelTypeHelper.GetCategory(ModelType);
         var featureCount = inputs.FeatureCount;
 
-        // Calculate all statistical metrics using the converted data types
-        CorrelationMatrix = StatisticsHelper<T>.CalculateCorrelationMatrix(matrix, _options);
-        CovarianceMatrix = StatisticsHelper<T>.CalculateCovarianceMatrix(matrix);
-        VIFList = StatisticsHelper<T>.CalculateVIF(matrix, _options);
-        ConditionNumber = StatisticsHelper<T>.CalculateConditionNumber(matrix, _options);
-        LogPointwisePredictiveDensity = StatisticsHelper<T>.CalculateLogPointwisePredictiveDensity(actual, predicted);
+        // Bayesian metrics
+        if (modelCategory == ModelCategory.Probabilistic)
+        {
+            if (_validMetrics.Contains(MetricType.LogPointwisePredictiveDensity))
+            {
+                _metrics[MetricType.LogPointwisePredictiveDensity] = StatisticsHelper<T>.CalculateLogPointwisePredictiveDensity(actual, predicted);
+                _calculatedMetrics.Add(MetricType.LogPointwisePredictiveDensity);
+            }
 
-        if (inputs.FitFunction != null)
+            if (_validMetrics.Contains(MetricType.MarginalLikelihood))
+            {
+                _metrics[MetricType.MarginalLikelihood] = StatisticsHelper<T>.CalculateMarginalLikelihood(actual, predicted, featureCount);
+                _calculatedMetrics.Add(MetricType.MarginalLikelihood);
+            }
+
+            if (_validMetrics.Contains(MetricType.ReferenceModelMarginalLikelihood))
+            {
+                _metrics[MetricType.ReferenceModelMarginalLikelihood] = StatisticsHelper<T>.CalculateReferenceModelMarginalLikelihood(actual);
+                _calculatedMetrics.Add(MetricType.ReferenceModelMarginalLikelihood);
+            }
+
+            if (_validMetrics.Contains(MetricType.EffectiveNumberOfParameters))
+            {
+                _metrics[MetricType.EffectiveNumberOfParameters] = StatisticsHelper<T>.CalculateEffectiveNumberOfParameters(matrix, coefficients);
+                _calculatedMetrics.Add(MetricType.EffectiveNumberOfParameters);
+            }
+
+            if (_validMetrics.Contains(MetricType.PosteriorPredictiveSamples))
+            {
+                PosteriorPredictiveSamples = StatisticsHelper<T>.CalculatePosteriorPredictiveSamples(actual, predicted, featureCount);
+                _calculatedMetrics.Add(MetricType.PosteriorPredictiveSamples);
+            }
+        }
+
+        // Clustering metrics
+        if (modelCategory == ModelCategory.Clustering)
+        {
+            if (_validMetrics.Contains(MetricType.SilhouetteScore))
+            {
+                _metrics[MetricType.SilhouetteScore] = StatisticsHelper<T>.CalculateSilhouetteScore(matrix, predicted);
+                _calculatedMetrics.Add(MetricType.SilhouetteScore);
+            }
+
+            if (_validMetrics.Contains(MetricType.CalinskiHarabaszIndex))
+            {
+                _metrics[MetricType.CalinskiHarabaszIndex] = StatisticsHelper<T>.CalculateCalinskiHarabaszIndex(matrix, predicted);
+                _calculatedMetrics.Add(MetricType.CalinskiHarabaszIndex);
+            }
+
+            if (_validMetrics.Contains(MetricType.DaviesBouldinIndex))
+            {
+                _metrics[MetricType.DaviesBouldinIndex] = StatisticsHelper<T>.CalculateDaviesBouldinIndex(matrix, predicted);
+                _calculatedMetrics.Add(MetricType.DaviesBouldinIndex);
+            }
+        }
+
+        // Information theory metrics
+        if (_validMetrics.Contains(MetricType.MutualInformation))
+        {
+            _metrics[MetricType.MutualInformation] = StatisticsHelper<T>.CalculateMutualInformation(actual, predicted);
+            _calculatedMetrics.Add(MetricType.MutualInformation);
+        }
+
+        if (_validMetrics.Contains(MetricType.NormalizedMutualInformation))
+        {
+            _metrics[MetricType.NormalizedMutualInformation] = StatisticsHelper<T>.CalculateNormalizedMutualInformation(actual, predicted);
+            _calculatedMetrics.Add(MetricType.NormalizedMutualInformation);
+        }
+
+        if (_validMetrics.Contains(MetricType.VariationOfInformation))
+        {
+            _metrics[MetricType.VariationOfInformation] = StatisticsHelper<T>.CalculateVariationOfInformation(actual, predicted);
+            _calculatedMetrics.Add(MetricType.VariationOfInformation);
+        }
+
+        // Ranking metrics
+        if (modelCategory == ModelCategory.Ranking)
+        {
+            if (_validMetrics.Contains(MetricType.MeanAveragePrecision))
+            {
+                _metrics[MetricType.MeanAveragePrecision] = StatisticsHelper<T>.CalculateMeanAveragePrecision(actual, predicted, _options.MapTopK);
+                _calculatedMetrics.Add(MetricType.MeanAveragePrecision);
+            }
+
+            if (_validMetrics.Contains(MetricType.NormalizedDiscountedCumulativeGain))
+            {
+                _metrics[MetricType.NormalizedDiscountedCumulativeGain] = StatisticsHelper<T>.CalculateNDCG(actual, predicted, _options.NdcgTopK);
+                _calculatedMetrics.Add(MetricType.NormalizedDiscountedCumulativeGain);
+            }
+
+            if (_validMetrics.Contains(MetricType.MeanReciprocalRank))
+            {
+                _metrics[MetricType.MeanReciprocalRank] = StatisticsHelper<T>.CalculateMeanReciprocalRank(actual, predicted);
+                _calculatedMetrics.Add(MetricType.MeanReciprocalRank);
+            }
+        }
+
+        // Time series metrics
+        if (modelCategory == ModelCategory.TimeSeries)
+        {
+            // Calculate residuals for time series metrics
+            var residuals = StatisticsHelper<T>.CalculateResiduals(actual, predicted);
+
+            if (_validMetrics.Contains(MetricType.AutoCorrelationFunction))
+            {
+                AutoCorrelationFunction = StatisticsHelper<T>.CalculateAutoCorrelationFunction(residuals, _options.AcfMaxLag);
+                _calculatedMetrics.Add(MetricType.AutoCorrelationFunction);
+            }
+
+            if (_validMetrics.Contains(MetricType.PartialAutoCorrelationFunction))
+            {
+                PartialAutoCorrelationFunction = StatisticsHelper<T>.CalculatePartialAutoCorrelationFunction(residuals, _options.PacfMaxLag);
+                _calculatedMetrics.Add(MetricType.PartialAutoCorrelationFunction);
+            }
+        }
+
+        // Cross-validation metrics
+        if (_validMetrics.Contains(MetricType.LeaveOneOutPredictiveDensities) && inputs.FitFunction != null)
         {
             // Convert the fit function to work with Matrix<T> and Vector<T>
             var convertedFitFunction = ConversionsHelper.ConvertFitFunction<T, TInput, TOutput>(inputs.FitFunction);
@@ -552,37 +833,38 @@ public class ModelStats<T, TInput, TOutput>
             // Create a wrapper function that matches the expected signature
             Vector<T> wrappedFitFunction(Matrix<T> m, Vector<T> v) => convertedFitFunction(m);
             LeaveOneOutPredictiveDensities = StatisticsHelper<T>.CalculateLeaveOneOutPredictiveDensities(matrix, actual, wrappedFitFunction);
+            _calculatedMetrics.Add(MetricType.LeaveOneOutPredictiveDensities);
         }
 
-        ObservedTestStatistic = StatisticsHelper<T>.CalculateObservedTestStatistic(actual, predicted);
-        PosteriorPredictiveSamples = StatisticsHelper<T>.CalculatePosteriorPredictiveSamples(actual, predicted, featureCount);
-        MarginalLikelihood = StatisticsHelper<T>.CalculateMarginalLikelihood(actual, predicted, featureCount);
-        ReferenceModelMarginalLikelihood = StatisticsHelper<T>.CalculateReferenceModelMarginalLikelihood(actual);
-        LogLikelihood = StatisticsHelper<T>.CalculateLogLikelihood(actual, predicted);
-        EffectiveNumberOfParameters = StatisticsHelper<T>.CalculateEffectiveNumberOfParameters(matrix, coefficients);
-        MutualInformation = StatisticsHelper<T>.CalculateMutualInformation(actual, predicted);
-        NormalizedMutualInformation = StatisticsHelper<T>.CalculateNormalizedMutualInformation(actual, predicted);
-        VariationOfInformation = StatisticsHelper<T>.CalculateVariationOfInformation(actual, predicted);
-        SilhouetteScore = StatisticsHelper<T>.CalculateSilhouetteScore(matrix, predicted);
-        CalinskiHarabaszIndex = StatisticsHelper<T>.CalculateCalinskiHarabaszIndex(matrix, predicted);
-        DaviesBouldinIndex = StatisticsHelper<T>.CalculateDaviesBouldinIndex(matrix, predicted);
-        MeanAveragePrecision = StatisticsHelper<T>.CalculateMeanAveragePrecision(actual, predicted, _options.MapTopK);
-        NormalizedDiscountedCumulativeGain = StatisticsHelper<T>.CalculateNDCG(actual, predicted, _options.NdcgTopK);
-        MeanReciprocalRank = StatisticsHelper<T>.CalculateMeanReciprocalRank(actual, predicted);
+        // Statistical test metrics
+        if (_validMetrics.Contains(MetricType.ObservedTestStatistic))
+        {
+            _metrics[MetricType.ObservedTestStatistic] = StatisticsHelper<T>.CalculateObservedTestStatistic(actual, predicted);
+            _calculatedMetrics.Add(MetricType.ObservedTestStatistic);
+        }
 
-        // Calculate residuals and time series metrics
-        var residuals = StatisticsHelper<T>.CalculateResiduals(actual, predicted);
-        AutoCorrelationFunction = StatisticsHelper<T>.CalculateAutoCorrelationFunction(residuals, _options.AcfMaxLag);
-        PartialAutoCorrelationFunction = StatisticsHelper<T>.CalculatePartialAutoCorrelationFunction(residuals, _options.PacfMaxLag);
-
-        // Calculate distance metrics
-        EuclideanDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Euclidean);
-        ManhattanDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Manhattan);
-        CosineSimilarity = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Cosine);
-        JaccardSimilarity = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Jaccard);
-        HammingDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Hamming);
-        MahalanobisDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Mahalanobis, CovarianceMatrix);
+        if (_validMetrics.Contains(MetricType.LogLikelihood))
+        {
+            _metrics[MetricType.LogLikelihood] = StatisticsHelper<T>.CalculateLogLikelihood(actual, predicted);
+            _calculatedMetrics.Add(MetricType.LogLikelihood);
+        }
     }
+
+    /// <summary>
+    /// Calculates metrics that depend on other metrics, ensuring proper calculation order.
+    /// </summary>
+    private void CalculateDependentMetrics(Matrix<T> matrix, Vector<T> actual, Vector<T> predicted)
+    {
+        // Implement additional metrics that depend on the previously calculated metrics
+        // This is where you would calculate metrics that require other metrics to be calculated first
+
+        // For example:
+        // If metric A depends on metric B being calculated first, you would check if metric B is in
+        // _calculatedMetrics before calculating metric A
+
+        // Implementation details would depend on the specific dependencies between metrics
+    }
+
     /// <summary>
     /// Retrieves the value of a specific metric.
     /// </summary>
@@ -607,87 +889,122 @@ public class ModelStats<T, TInput, TOutput>
     /// <exception cref="ArgumentException">Thrown when an unsupported metric type is requested.</exception>
     public T GetMetric(MetricType metricType)
     {
-        return metricType switch
+        if (!IsValidMetric(metricType))
         {
-            MetricType.ConditionNumber => ConditionNumber,
-            MetricType.LogPointwisePredictiveDensity => LogPointwisePredictiveDensity,
-            MetricType.ObservedTestStatistic => ObservedTestStatistic,
-            MetricType.MarginalLikelihood => MarginalLikelihood,
-            MetricType.ReferenceModelMarginalLikelihood => ReferenceModelMarginalLikelihood,
-            MetricType.LogLikelihood => LogLikelihood,
-            MetricType.EffectiveNumberOfParameters => EffectiveNumberOfParameters,
-            MetricType.EuclideanDistance => EuclideanDistance,
-            MetricType.ManhattanDistance => ManhattanDistance,
-            MetricType.CosineSimilarity => CosineSimilarity,
-            MetricType.JaccardSimilarity => JaccardSimilarity,
-            MetricType.HammingDistance => HammingDistance,
-            MetricType.MahalanobisDistance => MahalanobisDistance,
-            MetricType.MutualInformation => MutualInformation,
-            MetricType.NormalizedMutualInformation => NormalizedMutualInformation,
-            MetricType.VariationOfInformation => VariationOfInformation,
-            MetricType.SilhouetteScore => SilhouetteScore,
-            MetricType.CalinskiHarabaszIndex => CalinskiHarabaszIndex,
-            MetricType.DaviesBouldinIndex => DaviesBouldinIndex,
-            MetricType.MeanAveragePrecision => MeanAveragePrecision,
-            MetricType.NormalizedDiscountedCumulativeGain => NormalizedDiscountedCumulativeGain,
-            MetricType.MeanReciprocalRank => MeanReciprocalRank,
-            _ => throw new ArgumentException($"Metric {metricType} is not available in ModelStats.", nameof(metricType)),
-        };
+            throw new InvalidOperationException($"Metric {metricType} is not valid for model type {ModelType}.");
+        }
+
+        if (!_calculatedMetrics.Contains(metricType))
+        {
+            return _numOps.Zero;
+        }
+
+        return _metrics.TryGetValue(metricType, out var value) ? value : _numOps.Zero;
     }
 
     /// <summary>
-    /// Checks if a specific metric is available in this ModelStats instance.
+    /// Checks if a specific metric is valid for the current model type.
     /// </summary>
-    /// <param name="metricType">The type of metric to check for.</param>
-    /// <returns>True if the metric is available, false otherwise.</returns>
+    /// <param name="metricType">The type of metric to check.</param>
+    /// <returns>True if the metric is valid for the current model type; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method lets you check if a particular metric has been calculated 
-    /// for your model. It's useful when you're not sure if a specific metric is available, 
-    /// especially when working with different types of models or datasets.
+    /// This method determines whether a specific metric type is valid for the current model type.
+    /// It uses the ModelTypeHelper to check if the metric is appropriate for the model category.
     /// </para>
     /// <para>
-    /// For example, if you want to check if the Euclidean Distance is available, you would call:
-    /// <code>
-    /// if (modelStats.HasMetric(MetricType.EuclideanDistance))
-    /// {
-    ///     var distance = modelStats.GetMetric(MetricType.EuclideanDistance);
-    ///     // Use the distance...
-    /// }
-    /// </code>
+    /// Different metrics are appropriate for different types of models. For example, silhouette score is
+    /// appropriate for clustering models but not for regression models. This method helps
+    /// ensure that only appropriate metrics are calculated and used.
     /// </para>
     /// <para>
-    /// This prevents errors that might occur if you try to access a metric that wasn't calculated
-    /// for your particular model or dataset.
+    /// <b>For Beginners:</b> This method allows you to check if a particular metric is valid for your model type
+    /// before trying to get its value. It helps prevent errors by letting you know in advance
+    /// whether a metric makes sense for your model.
     /// </para>
     /// </remarks>
-    public bool HasMetric(MetricType metricType)
+    public bool IsValidMetric(MetricType metricType)
     {
-        return metricType switch
-        {
-            MetricType.ConditionNumber => true,
-            MetricType.LogPointwisePredictiveDensity => true,
-            MetricType.ObservedTestStatistic => true,
-            MetricType.MarginalLikelihood => true,
-            MetricType.ReferenceModelMarginalLikelihood => true,
-            MetricType.LogLikelihood => true,
-            MetricType.EffectiveNumberOfParameters => true,
-            MetricType.EuclideanDistance => true,
-            MetricType.ManhattanDistance => true,
-            MetricType.CosineSimilarity => true,
-            MetricType.JaccardSimilarity => true,
-            MetricType.HammingDistance => true,
-            MetricType.MahalanobisDistance => true,
-            MetricType.MutualInformation => true,
-            MetricType.NormalizedMutualInformation => true,
-            MetricType.VariationOfInformation => true,
-            MetricType.SilhouetteScore => true,
-            MetricType.CalinskiHarabaszIndex => true,
-            MetricType.DaviesBouldinIndex => true,
-            MetricType.MeanAveragePrecision => true,
-            MetricType.NormalizedDiscountedCumulativeGain => true,
-            MetricType.MeanReciprocalRank => true,
-            _ => false,
-        };
+        return _validMetrics.Contains(metricType);
+    }
+
+    /// <summary>
+    /// Checks if a specific metric has been calculated.
+    /// </summary>
+    /// <param name="metricType">The type of metric to check.</param>
+    /// <returns>True if the metric has been calculated; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method determines whether a specific metric has been calculated.
+    /// Even if a metric is valid for a model type, it might not have been calculated yet.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method tells you whether a particular metric has been calculated.
+    /// It's useful when you want to check if a metric is available before trying to use it.
+    /// </para>
+    /// </remarks>
+    public bool IsCalculatedMetric(MetricType metricType)
+    {
+        return _calculatedMetrics.Contains(metricType);
+    }
+
+    /// <summary>
+    /// Gets all metric types that are valid for the current model type.
+    /// </summary>
+    /// <returns>An array of valid metric types.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns all metric types that are valid for the current model type.
+    /// It can be used to determine which metrics are available for the current model.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method gives you a list of all metric types that make sense for your model type.
+    /// Different model types support different kinds of metrics, so this helps you
+    /// understand which ones are available for your specific model.
+    /// </para>
+    /// </remarks>
+    public MetricType[] GetValidMetricTypes()
+    {
+        return [.. _validMetrics];
+    }
+
+    /// <summary>
+    /// Gets all metric types that have been calculated.
+    /// </summary>
+    /// <returns>An array of calculated metric types.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns all metric types that have been calculated.
+    /// It can be used to determine which metrics are available for use.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method gives you a list of all metric types that have been calculated.
+    /// It's useful when you want to know which metrics are actually available for use,
+    /// rather than just which ones are valid for your model type.
+    /// </para>
+    /// </remarks>
+    public MetricType[] GetCalculatedMetricTypes()
+    {
+        return [.. _calculatedMetrics];
+    }
+
+    /// <summary>
+    /// Gets a dictionary of all calculated metrics.
+    /// </summary>
+    /// <returns>A dictionary mapping metric types to their values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns a dictionary of all calculated metrics.
+    /// It can be used to access all metrics at once.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method gives you all calculated metrics in one go. It's useful when you
+    /// want to work with multiple metrics at once, perhaps to compare them or display
+    /// them in a report.
+    /// </para>
+    /// </remarks>
+    public Dictionary<MetricType, T> GetAllCalculatedMetrics()
+    {
+        return new Dictionary<MetricType, T>(_metrics);
     }
 }

@@ -92,13 +92,14 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
         var inputSize = InputHelper<T, TInput>.GetInputSize(X);
         var actual = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+        var metaData = model.GetModelMetaData();
 
         return new DataSetStats<T, TInput, TOutput>
         {
-            ErrorStats = CalculateErrorStats(actual, predicted, inputSize),
+            ErrorStats = CalculateErrorStats(actual, predicted, inputSize, metaData.ModelType),
             ActualBasicStats = CalculateBasicStats(actual),
             PredictedBasicStats = CalculateBasicStats(predicted),
-            PredictionStats = CalculatePredictionStats(actual, predicted, inputSize),
+            PredictionStats = CalculatePredictionStats(actual, predicted, inputSize, metaData.ModelType),
             Predicted = predictions,
             Features = X,
             Actual = y
@@ -121,9 +122,9 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// Lower values for these metrics indicate better model performance.
     /// </remarks>
-    private static ErrorStats<T> CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int featureCount)
+    private static ErrorStats<T> CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int featureCount, ModelType modelType)
     {
-        return new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = actual, Predicted = predicted, FeatureCount = featureCount });
+        return new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = actual, Predicted = predicted, FeatureCount = featureCount }, modelType);
     }
 
     /// <summary>
@@ -142,7 +143,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// </remarks>
     private static BasicStats<T> CalculateBasicStats(Vector<T> values)
     {
-        return new BasicStats<T>(new BasicStatsInputs<T> { Values = values });
+        return new BasicStats<T>(values);
     }
 
     /// <summary>
@@ -161,7 +162,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// These metrics help you understand not just how accurate your model is, but also how reliable and robust it is.
     /// </remarks>
-    private PredictionStats<T> CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int featureCount)
+    private PredictionStats<T> CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int featureCount, ModelType modelType)
     {
         return new PredictionStats<T>(new PredictionStatsInputs<T> 
         { 
@@ -170,7 +171,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             NumberOfParameters = featureCount, 
             ConfidenceLevel = _predictionOptions.ConfidenceLevel, 
             LearningCurveSteps = _predictionOptions.LearningCurveSteps 
-        });
+        }, modelType);
     }
 
     /// <summary>

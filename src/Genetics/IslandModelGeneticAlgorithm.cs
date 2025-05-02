@@ -195,13 +195,13 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
     /// because it maintains more diversity while still allowing good ideas to spread.
     /// </para>
     /// </remarks>
-    public override EvolutionStats<T, TInput, TOutput> Evolve(
+    public override GeneticStats<T, TInput, TOutput> Evolve(
         int generations,
         TInput trainingInput,
         TOutput trainingOutput,
         TInput? validationInput = default,
         TOutput? validationOutput = default,
-        Func<EvolutionStats<T, TInput, TOutput>, bool>? stopCriteria = null)
+        Func<GeneticStats<T, TInput, TOutput>, bool>? stopCriteria = null)
     {
         // Initialize population if it's empty
         if (Population.Count == 0)
@@ -214,7 +214,7 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
 
         // Reset evolution tracking
         EvolutionStopwatch.Restart();
-        CurrentStats = new EvolutionStats<T, TInput, TOutput>(FitnessCalculator);
+        CurrentStats = new GeneticStats<T, TInput, TOutput>(FitnessCalculator);
         CurrentStats.Generation = 0;
 
         // Initial evaluation of the population

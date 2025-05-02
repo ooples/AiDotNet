@@ -76,10 +76,10 @@ public static class OptimizerHelper<T, TInput, TOutput>
         return new OptimizationResult<T, TInput, TOutput>.DatasetResult
         {
             Predictions = predictions,
-            ErrorStats = errorStats ?? ErrorStats<T>.Empty(),
+            ErrorStats = errorStats ?? ErrorStats<T>.Empty(ModelType.None),
             ActualBasicStats = actualBasicStats ?? BasicStats<T>.Empty(),
             PredictedBasicStats = predictedBasicStats ?? BasicStats<T>.Empty(),
-            PredictionStats = predictionStats ?? PredictionStats<T>.Empty(),
+            PredictionStats = predictionStats ?? PredictionStats<T>.Empty(ModelType.None),
             X = features,
             Y = y
         };

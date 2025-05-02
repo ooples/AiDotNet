@@ -30,7 +30,588 @@ public enum MetricType
     /// </para>
     /// </remarks>
     AdjustedR2,
-    
+
+    /// <summary>
+    /// The smallest value in the dataset.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The minimum is simply the smallest number in your data.
+    /// 
+    /// For the numbers [5, 12, 3, 8, 9], the minimum is 3.
+    /// </para>
+    /// </remarks>
+    Min,
+
+    /// <summary>
+    /// The largest value in the dataset.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The maximum is simply the largest number in your data.
+    /// 
+    /// For the numbers [5, 12, 3, 8, 9], the maximum is 12.
+    /// </para>
+    /// </remarks>
+    Max,
+
+    /// <summary>
+    /// The number of values in the dataset.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> N simply counts how many data points you have in your dataset.
+    /// 
+    /// For the numbers [5, 12, 3, 8, 9], N is 5.
+    /// </para>
+    /// </remarks>
+    N,
+
+    /// <summary>
+    /// The value below which 25% of the observations may be found.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The First Quartile (Q1) is the value that separates the lowest 25% of your data from the rest.
+    /// 
+    /// If you line up all your data from smallest to largest, Q1 is the value one-quarter of the way through the list.
+    /// It helps you understand the spread of the lower half of your data.
+    /// </para>
+    /// </remarks>
+    FirstQuartile,
+
+    /// <summary>
+    /// The value below which 75% of the observations may be found.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Third Quartile (Q3) is the value that separates the highest 25% of your data from the rest.
+    /// 
+    /// If you line up all your data from smallest to largest, Q3 is the value three-quarters of the way through the list.
+    /// It helps you understand the spread of the upper half of your data.
+    /// </para>
+    /// </remarks>
+    ThirdQuartile,
+
+    /// <summary>
+    /// A measure of the randomness or unpredictability in a dataset.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Entropy measures how unpredictable or random your data is.
+    /// 
+    /// High entropy means your data is very diverse and unpredictable - like a completely random sequence of numbers.
+    /// Low entropy means your data is more predictable or has patterns - like a sequence that repeats.
+    /// 
+    /// For example, the sequence [1, 2, 3, 4, 5] has lower entropy than [7, 2, 9, 1, 4] because the first one follows
+    /// a clear pattern while the second appears more random.
+    /// </para>
+    /// </remarks>
+    Entropy,
+
+    /// <summary>
+    /// Identifies which statistical distribution best fits the data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> BestDistributionType tells you which common statistical pattern your data follows.
+    /// 
+    /// Data can follow different patterns like:
+    /// - Normal (bell curve): common for natural phenomena like heights
+    /// - Exponential: common for waiting times
+    /// - Poisson: common for counting rare events
+    /// 
+    /// Knowing which distribution your data follows helps you make better predictions and understand the underlying process.
+    /// </para>
+    /// </remarks>
+    BestDistributionType,
+
+    /// <summary>
+    /// A statistical measure that indicates how well a distribution fits the data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GoodnessOfFitPValue tells you how well a statistical distribution matches your data.
+    /// 
+    /// It ranges from 0 to 1:
+    /// - Values closer to 1 suggest a good fit (the distribution matches your data well)
+    /// - Values closer to 0 suggest a poor fit (the distribution doesn't match your data well)
+    /// 
+    /// For example, if testing whether your data follows a normal distribution gives a p-value of 0.8,
+    /// it suggests your data is very likely to follow a normal distribution.
+    /// </para>
+    /// </remarks>
+    GoodnessOfFitPValue,
+
+    /// <summary>
+    /// Measures the correlation between a time series and a lagged version of itself.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutocorrelationCoefficient measures how similar your time series data is to itself at different time delays.
+    /// 
+    /// It ranges from -1 to 1:
+    /// - Values close to 1 indicate strong positive correlation (patterns repeat)
+    /// - Values close to -1 indicate strong negative correlation (patterns invert)
+    /// - Values close to 0 indicate little correlation (no pattern)
+    /// 
+    /// For example, daily temperature data might have a high autocorrelation at a lag of 24 hours,
+    /// showing that temperatures at the same time each day are related.
+    /// </para>
+    /// </remarks>
+    AutocorrelationCoefficient,
+
+    /// <summary>
+    /// Variance Inflation Factor - Measures multicollinearity among features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> VIF helps identify if some features are too similar to others.
+    /// High VIF values (usually above 5 or 10) suggest that a feature might be redundant,
+    /// as its information is already captured by other features. This can cause problems
+    /// for your model because these overlapping features don't provide unique information.
+    /// 
+    /// For example, if you include both "years of education" and "highest degree obtained" 
+    /// in your model, they might have high VIF values because they capture similar information.
+    /// </para>
+    /// </remarks>
+    VIF,
+
+    /// <summary>
+    /// Leave-One-Out Predictive Densities - Measures model performance when training without each data point.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This shows how well the model predicts each data point when it's trained without that point.
+    /// It helps identify which data points might be harder for the model to predict accurately.
+    /// 
+    /// Think of it like taking a practice test where for each question, you first study everything except that topic,
+    /// then try to answer it. The result helps you see which topics you can predict based on your knowledge of other topics,
+    /// and which ones are more independent or difficult.
+    /// </para>
+    /// </remarks>
+    LeaveOneOutPredictiveDensities,
+
+    /// <summary>
+    /// Correlation Matrix - Shows the relationships between features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Correlation Matrix shows how closely related each pair of features is to each other.
+    /// Each cell in the matrix contains a correlation coefficient between two features, ranging from -1 to 1:
+    /// - Values close to 1 indicate strong positive correlation (when one goes up, the other tends to go up)
+    /// - Values close to -1 indicate strong negative correlation (when one goes up, the other tends to go down)
+    /// - Values close to 0 indicate little to no relationship
+    /// 
+    /// This helps you understand which features might be providing similar information. For example,
+    /// if "height" and "weight" have a correlation of 0.8, they contain somewhat redundant information.
+    /// </para>
+    /// </remarks>
+    CorrelationMatrix,
+
+    /// <summary>
+    /// Covariance Matrix - Shows how features vary together.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Covariance Matrix shows how features change together, but unlike
+    /// the Correlation Matrix, it isn't standardized to a -1 to 1 scale. 
+    /// 
+    /// Each cell in the matrix contains the covariance between two features:
+    /// - Positive values indicate that the features tend to increase or decrease together
+    /// - Negative values indicate that as one feature increases, the other tends to decrease
+    /// - The magnitude depends on the scales of the features
+    /// 
+    /// The diagonal elements contain the variances of each feature (how much they vary on their own).
+    /// The Covariance Matrix is important for many statistical techniques and is used in calculations
+    /// like Mahalanobis Distance and Principal Component Analysis.
+    /// </para>
+    /// </remarks>
+    CovarianceMatrix,
+
+    /// <summary>
+    /// Posterior Predictive Samples - Provides possible predictions based on the model's uncertainty.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> These are possible predictions your model might make if you ran it multiple times.
+    /// They help you understand the range and uncertainty of your model's predictions.
+    /// 
+    /// Instead of getting a single prediction (like "house price = $300,000"), posterior predictive samples
+    /// might give you multiple possible predictions (like $290,000, $305,000, $315,000). This helps you
+    /// understand how confident your model is and what range of outcomes might be reasonable.
+    /// </para>
+    /// </remarks>
+    PosteriorPredictiveSamples,
+
+    /// <summary>
+    /// Auto-Correlation Function - Measures the correlation between a time series and lagged versions of itself.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This function helps you understand patterns in time-based data.
+    /// It shows how similar your data is to itself at different time delays. This can reveal:
+    /// - Repeating patterns (like seasonal effects)
+    /// - How long effects last in your data
+    /// - If your model is missing important time-based patterns
+    /// 
+    /// For example, for daily temperature data, the ACF might show a strong correlation at lag 365,
+    /// indicating an annual seasonal pattern.
+    /// </para>
+    /// </remarks>
+    AutoCorrelationFunction,
+
+    /// <summary>
+    /// Partial Auto-Correlation Function - Measures the direct relationship between an observation and its lag.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This function is similar to the Auto-Correlation Function, but it focuses on the direct relationship
+    /// between data points at different time delays, removing the influence of points in between.
+    /// It helps you:
+    /// - Identify how many past time points directly influence the current point
+    /// - Decide how many past observations to use in time series models
+    /// - Understand the "memory" of your time series data
+    /// 
+    /// For example, if PACF shows strong correlation at lag 1 but not beyond, it suggests each value
+    /// is directly influenced only by the immediately preceding value.
+    /// </para>
+    /// </remarks>
+    PartialAutoCorrelationFunction,
+
+    /// <summary>
+    /// The standard error of the mean, measuring the precision of the sample mean.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Standard Error measures how precisely we know the true population mean based on our sample data.
+    /// It's calculated as the standard deviation divided by the square root of the sample size.
+    /// As sample size increases, standard error decreases, indicating more precise estimates.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Standard Error tells you how accurately you know the average. Think of it as the "margin of error" 
+    /// around your average.
+    /// </para>
+    /// <para>
+    /// For example, if you calculate an average of 100 with a standard error of 5, the true population average is likely
+    /// between 95 and 105. A smaller standard error means you can be more confident in your average value. As you collect 
+    /// more data, your standard error typically gets smaller, indicating a more precise estimate.
+    /// </para>
+    /// </remarks>
+    StandardError,
+
+    /// <summary>
+    /// The lower bound of the confidence interval for the mean.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// MeanConfidenceIntervalLower represents the lower boundary of a confidence interval for the population mean.
+    /// It's calculated as the sample mean minus a critical value multiplied by the standard error.
+    /// Confidence intervals provide a range of plausible values for the true population parameter.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is the lower end of a range where we believe the true average likely falls.
+    /// </para>
+    /// <para>
+    /// For example, if your MeanConfidenceIntervalLower is 95, it means you're reasonably confident that the true average
+    /// is at least 95. The width of this interval depends on your confidence level (typically 95%) and how much data you have.
+    /// More data usually results in narrower, more precise confidence intervals.
+    /// </para>
+    /// </remarks>
+    MeanConfidenceIntervalLower,
+
+    /// <summary>
+    /// The upper bound of the confidence interval for the mean.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// MeanConfidenceIntervalUpper represents the upper boundary of a confidence interval for the population mean.
+    /// It's calculated as the sample mean plus a critical value multiplied by the standard error.
+    /// Together with MeanConfidenceIntervalLower, it provides a range of plausible values for the true mean.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is the upper end of a range where we believe the true average likely falls.
+    /// </para>
+    /// <para>
+    /// For example, if your MeanConfidenceIntervalUpper is 105, it means you're reasonably confident that the true average
+    /// is at most 105. When combined with the lower bound, you get a range (like 95 to 105) that likely contains the true 
+    /// population average. The narrower this range, the more precise your estimate is.
+    /// </para>
+    /// </remarks>
+    MeanConfidenceIntervalUpper,
+
+    /// <summary>
+    /// The ratio of the standard deviation to the mean, measuring relative variability.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Coefficient of Variation (CV) is a standardized measure of dispersion that allows comparison of variability
+    /// across different scales. It's calculated as the standard deviation divided by the mean and often expressed as a percentage.
+    /// Lower values indicate less relative variability.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Coefficient of Variation tells you how spread out your data is relative to its average.
+    /// </para>
+    /// <para>
+    /// For example, if one dataset has a CV of 5% and another has a CV of 15%, the second dataset has more variability 
+    /// relative to its average. This is useful when comparing datasets with different units or vastly different means.
+    /// For instance, comparing the variability of heights (measured in cm) with weights (measured in kg) would be 
+    /// difficult with standard deviation alone, but CV makes this comparison meaningful.
+    /// </para>
+    /// </remarks>
+    CoefficientOfVariation,
+
+    /// <summary>
+    /// A normalized version of the median absolute deviation for improved interpretation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// StandardizedMAD adjusts the Median Absolute Deviation (MAD) to make it comparable to standard deviation
+    /// when data follows a normal distribution. It's calculated by dividing MAD by 0.6745 (a constant derived from
+    /// the normal distribution). This standardization allows MAD to be interpreted on the same scale as standard deviation.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> StandardizedMAD is a robust way to measure spread that works well even with outliers,
+    /// but is adjusted so you can compare it directly with standard deviation.
+    /// </para>
+    /// <para>
+    /// If your data follows a bell curve, StandardizedMAD and standard deviation should be approximately equal.
+    /// If StandardizedMAD is much lower than standard deviation, it suggests your data contains outliers that are
+    /// inflating the standard deviation. This makes it a valuable tool for detecting when outliers might be affecting
+    /// your analysis.
+    /// </para>
+    /// </remarks>
+    StandardizedMAD,
+
+    /// <summary>
+    /// A scaling factor used for calculating robust Z-scores based on the median and MAD.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// RobustScale provides a factor (typically 1/MAD) that can be used to compute robust Z-scores by scaling
+    /// the difference between a value and the median. Unlike traditional Z-scores that use mean and standard deviation,
+    /// robust Z-scores use median and MAD, making them resistant to outliers.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> RobustScale helps you standardize your data in a way that isn't thrown off by extreme values.
+    /// </para>
+    /// <para>
+    /// To use it, you multiply each value minus the median by this scale factor. The resulting scores tell you
+    /// how many MADs away each point is from the median. This is particularly useful for outlier detection in
+    /// datasets where the traditional mean and standard deviation might be heavily influenced by extreme values.
+    /// </para>
+    /// </remarks>
+    RobustScale,
+
+    /// <summary>
+    /// A robust measure of skewness based on quartiles rather than moments.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// QuartileSkewness is a robust alternative to the traditional moment-based skewness. It's calculated as
+    /// (Q3 + Q1 - 2×Median) / (Q3 - Q1), where Q1 and Q3 are the first and third quartiles. This measure is less
+    /// sensitive to outliers than traditional skewness.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> QuartileSkewness tells you if your data is lopsided, but uses the middle values
+    /// rather than every single point, so extreme values don't distort the result as much.
+    /// </para>
+    /// <para>
+    /// Like traditional skewness, positive values indicate right skew (longer tail on right), negative values
+    /// indicate left skew (longer tail on left), and values near zero suggest symmetry. This metric is especially
+    /// useful when working with data that might contain outliers or when the distribution is not well-behaved.
+    /// </para>
+    /// </remarks>
+    QuartileSkewness,
+
+    /// <summary>
+    /// A scaling factor used for calculating Z-scores.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ZScoreScale provides a factor (1/standard deviation) that can be used to compute Z-scores by scaling
+    /// the difference between a value and the mean. Z-scores tell you how many standard deviations a value
+    /// is from the mean, standardizing measurements across different scales.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> ZScoreScale is a factor that helps you standardize your data to see how unusual each value is.
+    /// </para>
+    /// <para>
+    /// To use it, you multiply each value minus the mean by this scale factor. The resulting scores are in
+    /// standard deviation units, where values between -2 and 2 are typically considered "normal" (covering about 95%
+    /// of a normal distribution). This standardization allows for comparing values from different distributions
+    /// on a common scale.
+    /// </para>
+    /// </remarks>
+    ZScoreScale,
+
+    /// <summary>
+    /// Indicates which correlation coefficient best describes the relationship between actual and predicted values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// BestCorrelationType identifies whether linear correlation (Pearson) or rank correlation (Spearman) 
+    /// better captures the relationship between actual and predicted values. This is determined by comparing 
+    /// the absolute values of different correlation coefficients and selecting the one with the strongest 
+    /// relationship.
+    /// </para>
+    /// <para>
+    /// This metric returns a numeric representation of the correlation type:
+    /// - 1 represents Pearson correlation (linear relationship)
+    /// - 2 represents Spearman correlation (monotonic but potentially non-linear relationship)
+    /// - Additional values may represent other correlation types like Kendall's Tau
+    /// </para>
+    /// <para>
+    /// Understanding which correlation type best fits your data provides insights into the nature of the 
+    /// relationship that your model has captured:
+    /// - If Pearson is best, your model has captured a linear relationship
+    /// - If Spearman is best, your model has captured a monotonic but potentially non-linear relationship
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> BestCorrelationType tells you what kind of relationship exists between your 
+    /// actual and predicted values.
+    /// </para>
+    /// <para>
+    /// Think of it like this:
+    /// - If Pearson correlation is strongest (value = 1), your predictions follow a straight-line relationship 
+    ///   with the actual values (when one goes up, the other goes up proportionally)
+    /// - If Spearman correlation is strongest (value = 2), your predictions follow the same up-and-down pattern 
+    ///   as the actual values, but not necessarily in a straight line
+    /// </para>
+    /// <para>
+    /// This helps you understand whether your model is capturing linear or more complex non-linear patterns 
+    /// in your data, which can guide further model development and interpretation.
+    /// </para>
+    /// </remarks>
+    BestCorrelationType,
+
+    /// <summary>
+    /// A measure of similarity between two temporal sequences.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Dynamic Time Warping (DTW) is a time series analysis technique that measures the similarity 
+    /// between two temporal sequences, even if they vary in speed or timing. Unlike point-by-point 
+    /// Euclidean distance, DTW can handle sequences of different lengths and sequences where 
+    /// similar patterns occur at different times or rates.
+    /// </para>
+    /// <para>
+    /// DTW works by finding the optimal alignment between two sequences by warping them non-linearly 
+    /// in the time dimension. This allows for more precise similarity measurements between time series data 
+    /// where timing differences are expected or irrelevant to the comparison.
+    /// </para>
+    /// <para>
+    /// Smaller DTW values indicate greater similarity between sequences. A DTW value of zero would 
+    /// indicate identical sequences.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Dynamic Time Warping measures how similar two sequences are, even if they're 
+    /// not perfectly aligned in time. Think of it like comparing two audio recordings of the same song 
+    /// where one singer performs some parts faster or slower than the other - DTW can still recognize 
+    /// they're the same song.
+    /// </para>
+    /// <para>
+    /// Unlike simple point-by-point comparisons, DTW can handle sequences that are stretched, 
+    /// compressed, or shifted in time. This is particularly useful for comparing time series 
+    /// where patterns might occur at different rates.
+    /// </para>
+    /// <para>
+    /// Lower values indicate more similar sequences. This metric is especially useful for time series 
+    /// data like speech recognition, gesture recognition, or any data where timing may vary but 
+    /// the overall pattern is similar.
+    /// </para>
+    /// </remarks>
+    DynamicTimeWarping,
+
+    /// <summary>
+    /// Information about the statistical distribution that best fits the prediction data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// BestDistributionFit analyzes the predictions to determine which statistical distribution they most closely follow.
+    /// Unlike scalar metrics that return a single value, this returns a DistributionFitResult object containing
+    /// the type of distribution (e.g., Normal, Poisson, Exponential) and its parameters.
+    /// </para>
+    /// <para>
+    /// Understanding the underlying distribution of predictions is crucial for:
+    /// - Creating accurate confidence and prediction intervals
+    /// - Determining appropriate hypothesis tests
+    /// - Validating assumptions in parametric models
+    /// - Detecting anomalies or unexpected patterns in predictions
+    /// </para>
+    /// <para>
+    /// The fitting process typically uses goodness-of-fit tests (like Kolmogorov-Smirnov or Anderson-Darling)
+    /// to compare several candidate distributions and select the one with the best fit.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> BestDistributionFit helps you understand the shape of your prediction distribution.
+    /// It tells you whether your predictions follow common patterns like the bell curve (Normal distribution),
+    /// are skewed to one side, have long tails, etc.
+    /// </para>
+    /// <para>
+    /// Knowing the distribution can help with:
+    /// - Creating better intervals (by using the right distribution assumptions)
+    /// - Understanding the types of predictions your model makes (are they normally distributed? skewed?)
+    /// - Identifying potential issues with your predictions
+    /// </para>
+    /// <para>
+    /// For example, if your house price predictions should follow a log-normal distribution (common for prices),
+    /// but the distribution fit shows they're uniformly distributed, this might indicate a problem with your model.
+    /// </para>
+    /// </remarks>
+    BestDistributionFit,
+
+    /// <summary>
+    /// A list of performance metrics calculated at different training set sizes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Learning curves show how model performance changes as the amount of training data increases.
+    /// They are calculated by training the model on progressively larger subsets of the training data
+    /// and evaluating performance at each step.
+    /// </para>
+    /// <para>
+    /// Learning curves are valuable for diagnosing underfitting and overfitting:
+    /// - If both training and validation performance quickly plateau at a low level, the model may be underfitting (high bias)
+    /// - If there's a large gap between training and validation performance, the model may be overfitting (high variance)
+    /// - If validation performance continues to improve as data increases, more data could help
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> LearningCurve shows how your model's performance changes as you give it more training data.
+    /// </para>
+    /// <para>
+    /// This is helpful for diagnosing if your model is suffering from high bias (underfitting)
+    /// or high variance (overfitting):
+    /// - If performance quickly plateaus with small amounts of data, you might have high bias
+    /// - If performance continues improving with more data, you might need even more data
+    /// - If there's a large gap between training and validation performance, you might have high variance
+    /// </para>
+    /// <para>
+    /// Unlike most metrics that return a single value, this returns a list of performance values
+    /// at different training set sizes. This helps you visualize how your model learns from data.
+    /// </para>
+    /// </remarks>
+    LearningCurve,
+
+    /// <summary>
+    /// Residual Sum of Squares - The sum of squared differences between predicted and actual values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// RSS is calculated by summing the squared differences between each predicted value and its
+    /// corresponding actual value. It serves as the basis for many other metrics such as MSE
+    /// (which is RSS divided by the number of observations) and is used in calculating information
+    /// criteria like AIC and BIC.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> RSS is the total squared error of your model. It's the basis for many other metrics like MSE
+    /// (which is just RSS divided by the number of observations).
+    /// Lower values indicate a better fit. It's used in calculating metrics like AIC and BIC
+    /// that help you compare different models.
+    /// </para>
+    /// </remarks>
+    RSS,
+
     /// <summary>
     /// Measures the proportion of variance in the dependent variable explained by the model.
     /// </summary>
@@ -622,81 +1203,6 @@ public enum MetricType
     /// </para>
     /// </remarks>
     Kurtosis,
-
-    /// <summary>
-    /// The smallest value in the dataset.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The minimum is simply the smallest number in your data.
-    /// 
-    /// For the numbers [5, 12, 3, 8, 9], the minimum is 3.
-    /// 
-    /// It's useful to know the extreme values in your data, especially when looking for outliers
-    /// or setting valid ranges.
-    /// </para>
-    /// </remarks>
-    Min,
-
-    /// <summary>
-    /// The largest value in the dataset.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The maximum is simply the largest number in your data.
-    /// 
-    /// For the numbers [5, 12, 3, 8, 9], the maximum is 12.
-    /// 
-    /// Together with the minimum, it tells you the full range of your data.
-    /// </para>
-    /// </remarks>
-    Max,
-
-    /// <summary>
-    /// The number of values in the dataset.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> N is just the count of how many numbers are in your data.
-    /// 
-    /// For the numbers [5, 12, 3, 8, 9], N is 5.
-    /// 
-    /// The sample size is important because larger samples generally give more reliable statistics.
-    /// </para>
-    /// </remarks>
-    N,
-
-    /// <summary>
-    /// The first quartile (25th percentile) of the dataset.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The first quartile is the value where 25% of your data falls below it.
-    /// 
-    /// If you divide your sorted data into four equal parts, the first quartile is the value at the boundary
-    /// of the first and second parts.
-    /// 
-    /// For example, in a class of 20 students, the first quartile test score is the score that 5 students
-    /// scored below and 15 students scored above.
-    /// </para>
-    /// </remarks>
-    FirstQuartile,
-
-    /// <summary>
-    /// The third quartile (75th percentile) of the dataset.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The third quartile is the value where 75% of your data falls below it.
-    /// 
-    /// If you divide your sorted data into four equal parts, the third quartile is the value at the boundary
-    /// of the third and fourth parts.
-    /// 
-    /// For example, in a class of 20 students, the third quartile test score is the score that 15 students
-    /// scored below and 5 students scored above.
-    /// </para>
-    /// </remarks>
-    ThirdQuartile,
 
     /// <summary>
     /// The median absolute deviation (MAD) of the dataset.
