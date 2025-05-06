@@ -94,11 +94,11 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         var actual = ConversionsHelper.ConvertToVector<T, TOutput>(y);
         var metaData = model.GetModelMetaData();
 
-        return new DataSetStats<T, TInput, TOutput>
+        return new DataSetStats<T, TInput, TOutput>(metaData.ModelType)
         {
             ErrorStats = CalculateErrorStats(actual, predicted, inputSize, metaData.ModelType),
-            ActualBasicStats = CalculateBasicStats(actual),
-            PredictedBasicStats = CalculateBasicStats(predicted),
+            ActualBasicStats = CalculateBasicStats(actual, metaData.ModelType),
+            PredictedBasicStats = CalculateBasicStats(predicted, metaData.ModelType),
             PredictionStats = CalculatePredictionStats(actual, predicted, inputSize, metaData.ModelType),
             Predicted = predictions,
             Features = X,
@@ -141,9 +141,9 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// These statistics help you understand the distribution of your data.
     /// </remarks>
-    private static BasicStats<T> CalculateBasicStats(Vector<T> values)
+    private static BasicStats<T> CalculateBasicStats(Vector<T> values, ModelType modelType)
     {
-        return new BasicStats<T>(values);
+        return new BasicStats<T>(values, modelType);
     }
 
     /// <summary>
@@ -199,7 +199,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             XMatrix = xTrain,
             FeatureCount = InputHelper<T, TInput>.GetInputSize(xTrain),
             Model = predictionModelResult?.Model
-        });
+        }, modelType: model?.GetModelMetaData().ModelType ?? ModelType.None);
     }
 
     /// <summary>
@@ -239,7 +239,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         Vector<T> y,
         ICrossValidator<T>? crossValidator = null)
     {
-        crossValidator ??= new StandardCrossValidator<T>();
+        crossValidator ??= new StandardCrossValidator<T>(model.GetModelMetaData().ModelType);
 
         return crossValidator.Validate(model, X, y);
     }

@@ -60,7 +60,7 @@ namespace AiDotNet.Models
         /// generalizable patterns.
         /// </para>
         /// </remarks>
-        public DataSetStats<T, TInput, TOutput> TrainingSet { get; set; } = new();
+        public DataSetStats<T, TInput, TOutput> TrainingSet { get; set; } = new(ModelType.None);
         
         /// <summary>
         /// Gets or sets the statistics for the validation dataset.
@@ -91,7 +91,7 @@ namespace AiDotNet.Models
         /// their performance on the validation set to decide which one to use.
         /// </para>
         /// </remarks>
-        public DataSetStats<T, TInput, TOutput> ValidationSet { get; set; } = new();
+        public DataSetStats<T, TInput, TOutput> ValidationSet { get; set; } = new(ModelType.None);
         
         /// <summary>
         /// Gets or sets the statistics for the test dataset.
@@ -121,7 +121,7 @@ namespace AiDotNet.Models
         /// to get a true measure of performance without any bias from the development process.
         /// </para>
         /// </remarks>
-        public DataSetStats<T, TInput, TOutput> TestSet { get; set; } = new();
+        public DataSetStats<T, TInput, TOutput> TestSet { get; set; } = new(ModelType.None);
         
         /// <summary>
         /// Gets or sets the overall statistics for the model.

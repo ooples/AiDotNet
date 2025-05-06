@@ -51,7 +51,7 @@ public class GroupKFoldCrossValidator<T> : CrossValidatorBase<T>
     /// It's like setting up a series of tests that respect the groupings in your data.
     /// </para>
     /// </remarks>
-    public GroupKFoldCrossValidator(int[] groups, CrossValidationOptions? options = null) : base(options ?? new())
+    public GroupKFoldCrossValidator(int[] groups, ModelType modelType, CrossValidationOptions? options = null) : base(options ?? new(), modelType)
     {
         _groups = groups;
     }

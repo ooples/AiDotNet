@@ -1,5 +1,6 @@
 ﻿global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
+using AiDotNet.Serialization;
 
 namespace AiDotNet.Models.Results;
 
@@ -38,7 +39,7 @@ namespace AiDotNet.Models.Results;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [Serializable]
-internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TInput, TOutput>
+public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the underlying model used for making predictions.
@@ -224,7 +225,7 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
     /// first deserializing data into it, you'll get an error because the Model is null.
     /// </para>
     /// </remarks>
-    public PredictionModelResult()
+    internal PredictionModelResult()
     {
     }
 
@@ -332,6 +333,7 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
     /// - Uses Newtonsoft.Json for the conversion
     /// - Preserves all type information with TypeNameHandling.All
     /// - Formats the JSON with indentation for readability
+    /// - Uses custom converters for Matrix and Vector types to ensure they serialize correctly
     /// 
     /// This method is useful when you need to:
     /// - Save a model for later use
@@ -341,12 +343,32 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
     /// </remarks>
     public byte[] Serialize()
     {
-        var jsonString = JsonConvert.SerializeObject(this, Formatting.Indented, new JsonSerializerSettings
+        try
         {
-            TypeNameHandling = TypeNameHandling.All
-        });
+            // Register custom converters
+            RegisterJsonConverters();
 
-        return Encoding.UTF8.GetBytes(jsonString);
+            // Create JSON settings with custom converters for our types
+            var settings = new JsonSerializerSettings
+            {
+                TypeNameHandling = TypeNameHandling.All,
+                Formatting = Formatting.Indented,
+                Converters = new JsonConverter[]
+                {
+                        new MatrixJsonConverter<T>(),
+                        new VectorJsonConverter<T>(),
+                        new TimeSeriesModelConverter(),
+                        new InterfaceJsonConverter()
+                }
+            };
+
+            var jsonString = JsonConvert.SerializeObject(this, settings);
+            return Encoding.UTF8.GetBytes(jsonString);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to serialize the model: {ex.Message}", ex);
+        }
     }
 
     /// <summary>
@@ -373,6 +395,7 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
     /// - Converts the byte array to a JSON string
     /// - Uses Newtonsoft.Json to parse the JSON
     /// - Handles type information with TypeNameHandling.All
+    /// - Uses custom converters for Matrix and Vector types to ensure they deserialize correctly
     /// - Copies all properties from the deserialized object to the current instance
     /// 
     /// This method will throw an exception if:
@@ -386,22 +409,75 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
     /// </remarks>
     public void Deserialize(byte[] data)
     {
-        var jsonString = Encoding.UTF8.GetString(data);
-        var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, new JsonSerializerSettings
+        try
         {
-            TypeNameHandling = TypeNameHandling.All
-        });
+            // Register custom converters
+            RegisterJsonConverters();
 
-        if (deserializedObject != null)
-        {
-            Model = deserializedObject.Model;
-            OptimizationResult = deserializedObject.OptimizationResult;
-            NormalizationInfo = deserializedObject.NormalizationInfo;
-            ModelMetadata = deserializedObject.ModelMetadata;
+            var jsonString = Encoding.UTF8.GetString(data);
+
+            // Create JSON settings with custom converters for our types
+            var settings = new JsonSerializerSettings
+            {
+                TypeNameHandling = TypeNameHandling.All,
+                Converters = new JsonConverter[]
+                {
+                        new MatrixJsonConverter<T>(),
+                        new VectorJsonConverter<T>(),
+                        new TimeSeriesModelConverter(),
+                        new InterfaceJsonConverter()
+                }
+            };
+
+            var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
+
+            if (deserializedObject != null)
+            {
+                Model = deserializedObject.Model;
+                OptimizationResult = deserializedObject.OptimizationResult;
+                NormalizationInfo = deserializedObject.NormalizationInfo;
+                ModelMetadata = deserializedObject.ModelMetadata;
+            }
+            else
+            {
+                throw new InvalidOperationException("Deserialization resulted in a null object.");
+            }
         }
-        else
+        catch (Exception ex)
         {
-            throw new InvalidOperationException("Failed to deserialize the model.");
+            throw new InvalidOperationException($"Failed to deserialize the model: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Registers the custom JSON converters required for serialization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This private method ensures that all required JSON converters are registered before
+    /// serialization or deserialization. It's called internally by the Serialize and Deserialize methods.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes sure all the special handlers needed for saving and loading
+    /// complex types (like Matrix and Vector) are properly set up before we try to use them.
+    /// </para>
+    /// </remarks>
+    private static void RegisterJsonConverters()
+    {
+        // If we have a global registry class, call it here
+        try
+        {
+            // Attempt to find and invoke the global JSON converter registry if it exists
+            Type? registryType = Type.GetType("AiDotNet.Serialization.JsonConverterRegistry");
+            if (registryType != null)
+            {
+                var registerMethod = registryType.GetMethod("RegisterAllConverters");
+                registerMethod?.Invoke(null, null);
+            }
+        }
+        catch
+        {
+            // Fall back to local converters if global registration fails
+            // The Serialize/Deserialize methods already include local converters
         }
     }
 

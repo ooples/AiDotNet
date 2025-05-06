@@ -37,12 +37,6 @@ public class BasicStats<T> : StatisticsBase<T>
     /// Number of values in the dataset.
     /// </summary>
     private int _n;
-
-    /// <summary>
-    /// Set of metrics valid for this type of statistics.
-    /// </summary>
-    private readonly HashSet<MetricType> _validBasicStatMetrics = [];
-
     #endregion
 
     #region Property Accessors
@@ -317,9 +311,14 @@ public class BasicStats<T> : StatisticsBase<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="BasicStatsImpl{T}"/> class.
     /// </summary>
-    public BasicStats() : base()
+    public BasicStats(ModelType modelType) : base(modelType)
     {
         _n = 0;
+
+        if (modelType != ModelType.None)
+        {
+            DetermineValidMetrics();
+        }
     }
 
     /// <summary>
@@ -335,9 +334,15 @@ public class BasicStats<T> : StatisticsBase<T>
     /// Just pass in your data, and all the statistics will be calculated automatically.
     /// </para>
     /// </remarks>
-    public BasicStats(Vector<T> values) : base()
+    public BasicStats(Vector<T> values, ModelType modelType) : base(modelType)
     {
         _n = values.Length;
+
+        if (modelType != ModelType.None)
+        {
+            DetermineValidMetrics();
+        }
+
         CalculateStats(values);
     }
 
@@ -354,9 +359,15 @@ public class BasicStats<T> : StatisticsBase<T>
     /// from a simple array of numbers.
     /// </para>
     /// </remarks>
-    public BasicStats(T[] values) : base()
+    public BasicStats(T[] values, ModelType modelType) : base(modelType)
     {
         _n = values.Length;
+
+        if (modelType != ModelType.None)
+        {
+            DetermineValidMetrics();
+        }
+
         CalculateStats(new Vector<T>(values));
     }
 
@@ -380,9 +391,9 @@ public class BasicStats<T> : StatisticsBase<T>
     /// All the statistics in this empty object will be set to zero or their equivalent default values.
     /// </para>
     /// </remarks>
-    public static BasicStats<T> Empty()
+    public static BasicStats<T> Empty(ModelType modelType = ModelType.None)
     {
-        return new BasicStats<T>();
+        return new BasicStats<T>(modelType);
     }
 
     /// <summary>
@@ -405,9 +416,9 @@ public class BasicStats<T> : StatisticsBase<T>
     /// </code>
     /// </para>
     /// </remarks>
-    public static BasicStats<T> FromVector(Vector<T> values)
+    public static BasicStats<T> FromVector(Vector<T> values, ModelType modelType)
     {
-        return new BasicStats<T>(values);
+        return new BasicStats<T>(values, modelType);
     }
 
     /// <summary>
@@ -430,9 +441,9 @@ public class BasicStats<T> : StatisticsBase<T>
     /// </code>
     /// </para>
     /// </remarks>
-    public static BasicStats<T> FromArray(T[] values)
+    public static BasicStats<T> FromArray(T[] values, ModelType modelType)
     {
-        return new BasicStats<T>(values);
+        return new BasicStats<T>(values, modelType);
     }
 
     #endregion
@@ -444,15 +455,13 @@ public class BasicStats<T> : StatisticsBase<T>
     /// </summary>
     protected override void DetermineValidMetrics()
     {
-        // All basic statistics metrics are valid for this class
-        var allMetricTypes = Enum.GetValues(typeof(MetricType))
-                                .Cast<MetricType>()
-                                .Where(mt => IsBasicStatisticMetric(mt));
+        _validMetrics.Clear();
+        var cache = MetricValidationCache.Instance;
+        var modelMetrics = cache.GetValidMetrics(ModelType.None, IsBasicStatisticMetric);
 
-        foreach (var metricType in allMetricTypes)
+        foreach (var metric in modelMetrics)
         {
-            _validMetrics.Add(metricType);
-            _validBasicStatMetrics.Add(metricType);
+            _validMetrics.Add(metric);
         }
     }
 

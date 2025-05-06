@@ -1,6 +1,4 @@
-﻿using AiDotNet.Helpers;
-
-namespace AiDotNet.Models;
+﻿namespace AiDotNet.Models;
 
 /// <summary>
 /// Represents a comprehensive collection of statistical measures and data for evaluating model performance on a dataset.
@@ -34,88 +32,218 @@ namespace AiDotNet.Models;
 /// <typeparam name="TOutput">The type of output data (e.g., Vector<T> for regression, Tensor<T> for neural networks).</typeparam>
 public class DataSetStats<T, TInput, TOutput>
 {
+    private ModelType _modelType;
+    private ErrorStats<T>? _errorStats;
+    private PredictionStats<T>? _predictionStats;
+    private BasicStats<T>? _actualBasicStats;
+    private BasicStats<T>? _predictedBasicStats;
+
     /// <summary>
-    /// Gets or sets the error statistics for the model's predictions.
+    /// Gets the model type used for determining which statistics to calculate.
+    /// </summary>
+    public ModelType ModelType => _modelType;
+
+    /// <summary>
+    /// Gets the error statistics for the model's predictions.
     /// </summary>
     /// <value>An ErrorStats&lt;T&gt; object containing various error metrics.</value>
-    /// <remarks>
-    /// [Existing remarks for ErrorStats]
-    /// </remarks>
-    public ErrorStats<T> ErrorStats { get; set; } = ErrorStats<T>.Empty(ModelType.None);
-    
+    public ErrorStats<T> ErrorStats
+    {
+        get => _errorStats ??= ErrorStats<T>.Empty(_modelType);
+        set => _errorStats = value;
+    }
+
     /// <summary>
-    /// Gets or sets the basic descriptive statistics for the actual target values.
+    /// Gets the basic descriptive statistics for the actual target values.
     /// </summary>
     /// <value>A BasicStats&lt;T&gt; object containing descriptive statistics for the actual values.</value>
-    /// <remarks>
-    /// [Existing remarks for ActualBasicStats]
-    /// </remarks>
-    public BasicStats<T> ActualBasicStats { get; set; } = BasicStats<T>.Empty();
-    
+    public BasicStats<T> ActualBasicStats
+    {
+        get => _actualBasicStats ??= BasicStats<T>.Empty(_modelType);
+        set => _actualBasicStats = value;
+    }
+
     /// <summary>
-    /// Gets or sets the basic descriptive statistics for the predicted values.
+    /// Gets the basic descriptive statistics for the predicted values.
     /// </summary>
     /// <value>A BasicStats&lt;T&gt; object containing descriptive statistics for the predicted values.</value>
-    /// <remarks>
-    /// [Existing remarks for PredictedBasicStats]
-    /// </remarks>
-    public BasicStats<T> PredictedBasicStats { get; set; } = BasicStats<T>.Empty();
-    
+    public BasicStats<T> PredictedBasicStats
+    {
+        get => _predictedBasicStats ??= BasicStats<T>.Empty(_modelType);
+        set => _predictedBasicStats = value;
+    }
+
     /// <summary>
-    /// Gets or sets the prediction quality statistics for the model.
+    /// Gets the prediction quality statistics for the model.
     /// </summary>
     /// <value>A PredictionStats&lt;T&gt; object containing various prediction quality metrics.</value>
-    /// <remarks>
-    /// [Existing remarks for PredictionStats]
-    /// </remarks>
-    public PredictionStats<T> PredictionStats { get; set; } = PredictionStats<T>.Empty(ModelType.None);
-    
+    public PredictionStats<T> PredictionStats
+    {
+        get => _predictionStats ??= PredictionStats<T>.Empty(_modelType);
+        set => _predictionStats = value;
+    }
+
     /// <summary>
     /// Gets or sets the predicted values.
     /// </summary>
     /// <value>The predicted values of type TOutput.</value>
-    /// <remarks>
-    /// <para>
-    /// This property contains the model's predictions for the dataset. The structure of this object depends on the type of model and prediction task.
-    /// For regression tasks, it might be a vector where each element corresponds to an observation in the dataset. For more complex tasks like
-    /// image classification or sequence prediction, it might be a tensor or other multi-dimensional structure.
-    /// </para>
-    /// [Existing remarks for Predicted]
-    /// </remarks>
     public TOutput Predicted { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the actual target values.
     /// </summary>
     /// <value>The actual target values of type TOutput.</value>
-    /// <remarks>
-    /// <para>
-    /// This property contains the actual target values for the dataset. The structure of this object matches that of the Predicted property
-    /// and depends on the type of model and prediction task. These values represent the true outcomes that the model attempts to predict.
-    /// </para>
-    /// [Existing remarks for Actual]
-    /// </remarks>
     public TOutput Actual { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the input features.
     /// </summary>
     /// <value>The input features of type TInput.</value>
-    /// <remarks>
-    /// <para>
-    /// This property contains the input feature data for the dataset. The structure of this object depends on the type of model and input data.
-    /// For traditional machine learning tasks, it might be a matrix where each row represents an observation and each column a feature.
-    /// For more complex tasks like image or sequence processing, it might be a tensor or other multi-dimensional structure.
-    /// </para>
-    /// [Existing remarks for Features]
-    /// </remarks>
     public TInput Features { get; set; }
 
     /// <summary>
-    /// Initializes a new instance of the DataSetStats class with default empty model data.
+    /// Initializes a new instance of the DataSetStats class with default empty model data and ModelType.None.
     /// </summary>
-    public DataSetStats()
+    /// <remarks>
+    /// This constructor uses ModelType.None which will only enable general metrics. 
+    /// Use the constructor with ModelType parameter to enable model-specific metrics.
+    /// Statistics objects are lazily initialized when first accessed.
+    /// </remarks>
+    public DataSetStats() : this(ModelType.None)
     {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the DataSetStats class with default empty model data for the specified model type.
+    /// </summary>
+    /// <param name="modelType">The type of model being evaluated.</param>
+    /// <remarks>
+    /// This constructor sets up the model type but doesn't create statistics objects until they're accessed,
+    /// reducing unnecessary allocations.
+    /// </remarks>
+    public DataSetStats(ModelType modelType)
+    {
+        _modelType = modelType;
         (Features, Actual, Predicted) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
+    }
+
+    /// <summary>
+    /// Creates a new instance of DataSetStats with pre-calculated statistics.
+    /// </summary>
+    /// <param name="modelType">The type of model being evaluated.</param>
+    /// <param name="features">The input features.</param>
+    /// <param name="actual">The actual target values.</param>
+    /// <param name="predicted">The predicted values.</param>
+    /// <param name="errorStatsInputs">Optional inputs for error statistics calculation.</param>
+    /// <param name="predictionStatsInputs">Optional inputs for prediction statistics calculation.</param>
+    /// <returns>A DataSetStats instance populated with calculated statistics.</returns>
+    public static DataSetStats<T, TInput, TOutput> CreateWithCalculatedStats(
+        ModelType modelType,
+        TInput features,
+        TOutput actual,
+        TOutput predicted,
+        ErrorStatsInputs<T>? errorStatsInputs = null,
+        PredictionStatsInputs<T>? predictionStatsInputs = null)
+    {
+        var stats = new DataSetStats<T, TInput, TOutput>(modelType)
+        {
+            Features = features,
+            Actual = actual,
+            Predicted = predicted
+        };
+
+        var actualVector = ConversionsHelper.ConvertToVector<T, TOutput>(actual);
+        var predictedVector = ConversionsHelper.ConvertToVector<T, TOutput>(predicted);
+
+        if (!actualVector.IsEmpty)
+        {
+            stats._actualBasicStats = new BasicStats<T>(actualVector, modelType);
+        }
+
+        if (!predictedVector.IsEmpty)
+        {
+            stats._predictedBasicStats = new BasicStats<T>(predictedVector, modelType);
+        }
+
+        // Calculate error stats if inputs provided or can be derived
+        if (errorStatsInputs != null)
+        {
+            stats._errorStats = new ErrorStats<T>(errorStatsInputs, modelType);
+        }
+        else if (!actualVector.IsEmpty && !predictedVector.IsEmpty)
+        {
+            var inputs = new ErrorStatsInputs<T>
+            {
+                Actual = actualVector,
+                Predicted = predictedVector,
+                FeatureCount = 0 // This should be provided or calculated from features
+            };
+            stats._errorStats = new ErrorStats<T>(inputs, modelType);
+        }
+
+        // Calculate prediction stats if inputs provided
+        if (predictionStatsInputs != null)
+        {
+            stats._predictionStats = new PredictionStats<T>(predictionStatsInputs, modelType);
+        }
+        else if (!actualVector.IsEmpty && !predictedVector.IsEmpty)
+        {
+            var inputs = new PredictionStatsInputs<T>
+            {
+                Actual = actualVector,
+                Predicted = predictedVector,
+                NumberOfParameters = 0, // This should be provided
+                PredictionType = PredictionType.Regression // This should be determined from modelType
+            };
+            stats._predictionStats = new PredictionStats<T>(inputs, modelType);
+        }
+
+        return stats;
+    }
+
+    /// <summary>
+    /// Updates the model type and invalidates cached statistics objects.
+    /// </summary>
+    /// <param name="modelType">The new model type to use.</param>
+    /// <remarks>
+    /// This method allows changing the model type after initialization. It will clear any
+    /// cached statistics objects, which will be recreated with the new model type when accessed.
+    /// </remarks>
+    public void UpdateModelType(ModelType modelType)
+    {
+        if (_modelType != modelType)
+        {
+            _modelType = modelType;
+            _errorStats = null;
+            _predictionStats = null;
+            // Note: BasicStats doesn't depend on model type, so we keep those
+        }
+    }
+
+    /// <summary>
+    /// Determines if all statistics have been calculated.
+    /// </summary>
+    /// <returns>True if all statistics objects have been initialized; otherwise, false.</returns>
+    public bool AreAllStatsCalculated()
+    {
+        return _errorStats != null &&
+               _predictionStats != null &&
+               _actualBasicStats != null &&
+               _predictedBasicStats != null;
+    }
+
+    /// <summary>
+    /// Forces calculation of all statistics objects.
+    /// </summary>
+    /// <remarks>
+    /// This method ensures all statistics objects are initialized, creating empty ones if necessary.
+    /// Use this when you need to ensure all properties are non-null.
+    /// </remarks>
+    public void EnsureAllStatsInitialized()
+    {
+        _ = ErrorStats;
+        _ = PredictionStats;
+        _ = ActualBasicStats;
+        _ = PredictedBasicStats;
     }
 }

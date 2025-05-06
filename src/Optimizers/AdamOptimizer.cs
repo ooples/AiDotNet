@@ -143,7 +143,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             previousStepData = currentStepData;
         }
 
-        var parameters = Model.GetParameters();
+        var parameters = bestStepData.Solution.GetParameters();
         _m = new Vector<T>(parameters.Length);
         _v = new Vector<T>(parameters.Length);
 

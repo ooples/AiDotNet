@@ -6,63 +6,8 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double, decimal).</typeparam>
 [Serializable]
-public class PredictionStats<T>
+public class PredictionStats<T> : PredictionStatisticsBase<T>
 {
-    /// <summary>
-    /// Provides mathematical operations for the generic type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// The type of model being evaluated.
-    /// </summary>
-    public ModelType ModelType { get; private set; }
-
-    /// <summary>
-    /// Number of features or parameters in the model.
-    /// </summary>
-    private readonly int _numberOfParameters;
-
-    /// <summary>
-    /// The confidence level used for statistical intervals.
-    /// </summary>
-    private readonly T _confidenceLevel;
-
-    /// <summary>
-    /// The type of prediction (regression, binary classification, etc.)
-    /// </summary>
-    private readonly PredictionType _predictionType;
-
-    /// <summary>
-    /// Dictionary to store calculated metrics.
-    /// </summary>
-    private readonly Dictionary<MetricType, T> _metrics = [];
-
-    /// <summary>
-    /// Set of metrics that have been calculated.
-    /// </summary>
-    private readonly HashSet<MetricType> _calculatedMetrics = [];
-
-    /// <summary>
-    /// Set of metrics valid for this model type.
-    /// </summary>
-    private readonly HashSet<MetricType> _validMetrics = [];
-
-    /// <summary>
-    /// Dictionary to store calculated intervals as tuples.
-    /// </summary>
-    private readonly Dictionary<IntervalType, (T Lower, T Upper)> _intervals = [];
-
-    /// <summary>
-    /// Set of intervals that have been calculated.
-    /// </summary>
-    private readonly HashSet<IntervalType> _calculatedIntervals = [];
-
-    /// <summary>
-    /// Set of intervals valid for this model type.
-    /// </summary>
-    private readonly HashSet<IntervalType> _validIntervals = [];
-
     #region Property Accessors
 
     /// <summary>
@@ -513,18 +458,15 @@ public class PredictionStats<T>
     /// that are appropriate for that type of model.
     /// </remarks>
     internal PredictionStats(PredictionStatsInputs<T> inputs, ModelType modelType)
+        : base(modelType, inputs.NumberOfParameters, inputs.PredictionType, inputs.ConfidenceLevel)
     {
         if (inputs == null)
             throw new ArgumentNullException(nameof(inputs));
 
-        _numOps = MathHelper.GetNumericOperations<T>();
-        ModelType = modelType;
-        _numberOfParameters = inputs.NumberOfParameters;
-        _confidenceLevel = _numOps.FromDouble(inputs.ConfidenceLevel);
-        _predictionType = inputs.PredictionType;
-
-        // Determine which metrics and intervals are valid for this model type
-        DetermineValidMetricsAndIntervals();
+        if (modelType != ModelType.None)
+        {
+            DetermineValidMetrics();
+        }
 
         // Calculate valid metrics and intervals
         if (inputs.Actual != null && inputs.Predicted != null &&
@@ -544,18 +486,15 @@ public class PredictionStats<T>
     internal PredictionStats(PredictionStatsInputs<T> inputs, ModelType modelType,
                             IProgress<double>? progress = null,
                             CancellationToken cancellationToken = default)
+        : base(modelType, inputs.NumberOfParameters, inputs.PredictionType, inputs.ConfidenceLevel)
     {
         if (inputs == null)
             throw new ArgumentNullException(nameof(inputs));
 
-        _numOps = MathHelper.GetNumericOperations<T>();
-        ModelType = modelType;
-        _numberOfParameters = inputs.NumberOfParameters;
-        _confidenceLevel = _numOps.FromDouble(inputs.ConfidenceLevel);
-        _predictionType = inputs.PredictionType;
-
-        // Determine which metrics and intervals are valid for this model type
-        DetermineValidMetricsAndIntervals();
+        if (modelType != ModelType.None)
+        {
+            DetermineValidMetrics();
+        }
 
         // Calculate valid metrics and intervals
         if (inputs.Actual != null && inputs.Predicted != null &&
@@ -577,7 +516,7 @@ public class PredictionStats<T>
     /// for the specified model type are set to zero. It's useful when you need a placeholder
     /// or default instance, or when you want to compare against a baseline of "perfect predictions."
     /// </remarks>
-    public static PredictionStats<T> Empty(ModelType modelType)
+    public static PredictionStats<T> Empty(ModelType modelType = ModelType.None)
     {
         // Create properly initialized empty inputs
         var emptyInputs = new PredictionStatsInputs<T>
@@ -598,34 +537,112 @@ public class PredictionStats<T>
     #region Core Calculation Methods
 
     /// <summary>
-    /// Determines which metrics and intervals are valid for the current model type.
+    /// Determines which metrics are valid for this statistics object.
     /// </summary>
-    private void DetermineValidMetricsAndIntervals()
+    protected override void DetermineValidMetrics()
     {
-        // Determine valid metrics
-        var allMetricTypes = Enum.GetValues(typeof(MetricType))
-                                .Cast<MetricType>()
-                                .Where(mt => PredictionStats<T>.IsPredictionStatisticMetric(mt));
+        _validMetrics.Clear();
 
-        foreach (var metricType in allMetricTypes)
+        var cache = MetricValidationCache.Instance;
+        var modelMetrics = cache.GetValidMetrics(ModelType, IsPredictionStatisticMetric);
+
+        foreach (var metric in modelMetrics)
         {
-            if (ModelTypeHelper.IsValidMetric(ModelType, metricType))
-            {
-                _validMetrics.Add(metricType);
-            }
+            _validMetrics.Add(metric);
         }
 
-        // Determine valid intervals based on model type
-        var allIntervalTypes = Enum.GetValues(typeof(IntervalType))
-                                .Cast<IntervalType>();
+        // Now handle intervals separately since they have different logic
+        DetermineValidIntervals();
+    }
 
-        foreach (var intervalType in allIntervalTypes)
+    /// <summary>
+    /// Determines if an interval type is valid for a specific model type.
+    /// </summary>
+    /// <param name="intervalType">The type of interval to check.</param>
+    /// <param name="modelType">The type of model.</param>
+    /// <returns>True if the interval is valid for the model type; otherwise, false.</returns>
+    protected override bool IsValidIntervalForModelType(IntervalType intervalType, ModelType modelType)
+    {
+        var modelCategory = ModelTypeHelper.GetCategory(modelType);
+
+        return intervalType switch
         {
-            if (IsValidIntervalForModelType(intervalType, ModelType))
+            // Most intervals are mainly for regression models
+            IntervalType.Prediction => modelCategory == ModelCategory.Regression || modelCategory == ModelCategory.TimeSeries,
+            IntervalType.Confidence => modelCategory == ModelCategory.Regression || modelCategory == ModelCategory.TimeSeries,
+            IntervalType.Tolerance => modelCategory == ModelCategory.Regression || modelCategory == ModelCategory.TimeSeries,
+
+            // Forecast intervals are specifically for time series models
+            IntervalType.Forecast => modelCategory == ModelCategory.TimeSeries,
+
+            // These resampling-based intervals can work for most model types
+            IntervalType.Bootstrap => true,
+            IntervalType.Jackknife => true,
+            IntervalType.Percentile => true,
+
+            // Credible intervals are mainly for Bayesian models
+            IntervalType.Credible => modelCategory == ModelCategory.Regression || modelCategory == ModelCategory.TimeSeries,
+
+            // Simultaneous prediction intervals are for regression models
+            IntervalType.SimultaneousPrediction => modelCategory == ModelCategory.Regression || modelCategory == ModelCategory.TimeSeries,
+
+            // Default case for any unspecified interval type
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Determines if an interval type is valid for a specific prediction type.
+    /// </summary>
+    /// <param name="intervalType">The type of interval to check.</param>
+    /// <param name="predictionType">The type of prediction.</param>
+    /// <returns>True if the interval is valid for the prediction type; otherwise, false.</returns>
+    protected override bool IsPredictionIntervalType(IntervalType intervalType, PredictionType predictionType)
+    {
+        // For regression and time series predictions, most interval types can be valid
+        if (predictionType == PredictionType.Regression || predictionType == PredictionType.TimeSeries)
+        {
+            // All interval types except Forecast are valid for regular regression
+            if (predictionType == PredictionType.Regression && intervalType == IntervalType.Forecast)
             {
-                _validIntervals.Add(intervalType);
+                return false; // Forecast intervals are specifically for time series
             }
+
+            return true; // All other interval types are valid for regression/time series
         }
+
+        // For distribution predictions, most intervals can be valid
+        if (predictionType == PredictionType.Distribution)
+        {
+            return true;
+        }
+
+        // For classification predictions, only certain intervals make sense
+        if (predictionType == PredictionType.BinaryClassification ||
+            predictionType == PredictionType.MulticlassClassification ||
+            predictionType == PredictionType.ProbabilisticClassification ||
+            predictionType == PredictionType.MultiLabelClassification)
+        {
+            return intervalType switch
+            {
+                // These can be adapted for classification probabilities
+                IntervalType.Bootstrap => true,
+                IntervalType.Percentile => true,
+                IntervalType.Credible => predictionType == PredictionType.ProbabilisticClassification,
+
+                // Other interval types generally don't apply to classification
+                _ => false,
+            };
+        }
+
+        // For ranking predictions, intervals generally don't apply
+        if (predictionType == PredictionType.Ranking)
+        {
+            return false;
+        }
+
+        // Default fallback
+        return false;
     }
 
     /// <summary>
@@ -689,93 +706,6 @@ public class PredictionStats<T>
     }
 
     /// <summary>
-    /// Determines if an interval type is valid for a specific prediction type.
-    /// </summary>
-    /// <param name="intervalType">The type of interval to check.</param>
-    /// <param name="predictionType">The type of prediction.</param>
-    /// <returns>True if the interval is valid for the prediction type; otherwise, false.</returns>
-    public static bool IsPredictionIntervalType(IntervalType intervalType, PredictionType predictionType)
-    {
-        // For regression and time series predictions, most interval types can be valid
-        if (predictionType == PredictionType.Regression || predictionType == PredictionType.TimeSeries)
-        {
-            // All interval types except Forecast are valid for regular regression
-            if (predictionType == PredictionType.Regression && intervalType == IntervalType.Forecast)
-            {
-                return false; // Forecast intervals are specifically for time series
-            }
-
-            return true; // All other interval types are valid for regression/time series
-        }
-
-        // For distribution predictions, most intervals can be valid
-        if (predictionType == PredictionType.Distribution)
-        {
-            return true;
-        }
-
-        // For classification predictions, only certain intervals make sense
-        if (predictionType == PredictionType.BinaryClassification ||
-            predictionType == PredictionType.MulticlassClassification ||
-            predictionType == PredictionType.ProbabilisticClassification ||
-            predictionType == PredictionType.MultiLabelClassification)
-        {
-            return intervalType switch
-            {
-                // These can be adapted for classification probabilities
-                IntervalType.Bootstrap => true,
-                IntervalType.Percentile => true,
-                IntervalType.Credible => predictionType == PredictionType.ProbabilisticClassification,
-
-                // Other interval types generally don't apply to classification
-                _ => false,
-            };
-        }
-
-        // For ranking predictions, intervals generally don't apply
-        if (predictionType == PredictionType.Ranking)
-        {
-            return false;
-        }
-
-        // Default fallback
-        return false;
-    }
-
-    /// <summary>
-    /// Determines if an interval type is valid for a specific model type.
-    /// </summary>
-    private static bool IsValidIntervalForModelType(IntervalType intervalType, ModelType modelType)
-    {
-        var modelCategory = ModelTypeHelper.GetCategory(modelType);
-
-        return intervalType switch
-        {
-            // Most intervals are mainly for regression models
-            IntervalType.Prediction => modelCategory == ModelCategory.Regression || modelCategory == ModelCategory.TimeSeries,
-            IntervalType.Confidence => modelCategory == ModelCategory.Regression || modelCategory == ModelCategory.TimeSeries,
-            IntervalType.Tolerance => modelCategory == ModelCategory.Regression || modelCategory == ModelCategory.TimeSeries,
-
-            // Forecast intervals are specifically for time series models
-            IntervalType.Forecast => modelCategory == ModelCategory.TimeSeries,
-
-            // These resampling-based intervals can work for most model types
-            IntervalType.Bootstrap => true,
-            IntervalType.Jackknife => true,
-            IntervalType.Percentile => true,
-
-            // Credible intervals are mainly for Bayesian models
-            IntervalType.Credible => modelCategory == ModelCategory.Regression || modelCategory == ModelCategory.TimeSeries,
-
-            // Simultaneous prediction intervals are for regression models
-            IntervalType.SimultaneousPrediction => modelCategory == ModelCategory.Regression || modelCategory == ModelCategory.TimeSeries,
-
-            // Default case for any unspecified interval type
-            _ => false
-        };
-    }
-
-    /// <summary>
     /// Calculates all metrics and intervals that are valid for the current model type.
     /// </summary>
     private void CalculateValidMetricsAndIntervals(Vector<T> actual, Vector<T> predicted, int learningCurveSteps,
@@ -822,8 +752,8 @@ public class PredictionStats<T>
             }
 
             // Calculate classification metrics if applicable
-            if (_predictionType == PredictionType.BinaryClassification ||
-                _predictionType == PredictionType.MulticlassClassification)
+            if (PredictionType == PredictionType.BinaryClassification ||
+                PredictionType == PredictionType.MulticlassClassification)
             {
                 CalculateClassificationMetrics(actual, predicted);
             }
@@ -998,7 +928,7 @@ public class PredictionStats<T>
         // Calculate accuracy if valid
         if (_validMetrics.Contains(MetricType.Accuracy))
         {
-            _metrics[MetricType.Accuracy] = StatisticsHelper<T>.CalculateAccuracy(actual, predicted, _predictionType);
+            _metrics[MetricType.Accuracy] = StatisticsHelper<T>.CalculateAccuracy(actual, predicted, PredictionType);
             _calculatedMetrics.Add(MetricType.Accuracy);
         }
 
@@ -1007,7 +937,7 @@ public class PredictionStats<T>
             _validMetrics.Contains(MetricType.Recall) ||
             _validMetrics.Contains(MetricType.F1Score))
         {
-            var (precision, recall, f1) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, _predictionType);
+            var (precision, recall, f1) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, PredictionType);
 
             if (_validMetrics.Contains(MetricType.Precision))
             {
@@ -1041,7 +971,7 @@ public class PredictionStats<T>
             !_calculatedMetrics.Contains(MetricType.AdjustedR2))
         {
             var r2 = _metrics[MetricType.R2];
-            _metrics[MetricType.AdjustedR2] = StatisticsHelper<T>.CalculateAdjustedR2(r2, n, _numberOfParameters);
+            _metrics[MetricType.AdjustedR2] = StatisticsHelper<T>.CalculateAdjustedR2(r2, n, FeatureCount);
             _calculatedMetrics.Add(MetricType.AdjustedR2);
         }
 
@@ -1095,10 +1025,10 @@ public class PredictionStats<T>
         if (_calculatedMetrics.Contains(MetricType.PopulationStandardError) &&
             _validMetrics.Contains(MetricType.SampleStandardError) &&
             !_calculatedMetrics.Contains(MetricType.SampleStandardError) &&
-            n > _numberOfParameters)
+            n > FeatureCount)
         {
             var popStdErr = _metrics[MetricType.PopulationStandardError];
-            var correctionFactor = _numOps.FromDouble((double)n / (n - _numberOfParameters));
+            var correctionFactor = _numOps.FromDouble((double)n / (n - FeatureCount));
             correctionFactor = _numOps.Sqrt(correctionFactor);
             _metrics[MetricType.SampleStandardError] = _numOps.Multiply(popStdErr, correctionFactor);
             _calculatedMetrics.Add(MetricType.SampleStandardError);
@@ -1137,7 +1067,7 @@ public class PredictionStats<T>
             if (_validMetrics.Contains(MetricType.AIC) &&
                 !_calculatedMetrics.Contains(MetricType.AIC))
             {
-                _metrics[MetricType.AIC] = StatisticsHelper<T>.CalculateAIC(n, _numberOfParameters, rss);
+                _metrics[MetricType.AIC] = StatisticsHelper<T>.CalculateAIC(n, FeatureCount, rss);
                 _calculatedMetrics.Add(MetricType.AIC);
             }
 
@@ -1145,7 +1075,7 @@ public class PredictionStats<T>
             if (_validMetrics.Contains(MetricType.BIC) &&
                 !_calculatedMetrics.Contains(MetricType.BIC))
             {
-                _metrics[MetricType.BIC] = StatisticsHelper<T>.CalculateBIC(n, _numberOfParameters, rss);
+                _metrics[MetricType.BIC] = StatisticsHelper<T>.CalculateBIC(n, FeatureCount, rss);
                 _calculatedMetrics.Add(MetricType.BIC);
             }
 
@@ -1153,7 +1083,7 @@ public class PredictionStats<T>
             if (_validMetrics.Contains(MetricType.AICAlt) &&
                 !_calculatedMetrics.Contains(MetricType.AICAlt))
             {
-                _metrics[MetricType.AICAlt] = StatisticsHelper<T>.CalculateAICAlternative(n, _numberOfParameters, rss);
+                _metrics[MetricType.AICAlt] = StatisticsHelper<T>.CalculateAICAlternative(n, FeatureCount, rss);
                 _calculatedMetrics.Add(MetricType.AICAlt);
             }
         }
@@ -1168,263 +1098,18 @@ public class PredictionStats<T>
     /// </summary>
     /// <param name="metricType">The type of metric to retrieve.</param>
     /// <returns>The value of the requested metric.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the requested metric is not valid for the current model type.</exception>
     /// <remarks>
-    /// For Beginners:
-    /// This method provides a convenient way to get a specific metric value using the MetricType enum.
-    /// 
-    /// For example, instead of directly accessing the R2 property, you could use:
-    /// <code>
-    /// var r2Value = stats.GetMetric(MetricType.R2);
-    /// </code>
-    /// 
-    /// This is particularly useful when you want to programmatically access different metrics
-    /// based on user input or configuration settings.
-    /// 
-    /// If you request a metric type that doesn't exist, the method will throw an InvalidOperationException.
+    /// This override handles special cases like LearningCurve that return different types.
     /// </remarks>
-    public T GetMetric(MetricType metricType)
+    public override T GetMetric(MetricType metricType)
     {
-        if (!IsValidMetric(metricType))
-        {
-            throw new InvalidOperationException($"Metric {metricType} is not valid for model type {ModelType}.");
-        }
-
         // Special handling for LearningCurve since it's a List<T> not a T
         if (metricType == MetricType.LearningCurve)
         {
             throw new InvalidOperationException("Learning curve is not a scalar metric. Access LearningCurve property directly.");
         }
 
-        return _metrics.TryGetValue(metricType, out var value) ? value : _numOps.Zero;
-    }
-
-    /// <summary>
-    /// Checks if a specific metric is valid for the current model type.
-    /// </summary>
-    /// <param name="metricType">The type of metric to check.</param>
-    /// <returns>True if the metric is valid for the current model type; otherwise, false.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method determines whether a specific metric type is valid for the current model type.
-    /// It uses the ModelTypeHelper to check if the metric is appropriate for the model category.
-    /// </para>
-    /// <para>
-    /// Different metrics are appropriate for different types of models. For example, R-squared is
-    /// appropriate for regression models but not for classification models. This method helps
-    /// ensure that only appropriate metrics are calculated and used.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method allows you to check if a particular metric is valid for your model type
-    /// before trying to get its value. It helps prevent errors by letting you know in advance
-    /// whether a metric makes sense for your model.
-    /// </para>
-    /// <para>
-    /// For example, asking for "accuracy" when evaluating a regression model wouldn't make sense,
-    /// and this method would return false in that case.
-    /// </para>
-    /// </remarks>
-    /// <example>
-    /// <code>
-    /// // Check if R-squared is valid for this model type
-    /// if (stats.IsValidMetric(MetricType.R2))
-    /// {
-    ///     // Use R-squared...
-    ///     var r2 = stats.GetMetric(MetricType.R2);
-    ///     Console.WriteLine($"R-squared: {r2}");
-    /// }
-    /// </code>
-    /// </example>
-    public bool IsValidMetric(MetricType metricType)
-    {
-        // Special handling for LearningCurve (which is a List<T>, not a T)
-        if (metricType == MetricType.LearningCurve)
-        {
-            return _validMetrics.Contains(metricType);
-        }
-
-        // Use ModelTypeHelper to determine if the metric is valid for this model type
-        return ModelTypeHelper.IsValidMetric(ModelType, metricType) && _validMetrics.Contains(metricType);
-    }
-
-    /// <summary>
-    /// Checks if a specific metric has been calculated.
-    /// </summary>
-    /// <param name="metricType">The type of metric to check.</param>
-    /// <returns>True if the metric has been calculated; otherwise, false.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method determines whether a specific metric has been calculated.
-    /// Even if a metric is valid for a model type, it might not have been calculated yet.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method tells you whether a particular metric has been calculated.
-    /// It's useful when you want to check if a metric is available before trying to use it.
-    /// </para>
-    /// <para>
-    /// For example, some metrics might not be calculated by default to save processing time,
-    /// and this method lets you check if they're available before trying to access them.
-    /// </para>
-    /// </remarks>
-    /// <example>
-    /// <code>
-    /// // Check if the learning curve has been calculated
-    /// if (stats.IsCalculatedMetric(MetricType.LearningCurve))
-    /// {
-    ///     // Use the learning curve...
-    ///     var learningCurve = stats.LearningCurve;
-    ///     // Process learning curve data...
-    /// }
-    /// else
-    /// {
-    ///     Console.WriteLine("Learning curve not calculated. Try increasing learningCurveSteps parameter.");
-    /// }
-    /// </code>
-    /// </example>
-    public bool IsCalculatedMetric(MetricType metricType)
-    {
-        return _calculatedMetrics.Contains(metricType);
-    }
-
-    /// <summary>
-    /// Gets an interval by type.
-    /// </summary>
-    /// <param name="intervalType">The type of interval to retrieve.</param>
-    /// <returns>The interval as a tuple of (Lower, Upper) bounds.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the requested interval is not valid for the current model type.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method provides a way to access prediction intervals by their type. It will return a tuple
-    /// containing the lower and upper bounds of the requested interval.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method provides a way to get a specific interval using the IntervalType enum.
-    /// 
-    /// For example, instead of directly accessing the PredictionInterval property, you could use:
-    /// <code>
-    /// var interval = stats.GetInterval(IntervalType.Prediction);
-    /// </code>
-    /// 
-    /// This is useful for programmatically accessing different interval types.
-    /// </para>
-    /// </remarks>
-    public (T Lower, T Upper) GetInterval(IntervalType intervalType)
-    {
-        if (!IsValidInterval(intervalType))
-        {
-            throw new InvalidOperationException($"Interval {intervalType} is not valid for model type {ModelType}.");
-        }
-
-        return _intervals.TryGetValue(intervalType, out var interval) ? interval : (_numOps.Zero, _numOps.Zero);
-    }
-
-    /// <summary>
-    /// Tries to get a specific interval.
-    /// </summary>
-    /// <param name="intervalType">The type of interval to retrieve.</param>
-    /// <param name="interval">The interval as a tuple of (Lower, Upper) bounds if successful.</param>
-    /// <returns>True if the interval was successfully retrieved; otherwise, false.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method provides a safe way to access prediction intervals without throwing exceptions.
-    /// It returns true if the interval was successfully retrieved, and false otherwise.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is a safer version of GetInterval that won't throw an exception if the interval
-    /// is invalid or hasn't been calculated. Instead, it returns false and sets the output
-    /// interval to (0, 0). This pattern is commonly used in production code to avoid exceptions.
-    /// </para>
-    /// </remarks>
-    public bool TryGetInterval(IntervalType intervalType, out (T Lower, T Upper) interval)
-    {
-        if (!IsValidInterval(intervalType))
-        {
-            interval = (_numOps.Zero, _numOps.Zero);
-            return false;
-        }
-
-        return _intervals.TryGetValue(intervalType, out interval);
-    }
-
-    /// <summary>
-    /// Checks if a specific interval is valid for the current model type.
-    /// </summary>
-    /// <param name="intervalType">The type of interval to check.</param>
-    /// <returns>True if the interval is valid for the current model type; otherwise, false.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method determines whether a particular type of interval is valid for the current model type.
-    /// Different model types support different kinds of intervals.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method allows you to check if a particular interval type is valid for your model type
-    /// before trying to get its value. For example, forecast intervals only make sense for time
-    /// series models, not for general regression models.
-    /// </para>
-    /// </remarks>
-    public bool IsValidInterval(IntervalType intervalType)
-    {
-        return _validIntervals.Contains(intervalType);
-    }
-
-    /// <summary>
-    /// Checks if a specific interval has been calculated.
-    /// </summary>
-    /// <param name="intervalType">The type of interval to check.</param>
-    /// <returns>True if the interval has been calculated; otherwise, false.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method determines whether a particular type of interval has been calculated.
-    /// It can be used to avoid requesting intervals that haven't been calculated yet.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method tells you whether a particular interval has been 
-    /// calculated. It's useful when you want to check if an interval is available before trying to use it.
-    /// </para>
-    /// </remarks>
-    public bool IsCalculatedInterval(IntervalType intervalType)
-    {
-        return _calculatedIntervals.Contains(intervalType);
-    }
-
-    /// <summary>
-    /// Gets all interval types that are valid for the current model type.
-    /// </summary>
-    /// <returns>An array of valid interval types.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns all interval types that are valid for the current model type.
-    /// It can be used to determine which intervals are available for the current model.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method gives you a list of all interval types that make sense for your model type.
-    /// Different model types support different kinds of intervals, so this helps you
-    /// understand which ones are available for your specific model.
-    /// </para>
-    /// </remarks>
-    public IntervalType[] GetValidIntervalTypes()
-    {
-        return [.. _validIntervals];
-    }
-
-    /// <summary>
-    /// Gets all interval types that have been calculated.
-    /// </summary>
-    /// <returns>An array of calculated interval types.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns all interval types that have been calculated.
-    /// It can be used to determine which intervals are available for use.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method gives you a list of all interval types that have been calculated.
-    /// It's useful when you want to know which intervals are actually available for use,
-    /// rather than just which ones are valid for your model type.
-    /// </para>
-    /// </remarks>
-    public IntervalType[] GetCalculatedIntervalTypes()
-    {
-        return [.. _calculatedIntervals];
+        return base.GetMetric(metricType);
     }
 
     /// <summary>
@@ -1445,6 +1130,16 @@ public class PredictionStats<T>
     public Dictionary<IntervalType, (T Lower, T Upper)> GetAllCalculatedIntervals()
     {
         return new Dictionary<IntervalType, (T Lower, T Upper)>(_intervals);
+    }
+
+    /// <summary>
+    /// Determines if a metric type is a provider-specific statistic metric.
+    /// </summary>
+    /// <param name="metricType">The metric type to check.</param>
+    /// <returns>True if the metric is a prediction statistic; otherwise, false.</returns>
+    protected override bool IsProviderStatisticMetric(MetricType metricType)
+    {
+        return IsPredictionStatisticMetric(metricType);
     }
 
     #endregion

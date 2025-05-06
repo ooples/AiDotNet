@@ -2549,15 +2549,17 @@ public static class StatisticsHelper<T>
         var sortedShapes = estimates.Select(e => e.Shape).OrderBy(s => s).ToList();
         var sortedScales = estimates.Select(e => e.Scale).OrderBy(s => s).ToList();
 
-        T halfConfidenceLevel = _numOps.Divide(confidenceLevel, _numOps.FromDouble(2));
-        T oneMinusHalfConfidenceLevel = _numOps.Subtract(_numOps.One, halfConfidenceLevel);
-        T onePlusHalfConfidenceLevel = _numOps.Add(_numOps.One, halfConfidenceLevel);
+        // Calculate the alpha value (the total probability in both tails)
+        T alpha = _numOps.Subtract(_numOps.One, confidenceLevel);
 
-        T lowerIndexT = _numOps.Multiply(_numOps.FromDouble(bootstrapSamples), oneMinusHalfConfidenceLevel);
-        int lowerIndex = Convert.ToInt32(_numOps.Round(lowerIndexT));
+        // Calculate the percentiles for the lower and upper bounds
+        // For a 95% confidence interval, we want the 2.5th and 97.5th percentiles
+        T lowerPercentile = _numOps.Divide(alpha, _numOps.FromDouble(2));
+        T upperPercentile = _numOps.Subtract(_numOps.One, _numOps.Divide(alpha, _numOps.FromDouble(2)));
 
-        T upperIndexT = _numOps.Multiply(_numOps.FromDouble(bootstrapSamples), onePlusHalfConfidenceLevel);
-        int upperIndex = Convert.ToInt32(_numOps.Round(upperIndexT));
+        // Convert percentiles to indices in the sorted lists
+        int lowerIndex = Math.Max(0, Convert.ToInt32(MathHelper.Floor(_numOps.Multiply(_numOps.FromDouble(bootstrapSamples), lowerPercentile))));
+        int upperIndex = Math.Min(bootstrapSamples - 1, Convert.ToInt32(MathHelper.Floor(_numOps.Multiply(_numOps.FromDouble(bootstrapSamples), upperPercentile))));
 
         return (_numOps.Multiply(sortedShapes[lowerIndex], sortedScales[lowerIndex]),
                 _numOps.Multiply(sortedShapes[upperIndex], sortedScales[upperIndex]));

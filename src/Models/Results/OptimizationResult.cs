@@ -447,9 +447,9 @@ public class OptimizationResult<T, TInput, TOutput>
         _numOps = MathHelper.GetNumericOperations<T>();
         FitnessHistory = Vector<T>.Empty();
         SelectedFeatures = [];
-        TrainingResult = new DatasetResult();
-        ValidationResult = new DatasetResult();
-        TestResult = new DatasetResult();
+        TrainingResult = new DatasetResult(ModelType.None);
+        ValidationResult = new DatasetResult(ModelType.None);
+        TestResult = new DatasetResult(ModelType.None);
         FitDetectionResult = new FitDetectorResult<T>();
         CoefficientLowerBounds = Vector<T>.Empty();
         CoefficientUpperBounds = Vector<T>.Empty();
@@ -702,11 +702,11 @@ public class OptimizationResult<T, TInput, TOutput>
         /// used internally when creating the OptimizationResult.
         /// </para>
         /// </remarks>
-        public DatasetResult()
+        public DatasetResult(ModelType modelType)
         {
             (X, Y, Predictions) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
-            ErrorStats = ErrorStats<T>.Empty(ModelType.None);
-            PredictionStats = PredictionStats<T>.Empty(ModelType.None);
+            ErrorStats = ErrorStats<T>.Empty();
+            PredictionStats = PredictionStats<T>.Empty();
             ActualBasicStats = BasicStats<T>.Empty();
             PredictedBasicStats = BasicStats<T>.Empty();
         }

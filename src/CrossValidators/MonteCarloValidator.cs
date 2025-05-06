@@ -47,8 +47,8 @@ public class MonteCarloValidator<T> : CrossValidatorBase<T>
     /// </remarks>
     private new MonteCarloValidationOptions Options => (MonteCarloValidationOptions)base.Options;
 
-    public MonteCarloValidator(MonteCarloValidationOptions? options = null) 
-        : base(options ?? new MonteCarloValidationOptions())
+    public MonteCarloValidator(ModelType modelType, MonteCarloValidationOptions? options = null) 
+        : base(options ?? new MonteCarloValidationOptions(), modelType)
     {
     }
 

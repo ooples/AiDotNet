@@ -73,13 +73,14 @@ public static class OptimizerHelper<T, TInput, TOutput>
         TInput features,
         TOutput y)
     {
-        return new OptimizationResult<T, TInput, TOutput>.DatasetResult
+        var modelType = predictionStats?.ModelType ?? ModelType.None;
+        return new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
         {
             Predictions = predictions,
-            ErrorStats = errorStats ?? ErrorStats<T>.Empty(ModelType.None),
+            ErrorStats = errorStats ?? ErrorStats<T>.Empty(),
             ActualBasicStats = actualBasicStats ?? BasicStats<T>.Empty(),
             PredictedBasicStats = predictedBasicStats ?? BasicStats<T>.Empty(),
-            PredictionStats = predictionStats ?? PredictionStats<T>.Empty(ModelType.None),
+            PredictionStats = predictionStats ?? PredictionStats<T>.Empty(),
             X = features,
             Y = y
         };

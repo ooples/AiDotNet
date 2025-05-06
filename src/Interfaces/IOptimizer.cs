@@ -93,4 +93,20 @@ public interface IOptimizer<T, TInput, TOutput> : IModelSerializer
     /// Resets the optimizer to its initial state.
     /// </summary>
     void Reset();
+
+    /// <summary>
+    /// Gets the model that this optimizer is configured to optimize.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property provides access to the model that the optimizer is working with.
+    /// It allows for consistency checks between the model used by the optimizer and
+    /// the model used elsewhere in the pipeline.
+    /// </para>
+    /// <para><b>For Beginners:</b> This lets you see which model the optimizer is currently
+    /// set up to work with. It's important for maintaining consistency, ensuring that
+    /// the optimizer is working with the model you expect.
+    /// </para>
+    /// </remarks>
+    IFullModel<T, TInput, TOutput> Model { get; }
 }

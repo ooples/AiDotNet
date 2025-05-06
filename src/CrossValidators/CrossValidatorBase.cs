@@ -42,6 +42,8 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T>
     /// </summary>
     protected readonly CrossValidationOptions Options;
 
+    protected readonly ModelType ModelType;
+
     /// <summary>
     /// Initializes a new instance of the CrossValidationBase class.
     /// </summary>
@@ -58,11 +60,12 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T>
     /// each time we run the code, which is useful for testing and reproducibility.
     /// </para>
     /// </remarks>
-    protected CrossValidatorBase(CrossValidationOptions options)
+    protected CrossValidatorBase(CrossValidationOptions options, ModelType modelType)
     {
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options;
         Random = options.RandomSeed.HasValue ? new Random(options.RandomSeed.Value) : new Random();
+        ModelType = modelType;
     }
 
     /// <summary>
@@ -158,6 +161,6 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T>
 
         totalTimer.Stop();
 
-        return new CrossValidationResult<T>(foldResults, totalTimer.Elapsed);
+        return new CrossValidationResult<T>(foldResults, totalTimer.Elapsed, ModelType);
     }
 }

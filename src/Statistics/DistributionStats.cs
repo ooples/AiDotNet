@@ -210,11 +210,11 @@ public class DistributionStats<T> : StatisticsBase<T>
     /// that help you understand its distribution properties.
     /// </para>
     /// </remarks>
-    public DistributionStats(Vector<T> values)
+    public DistributionStats(Vector<T> values, ModelType modelType) : base(modelType)
     {
         Values = values ?? Vector<T>.Empty();
-        DistributionParameters = new Dictionary<string, T>();
-        Quantiles = new List<(T, T)>();
+        DistributionParameters = [];
+        Quantiles = [];
 
         // Calculate all valid metrics
         if (!Values.IsEmpty)
@@ -234,7 +234,7 @@ public class DistributionStats<T> : StatisticsBase<T>
     /// </remarks>
     public static DistributionStats<T> Empty()
     {
-        return new DistributionStats<T>(Vector<T>.Empty());
+        return new DistributionStats<T>(Vector<T>.Empty(), ModelType.None);
     }
 
     #endregion

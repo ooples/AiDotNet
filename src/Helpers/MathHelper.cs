@@ -769,6 +769,62 @@ public static class MathHelper
     }
 
     /// <summary>
+    /// Rounds a numeric value to the nearest integral value.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="value">The value to round.</param>
+    /// <param name="midpointRounding">Specifies how to round when a value is midway between two other values. Default is ToEven.</param>
+    /// <returns>The rounded value.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method rounds a number to the nearest integer, with control over how midpoint values 
+    /// (those exactly halfway between two integers) are handled. For example, 2.5 could round to either 2 or 3 
+    /// depending on the midpoint rounding strategy. ToEven (also called "banker's rounding") rounds to the nearest 
+    /// even number, while AwayFromZero always rounds up in magnitude.
+    /// </para>
+    /// </remarks>
+    public static T Round<T>(T value, MidpointRounding midpointRounding = MidpointRounding.ToEven)
+    {
+        return GetNumericOperations<T>().FromDouble(Math.Round(Convert.ToDouble(value), midpointRounding));
+    }
+
+    /// <summary>
+    /// Returns the largest integral value less than or equal to the specified number.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="value">The value to floor.</param>
+    /// <returns>The largest integral value less than or equal to the specified number.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method rounds a number down to the nearest integer that's less than or equal to it.
+    /// For example, Floor(3.7) returns 3, and Floor(-3.7) returns -4. This is useful when you need to ensure 
+    /// a value doesn't exceed a certain threshold, or when working with indices that must stay within bounds.
+    /// </para>
+    /// </remarks>
+    public static T Floor<T>(T value)
+    {
+        return GetNumericOperations<T>().FromDouble(Math.Floor(Convert.ToDouble(value)));
+    }
+
+    /// <summary>
+    /// Returns the smallest integral value greater than or equal to the specified number.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="value">The value to ceiling.</param>
+    /// <returns>The smallest integral value greater than or equal to the specified number.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method rounds a number up to the nearest integer that's greater than or equal to it.
+    /// For example, Ceiling(3.2) returns 4, and Ceiling(-3.2) returns -3. This is useful when you need to ensure 
+    /// you have enough resources to cover a fractional need, like calculating how many containers you need to store items.
+    /// </para>
+    /// </remarks>
+    public static T Ceiling<T>(T value)
+    {
+        return GetNumericOperations<T>().FromDouble(Math.Ceiling(Convert.ToDouble(value)));
+    }
+
+    /// <summary>
     /// Calculates the cosine of an angle.
     /// </summary>
     /// <typeparam name="T">The numeric type to use for calculations.</typeparam>

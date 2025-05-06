@@ -54,6 +54,8 @@ public class CrossValidationResult<T>
     /// </summary>
     public TimeSpan TotalTime { get; }
 
+    private readonly ModelType _modelType;
+
     /// <summary>
     /// Creates a new instance of the CrossValidationResult class.
     /// </summary>
@@ -67,10 +69,11 @@ public class CrossValidationResult<T>
     /// across different subsets of your data.
     /// </para>
     /// </remarks>
-    public CrossValidationResult(List<FoldResult<T>> foldResults, TimeSpan totalTime)
+    public CrossValidationResult(List<FoldResult<T>> foldResults, TimeSpan totalTime, ModelType modelType)
     {
         FoldResults = foldResults;
         TotalTime = totalTime;
+        _modelType = modelType;
 
         // Calculate average training time
         AverageTrainingTime = TimeSpan.FromTicks(
@@ -83,9 +86,9 @@ public class CrossValidationResult<T>
         var maeValues = new Vector<T>([.. foldResults.Select(r => r.ValidationErrors.MAE)]);
 
         // Use our existing BasicStats class to calculate statistics across folds
-        R2Stats = new BasicStats<T>(r2Values);
-        RMSEStats = new BasicStats<T>(rmseValues);
-        MAEStats = new BasicStats<T>(maeValues);
+        R2Stats = new BasicStats<T>(r2Values, _modelType);
+        RMSEStats = new BasicStats<T>(rmseValues, _modelType);
+        MAEStats = new BasicStats<T>(maeValues, _modelType);
 
         // Aggregate feature importance scores across folds
         FeatureImportanceStats = AggregateFeatureImportance(foldResults);
@@ -122,7 +125,7 @@ public class CrossValidationResult<T>
                 .ToArray();
 
             // Calculate statistics for this feature using our existing BasicStats class
-            result[feature] = new BasicStats<T>(values);
+            result[feature] = new BasicStats<T>(values, _modelType);
         }
 
         return result;
@@ -159,7 +162,7 @@ public class CrossValidationResult<T>
                 throw new ArgumentException($"Metric '{metricType}' not found in fold results", nameof(metricType));
             }).ToArray();
 
-            return new BasicStats<T>(values);
+            return new BasicStats<T>(values, _modelType);
         }
         catch (ArgumentException ex)
         {

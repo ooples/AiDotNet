@@ -28,11 +28,17 @@ public abstract class StatisticsBase<T> : IStatisticsProvider<T>
     protected readonly HashSet<MetricType> _validMetrics = [];
 
     /// <summary>
+    /// The type of model being evaluated.
+    /// </summary>
+    protected readonly ModelType ModelType;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="StatisticsBase{T}"/> class.
     /// </summary>
-    protected StatisticsBase()
+    protected StatisticsBase(ModelType modelType)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        ModelType = modelType;
 
         // Determine which metrics are valid for this statistics provider
         DetermineValidMetrics();
@@ -51,11 +57,6 @@ public abstract class StatisticsBase<T> : IStatisticsProvider<T>
     /// <exception cref="InvalidOperationException">Thrown when the requested metric is not valid.</exception>
     public virtual T GetMetric(MetricType metricType)
     {
-        if (!IsValidMetric(metricType))
-        {
-            throw new InvalidOperationException($"Metric {metricType} is not valid for this statistics provider.");
-        }
-
         return _metrics.TryGetValue(metricType, out var value) ? value : _numOps.Zero;
     }
 

@@ -49,7 +49,7 @@ public class StandardCrossValidator<T> : CrossValidatorBase<T>
     /// without needing to change the calculator itself.
     /// </para>
     /// </remarks>
-    public StandardCrossValidator(CrossValidationOptions? options = null) : base(options ?? new())
+    public StandardCrossValidator(ModelType modelType, CrossValidationOptions? options = null) : base(options ?? new(), modelType)
     {
     }
 

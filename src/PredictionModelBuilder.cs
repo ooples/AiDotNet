@@ -217,7 +217,23 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
 
         // Use defaults for these interfaces if they aren't set
-        var model = _model ?? new DefaultModelSelector<T, TInput, TOutput>().SelectModel(x, y);
+        IFullModel<T, TInput, TOutput> model;
+        if (_model != null)
+        {
+            // User explicitly configured a model, use it
+            model = _model;
+        }
+        else if (_optimizer != null)
+        {
+            // Use the model from the optimizer
+            model = _optimizer.Model;
+        }
+        else
+        {
+            // No model specified and no optimizer with a model, use default selection
+            model = new DefaultModelSelector<T, TInput, TOutput>().SelectModel(x, y);
+        }
+
         var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
         var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(model);
         var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();

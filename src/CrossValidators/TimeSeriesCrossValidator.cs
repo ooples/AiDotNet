@@ -74,8 +74,8 @@ public class TimeSeriesCrossValidator<T> : CrossValidatorBase<T>
     /// It's like setting up a series of tests that respect the time order of your data.
     /// </para>
     /// </remarks>
-    public TimeSeriesCrossValidator(int initialTrainSize, int validationSize, int step, CrossValidationOptions? options = null) 
-        : base(options ?? new())
+    public TimeSeriesCrossValidator(int initialTrainSize, int validationSize, int step, ModelType modelType, CrossValidationOptions? options = null) 
+        : base(options ?? new(), modelType)
     {
         _initialTrainSize = initialTrainSize;
         _validationSize = validationSize;

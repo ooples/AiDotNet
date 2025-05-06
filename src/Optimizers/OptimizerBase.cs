@@ -1,7 +1,6 @@
 global using AiDotNet.Models.Inputs;
 global using AiDotNet.Evaluation;
 global using AiDotNet.Caching;
-using System;
 
 namespace AiDotNet.Optimizers;
 
@@ -107,7 +106,25 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </summary>
     protected int IterationsWithImprovement;
 
-    protected readonly IFullModel<T, TInput, TOutput> Model;
+    /// <summary>
+    /// Gets the model that this optimizer is configured to optimize.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property provides access to the model that the optimizer is working with.
+    /// It implements the IOptimizer interface property to expose the protected Model field.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property lets external code see which model 
+    /// the optimizer is currently working with, without being able to change it.
+    /// It's like a window that lets you look at the model but not touch it.
+    /// </para>
+    /// </remarks>
+    public IFullModel<T, TInput, TOutput> Model => _model;
+
+    /// <summary>
+    /// The model that this optimizer is configured to optimize.
+    /// </summary>
+    private IFullModel<T, TInput, TOutput> _model;
 
     /// <summary>
     /// Initializes a new instance of the OptimizerBase class.
@@ -117,7 +134,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected OptimizerBase(IFullModel<T, TInput, TOutput> model,
         OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
-        Model = model;
+        _model = model;
         Random = new();
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new OptimizationAlgorithmOptions<T, TInput, TOutput>();
@@ -457,12 +474,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(OptimizationStepData<T, TInput, TOutput> bestStepData, OptimizationInputData<T, TInput, TOutput> input)
     {
+        var modelType = bestStepData.Solution.GetModelMetaData().ModelType;
         return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
             bestStepData.Solution,
             bestStepData.FitnessScore,
             FitnessList,
             bestStepData.SelectedFeatures,
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
             {
                 X = bestStepData.XTrainSubset,
                 Y = input.YTrain,
@@ -472,7 +490,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
             {
                 X = bestStepData.XValSubset,
                 Y = input.YValidation,
@@ -482,7 +500,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
             {
                 X = bestStepData.XTestSubset,
                 Y = input.YTest,

@@ -29,8 +29,8 @@ public abstract class IntervalProviderBase<T> : StatisticsBase<T>, IIntervalProv
     /// Initializes a new instance of the <see cref="IntervalProviderBase{T}"/> class.
     /// </summary>
     /// <param name="confidenceLevel">The confidence level to use for intervals (typically 0.95).</param>
-    protected IntervalProviderBase(double confidenceLevel = 0.95)
-        : base()
+    protected IntervalProviderBase(ModelType modelType, double confidenceLevel = 0.95)
+        : base(modelType)
     {
         _confidenceLevel = _numOps.FromDouble(confidenceLevel);
 

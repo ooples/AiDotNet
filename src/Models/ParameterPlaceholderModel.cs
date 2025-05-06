@@ -100,8 +100,6 @@ public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInpu
                 { "ActiveFeatureCount", _activeFeatures.Count }
             }
         };
-
-        Console.WriteLine();
     }
 
     // [Other methods remain the same]

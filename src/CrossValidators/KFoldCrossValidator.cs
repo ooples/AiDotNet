@@ -44,7 +44,7 @@ public class KFoldCrossValidator<T> : CrossValidatorBase<T>
     /// It's like setting up a series of tests for your model based on your instructions.
     /// </para>
     /// </remarks>
-    public KFoldCrossValidator(CrossValidationOptions? options = null) : base(options ?? new())
+    public KFoldCrossValidator(ModelType modelType, CrossValidationOptions? options = null) : base(options ?? new(), modelType)
     {
     }
 

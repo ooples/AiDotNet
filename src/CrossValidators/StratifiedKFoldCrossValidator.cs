@@ -44,7 +44,7 @@ public class StratifiedKFoldCrossValidator<T, TInput, TOutput, TMetadata> : Cros
     /// It's like setting up a series of balanced tests for your model based on your instructions.
     /// </para>
     /// </remarks>
-    public StratifiedKFoldCrossValidator(CrossValidationOptions? options = null) : base(options ?? new())
+    public StratifiedKFoldCrossValidator(ModelType modelType, CrossValidationOptions? options = null) : base(options ?? new(), modelType)
     {
     }
 

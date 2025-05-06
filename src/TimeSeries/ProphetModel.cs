@@ -1066,13 +1066,16 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// <remarks>
     /// <para>
     /// This protected method contains the actual implementation of the training process.
-    /// It's called by the public Train method and handles the core training logic.
+    /// It validates the input data, initializes model components, optimizes the parameters,
+    /// updates the model's parameter vector, and stores the final state for future reference.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the real learning happens for the model.
     /// The method carefully validates your data, then initializes the model components
     /// (like trend and seasonal patterns), and finally optimizes all the parameters to
-    /// best fit your data. If anything goes wrong during this process, it provides clear
-    /// error messages to help you understand and fix the issue.
+    /// best fit your data. It also makes sure to store these learned parameters properly
+    /// so they can be accessed later when making predictions or when saving the model.
+    /// If anything goes wrong during this process, it provides clear error messages to 
+    /// help you understand and fix the issue.
     /// </para>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
@@ -1082,34 +1085,145 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         {
             throw new ArgumentNullException(nameof(x), "Input matrix cannot be null");
         }
-    
+
         if (y == null)
         {
             throw new ArgumentNullException(nameof(y), "Target vector cannot be null");
         }
-    
+
         if (x.Rows != y.Length)
         {
             throw new ArgumentException($"Input matrix rows ({x.Rows}) must match target vector length ({y.Length})");
         }
-    
+
         if (x.Rows == 0)
         {
             throw new ArgumentException("Cannot train on empty dataset");
         }
-    
+
         // Initialize model state vector
         int n = y.Length;
         var states = new Matrix<T>(n, GetStateSize());
-        
+
         // Initialize components (trend, seasonal, holiday, changepoint, regressors)
         InitializeComponents(x, y);
-        
+
         // Optimize parameters using the selected optimizer
         OptimizeParameters(x, y);
-        
+
+        // Update ModelParameters with the current state
+        ModelParameters = GetCurrentState();
+
         // Store final state for future reference
         states.SetRow(n - 1, GetCurrentState());
+    }
+
+    /// <summary>
+    /// Applies the provided parameters to the Prophet model components.
+    /// </summary>
+    /// <param name="parameters">The vector of parameters to apply.</param>
+    /// <exception cref="ArgumentNullException">Thrown when parameters is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method distributes the values from the parameters vector to the appropriate model components.
+    /// It first stores the parameters in the base ModelParameters property, then assigns each parameter
+    /// to its corresponding component: trend, seasonal components, holiday components, changepoint, and regressors.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method takes all the numerical values that define the model's behavior
+    /// and assigns them to the right places within the model. It's like taking a list of settings and applying
+    /// each one to the correct dial or switch in the model.
+    /// 
+    /// The parameters vector contains all these settings in a specific order:
+    /// - First comes the trend component (the overall direction of your data)
+    /// - Then the seasonal components (recurring patterns like daily, weekly, yearly cycles)
+    /// - Next are holiday effects (how special days impact your values)
+    /// - Then the changepoint (where your data's behavior suddenly shifts)
+    /// - Finally, the regressor effects (how external factors influence your data)
+    /// 
+    /// This method makes sure each value goes to the right place so the model works correctly.
+    /// </para>
+    /// </remarks>
+    protected override void ApplyParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
+        }
+
+        // Call base implementation to store the parameters
+        base.ApplyParameters(parameters);
+
+        // Apply parameters to the model's components
+        int index = 0;
+
+        // Check if we have enough parameters
+        if (parameters.Length < GetStateSize())
+        {
+            throw new ArgumentException($"Parameters vector length ({parameters.Length}) is less than required state size ({GetStateSize()}).");
+        }
+
+        // Extract trend parameter
+        _trend = parameters[index++];
+
+        // Extract seasonal components
+        for (int i = 0; i < _seasonalComponents.Length; i++)
+        {
+            _seasonalComponents[i] = parameters[index++];
+        }
+
+        // Extract holiday components
+        for (int i = 0; i < _holidayComponents.Length; i++)
+        {
+            _holidayComponents[i] = parameters[index++];
+        }
+
+        // Extract changepoint parameter
+        _changepoint = parameters[index++];
+
+        // Extract regressor parameters
+        for (int i = 0; i < _regressors.Length; i++)
+        {
+            _regressors[i] = parameters[index++];
+        }
+    }
+
+    /// <summary>
+    /// Gets the trainable parameters of the Prophet model as a vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters of the model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method ensures that the ModelParameters property is up to date with the current values
+    /// of all model components before returning it. This guarantees that any changes made to the
+    /// individual components are properly reflected in the returned parameter vector.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the important numbers that define how
+    /// your model works and packages them into a single list. These parameters include information
+    /// about trends, seasonal patterns, holiday effects, and more.
+    /// 
+    /// Think of it like taking a snapshot of all the model's settings at once. This is useful when you want to:
+    /// - Save the model's current state
+    /// - Share the model with others
+    /// - Make a copy of the model
+    /// - Analyze what the model has learned
+    /// 
+    /// The method makes sure this snapshot is always up to date, even if the model's components
+    /// have been adjusted separately.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("Cannot get parameters for an untrained model.");
+        }
+
+        // Ensure ModelParameters is up to date with the current component values
+        ModelParameters = GetCurrentState();
+
+        return base.GetParameters();
     }
 
     /// <summary>

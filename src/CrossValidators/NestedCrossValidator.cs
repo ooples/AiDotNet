@@ -77,8 +77,8 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
     /// </para>
     /// </remarks>
     public NestedCrossValidator(ICrossValidator<T> outerValidator, ICrossValidator<T> innerValidator, 
-        Func<CrossValidationResult<T>, IFullModel<T, Matrix<T>, Vector<T>>> modelSelector, CrossValidationOptions? options = null) 
-        : base(options ?? new())
+        Func<CrossValidationResult<T>, IFullModel<T, Matrix<T>, Vector<T>>> modelSelector, ModelType modelType, CrossValidationOptions? options = null) 
+        : base(options ?? new(), modelType)
     {
         _outerValidator = outerValidator;
         _innerValidator = innerValidator;
@@ -156,7 +156,7 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
         }
 
         totalTimer.Stop();
-        return new CrossValidationResult<T>(nestedResults, totalTimer.Elapsed);
+        return new CrossValidationResult<T>(nestedResults, totalTimer.Elapsed, ModelType);
     }
 
     /// <summary>

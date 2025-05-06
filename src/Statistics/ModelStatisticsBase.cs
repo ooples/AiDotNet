@@ -1,4 +1,6 @@
-﻿/// <summary>
+﻿namespace AiDotNet.Statistics;
+
+/// <summary>
 /// Base class for model-based statistics providers.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -6,14 +8,11 @@
 public abstract class ModelStatisticsBase<T> : StatisticsBase<T>, IModelStatistics<T>
 {
     /// <summary>
-    /// Gets the type of model being evaluated.
-    /// </summary>
-    public ModelType ModelType { get; }
-
-    /// <summary>
     /// Gets the number of features or parameters in the model.
     /// </summary>
     public int FeatureCount { get; }
+
+    public new ModelType ModelType { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ModelStatisticsBase{T}"/> class.
@@ -21,7 +20,7 @@ public abstract class ModelStatisticsBase<T> : StatisticsBase<T>, IModelStatisti
     /// <param name="modelType">The type of model being evaluated.</param>
     /// <param name="featureCount">The number of features or parameters in the model.</param>
     protected ModelStatisticsBase(ModelType modelType, int featureCount)
-        : base()
+        : base(modelType)
     {
         ModelType = modelType;
         FeatureCount = featureCount;
@@ -32,18 +31,13 @@ public abstract class ModelStatisticsBase<T> : StatisticsBase<T>, IModelStatisti
     /// </summary>
     protected override void DetermineValidMetrics()
     {
-        // First determine which metrics are valid for this specific stats class
-        var allMetricTypes = Enum.GetValues(typeof(MetricType))
-                                .Cast<MetricType>()
-                                .Where(mt => IsProviderStatisticMetric(mt));
+        _validMetrics.Clear();
+        var cache = MetricValidationCache.Instance;
+        var modelMetrics = cache.GetValidMetrics(ModelType, IsProviderStatisticMetric);
 
-        // Then filter based on the model type
-        foreach (var metricType in allMetricTypes)
+        foreach (var metric in modelMetrics)
         {
-            if (ModelTypeHelper.IsValidMetric(ModelType, metricType))
-            {
-                _validMetrics.Add(metricType);
-            }
+            _validMetrics.Add(metric);
         }
     }
 

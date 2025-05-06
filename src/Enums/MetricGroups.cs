@@ -39,6 +39,11 @@ public enum MetricGroups
     Clustering,
 
     /// <summary>
+    /// Metrics for evaluating neural network and deep learning model performance.
+    /// </summary>
+    NeuralNetwork,
+
+    /// <summary>
     /// Metrics that apply to all model types, like training time, memory usage.
     /// </summary>
     General

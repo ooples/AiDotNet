@@ -845,58 +845,6 @@ public enum MetricType
     InterquartileRange,
 
     /// <summary>
-    /// The average of the absolute differences between predicted and actual values.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Mean Absolute Error (MAE) measures how far off your predictions are on average, 
-    /// ignoring whether they're too high or too low. It's easy to understand: if your MAE is 5, it means your 
-    /// predictions are off by 5 units on average. MAE treats all errors equally, unlike some metrics that 
-    /// penalize large errors more heavily.
-    /// </para>
-    /// </remarks>
-    MeanAbsoluteError,
-
-    /// <summary>
-    /// The average of the squared differences between predicted and actual values.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Mean Squared Error (MSE) is similar to MAE, but it squares the errors before 
-    /// averaging them. This means it penalizes large errors more than small ones. For example, being off by 
-    /// 2 is more than twice as bad as being off by 1. MSE is often used in optimization because it's 
-    /// mathematically convenient, but its units are squared, which can be hard to interpret.
-    /// </para>
-    /// </remarks>
-    MeanSquaredError,
-
-    /// <summary>
-    /// The square root of the mean squared error.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Root Mean Squared Error (RMSE) is the square root of MSE. It brings the error 
-    /// metric back to the same units as your original data, making it easier to interpret than MSE. Like MSE, 
-    /// it penalizes large errors more than small ones. RMSE is often preferred in practice because it's both 
-    /// mathematically convenient and interpretable.
-    /// </para>
-    /// </remarks>
-    RootMeanSquaredError,
-
-    /// <summary>
-    /// The average of the absolute percentage differences between predicted and actual values.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Mean Absolute Percentage Error (MAPE) measures the average percentage difference 
-    /// between predicted and actual values. It's useful when you want to know the typical size of errors 
-    /// relative to the actual values. For example, a MAPE of 5% means that, on average, your predictions are 
-    /// off by 5% of the actual value. However, MAPE can be misleading when actual values are close to zero.
-    /// </para>
-    /// </remarks>
-    MeanAbsolutePercentageError,
-
-    /// <summary>
     /// A measure of the relative quality of statistical models for a given set of data.
     /// </summary>
     /// <remarks>
@@ -960,19 +908,6 @@ public enum MetricType
     /// </para>
     /// </remarks>
     BrierScore,
-
-    /// <summary>
-    /// Measures the trade-off between true positive rate and false positive rate.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> ROC AUC Score measures how well your model can distinguish between classes. 
-    /// It's like measuring how good a bouncer is at a club. A perfect bouncer (ROC AUC = 1) lets in all the 
-    /// VIPs and keeps out all the non-VIPs. A bouncer who just guesses randomly (ROC AUC = 0.5) is no better 
-    /// than flipping a coin. The higher the ROC AUC, the better your model is at telling the classes apart.
-    /// </para>
-    /// </remarks>
-    ROCAUCScore,
 
     /// <summary>
     /// Measures the average log-loss across all classes in classification problems.

@@ -47,7 +47,7 @@ public class LeaveOneOutCrossValidator<T> : CrossValidatorBase<T>
     /// It's like setting up a series of tests where each piece of data gets a chance to be the test case.
     /// </para>
     /// </remarks>
-    public LeaveOneOutCrossValidator(CrossValidationOptions? options = null) : base(options ?? new())
+    public LeaveOneOutCrossValidator(ModelType modelType, CrossValidationOptions? options = null) : base(options ?? new(), modelType)
     {
     }
 

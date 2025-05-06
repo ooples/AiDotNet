@@ -92,11 +92,6 @@ public abstract class PredictionStatisticsBase<T> : ModelStatisticsBase<T>, IPre
     /// <returns>The interval as a tuple of (Lower, Upper) bounds.</returns>
     public virtual (T Lower, T Upper) GetInterval(IntervalType intervalType)
     {
-        if (!IsValidInterval(intervalType))
-        {
-            throw new InvalidOperationException($"Interval {intervalType} is not valid for this provider.");
-        }
-
         return _intervals.TryGetValue(intervalType, out var interval) ? interval : (_numOps.Zero, _numOps.Zero);
     }
 

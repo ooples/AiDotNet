@@ -187,10 +187,10 @@ public static class ModelTypeHelper
     {
         return metricType switch
         {
-            // Regression metrics (some also apply to time series)
-            MetricType.R2 => new[] { MetricGroups.Regression },
-            MetricType.AdjustedR2 => new[] { MetricGroups.Regression },
-            MetricType.ExplainedVarianceScore => new[] { MetricGroups.Regression },
+            // Regression metrics (many also apply to time series)
+            MetricType.R2 => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
+            MetricType.AdjustedR2 => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
+            MetricType.ExplainedVarianceScore => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
             MetricType.MeanPredictionError => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
             MetricType.MedianPredictionError => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
             MetricType.MAE => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
@@ -208,12 +208,9 @@ public static class ModelTypeHelper
             MetricType.AIC => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
             MetricType.BIC => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
             MetricType.AICAlt => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
-            MetricType.MeanAbsoluteError => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
-            MetricType.MeanSquaredError => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
-            MetricType.RootMeanSquaredError => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
-            MetricType.MeanAbsolutePercentageError => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
+            MetricType.RSS => new[] { MetricGroups.Regression, MetricGroups.TimeSeries },
 
-            // Binary classification metrics (some also apply to multiclass)
+            // Binary classification metrics
             MetricType.Precision => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
             MetricType.Recall => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
             MetricType.F1Score => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
@@ -224,12 +221,11 @@ public static class ModelTypeHelper
             MetricType.AUCPR => new[] { MetricGroups.BinaryClassification },
             MetricType.AveragePrecision => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
             MetricType.CalibrationError => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
-            MetricType.BrierScore => new[] { MetricGroups.BinaryClassification },
-            MetricType.ROCAUCScore => new[] { MetricGroups.BinaryClassification },
+            MetricType.BrierScore => new[] { MetricGroups.BinaryClassification, MetricGroups.NeuralNetwork },
 
-            // Multiclass classification metrics (some also apply to binary)
+            // Multiclass classification metrics
             MetricType.Accuracy => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
-            MetricType.CrossEntropyLoss => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
+            MetricType.CrossEntropyLoss => new[] { MetricGroups.MulticlassClassification, MetricGroups.NeuralNetwork },
             MetricType.CohenKappa => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
             MetricType.MutualInformation => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification, MetricGroups.Clustering },
             MetricType.NormalizedMutualInformation => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification, MetricGroups.Clustering },
@@ -237,7 +233,14 @@ public static class ModelTypeHelper
             // Time series specific metrics
             MetricType.TheilUStatistic => new[] { MetricGroups.TimeSeries },
             MetricType.DurbinWatsonStatistic => new[] { MetricGroups.TimeSeries },
-            MetricType.Perplexity => new[] { MetricGroups.TimeSeries },
+            MetricType.AutoCorrelationFunction => new[] { MetricGroups.TimeSeries },
+            MetricType.PartialAutoCorrelationFunction => new[] { MetricGroups.TimeSeries },
+            MetricType.DynamicTimeWarping => new[] { MetricGroups.TimeSeries },
+
+            // Neural network / deep learning metrics
+            MetricType.Perplexity => new[] { MetricGroups.NeuralNetwork }, // For language models
+            MetricType.KLDivergence => new[] { MetricGroups.NeuralNetwork, MetricGroups.General },
+            MetricType.LogLikelihood => new[] { MetricGroups.NeuralNetwork, MetricGroups.General },
 
             // Clustering metrics
             MetricType.SilhouetteScore => new[] { MetricGroups.Clustering },
@@ -245,13 +248,15 @@ public static class ModelTypeHelper
             MetricType.CalinskiHarabaszIndex => new[] { MetricGroups.Clustering },
             MetricType.DaviesBouldinIndex => new[] { MetricGroups.Clustering },
 
-            // Information Retrieval metrics (a subset of classification metrics)
+            // Information Retrieval / Ranking metrics
             MetricType.MeanAveragePrecision => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
             MetricType.NormalizedDiscountedCumulativeGain => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
             MetricType.MeanReciprocalRank => new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
+
+            // String distance metrics
             MetricType.LevenshteinDistance => new[] { MetricGroups.General },
 
-            // General descriptive statistics - applicable to most model types
+            // General descriptive statistics
             MetricType.Mean => new[] { MetricGroups.General },
             MetricType.Median => new[] { MetricGroups.General },
             MetricType.Mode => new[] { MetricGroups.General },
@@ -269,9 +274,9 @@ public static class ModelTypeHelper
             MetricType.Kurtosis => new[] { MetricGroups.General },
 
             // Correlation and similarity metrics
-            MetricType.PearsonCorrelation => new[] { MetricGroups.Regression, MetricGroups.General },
-            MetricType.SpearmanCorrelation => new[] { MetricGroups.Regression, MetricGroups.General },
-            MetricType.KendallTau => new[] { MetricGroups.Regression, MetricGroups.General },
+            MetricType.PearsonCorrelation => new[] { MetricGroups.Regression, MetricGroups.TimeSeries, MetricGroups.General },
+            MetricType.SpearmanCorrelation => new[] { MetricGroups.Regression, MetricGroups.TimeSeries, MetricGroups.General },
+            MetricType.KendallTau => new[] { MetricGroups.Regression, MetricGroups.TimeSeries, MetricGroups.General },
             MetricType.CosineSimilarity => new[] { MetricGroups.General },
             MetricType.JaccardSimilarity => new[] { MetricGroups.General, MetricGroups.Clustering },
 
@@ -283,8 +288,6 @@ public static class ModelTypeHelper
 
             // Advanced statistical metrics
             MetricType.Likelihood => new[] { MetricGroups.General },
-            MetricType.LogLikelihood => new[] { MetricGroups.General },
-            MetricType.KLDivergence => new[] { MetricGroups.General },
             MetricType.BhattacharyyaDistance => new[] { MetricGroups.General },
             MetricType.ConditionNumber => new[] { MetricGroups.General },
             MetricType.LogPointwisePredictiveDensity => new[] { MetricGroups.General },
@@ -292,6 +295,20 @@ public static class ModelTypeHelper
             MetricType.MarginalLikelihood => new[] { MetricGroups.General },
             MetricType.ReferenceModelMarginalLikelihood => new[] { MetricGroups.General },
             MetricType.EffectiveNumberOfParameters => new[] { MetricGroups.General },
+
+            // Model structure metrics
+            MetricType.CorrelationMatrix => new[] { MetricGroups.General },
+            MetricType.CovarianceMatrix => new[] { MetricGroups.General },
+            MetricType.VIF => new[] { MetricGroups.General },
+
+            // Distribution metrics
+            MetricType.BestDistributionFit => new[] { MetricGroups.General },
+            MetricType.BestCorrelationType => new[] { MetricGroups.General },
+
+            // Cross-validation metrics
+            MetricType.LeaveOneOutPredictiveDensities => new[] { MetricGroups.General },
+            MetricType.PosteriorPredictiveSamples => new[] { MetricGroups.General },
+            MetricType.LearningCurve => new[] { MetricGroups.General },
 
             // Default case for any metrics not explicitly categorized
             _ => new[] { MetricGroups.General }

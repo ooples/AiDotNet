@@ -6,37 +6,12 @@
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [Serializable]
-public class ErrorStats<T>
+public class ErrorStats<T> : StatisticsBase<T>
 {
-    /// <summary>
-    /// Provides mathematical operations for the generic type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// The type of model being evaluated.
-    /// </summary>
-    public ModelType ModelType { get; private set; }
-
     /// <summary>
     /// Number of features or parameters in the model.
     /// </summary>
     private readonly int _numberOfParameters;
-
-    /// <summary>
-    /// Dictionary to store calculated metrics.
-    /// </summary>
-    private readonly Dictionary<MetricType, T> _metrics = new();
-
-    /// <summary>
-    /// Set of metrics that have been calculated.
-    /// </summary>
-    private readonly HashSet<MetricType> _calculatedMetrics = new();
-
-    /// <summary>
-    /// Set of metrics valid for this model type.
-    /// </summary>
-    private readonly HashSet<MetricType> _validMetrics = new();
 
     /// <summary>
     /// List of individual prediction errors (residuals).
@@ -292,17 +267,17 @@ public class ErrorStats<T>
     /// and the type of model you're evaluating. It then calculates only the error metrics
     /// that are appropriate for that type of model.
     /// </remarks>
-    internal ErrorStats(ErrorStatsInputs<T> inputs, ModelType modelType)
+    internal ErrorStats(ErrorStatsInputs<T> inputs, ModelType modelType) : base(modelType)
     {
         if (inputs == null)
             throw new ArgumentNullException(nameof(inputs));
 
-        _numOps = MathHelper.GetNumericOperations<T>();
-        ModelType = modelType;
-        _numberOfParameters = inputs.FeatureCount;
+        if (modelType != ModelType.None)
+        {
+            DetermineValidMetrics();
+        }
 
-        // Determine which metrics are valid for this model type
-        DetermineValidMetrics();
+        _numberOfParameters = inputs.FeatureCount;
 
         // Calculate all valid metrics
         if (inputs.Actual != null && inputs.Predicted != null &&
@@ -321,17 +296,17 @@ public class ErrorStats<T>
     /// <param name="cancellationToken">Optional cancellation token.</param>
     internal ErrorStats(ErrorStatsInputs<T> inputs, ModelType modelType,
                        IProgress<double>? progress = null,
-                       CancellationToken cancellationToken = default)
+                       CancellationToken cancellationToken = default) : base(modelType)
     {
         if (inputs == null)
             throw new ArgumentNullException(nameof(inputs));
 
-        _numOps = MathHelper.GetNumericOperations<T>();
-        ModelType = modelType;
-        _numberOfParameters = inputs.FeatureCount;
+        if (modelType != ModelType.None)
+        {
+            DetermineValidMetrics();
+        }
 
-        // Determine which metrics are valid for this model type
-        DetermineValidMetrics();
+        _numberOfParameters = inputs.FeatureCount;
 
         // Calculate all valid metrics
         if (inputs.Actual != null && inputs.Predicted != null &&
@@ -352,7 +327,7 @@ public class ErrorStats<T>
     /// for the specified model type are set to zero. It's useful when you need a placeholder
     /// or default instance, or when you want to compare against a baseline of "no errors."
     /// </remarks>
-    public static ErrorStats<T> Empty(ModelType modelType)
+    public static ErrorStats<T> Empty(ModelType modelType = ModelType.None)
     {
         // Create properly initialized empty inputs
         var emptyInputs = new ErrorStatsInputs<T>
@@ -370,23 +345,28 @@ public class ErrorStats<T>
     #region Core Calculation Methods
 
     /// <summary>
-    /// Determines which metrics are valid for the current model type.
+    /// Determines which metrics are valid for this statistics provider.
     /// </summary>
-    private void DetermineValidMetrics()
+    protected override void DetermineValidMetrics()
     {
-        // Get all possible metric types
-        var allMetricTypes = Enum.GetValues(typeof(MetricType))
-                                .Cast<MetricType>()
-                                .Where(mt => ErrorStats<T>.IsErrorStatisticMetric(mt));
+        _validMetrics.Clear();
+        var cache = MetricValidationCache.Instance;
+        var modelMetrics = cache.GetValidMetrics(ModelType, IsErrorStatisticMetric);
 
-        // Check each metric type for validity with current model type
-        foreach (var metricType in allMetricTypes)
+        foreach (var metric in modelMetrics)
         {
-            if (ModelTypeHelper.IsValidMetric(ModelType, metricType))
-            {
-                _validMetrics.Add(metricType);
-            }
+            _validMetrics.Add(metric);
         }
+    }
+
+    /// <summary>
+    /// Determines if a metric type is a provider-specific statistic metric.
+    /// </summary>
+    /// <param name="metricType">The metric type to check.</param>
+    /// <returns>True if the metric is an error statistic; otherwise, false.</returns>
+    protected virtual bool IsProviderStatisticMetric(MetricType metricType)
+    {
+        return IsErrorStatisticMetric(metricType);
     }
 
     /// <summary>
@@ -449,7 +429,7 @@ public class ErrorStats<T>
             }
 
             // Calculate residuals for all model types
-            ErrorList = [..StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
+            ErrorList = [.. StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
 
             // Check for cancellation
             cancellationToken.ThrowIfCancellationRequested();
@@ -706,34 +686,6 @@ public class ErrorStats<T>
     #region Public API Methods
 
     /// <summary>
-    /// Gets the value of a specific metric.
-    /// </summary>
-    /// <param name="metricType">The type of metric to retrieve.</param>
-    /// <returns>The value of the requested metric.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the requested metric is not valid for the current model type.</exception>
-    /// <remarks>
-    /// For Beginners:
-    /// This method is like a vending machine for error metrics.
-    /// 
-    /// You tell it which error metric you want (using the MetricType), and it gives you the value.
-    /// For example:
-    /// - If you ask for MetricType.MAE, it gives you the Mean Absolute Error
-    /// - If you ask for MetricType.RMSE, it gives you the Root Mean Squared Error
-    /// 
-    /// This is useful when you want to work with different error metrics in a flexible way,
-    /// especially if you don't know in advance which metric you'll need.
-    /// </remarks>
-    public T GetMetric(MetricType metricType)
-    {
-        if (!IsValidMetric(metricType))
-        {
-            throw new InvalidOperationException($"Metric {metricType} is not valid for model type {ModelType}.");
-        }
-
-        return _metrics.TryGetValue(metricType, out var value) ? value : _numOps.Zero;
-    }
-
-    /// <summary>
     /// Tries to get the value of a specific metric.
     /// </summary>
     /// <param name="metricType">The type of metric to retrieve.</param>
@@ -762,71 +714,6 @@ public class ErrorStats<T>
 
         value = Convert.ToDouble(_numOps.Zero);
         return false;
-    }
-
-    /// <summary>
-    /// Checks if a specific metric is valid for the current model type.
-    /// </summary>
-    /// <param name="metricType">The type of metric to check.</param>
-    /// <returns>True if the metric is valid for the current model type; otherwise, false.</returns>
-    /// <remarks>
-    /// For Beginners:
-    /// This method allows you to check if a particular metric is valid for your model type
-    /// before trying to get its value. It helps prevent errors by letting you know in advance
-    /// whether a metric makes sense for your model.
-    /// </remarks>
-    public bool IsValidMetric(MetricType metricType)
-    {
-        return _validMetrics.Contains(metricType);
-    }
-
-    /// <summary>
-    /// Checks if a specific metric has been calculated.
-    /// </summary>
-    /// <param name="metricType">The type of metric to check.</param>
-    /// <returns>True if the metric has been calculated; otherwise, false.</returns>
-    public bool IsCalculatedMetric(MetricType metricType)
-    {
-        return _calculatedMetrics.Contains(metricType);
-    }
-
-    /// <summary>
-    /// Gets all metric types that are valid for the current model type.
-    /// </summary>
-    /// <returns>An array of valid metric types.</returns>
-    /// <remarks>
-    /// For Beginners:
-    /// This method gives you a list of all metrics that make sense for your model type.
-    /// It's useful when you want to explore which evaluation metrics you could use,
-    /// especially if you're not familiar with all the available options.
-    /// </remarks>
-    public MetricType[] GetValidMetricTypes()
-    {
-        return [.. _validMetrics];
-    }
-
-    /// <summary>
-    /// Gets all metric types that have been calculated.
-    /// </summary>
-    /// <returns>An array of calculated metric types.</returns>
-    public MetricType[] GetCalculatedMetricTypes()
-    {
-        return [.. _calculatedMetrics];
-    }
-
-    /// <summary>
-    /// Gets a dictionary of all calculated metrics.
-    /// </summary>
-    /// <returns>A dictionary mapping metric types to their values.</returns>
-    /// <remarks>
-    /// For Beginners:
-    /// This method gives you all calculated metrics in one go. It's useful when you
-    /// want to work with multiple metrics at once, perhaps to compare them or display
-    /// them in a report.
-    /// </remarks>
-    public Dictionary<MetricType, T> GetAllCalculatedMetrics()
-    {
-        return new Dictionary<MetricType, T>(_metrics);
     }
 
     #endregion
