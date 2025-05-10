@@ -367,11 +367,11 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             inputData.XTrain, [.. selectedFeaturesIndices]);
 
         var XTrainSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
-            inputData.XTrain, selectedFeatures);
+            inputData.XTrain, selectedFeaturesIndices);
         var XValSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
-            inputData.XValidation, selectedFeatures);
+            inputData.XValidation, selectedFeaturesIndices);
         var XTestSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
-            inputData.XTest, selectedFeatures);
+            inputData.XTest, selectedFeaturesIndices);
 
         // Step 5: Create input data with selected features
         var subsetInputData = new OptimizationInputData<T, TInput, TOutput>

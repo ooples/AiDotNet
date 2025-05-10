@@ -251,7 +251,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         DefaultInputCache.CacheDefaultInputData(inputData);
         var optimizationResult = optimizer.Optimize(inputData);
 
-        return new PredictionModelResult<T, TInput, TOutput>(model, optimizationResult, normInfo);
+        return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo);
     }
 
     /// <summary>

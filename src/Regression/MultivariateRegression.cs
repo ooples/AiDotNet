@@ -24,7 +24,7 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MultivariateRegression<T> : RegressionBase<T>
+public class MultivariateRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="MultivariateRegression{T}"/> class with optional custom options and regularization.

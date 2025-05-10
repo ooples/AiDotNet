@@ -21,7 +21,7 @@ public static class PredictionModelResultExtensions
                 [
                     new MatrixJsonConverter<T>(),
                     new VectorJsonConverter<T>(),
-                    new DiagnosticInterfaceConverter()
+                    new InterfaceJsonConverter()
                 ]
             };
 

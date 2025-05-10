@@ -72,6 +72,26 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     private T _constant;
 
     /// <summary>
+    /// Last values of original time series before differencing, used for undifferencing predictions.
+    /// </summary>
+    private Vector<T> _originalLastValues;
+
+    /// <summary>
+    /// Last values of the differenced series, used for initializing predictions.
+    /// </summary>
+    private Vector<T> _lastDiffValues;
+
+    /// <summary>
+    /// Last residuals from the AR process, used for initializing MA component.
+    /// </summary>
+    private Vector<T> _lastResiduals;
+
+    /// <summary>
+    /// Coefficients for exogenous variables in the model.
+    /// </summary>
+    private Vector<T> _exogCoefficients;
+
+    /// <summary>
     /// Creates a new ARIMA model with the specified options.
     /// </summary>
     /// <param name="options">Options for the ARIMA model, including p, d, and q parameters. If null, default options are used.</param>
@@ -88,9 +108,15 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     public ARIMAModel(ARIMAOptions<T>? options = null) : base(options ?? new())
     {
         _arimaOptions = options ?? new();
+        // Ensure LagOrder is at least equal to P for AR components
+        _arimaOptions.LagOrder = Math.Max(_arimaOptions.LagOrder, _arimaOptions.P);
         _constant = NumOps.Zero;
         _arCoefficients = Vector<T>.Empty();
         _maCoefficients = Vector<T>.Empty();
+        _originalLastValues = Vector<T>.Empty(); // Store historical values for undifferencing
+        _lastDiffValues = Vector<T>.Empty();
+        _lastResiduals = Vector<T>.Empty();
+        _exogCoefficients = Vector<T>.Empty();
     }
 
     /// <summary>
@@ -140,24 +166,74 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // Validate model is trained
+        if (_arCoefficients.Length == 0 || _maCoefficients.Length == 0)
+        {
+            throw new InvalidOperationException("Model must be trained before making predictions.");
+        }
+
+        // Validate input
+        if (input.Rows == 0)
+        {
+            return new Vector<T>(0);
+        }
+
         Vector<T> predictions = new(input.Rows);
-        Vector<T> lastObservedValues = new(_arimaOptions.LagOrder);
-        Vector<T> lastErrors = new(_maCoefficients.Length);
+
+        // Initialize with proper historical values from training
+        Vector<T> lastObservedValues = _lastDiffValues != null && _lastDiffValues.Length > 0
+            ? new Vector<T>(_lastDiffValues)
+            : new Vector<T>(_arimaOptions.P);
+
+        Vector<T> lastErrors = _lastResiduals != null && _lastResiduals.Length > 0
+            ? new Vector<T>(_lastResiduals)
+            : new Vector<T>(_arimaOptions.Q);
+
+        // If we don't have stored values and input has data, try to use it
+        if ((_lastDiffValues == null || _lastDiffValues.Length == 0) && input.Columns > 0 && input.Rows > 0)
+        {
+            // Initialize with actual values from input if available (first column is assumed to be the target series)
+            for (int j = 0; j < Math.Min(_arimaOptions.P, input.Rows); j++)
+            {
+                if (j < input.Rows)
+                {
+                    lastObservedValues[j] = input[input.Rows - 1 - j, 0];
+                }
+            }
+        }
+
+        // Initialize lastErrors with zeros if not already set
+        for (int j = 0; j < lastErrors.Length; j++)
+        {
+            if (j >= (_lastResiduals?.Length ?? 0))
+            {
+                lastErrors[j] = NumOps.Zero;
+            }
+        }
 
         for (int i = 0; i < predictions.Length; i++)
         {
             T prediction = _constant;
 
-            // Add AR component
-            for (int j = 0; j < _arCoefficients.Length; j++)
+            // Add AR component - make sure we don't exceed array bounds
+            for (int j = 0; j < Math.Min(_arCoefficients.Length, lastObservedValues.Length); j++)
             {
                 prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[j], lastObservedValues[j]));
             }
 
-            // Add MA component
-            for (int j = 0; j < _maCoefficients.Length; j++)
+            // Add MA component - make sure we don't exceed array bounds
+            for (int j = 0; j < Math.Min(_maCoefficients.Length, lastErrors.Length); j++)
             {
                 prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[j], lastErrors[j]));
+            }
+
+            // Add exogenous variables effect if present (columns after the first one)
+            if (input.Columns > 1 && _exogCoefficients != null && _exogCoefficients.Length > 0)
+            {
+                for (int j = 1; j < input.Columns && (j - 1) < _exogCoefficients.Length; j++)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_exogCoefficients[j - 1], input[i, j]));
+                }
             }
 
             predictions[i] = prediction;
@@ -167,16 +243,60 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
             {
                 lastObservedValues[j] = lastObservedValues[j - 1];
             }
+
             lastObservedValues[0] = prediction;
 
             for (int j = lastErrors.Length - 1; j > 0; j--)
             {
                 lastErrors[j] = lastErrors[j - 1];
             }
-            lastErrors[0] = NumOps.Zero; // Assume zero error for future predictions
+
+            // For forecasting we assume zero error
+            lastErrors[0] = NumOps.Zero;
+        }
+
+        // Undifference the predictions if needed
+        if (_arimaOptions.D > 0 && _originalLastValues != null && _originalLastValues.Length > 0)
+        {
+            predictions = UndifferenceSeries(predictions, _originalLastValues, _arimaOptions.D);
         }
 
         return predictions;
+    }
+
+    /// <summary>
+    /// Helper method to undifference a series based on original values.
+    /// </summary>
+    private Vector<T> UndifferenceSeries(Vector<T> diffSeries, Vector<T> originalLastValues, int d)
+    {
+        if (d <= 0 || diffSeries.Length == 0 || originalLastValues.Length < d)
+        {
+            return diffSeries;
+        }
+
+        Vector<T> result = new Vector<T>(diffSeries.Length);
+
+        // For first-order differencing
+        if (d == 1)
+        {
+            T lastValue = originalLastValues[0];
+            for (int i = 0; i < diffSeries.Length; i++)
+            {
+                result[i] = NumOps.Add(lastValue, diffSeries[i]);
+                lastValue = result[i];
+            }
+        }
+        // For higher-order differencing, apply undifferencing recursively
+        else
+        {
+            // First undifference to d-1 order
+            Vector<T> undiffD1 = UndifferenceSeries(diffSeries, new Vector<T>(originalLastValues.Skip(1)), d - 1);
+            // Then apply first-order undifferencing
+            Vector<T> lastValues = new Vector<T>(1) { [0] = originalLastValues[0] };
+            result = UndifferenceSeries(undiffD1, lastValues, 1);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -256,6 +376,16 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         {
             writer.Write(Convert.ToDouble(_maCoefficients[i]));
         }
+
+        // Write exogenous coefficients
+        writer.Write(_exogCoefficients != null ? _exogCoefficients.Length : 0);
+        if (_exogCoefficients != null)
+        {
+            for (int i = 0; i < _exogCoefficients.Length; i++)
+            {
+                writer.Write(Convert.ToDouble(_exogCoefficients[i]));
+            }
+        }
     }
 
     /// <summary>
@@ -305,6 +435,14 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         {
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+
+        // Read exogenous coefficients
+        int exogLength = reader.ReadInt32();
+        _exogCoefficients = new Vector<T>(exogLength);
+        for (int i = 0; i < exogLength; i++)
+        {
+            _exogCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <summary>
@@ -329,19 +467,145 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         int p = _arimaOptions.P; // AR order
         int d = _arimaOptions.D; // Differencing order
         int q = _arimaOptions.Q; // MA order
+        int numExogVars = x.Columns > 1 ? x.Columns - 1 : 0; // Assuming first column is time and rest are exogenous
+
+        // Store last values of original series for later undifferencing
+        _originalLastValues = new Vector<T>(d);
+        for (int i = 0; i < d && i < y.Length; i++)
+        {
+            _originalLastValues[i] = y[y.Length - 1 - i];
+        }
 
         // Step 1: Difference the series to make it stationary
         Vector<T> diffY = TimeSeriesHelper<T>.DifferenceSeries(y, d);
 
-        // Step 2: Estimate AR coefficients using least squares or Yule-Walker equations
+        // Step 2: If we have exogenous variables, prepare them
+        Matrix<T> exogMatrix = Matrix<T>.Empty();
+        if (numExogVars > 0)
+        {
+            // Extract exogenous variables (columns after the first one)
+            exogMatrix = new Matrix<T>(x.Rows, numExogVars);
+            for (int i = 0; i < x.Rows; i++)
+            {
+                for (int j = 0; j < numExogVars; j++)
+                {
+                    exogMatrix[i, j] = x[i, j + 1]; // Skip the first column (time)
+                }
+            }
+
+            // Difference exogenous variables if differencing is applied to target
+            if (d > 0)
+            {
+                Matrix<T> diffExog = new Matrix<T>(diffY.Length, numExogVars);
+                for (int j = 0; j < numExogVars; j++)
+                {
+                    Vector<T> column = new Vector<T>(x.Rows);
+                    for (int i = 0; i < x.Rows; i++)
+                    {
+                        column[i] = x[i, j + 1];
+                    }
+
+                    Vector<T> diffColumn = TimeSeriesHelper<T>.DifferenceSeries(column, d);
+                    for (int i = 0; i < diffY.Length; i++)
+                    {
+                        diffExog[i, j] = diffColumn[i];
+                    }
+                }
+
+                exogMatrix = diffExog;
+            }
+        }
+
+        // Step 3: Estimate AR coefficients first
         _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(diffY, p, MatrixDecompositionType.Qr);
 
-        // Step 3: Calculate AR residuals and use them to estimate MA coefficients
-        Vector<T> arResiduals = TimeSeriesHelper<T>.CalculateARResiduals(diffY, _arCoefficients);
-        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(arResiduals, q);
+        // Step 4: Now estimate exogenous variable coefficients
+        if (numExogVars > 0)
+        {
+            // Calculate AR predictions
+            Vector<T> arPredictions = new Vector<T>(diffY.Length - p);
+            for (int i = p; i < diffY.Length; i++)
+            {
+                T predicted = NumOps.Zero;
+                for (int j = 0; j < p; j++)
+                {
+                    predicted = NumOps.Add(predicted, NumOps.Multiply(_arCoefficients[j], diffY[i - j - 1]));
+                }
+                arPredictions[i - p] = predicted;
+            }
 
-        // Step 4: Estimate constant term for the model
+            // Calculate residuals (target - AR predictions)
+            Vector<T> arResiduals = new Vector<T>(diffY.Length - p);
+            for (int i = 0; i < arResiduals.Length; i++)
+            {
+                arResiduals[i] = NumOps.Subtract(diffY[i + p], arPredictions[i]);
+            }
+
+            // Create exogenous design matrix for the same period
+            Matrix<T> exogDesign = new Matrix<T>(diffY.Length - p, numExogVars);
+            for (int i = 0; i < exogDesign.Rows; i++)
+            {
+                for (int j = 0; j < numExogVars; j++)
+                {
+                    exogDesign[i, j] = exogMatrix[i + p, j];
+                }
+            }
+
+            // Estimate exogenous coefficients using linear regression on residuals
+            _exogCoefficients = MatrixSolutionHelper.SolveLinearSystem<T>(exogDesign, arResiduals, MatrixDecompositionType.Qr);
+        }
+        else
+        {
+            _exogCoefficients = new Vector<T>(0);
+        }
+
+        // Step 5: Calculate complete residuals (including exog effects) for MA
+        Vector<T> fullResiduals;
+        if (numExogVars > 0 && _exogCoefficients.Length > 0)
+        {
+            fullResiduals = new Vector<T>(diffY.Length - p);
+            for (int i = p; i < diffY.Length; i++)
+            {
+                T predicted = NumOps.Zero;
+
+                // Add AR component
+                for (int j = 0; j < p; j++)
+                {
+                    predicted = NumOps.Add(predicted, NumOps.Multiply(_arCoefficients[j], diffY[i - j - 1]));
+                }
+
+                // Add exogenous component
+                for (int j = 0; j < numExogVars; j++)
+                {
+                    predicted = NumOps.Add(predicted, NumOps.Multiply(_exogCoefficients[j], exogMatrix[i, j]));
+                }
+
+                fullResiduals[i - p] = NumOps.Subtract(diffY[i], predicted);
+            }
+        }
+        else
+        {
+            fullResiduals = TimeSeriesHelper<T>.CalculateARResiduals(diffY, _arCoefficients);
+        }
+
+        // Step 6: Estimate MA coefficients using the full residuals
+        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(fullResiduals, q);
+
+        // Step 7: Estimate constant term
         _constant = EstimateConstant(diffY, _arCoefficients, _maCoefficients);
+
+        // Store last values for initialization in Predict
+        _lastDiffValues = new Vector<T>(p);
+        for (int i = 0; i < p && i < diffY.Length; i++)
+        {
+            _lastDiffValues[i] = diffY[diffY.Length - 1 - i];
+        }
+
+        _lastResiduals = new Vector<T>(q);
+        for (int i = 0; i < q && i < fullResiduals.Length; i++)
+        {
+            _lastResiduals[i] = fullResiduals[fullResiduals.Length - 1 - i];
+        }
     }
 
     /// <summary>

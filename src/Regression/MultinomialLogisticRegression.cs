@@ -24,7 +24,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MultinomialLogisticRegression<T> : RegressionBase<T>
+public class MultinomialLogisticRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// The configuration options for the multinomial logistic regression model.

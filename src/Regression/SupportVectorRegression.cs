@@ -30,7 +30,7 @@ namespace AiDotNet.Regression;
 /// if they're unusually priced for their features.
 /// </para>
 /// </remarks>
-public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
+public class SupportVectorRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the Support Vector Regression model.

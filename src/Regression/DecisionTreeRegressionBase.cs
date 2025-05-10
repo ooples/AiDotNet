@@ -25,7 +25,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
+public abstract class DecisionTreeRegressionModelBase<T> : ITreeBasedRegression<T>
 {
     /// <summary>
     /// Provides operations for performing numeric calculations appropriate for the type T.
@@ -171,7 +171,7 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     public virtual int NumberOfTrees => 1;
     
     /// <summary>
-    /// Initializes a new instance of the <see cref="DecisionTreeRegressionBase{T}"/> class.
+    /// Initializes a new instance of the <see cref="DecisionTreeRegressionModelBase{T}"/> class.
     /// </summary>
     /// <param name="options">Optional configuration options for the decision tree algorithm.</param>
     /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
@@ -193,7 +193,7 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// of decision tree models.
     /// </para>
     /// </remarks>
-    protected DecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization)
+    protected DecisionTreeRegressionModelBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization)
     {
         Options = options ?? new();
         NumOps = MathHelper.GetNumericOperations<T>();
@@ -563,13 +563,13 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     
         // Reconstruct the tree from the parameter vector
         int currentIndex = 1;
-        ((DecisionTreeRegressionBase<T>)newModel).Root = DeserializeNodeFromVector(parameters, ref currentIndex);
+        ((DecisionTreeRegressionModelBase<T>)newModel).Root = DeserializeNodeFromVector(parameters, ref currentIndex);
     
         // Assume the feature importances are already calculated and stored in the parameters
         // or recalculate them based on the reconstructed tree
         if (FeatureImportances.Length > 0)
         {
-            ((DecisionTreeRegressionBase<T>)newModel).FeatureImportances = new Vector<T>(FeatureImportances);
+            ((DecisionTreeRegressionModelBase<T>)newModel).FeatureImportances = new Vector<T>(FeatureImportances);
         }
     
         return newModel;
@@ -714,13 +714,13 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
         // Deep copy the tree structure
         if (Root != null)
         {
-            ((DecisionTreeRegressionBase<T>)clone).Root = DeepCloneNode(Root);
+            ((DecisionTreeRegressionModelBase<T>)clone).Root = DeepCloneNode(Root);
         }
     
         // Copy feature importances
         if (FeatureImportances.Length > 0)
         {
-            ((DecisionTreeRegressionBase<T>)clone).FeatureImportances = new Vector<T>(FeatureImportances);
+            ((DecisionTreeRegressionModelBase<T>)clone).FeatureImportances = new Vector<T>(FeatureImportances);
         }
     
         return clone;

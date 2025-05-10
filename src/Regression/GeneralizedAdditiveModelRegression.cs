@@ -32,7 +32,7 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GeneralizedAdditiveModel<T> : RegressionBase<T>
+public class GeneralizedAdditiveModel<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the Generalized Additive Model.

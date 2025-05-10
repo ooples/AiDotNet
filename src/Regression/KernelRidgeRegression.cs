@@ -32,7 +32,7 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
+public class KernelRidgeRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// The Gram matrix (kernel matrix) that represents pairwise similarities between all training points.

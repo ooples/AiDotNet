@@ -1,4 +1,4 @@
-namespace AiDotNet.TimeSeries;
+﻿namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Represents a Prophet model for time series forecasting.
@@ -238,29 +238,48 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     private void InitializeSeasonalComponents(Matrix<T> x, Vector<T> y)
     {
         int n = y.Length;
-        int index = 0;
+        int totalComponents = 0;
 
+        // Calculate total number of components needed
         foreach (int period in _prophetOptions.SeasonalPeriods)
         {
-            int numHarmonics = Math.Min(period / 2, 10); // Use up to 10 harmonics or period/2, whichever is smaller
+            int numHarmonics = Math.Min(period / 2, 10);
+            totalComponents += numHarmonics * 2; // Each harmonic has sin and cos
+        }
+
+        // Initialize the seasonal components vector
+        _seasonalComponents = new Vector<T>(totalComponents);
+
+        int index = 0;
+
+        // For each seasonal period
+        foreach (int period in _prophetOptions.SeasonalPeriods)
+        {
+            int numHarmonics = Math.Min(period / 2, 10);
 
             for (int h = 1; h <= numHarmonics; h++)
             {
+                // Create matrices for this harmonic
                 var sinComponent = new Vector<T>(n);
                 var cosComponent = new Vector<T>(n);
 
+                // Calculate sin and cos for each time point
                 for (int i = 0; i < n; i++)
                 {
-                    T t = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(period));
+                    // Get time value from first column
+                    T timeValue = x[i, 0];
+                    T t = NumOps.Divide(timeValue, NumOps.FromDouble(period));
                     T angle = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * h), t);
+
                     sinComponent[i] = MathHelper.Sin(angle);
                     cosComponent[i] = MathHelper.Cos(angle);
                 }
 
-                // Perform simple linear regression to get initial estimates
+                // Perform simple linear regression to get initial coefficients
                 T sinCoefficient = SimpleLinearRegression(sinComponent, y);
                 T cosCoefficient = SimpleLinearRegression(cosComponent, y);
 
+                // Store the coefficients
                 _seasonalComponents[index++] = sinCoefficient;
                 _seasonalComponents[index++] = cosCoefficient;
             }
@@ -431,124 +450,294 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     private void OptimizeParameters(Matrix<T> x, Vector<T> y)
     {
-        int n = x.Rows;
-        int p = x.Columns;
+        _trend = y.Mean();
 
-        // Initialize parameters
-        var initialParameters = new Vector<T>(p + 2); // +2 for trend and changepoint
+        // Calculate total parameter count
+        int totalParams = 1 + _seasonalComponents.Length + _holidayComponents.Length + 1 + _regressors.Length;
 
-        // Initialize regressors with small random values if they're all zero
-        bool allZero = true;
-        for (int i = 0; i < p; i++)
+        // Initialize parameters vector with current values
+        var initialParameters = new Vector<T>(totalParams);
+        int paramIndex = 0;
+        initialParameters[paramIndex++] = _trend;
+
+        // Add seasonal component parameters
+        for (int i = 0; i < _seasonalComponents.Length; i++)
         {
-            initialParameters[i] = _regressors[i];
-            if (!NumOps.Equals(_regressors[i], NumOps.Zero))
-            {
-                allZero = false;
-            }
+            initialParameters[paramIndex++] = _seasonalComponents[i];
         }
 
-        // If all regressor values are zero, initialize with small random values
-        if (allZero && p > 0)
+        // Add holiday component parameters
+        for (int i = 0; i < _holidayComponents.Length; i++)
         {
-            for (int i = 0; i < p; i++)
-            {
-                // Generate small random values between -0.1 and 0.1
-                double randomValue = (Random.NextDouble() * 0.2) - 0.1;
-                initialParameters[i] = NumOps.FromDouble(randomValue);
-            }
+            initialParameters[paramIndex++] = _holidayComponents[i];
         }
 
-        // Set trend and changepoint parameters with reasonable default values if zero
-        T trendValue = NumOps.FromDouble(_prophetOptions.InitialTrendValue);
-        if (NumOps.Equals(trendValue, NumOps.Zero))
-        {
-            // Use a small positive value for trend if zero
-            trendValue = NumOps.FromDouble(0.01);
-        }
-        initialParameters[p] = trendValue;
+        // Add changepoint parameter
+        initialParameters[paramIndex++] = _changepoint;
 
-        T changepointValue = NumOps.FromDouble(_prophetOptions.InitialChangepointValue);
-        if (NumOps.Equals(changepointValue, NumOps.Zero))
+        // Add regressor parameters
+        for (int i = 0; i < _regressors.Length; i++)
         {
-            // Use a small value for changepoint if zero
-            changepointValue = NumOps.FromDouble(0.05);
+            initialParameters[paramIndex++] = _regressors[i];
         }
-        initialParameters[p + 1] = changepointValue;
 
-        // Get active feature indices if available from the model
+        // Initialize random values for zero parameters to avoid optimization issues
+        InitializeZeroParameters(initialParameters);
+
+        // Get active feature indices if available
         IEnumerable<int>? activeFeatures = null;
         if (this is IFeatureAware featureAwareModel)
         {
             activeFeatures = featureAwareModel.GetActiveFeatureIndices();
         }
 
-        // Define a custom prediction function based on current model state
+        // Define a custom prediction function that mirrors the actual full prediction logic
         Func<Matrix<T>, Vector<T>, Vector<T>> customPredict = (input, parameters) =>
         {
             // Create output vector with appropriate size (one prediction per row)
             var result = new Vector<T>(input.Rows);
+            T trendParam = parameters[0];
 
-            // Split parameters into their components
-            T trendParam = NumOps.Zero;
-            T changepointParam = NumOps.Zero;
-
-            // Extract trend and changepoint parameters
-            if (parameters.Length > p)
-                trendParam = parameters[p];
-            if (parameters.Length > p + 1)
-                changepointParam = parameters[p + 1];
-
-            // Apply parameters to generate predictions
+            // For each input row
             for (int i = 0; i < result.Length; i++)
             {
-                // Start with trend component
-                T prediction = trendParam;
-
-                // Add regressor effects (if any)
                 var row = input.GetRow(i);
-                for (int j = 0; j < Math.Min(row.Length, p); j++)
+                T timeValue = row[0]; // Time is first column
+                result[i] = trendParam;
+
+                // Add seasonal components
+                int pIdx = 1; // Start index after trend
+
+                foreach (var period in _prophetOptions.SeasonalPeriods)
                 {
-                    if (j < parameters.Length)
-                        prediction = NumOps.Add(prediction, NumOps.Multiply(row[j], parameters[j]));
+                    int numHarmonics = Math.Min(period / 2, 10);
+                    for (int h = 1; h <= numHarmonics; h++)
+                    {
+                        T t = NumOps.Divide(timeValue, NumOps.FromDouble(period));
+                        T angle = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * h), t);
+                        T sinVal = MathHelper.Sin(angle);
+                        T cosVal = MathHelper.Cos(angle);
+
+                        if (pIdx < parameters.Length && pIdx + 1 < parameters.Length)
+                        {
+                            T sinCoef = parameters[pIdx++];
+                            T cosCoef = parameters[pIdx++];
+
+                            result[i] = NumOps.Add(result[i], NumOps.Multiply(sinCoef, sinVal));
+                            result[i] = NumOps.Add(result[i], NumOps.Multiply(cosCoef, cosVal));
+                        }
+                    }
                 }
 
-                // Apply a simple changepoint effect based on position in sequence
-                // (In a real Prophet model, this would be more complex)
-                T positionEffect = NumOps.Multiply(
-                    changepointParam,
-                    NumOps.FromDouble((double)i / input.Rows)
-                );
-                prediction = NumOps.Add(prediction, positionEffect);
+                // Skip holiday components for simplicity
+                pIdx += _holidayComponents.Length;
 
-                result[i] = prediction;
+                // Add changepoint effect if there are any
+                if (pIdx < parameters.Length)
+                {
+                    T changepointParam = parameters[pIdx++];
+
+                    foreach (var cp in _prophetOptions.Changepoints)
+                    {
+                        if (NumOps.GreaterThan(timeValue, cp))
+                        {
+                            T delta = NumOps.Subtract(timeValue, cp);
+                            result[i] = NumOps.Add(result[i], NumOps.Multiply(changepointParam, delta));
+                        }
+                    }
+                }
+
+                // Skip regressor components for simplicity
             }
 
             return result;
         };
 
-        // Create a parameter placeholder model that implements IFullModel
+        // Create a parameter placeholder model
         var placeholderModel = new ParameterPlaceholderModel<T, Matrix<T>, Vector<T>>(
             initialParameters, null, activeFeatures, customPredict, this);
 
-        // Use the user-defined optimizer if provided, otherwise use LFGSOptimizer as default
+        // Use user-defined optimizer or default
         var optimizer = _prophetOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(placeholderModel);
 
-        // Get the cached input data (whether we just created it or it was already there)
+        // Get the cached input data
         var optimizationData = DefaultInputCache.GetDefaultInputData<T, Matrix<T>, Vector<T>>();
 
-        // Use the cached data for optimization
+        // Perform optimization
         var optimizationResult = optimizer.Optimize(optimizationData);
 
-        // Update model parameters with optimized values
-        Vector<T> optimizedParameters = optimizationResult.BestSolution?.GetParameters() ?? Vector<T>.Empty();
-        for (int i = 0; i < p; i++)
+        // Check if optimization succeeded
+        if (optimizationResult.BestSolution == null || optimizationResult.BestSolution.GetParameters() == null)
         {
-            _regressors[i] = optimizedParameters[i];
+            throw new InvalidOperationException("Optimization failed: no solution found");
         }
 
-        _trend = optimizedParameters[p];
-        _changepoint = optimizedParameters[p + 1];
+        // Update ALL model parameters with optimized values
+        Vector<T> optimizedParameters = optimizationResult.BestSolution.GetParameters();
+
+        // Check if we have enough parameters
+        if (optimizedParameters.Length < totalParams)
+        {
+            throw new InvalidOperationException($"Optimization returned too few parameters: {optimizedParameters.Length} (expected {totalParams})");
+        }
+
+        // Update parameters in the model
+        paramIndex = 0;
+
+        _trend = optimizedParameters[paramIndex++];
+
+        // If trend is zero or negative, restore initial trend
+        if (NumOps.LessThanOrEquals(_trend, NumOps.Zero))
+        {
+            _trend = y.Mean(); // Fallback to mean
+        }
+
+        // Update seasonal components
+        for (int i = 0; i < _seasonalComponents.Length; i++)
+        {
+            _seasonalComponents[i] = optimizedParameters[paramIndex++];
+        }
+
+        // Update holiday components
+        for (int i = 0; i < _holidayComponents.Length; i++)
+        {
+            _holidayComponents[i] = optimizedParameters[paramIndex++];
+        }
+
+        // Update changepoint
+        _changepoint = optimizedParameters[paramIndex++];
+
+        // Update regressors
+        for (int i = 0; i < _regressors.Length; i++)
+        {
+            _regressors[i] = optimizedParameters[paramIndex++];
+        }
+
+        // Validate that parameters have been updated
+        ValidateModelParameters();
+    }
+
+    /// <summary>
+    /// Initialize any zero parameters with small random values to improve optimization.
+    /// </summary>
+    private void InitializeZeroParameters(Vector<T> parameters)
+    {
+        Random random = new Random(42); // Fixed seed for reproducibility
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            if (NumOps.Equals(parameters[i], NumOps.Zero))
+            {
+                // Generate small random value between -0.1 and 0.1
+                double randomValue = (random.NextDouble() * 0.2) - 0.1;
+                parameters[i] = NumOps.FromDouble(randomValue);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Extract time features (sine and cosine terms) for each seasonal period.
+    /// </summary>
+    private Dictionary<int, (T Sin, T Cos)[]> ExtractTimeFeatures(T timeValue)
+    {
+        var result = new Dictionary<int, (T Sin, T Cos)[]>();
+
+        foreach (int period in _prophetOptions.SeasonalPeriods)
+        {
+            int numHarmonics = Math.Min(period / 2, 10);
+            var harmonics = new (T Sin, T Cos)[numHarmonics];
+
+            T t = NumOps.Divide(timeValue, NumOps.FromDouble(period));
+
+            for (int h = 1; h <= numHarmonics; h++)
+            {
+                T angle = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * h), t);
+                harmonics[h - 1] = (MathHelper.Sin(angle), MathHelper.Cos(angle));
+            }
+
+            result[period] = harmonics;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Convert a numeric timestamp to a DateTime object.
+    /// </summary>
+    private DateTime DateTimeFromTimestamp(T timestamp)
+    {
+        try
+        {
+            // Depends on how your timestamps are stored
+            // This assumes OADate format
+            return DateTime.FromOADate(Convert.ToDouble(timestamp));
+        }
+        catch
+        {
+            // Fallback - current date
+            return DateTime.Today;
+        }
+    }
+
+    /// <summary>
+    /// Calculate the effect of all changepoints for a given time value.
+    /// </summary>
+    private T CalculateChangepointEffect(T timeValue, T changepointParam)
+    {
+        T effect = NumOps.Zero;
+
+        foreach (var cp in _prophetOptions.Changepoints)
+        {
+            if (NumOps.GreaterThan(timeValue, cp))
+            {
+                T delta = NumOps.Subtract(timeValue, cp);
+                effect = NumOps.Add(effect, NumOps.Multiply(changepointParam, delta));
+            }
+        }
+
+        return effect;
+    }
+
+    /// <summary>
+    /// Validate that model parameters have been properly updated.
+    /// </summary>
+    private void ValidateModelParameters()
+    {
+        bool allZero = true;
+
+        // Check trend
+        if (!NumOps.Equals(_trend, NumOps.Zero))
+            allZero = false;
+
+        // Check seasonal components
+        for (int i = 0; i < _seasonalComponents.Length && allZero; i++)
+        {
+            if (!NumOps.Equals(_seasonalComponents[i], NumOps.Zero))
+                allZero = false;
+        }
+
+        // Check holiday components
+        for (int i = 0; i < _holidayComponents.Length && allZero; i++)
+        {
+            if (!NumOps.Equals(_holidayComponents[i], NumOps.Zero))
+                allZero = false;
+        }
+
+        // Check changepoint
+        if (!NumOps.Equals(_changepoint, NumOps.Zero))
+            allZero = false;
+
+        // Check regressors
+        for (int i = 0; i < _regressors.Length && allZero; i++)
+        {
+            if (!NumOps.Equals(_regressors[i], NumOps.Zero))
+                allZero = false;
+        }
+
+        if (allZero)
+        {
+            throw new InvalidOperationException("Optimization failed: all model parameters are zero");
+        }
     }
 
     /// <summary>
@@ -566,12 +755,53 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // Validate input
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input), "Input matrix cannot be null");
+        }
+
+        if (input.Rows == 0)
+        {
+            return new Vector<T>(0); // Return empty vector for empty input
+        }
+
+        // Check if model has been trained
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("Model must be trained before making predictions");
+        }
+
+        // Validate input dimensions
+        int expectedMinColumns = 1; // At minimum we need time
+
+        // If we have regressors, we need columns for them too
+        if (_prophetOptions.RegressorCount > 0)
+        {
+            expectedMinColumns += _prophetOptions.RegressorCount;
+        }
+
+        if (input.Columns < expectedMinColumns)
+        {
+            throw new ArgumentException(
+                $"Input matrix has too few columns ({input.Columns}). Expected at least {expectedMinColumns}.",
+                nameof(input));
+        }
+
+        // Create output vector
         int n = input.Rows;
         Vector<T> predictions = new Vector<T>(n);
 
+        // Make prediction for each row
         for (int i = 0; i < n; i++)
         {
-            predictions[i] = PredictSingle(input.GetRow(i));
+            predictions[i] = PredictSingleInternal(input.GetRow(i));
+
+            // Apply transformation if needed
+            if (_prophetOptions.ApplyTransformation)
+            {
+                predictions[i] = _prophetOptions.TransformPrediction(predictions[i]);
+            }
         }
 
         return predictions;
@@ -594,11 +824,28 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     private T PredictSingleInternal(Vector<T> x)
     {
+        if (x == null || x.Length == 0)
+        {
+            throw new ArgumentException("Input vector cannot be null or empty", nameof(x));
+        }
+
         T prediction = _trend;
-        prediction = NumOps.Add(prediction, GetSeasonalComponent(x));
-        prediction = NumOps.Add(prediction, GetHolidayComponent(x));
-        prediction = NumOps.Add(prediction, GetChangepointEffect(x));
-        prediction = NumOps.Add(prediction, GetRegressorEffect(x));
+
+        // Add seasonal component
+        T seasonalComponent = GetSeasonalComponent(x);
+        prediction = NumOps.Add(prediction, seasonalComponent);
+
+        // Add holiday component
+        T holidayComponent = GetHolidayComponent(x);
+        prediction = NumOps.Add(prediction, holidayComponent);
+
+        // Add changepoint effect
+        T changepointEffect = GetChangepointEffect(x);
+        prediction = NumOps.Add(prediction, changepointEffect);
+
+        // Add regressor effect
+        T regressorEffect = GetRegressorEffect(x);
+        prediction = NumOps.Add(prediction, regressorEffect);
 
         return prediction;
     }
@@ -620,23 +867,38 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     private T GetSeasonalComponent(Vector<T> x)
     {
-        T _seasonalComponent = NumOps.Zero;
-        int _timeIndex = 0; // Assume the time index is the first element of x
+        T seasonalComponent = NumOps.Zero;
+        T timeValue = x[0]; // Assuming time is the first element
 
-        foreach (var _period in _prophetOptions.SeasonalPeriods)
+        int componentIndex = 0;
+
+        foreach (int period in _prophetOptions.SeasonalPeriods)
         {
-            T _t = NumOps.Divide(NumOps.FromDouble(_timeIndex), NumOps.FromDouble(_period));
-            for (int _j = 0; _j < _prophetOptions.FourierOrder; _j++)
+            int harmonics = Math.Min(period / 2, 10); // Use up to 10 harmonics or period/2
+
+            // Calculate t as a fraction of the period
+            T t = NumOps.Divide(timeValue, NumOps.FromDouble(period));
+
+            for (int h = 1; h <= harmonics; h++)
             {
-                int _idx = _j * 2;
-                T _cos_t = MathHelper.Cos(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * (_j + 1)), _t));
-                T _sin_t = MathHelper.Sin(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * (_j + 1)), _t));
-                _seasonalComponent = NumOps.Add(_seasonalComponent, NumOps.Multiply(_seasonalComponents[_idx], _cos_t));
-                _seasonalComponent = NumOps.Add(_seasonalComponent, NumOps.Multiply(_seasonalComponents[_idx + 1], _sin_t));
+                // Calculate angle: 2π * h * t
+                T angle = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * h), t);
+
+                // Calculate sin and cos components
+                T sinComponent = MathHelper.Sin(angle);
+                T cosComponent = MathHelper.Cos(angle);
+
+                // Access the correct coefficients for this period and harmonic
+                T sinCoef = _seasonalComponents[componentIndex++];
+                T cosCoef = _seasonalComponents[componentIndex++];
+
+                // Add weighted components to the result
+                seasonalComponent = NumOps.Add(seasonalComponent, NumOps.Multiply(sinCoef, sinComponent));
+                seasonalComponent = NumOps.Add(seasonalComponent, NumOps.Multiply(cosCoef, cosComponent));
             }
         }
 
-        return _seasonalComponent;
+        return seasonalComponent;
     }
 
     /// <summary>
@@ -655,19 +917,43 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     private T GetHolidayComponent(Vector<T> x)
     {
-        T _holidayComponent = NumOps.Zero;
-        DateTime _currentDate = DateTime.FromOADate(Convert.ToDouble(x[0])); // Assume the date is the first element of x
-
-        for (int _i = 0; _i < _prophetOptions.Holidays.Count; _i++)
+        if (_holidayComponents.Length == 0 || _prophetOptions.Holidays.Count == 0)
         {
-            if (_currentDate.Date == _prophetOptions.Holidays[_i].Date)
+            return NumOps.Zero;
+        }
+
+        T holidayComponent = NumOps.Zero;
+
+        // Convert timestamp to date
+        DateTime currentDate;
+        try
+        {
+            double timestamp = Convert.ToDouble(x[0]);
+            currentDate = DateTime.FromOADate(timestamp);
+        }
+        catch
+        {
+            // If date conversion fails, return zero effect
+            return NumOps.Zero;
+        }
+
+        // Remove time component to compare only dates
+        currentDate = currentDate.Date;
+
+        // Check if current date matches any holiday
+        for (int i = 0; i < _prophetOptions.Holidays.Count && i < _holidayComponents.Length; i++)
+        {
+            if (currentDate == _prophetOptions.Holidays[i].Date)
             {
-                _holidayComponent = NumOps.Add(_holidayComponent, _holidayComponents[_i]);
-                break; // Assume only one holiday per day
+                holidayComponent = NumOps.Add(holidayComponent, _holidayComponents[i]);
+
+                // If we want to allow multiple holiday effects to stack, remove this break
+                // For most use cases, we assume only one holiday effect applies per day
+                break;
             }
         }
 
-        return _holidayComponent;
+        return holidayComponent;
     }
 
     /// <summary>
@@ -687,19 +973,37 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     private T GetChangepointEffect(Vector<T> x)
     {
-        T _changepointEffect = NumOps.Zero;
-        T _t = x[0]; // Assume the time is the first element of x
+        T changepointEffect = NumOps.Zero;
+        T timeValue = x[0]; // Assuming time is first element
 
-        for (int _i = 0; _i < _prophetOptions.Changepoints.Count; _i++)
+        if (_prophetOptions.Changepoints.Count == 0 || NumOps.Equals(_changepoint, NumOps.Zero))
         {
-            if (NumOps.GreaterThan(_t, _prophetOptions.Changepoints[_i]))
+            return changepointEffect;
+        }
+
+        // Calculate cumulative effect of all changepoints
+        foreach (T changepointTime in _prophetOptions.Changepoints)
+        {
+            if (NumOps.GreaterThan(timeValue, changepointTime))
             {
-                T _delta = NumOps.Subtract(_t, _prophetOptions.Changepoints[_i]);
-                _changepointEffect = NumOps.Add(_changepointEffect, NumOps.Multiply(_changepoint, _delta));
+                T timeSinceChangepoint = NumOps.Subtract(timeValue, changepointTime);
+                T effect = NumOps.Multiply(_changepoint, timeSinceChangepoint);
+
+                // Only add positive effects or limit negative effects
+                if (NumOps.GreaterThanOrEquals(effect, NumOps.Zero))
+                {
+                    changepointEffect = NumOps.Add(changepointEffect, effect);
+                }
+                else
+                {
+                    // Limit negative effects to prevent erasing the trend
+                    T limitedEffect = NumOps.Multiply(effect, NumOps.FromDouble(0.1));
+                    changepointEffect = NumOps.Add(changepointEffect, limitedEffect);
+                }
             }
         }
 
-        return _changepointEffect;
+        return changepointEffect;
     }
 
     /// <summary>
@@ -719,15 +1023,25 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     private T GetRegressorEffect(Vector<T> x)
     {
-        T _regressorEffect = NumOps.Zero;
+        T regressorEffect = NumOps.Zero;
 
-        for (int _i = 0; _i < _regressors.Length; _i++)
+        if (_regressors.Length == 0)
         {
-            // Assume regressors start from the second element of x
-            _regressorEffect = NumOps.Add(_regressorEffect, NumOps.Multiply(_regressors[_i], x[_i + 1]));
+            return regressorEffect;
         }
 
-        return _regressorEffect;
+        // Regressor values should start from index 1 (after time)
+        for (int i = 0; i < _regressors.Length && i + 1 < x.Length; i++)
+        {
+            T regressorValue = x[i + 1];
+            T coefficient = _regressors[i];
+
+            // Add weighted regressor effect
+            regressorEffect = NumOps.Add(regressorEffect,
+                NumOps.Multiply(coefficient, regressorValue));
+        }
+
+        return regressorEffect;
     }
 
     /// <summary>
@@ -1101,10 +1415,6 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             throw new ArgumentException("Cannot train on empty dataset");
         }
 
-        // Initialize model state vector
-        int n = y.Length;
-        var states = new Matrix<T>(n, GetStateSize());
-
         // Initialize components (trend, seasonal, holiday, changepoint, regressors)
         InitializeComponents(x, y);
 
@@ -1113,9 +1423,6 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 
         // Update ModelParameters with the current state
         ModelParameters = GetCurrentState();
-
-        // Store final state for future reference
-        states.SetRow(n - 1, GetCurrentState());
     }
 
     /// <summary>
@@ -1247,34 +1554,43 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
-        // Validate the input
+        // Validate input
         if (input == null)
         {
             throw new ArgumentNullException(nameof(input), "Input vector cannot be null");
         }
-    
+
         // Check if model has been trained
-        if (NumOps.Equals(_trend, NumOps.Zero) && _seasonalComponents.Length == 0)
+        if (!IsTrained)
         {
             throw new InvalidOperationException("Model must be trained before making predictions");
         }
-    
-        // Check if input has the right dimensions
-        int expectedLength = 1 + _prophetOptions.RegressorCount; // Time plus regressors
-        if (input.Length < expectedLength)
+
+        // Validate input dimensions
+        int expectedMinLength = 1; // At minimum we need time
+
+        // If we have regressors, we need space for them too
+        if (_prophetOptions.RegressorCount > 0)
         {
-            throw new ArgumentException($"Input vector length ({input.Length}) is too short. Expected at least {expectedLength} elements.");
+            expectedMinLength += _prophetOptions.RegressorCount;
         }
-    
-        // Use the private implementation to make the actual prediction
+
+        if (input.Length < expectedMinLength)
+        {
+            throw new ArgumentException(
+                $"Input vector length ({input.Length}) is too short. Expected at least {expectedMinLength} elements.",
+                nameof(input));
+        }
+
+        // Use the internal implementation to make the prediction
         T prediction = PredictSingleInternal(input);
-        
-        // Apply any post-processing logic if needed
+
+        // Apply any post-processing if needed
         if (_prophetOptions.ApplyTransformation)
         {
             prediction = _prophetOptions.TransformPrediction(prediction);
         }
-        
+
         return prediction;
     }
 

@@ -29,7 +29,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
+public class LocallyWeightedRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the Locally Weighted Regression algorithm.

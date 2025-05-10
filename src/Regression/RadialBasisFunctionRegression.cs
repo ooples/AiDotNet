@@ -23,7 +23,7 @@ namespace AiDotNet.Regression;
 /// modeling complex, non-linear relationships in data.
 /// </para>
 /// </remarks>
-public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
+public class RadialBasisFunctionRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the radial basis function regression model.

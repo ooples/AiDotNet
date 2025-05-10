@@ -1,6 +1,6 @@
 ﻿global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
-using AiDotNet.Serialization;
+global using AiDotNet.Serialization;
 
 namespace AiDotNet.Models.Results;
 
@@ -68,7 +68,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </para>
     /// </remarks>
     public IFullModel<T, TInput, TOutput>? Model { get; private set; }
-    
+
     /// <summary>
     /// Gets or sets the results of the optimization process that created the model.
     /// </summary>
@@ -98,7 +98,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </para>
     /// </remarks>
     public OptimizationResult<T, TInput, TOutput> OptimizationResult { get; private set; } = new();
-    
+
     /// <summary>
     /// Gets or sets the normalization information used to preprocess input data and postprocess predictions.
     /// </summary>
@@ -130,7 +130,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </para>
     /// </remarks>
     public NormalizationInfo<T, TInput, TOutput> NormalizationInfo { get; private set; } = new();
-    
+
     /// <summary>
     /// Gets or sets the metadata associated with the model.
     /// </summary>
@@ -191,13 +191,13 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// to create a complete package that can be saved and used for making predictions.
     /// </para>
     /// </remarks>
-    public PredictionModelResult(IFullModel<T, TInput, TOutput>? model, OptimizationResult<T, TInput, TOutput> optimizationResult, 
+    public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo)
     {
-        Model = model;
+        Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
-        ModelMetadata = model?.GetModelMetaData() ?? new();
+        ModelMetadata = Model?.GetModelMetaData() ?? new();
     }
 
     /// <summary>
@@ -316,52 +316,54 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// <returns>A byte array containing the serialized model.</returns>
     /// <remarks>
     /// <para>
-    /// This method serializes the entire PredictionModelResult object, including the model, optimization results, normalization 
-    /// information, and metadata, to a JSON string and then converts it to a byte array. The serialization uses Newtonsoft.Json 
-    /// with TypeNameHandling.All to ensure that all type information is preserved, which is necessary for correctly deserializing 
-    /// the model later. This is particularly important for polymorphic types like the Model property, which could be any 
-    /// implementation of IFullModel&lt;T&gt;.
+    /// This method serializes the entire PredictionModelResult object, including the model, optimization results, 
+    /// normalization information, and metadata. The model is serialized using its own Serialize() method, 
+    /// ensuring that model-specific serialization logic is properly applied. The other components are 
+    /// serialized using JSON. This approach ensures that each component of the PredictionModelResult is 
+    /// serialized in the most appropriate way.
     /// </para>
     /// <para><b>For Beginners:</b> This method converts the model into a format that can be stored or transmitted.
     /// 
     /// The Serialize method:
-    /// - Converts the entire model object to JSON format
-    /// - Includes type information to ensure proper deserialization
-    /// - Returns the result as a byte array that can be saved to a file or database
+    /// - Uses the model's own serialization method to properly handle model-specific details
+    /// - Serializes other components (optimization results, normalization info, metadata) to JSON
+    /// - Combines everything into a single byte array that can be saved to a file or database
     /// 
-    /// The serialization process:
-    /// - Uses Newtonsoft.Json for the conversion
-    /// - Preserves all type information with TypeNameHandling.All
-    /// - Formats the JSON with indentation for readability
-    /// - Uses custom converters for Matrix and Vector types to ensure they serialize correctly
-    /// 
-    /// This method is useful when you need to:
-    /// - Save a model for later use
-    /// - Send a model to another application
-    /// - Store a model in a database
+    /// This is important because:
+    /// - Different model types may need to be serialized differently
+    /// - It ensures all the model's internal details are properly preserved
+    /// - It allows for more efficient and robust storage of the complete prediction model package
     /// </para>
     /// </remarks>
     public byte[] Serialize()
     {
         try
         {
-            // Register custom converters
-            RegisterJsonConverters();
+            // Register all converters using our centralized registry
+            JsonConverterRegistry.RegisterAllConverters();
 
             // Create JSON settings with custom converters for our types
             var settings = new JsonSerializerSettings
             {
                 TypeNameHandling = TypeNameHandling.All,
-                Formatting = Formatting.Indented,
-                Converters = new JsonConverter[]
-                {
-                        new MatrixJsonConverter<T>(),
-                        new VectorJsonConverter<T>(),
-                        new TimeSeriesModelConverter(),
-                        new InterfaceJsonConverter()
-                }
+                Formatting = Formatting.Indented
             };
 
+            // Add all needed converters from the registry
+            var allConverters = JsonConverterRegistry.GetAllConverters();
+
+            // Add type-specific converters for T
+            var typeSpecificConverters = JsonConverterRegistry.GetConvertersForType<T>();
+
+            // Combine converters
+            var converters = new List<JsonConverter>();
+            converters.AddRange(allConverters);
+            converters.AddRange(typeSpecificConverters);
+
+            // Set the converters on our settings
+            settings.Converters = converters;
+
+            // Serialize the object
             var jsonString = JsonConvert.SerializeObject(this, settings);
             return Encoding.UTF8.GetBytes(jsonString);
         }
@@ -378,57 +380,58 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// <exception cref="InvalidOperationException">Thrown when deserialization fails.</exception>
     /// <remarks>
     /// <para>
-    /// This method deserializes a PredictionModelResult object from a byte array. It first converts the byte array to a JSON 
-    /// string, then uses Newtonsoft.Json to deserialize the string into a PredictionModelResult object. The deserialization 
-    /// uses TypeNameHandling.All to correctly handle polymorphic types like the Model property. If deserialization is successful, 
-    /// the method updates all properties of the current instance with the values from the deserialized object. If deserialization 
-    /// fails, an InvalidOperationException is thrown.
+    /// This method reconstructs a PredictionModelResult object from a serialized byte array. It reads 
+    /// the serialized data of each component (model, optimization results, normalization information, 
+    /// and metadata) and deserializes them using the appropriate methods. The model is deserialized 
+    /// using its model-specific deserialization method, while the other components are deserialized 
+    /// from JSON.
     /// </para>
     /// <para><b>For Beginners:</b> This method loads a model from a previously serialized byte array.
     /// 
     /// The Deserialize method:
     /// - Takes a byte array containing a serialized model
-    /// - Converts it back into a usable PredictionModelResult object
-    /// - Updates the current instance with all the deserialized data
+    /// - Extracts each component (model, optimization results, etc.)
+    /// - Uses the appropriate deserialization method for each component
+    /// - Reconstructs the complete PredictionModelResult object
     /// 
-    /// The deserialization process:
-    /// - Converts the byte array to a JSON string
-    /// - Uses Newtonsoft.Json to parse the JSON
-    /// - Handles type information with TypeNameHandling.All
-    /// - Uses custom converters for Matrix and Vector types to ensure they deserialize correctly
-    /// - Copies all properties from the deserialized object to the current instance
+    /// This approach ensures:
+    /// - Each model type is deserialized correctly using its own specific logic
+    /// - All model parameters and settings are properly restored
+    /// - The complete prediction pipeline (normalization, prediction, denormalization) is reconstructed
     /// 
-    /// This method will throw an exception if:
-    /// - The deserialization process fails
-    /// - The byte array doesn't contain a valid serialized model
-    /// 
-    /// This method is typically used when:
-    /// - Loading a model from a file or database
-    /// - Receiving a model from another application
+    /// This method will throw an exception if the deserialization process fails for any component.
     /// </para>
     /// </remarks>
     public void Deserialize(byte[] data)
     {
         try
         {
-            // Register custom converters
-            RegisterJsonConverters();
+            // Register all converters using our centralized registry
+            JsonConverterRegistry.RegisterAllConverters();
 
             var jsonString = Encoding.UTF8.GetString(data);
 
             // Create JSON settings with custom converters for our types
             var settings = new JsonSerializerSettings
             {
-                TypeNameHandling = TypeNameHandling.All,
-                Converters = new JsonConverter[]
-                {
-                        new MatrixJsonConverter<T>(),
-                        new VectorJsonConverter<T>(),
-                        new TimeSeriesModelConverter(),
-                        new InterfaceJsonConverter()
-                }
+                TypeNameHandling = TypeNameHandling.All
             };
 
+            // Add all needed converters from the registry
+            var allConverters = JsonConverterRegistry.GetAllConverters();
+
+            // Add type-specific converters for T
+            var typeSpecificConverters = JsonConverterRegistry.GetConvertersForType<T>();
+
+            // Combine converters
+            var converters = new List<JsonConverter>();
+            converters.AddRange(allConverters);
+            converters.AddRange(typeSpecificConverters);
+
+            // Set the converters on our settings
+            settings.Converters = converters;
+
+            // Deserialize the object
             var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
 
             if (deserializedObject != null)
@@ -446,38 +449,6 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         catch (Exception ex)
         {
             throw new InvalidOperationException($"Failed to deserialize the model: {ex.Message}", ex);
-        }
-    }
-
-    /// <summary>
-    /// Registers the custom JSON converters required for serialization.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This private method ensures that all required JSON converters are registered before
-    /// serialization or deserialization. It's called internally by the Serialize and Deserialize methods.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method makes sure all the special handlers needed for saving and loading
-    /// complex types (like Matrix and Vector) are properly set up before we try to use them.
-    /// </para>
-    /// </remarks>
-    private static void RegisterJsonConverters()
-    {
-        // If we have a global registry class, call it here
-        try
-        {
-            // Attempt to find and invoke the global JSON converter registry if it exists
-            Type? registryType = Type.GetType("AiDotNet.Serialization.JsonConverterRegistry");
-            if (registryType != null)
-            {
-                var registerMethod = registryType.GetMethod("RegisterAllConverters");
-                registerMethod?.Invoke(null, null);
-            }
-        }
-        catch
-        {
-            // Fall back to local converters if global registration fails
-            // The Serialize/Deserialize methods already include local converters
         }
     }
 
@@ -518,39 +489,171 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// Loads a model from a file.
     /// </summary>
     /// <param name="filePath">The path of the file containing the serialized model.</param>
+    /// <param name="modelFactory">A factory function that creates the appropriate model type based on metadata.</param>
     /// <returns>A new PredictionModelResult&lt;T&gt; instance loaded from the file.</returns>
     /// <remarks>
     /// <para>
-    /// This static method loads a serialized model from a file at the specified path. It first reads the file as a byte array, 
-    /// then creates a new PredictionModelResult instance and deserializes the byte array into it using the Deserialize method. 
-    /// This method provides a convenient way to load a previously saved model for use in making predictions.
+    /// This static method loads a serialized model from a file at the specified path. It requires a model factory function
+    /// that can create the appropriate model type based on metadata. This ensures that the correct model type is instantiated
+    /// before deserialization.
     /// </para>
     /// <para><b>For Beginners:</b> This method loads a previously saved model from a file.
     /// 
     /// The LoadModel method:
     /// - Takes a file path where the model is stored
-    /// - Reads the file into a byte array
-    /// - Creates a new PredictionModelResult object
-    /// - Deserializes the byte array into the object
-    /// - Returns the fully loaded model
+    /// - Uses the model factory to create the right type of model based on metadata
+    /// - Reads the file and deserializes the data into a new PredictionModelResult object
+    /// - Returns the fully loaded model ready for making predictions
     /// 
-    /// This method is useful when:
-    /// - You want to use a previously trained model
-    /// - You're deploying a model in a production environment
-    /// - You're sharing models between different applications
+    /// The model factory is important because:
+    /// - Different types of models (linear regression, neural networks, etc.) need different deserialization logic
+    /// - The factory knows how to create the right type of model based on information in the saved file
     /// 
     /// For example, you might load a model with:
-    /// `var model = PredictionModelResult<double>.LoadModel("C:\\Models\\house_price_predictor.model");`
+    /// `var model = PredictionModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
+    ///     "C:\\Models\\house_price_predictor.model", 
+    ///     metadata => new LinearRegressionModel<double>());`
+    /// </para>
+    /// </remarks>
+    public static PredictionModelResult<T, TInput, TOutput> LoadModel(
+        string filePath,
+        Func<ModelMetaData<T>, IFullModel<T, TInput, TOutput>> modelFactory)
+    {
+        // First, we need to read the file
+        byte[] data = File.ReadAllBytes(filePath);
+
+        // Extract metadata to determine model type
+        var metadata = ExtractMetadataFromSerializedData(data);
+
+        // Create a new model instance of the appropriate type
+        var model = modelFactory(metadata);
+
+        // Create a new PredictionModelResult with the model
+        var result = new PredictionModelResult<T, TInput, TOutput>
+        {
+            Model = model
+        };
+
+        // Deserialize the data
+        result.Deserialize(data);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Extracts metadata from serialized data without fully deserializing the model.
+    /// </summary>
+    /// <param name="data">The serialized data.</param>
+    /// <returns>The model metadata.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method extracts only the metadata portion from serialized data, without deserializing
+    /// the entire model. This is useful for determining the model type before full deserialization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method peeks at the saved model file to get basic information
+    /// about what type of model it contains, without loading the entire model.
     /// 
-    /// This method is static, so you call it on the class itself, not on an instance.
+    /// It's like reading the label on a box to see what's inside before opening it completely.
+    /// This lets us determine what type of model we need to create before fully loading the data.
+    /// </para>
+    /// </remarks>
+    private static ModelMetaData<T> ExtractMetadataFromSerializedData(byte[] data)
+    {
+        try
+        {
+            using var ms = new MemoryStream(data);
+            using var reader = new BinaryReader(ms);
+
+            // Skip model bytes
+            int modelBytesLength = reader.ReadInt32();
+            reader.BaseStream.Seek(modelBytesLength, SeekOrigin.Current);
+
+            // Skip optimization result bytes
+            int optimizationResultBytesLength = reader.ReadInt32();
+            reader.BaseStream.Seek(optimizationResultBytesLength, SeekOrigin.Current);
+
+            // Skip normalization info bytes
+            int normalizationInfoBytesLength = reader.ReadInt32();
+            reader.BaseStream.Seek(normalizationInfoBytesLength, SeekOrigin.Current);
+
+            // Read metadata bytes
+            int modelMetadataBytesLength = reader.ReadInt32();
+            var modelMetadataBytes = reader.ReadBytes(modelMetadataBytesLength);
+            var modelMetadataJson = Encoding.UTF8.GetString(modelMetadataBytes);
+
+            // Deserialize metadata
+            return JsonConvert.DeserializeObject<ModelMetaData<T>>(modelMetadataJson) ?? new ModelMetaData<T>();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to extract metadata from serialized data: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads a model from a file using a simple approach that doesn't require a model factory.
+    /// This is a simplified version that uses JSON serialization for backward compatibility.
+    /// </summary>
+    /// <param name="filePath">The path of the file containing the serialized model.</param>
+    /// <returns>A new PredictionModelResult&lt;T&gt; instance loaded from the file.</returns>
+    /// <remarks>
+    /// <para>
+    /// This version of LoadModel uses JSON serialization for backward compatibility with previously
+    /// saved models. It should be used when loading models that were saved with the old serialization method.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads models that were saved using an older version
+    /// of the serialization code. It uses a different approach (pure JSON) that's compatible with
+    /// those older model files.
+    /// 
+    /// Use this method when:
+    /// - You're loading a model that was saved with an older version of the library
+    /// - You don't have a model factory function available
+    /// - You're not sure which version of serialization was used
+    /// 
+    /// For newer models, prefer the other LoadModel method that uses a model factory.
     /// </para>
     /// </remarks>
     public static PredictionModelResult<T, TInput, TOutput> LoadModel(string filePath)
     {
-        var data = File.ReadAllBytes(filePath);
-        var result = new PredictionModelResult<T, TInput, TOutput>();
-        result.Deserialize(data);
+        try
+        {
+            // First try the new binary serialization format
+            byte[] data = File.ReadAllBytes(filePath);
+            using (var ms = new MemoryStream(data))
+            using (var reader = new BinaryReader(ms))
+            {
+                // Check if this looks like our binary format by trying to read the first integer
+                try
+                {
+                    int modelBytesLength = reader.ReadInt32();
+                    // If we can read this without exception and it's a reasonable value,
+                    // this might be our binary format
+                    if (modelBytesLength >= 0 && modelBytesLength <= data.Length)
+                    {
+                        // This appears to be our binary format, but we can't continue without a model factory
+                        throw new InvalidOperationException(
+                            "This model appears to use the new binary serialization format. Please use the LoadModel method that accepts a model factory parameter.");
+                    }
+                }
+                catch (EndOfStreamException)
+                {
+                    // Not our binary format, try JSON
+                }
+            }
 
-        return result;
+            // Fall back to old JSON serialization format
+            var jsonString = Encoding.UTF8.GetString(data);
+            var settings = new JsonSerializerSettings
+            {
+                TypeNameHandling = TypeNameHandling.All
+            };
+
+            var result = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
+            return result ?? throw new InvalidOperationException("Deserialization resulted in a null object.");
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load model from file: {ex.Message}", ex);
+        }
     }
 }

@@ -29,7 +29,7 @@ namespace AiDotNet.Regression;
 /// This helps you build models that focus more on the data points you trust or care about most.
 /// </para>
 /// </remarks>
-public class WeightedRegression<T> : RegressionBase<T>
+public class WeightedRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// The weights assigned to each data point, determining their influence on the model.

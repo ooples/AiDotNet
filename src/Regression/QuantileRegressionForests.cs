@@ -24,7 +24,7 @@ namespace AiDotNet.Regression;
 /// varies across different parts of the distribution.
 /// </para>
 /// </remarks>
-public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
+public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the Quantile Regression Forests model.

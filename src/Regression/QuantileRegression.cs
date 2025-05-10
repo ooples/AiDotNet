@@ -23,7 +23,7 @@ namespace AiDotNet.Regression;
 /// ranges of the outcome.
 /// </para>
 /// </remarks>
-public class QuantileRegression<T> : RegressionBase<T>
+public class QuantileRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the quantile regression model.

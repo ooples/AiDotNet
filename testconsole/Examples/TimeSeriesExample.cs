@@ -1,4 +1,5 @@
 ﻿using AiDotNet;
+using AiDotNet.Factories;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
@@ -37,28 +38,28 @@ public class TimeSeriesExample
                 prices[i] = trend + seasonal + noise;
             }
 
+            // Print a few sample data points
+            Console.WriteLine("Sample data points:");
+            for (int i = 0; i < 10; i++)
+            {
+                Console.WriteLine($"Day {i}: ${prices[i]:F2}");
+            }
+            Console.WriteLine("...");
+
             // Convert to Matrix/Vector format
             var timeFeatures = new Matrix<double>([.. dates.Select(d => new[] { d })]);
             var priceVector = new Vector<double>(prices);
 
             Console.WriteLine("Data prepared. Starting model training...");
 
-            // Create and configure the model builder
-            // Configure time series model (e.g., Prophet-like model)
-            var timeSeriesOptions = new ProphetOptions<double, Matrix<double>, Vector<double>>
-            {
-                SeasonalPeriods = [7],  // Weekly seasonality (using List<int> instead of double[])
-                ChangePointPriorScale = 0.05,           // Control flexibility of the trend (this is the correct property)
-                ForecastHorizon = 30                    // Forecast 30 days ahead
-            };
-            var model = new ProphetModel<double, Matrix<double>, Vector<double>>(timeSeriesOptions);
+            var model = TimeSeriesModelFactory<double, Matrix<double>, Vector<double>>.CreateProphetModel(timeFeatures, priceVector, 30);
             var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
-            // Configure optimizer
+            // Configure optimizer with appropriate settings for trend preservation
             var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
             {
                 LearningRate = 0.01,
-                MaxIterations = 1000
+                MaxIterations = 500,
             };
             var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(model, adamOptions);
 
@@ -97,18 +98,25 @@ public class TimeSeriesExample
             {
                 Console.WriteLine($"Day {futureDates[i]}: ${forecast2[i]:F2}");
             }
-
-            // Visualize components if available
-            if (modelResult is ProphetModel<double, Matrix<double>, Vector<double>> prophetModel)
-            {
-                Console.WriteLine("\nModel Components Analysis available in ProphetModel");
-                Console.WriteLine("(Implementation would show trend, seasonality components)");
-            }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
         }
+    }
+
+    // Helper method to generate evenly spaced changepoints
+    private List<double> GetChangepoints(int count, double start, double end)
+    {
+        var changepoints = new List<double>();
+        double step = (end - start) / (count + 1);
+
+        for (int i = 1; i <= count; i++)
+        {
+            changepoints.Add(start + i * step);
+        }
+
+        return changepoints;
     }
 }

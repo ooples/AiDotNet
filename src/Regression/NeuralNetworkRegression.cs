@@ -22,7 +22,7 @@ namespace AiDotNet.Regression;
 /// the model's accuracy. This process is similar to how we learn from experience.
 /// </para>
 /// </remarks>
-public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
+public class NeuralNetworkRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the neural network regression model.

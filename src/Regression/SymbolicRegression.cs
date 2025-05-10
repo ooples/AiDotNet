@@ -32,7 +32,7 @@
 /// "growth = sunlight² × water / (1 + temperature)".
 /// </para>
 /// </remarks>
-public class SymbolicRegression<T> : NonLinearRegressionBase<T>
+public class SymbolicRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the symbolic regression model.

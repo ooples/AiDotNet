@@ -29,7 +29,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
+public class KNearestNeighborsRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the K-Nearest Neighbors algorithm.

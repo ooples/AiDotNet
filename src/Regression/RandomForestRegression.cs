@@ -22,7 +22,7 @@ namespace AiDotNet.Regression;
 /// than any single tree. It's like asking multiple experts for their opinion and taking the average.
 /// </para>
 /// </remarks>
-public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public class RandomForestRegression<T> : AsyncDecisionTreeRegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the Random Forest regression model.

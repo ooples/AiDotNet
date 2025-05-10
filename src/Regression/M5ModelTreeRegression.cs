@@ -24,7 +24,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
+public class M5ModelTree<T> : AsyncDecisionTreeRegressionModelBase<T>
 {
     /// <summary>
     /// The configuration options for the M5 model tree algorithm.

@@ -36,7 +36,7 @@
 /// to build multiple models.
 /// </para>
 /// </remarks>
-public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
+public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionModelBase<T>
 {
     /// <summary>
     /// Options for configuring the AdaBoost.R2 regression algorithm.

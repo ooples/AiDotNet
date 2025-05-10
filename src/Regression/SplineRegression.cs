@@ -31,7 +31,7 @@ namespace AiDotNet.Regression;
 /// A spline regression can capture these changing relationships much better than a simple line.
 /// </para>
 /// </remarks>
-public class SplineRegression<T> : NonLinearRegressionBase<T>
+public class SplineRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the spline regression model.

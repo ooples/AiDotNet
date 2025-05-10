@@ -23,7 +23,7 @@ namespace AiDotNet.Regression;
 /// that most influence the taste, rather than just the most abundant ingredients.
 /// </para>
 /// </remarks>
-public class PartialLeastSquaresRegression<T> : RegressionBase<T>
+public class PartialLeastSquaresRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the partial least squares regression model.

@@ -20,7 +20,7 @@ namespace AiDotNet.Regression;
 /// variance increases with the mean, which is common in count data.
 /// </para>
 /// </remarks>
-public class PoissonRegression<T> : RegressionBase<T>
+public class PoissonRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the Poisson regression model.

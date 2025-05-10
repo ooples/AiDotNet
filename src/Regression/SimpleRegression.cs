@@ -27,7 +27,7 @@ namespace AiDotNet.Regression;
 /// estimate someone's weight if you only know their height.
 /// </para>
 /// </remarks>
-public class SimpleRegression<T> : RegressionBase<T>
+public class SimpleRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Creates a new simple regression model.

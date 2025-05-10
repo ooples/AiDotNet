@@ -21,24 +21,14 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <para><b>For Beginners:</b> This creates a vector with no elements.
     /// It's useful as a placeholder or when you need to represent the absence of data.</para>
     /// </remarks>
-    public new static Vector<T> Empty()
+    public static new Vector<T> Empty()
     {
-        // Create a singleton empty vector instance if it doesn't exist yet
-        _emptyVector ??= new Vector<T>(0)
-        {
-            IsEmpty = true
-        };
-
+        _emptyVector ??= new Vector<T>(0);
         return _emptyVector;
     }
 
     // Static field to hold the singleton empty vector instance
     private static Vector<T>? _emptyVector;
-
-    /// <summary>
-    /// Gets a value indicating whether this vector is empty.
-    /// </summary>
-    public new bool IsEmpty { get; private set; }
 
     /// <summary>
     /// Gets the length of the vector.
@@ -53,13 +43,11 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </summary>
     /// <param name="length">The length of the vector.</param>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This creates an empty vector with the given size.
+    /// <para><b>For Beginners:</b> This creates a vector with the given size.
     /// All elements will be initialized to their default values (0 for numeric types).</para>
     /// </remarks>
-    public Vector(int length) : base(length > 0 ? length : 1)
+    public Vector(int length) : base(length)
     {
-        // Mark as empty if length is 0
-        IsEmpty = length == 0;
     }
 
     /// <summary>

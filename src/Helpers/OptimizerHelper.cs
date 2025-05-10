@@ -130,46 +130,41 @@ public static class OptimizerHelper<T, TInput, TOutput>
     /// this method would create a new dataset with just those 10 features.
     /// </para>
     /// </remarks>
-    public static TInput SelectFeatures(TInput input, IEnumerable<Vector<T>> selectedFeatures)
+    public static TInput SelectFeatures(TInput input, IEnumerable<int> selectedFeatureIndices)
     {
-        if (input is Matrix<T>)
+        var indices = selectedFeatureIndices.ToList();
+
+        if (input is Matrix<T> matrix)
         {
-            // Create a new matrix from the selected column vectors
-            return (TInput)(object)Matrix<T>.FromColumns([.. selectedFeatures]);
+            // Create a new matrix with selected columns from THIS matrix
+            var selectedColumns = indices.Select(i => matrix.GetColumn(i)).ToArray();
+            return (TInput)(object)Matrix<T>.FromColumns(selectedColumns);
         }
-        else if (input is Tensor<T>)
+        else if (input is Tensor<T> tensor)
         {
-            var featureList = selectedFeatures.ToList();
-            if (featureList.Count == 0)
+            // Check indices are in bounds
+            foreach (var idx in indices)
             {
-                return (TInput)(object)new Tensor<T>([0, 0]);
+                if (idx < 0 || idx >= tensor.Shape[1])
+                    throw new ArgumentOutOfRangeException(nameof(selectedFeatureIndices),
+                        $"Feature index {idx} is out of range for tensor with {tensor.Shape[1]} columns");
             }
 
-            // All vectors should have the same length (number of rows)
-            int rows = featureList[0].Length;
-            int cols = featureList.Count;
-        
-            // Check all vectors have same length
-            for (int i = 1; i < featureList.Count; i++)
-            {
-                if (featureList[i].Length != rows)
-                {
-                    throw new ArgumentException("All feature vectors must have the same length");
-                }
-            }
-        
-            // Create a new 2D tensor
+            int rows = tensor.Shape[0];
+            int cols = indices.Count;
+
+            // Create a new tensor with selected columns from THIS tensor
             var result = new Tensor<T>([rows, cols]);
-        
-            // Fill the tensor with the data from the selected columns
-            for (int col = 0; col < cols; col++)
+
+            for (int newCol = 0; newCol < cols; newCol++)
             {
+                int origCol = indices[newCol];
                 for (int row = 0; row < rows; row++)
                 {
-                    result[row, col] = featureList[col][row];
+                    result[row, newCol] = tensor[row, origCol];
                 }
             }
-        
+
             return (TInput)(object)result;
         }
         else
@@ -190,6 +185,15 @@ public static class OptimizerHelper<T, TInput, TOutput>
     /// </remarks>
     private static Matrix<T> SelectFeaturesMatrix(Matrix<T> X, List<int> selectedFeatures)
     {
+        // Validate that all feature indices are within bounds
+        foreach (var featureIndex in selectedFeatures)
+        {
+            if (featureIndex < 0 || featureIndex >= X.Columns)
+            {
+                throw new ArgumentException($"Invalid feature index: {featureIndex}. Matrix has {X.Columns} columns.");
+            }
+        }
+
         var selectedX = new Matrix<T>(X.Rows, selectedFeatures.Count);
         for (int i = 0; i < selectedFeatures.Count; i++)
         {
@@ -261,56 +265,37 @@ public static class OptimizerHelper<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Creates a new input containing only the selected features from the original data.
+    /// Determines which column index the feature vector corresponds to in the original matrix.
     /// </summary>
-    /// <param name="X">The original feature input (Matrix<T> or Tensor<T>).</param>
-    /// <param name="selectedFeatures">List of feature vectors representing important features.</param>
-    /// <returns>A new input with only the selected features.</returns>
-    public static TInput SelectFeatures(TInput X, List<Vector<T>> selectedFeatures)
+    /// <param name="featureVector">A column vector from the original matrix.</param>
+    /// <returns>The index of the column this vector represents in the original matrix.</returns>
+    private static int GetFeatureIndex(Vector<T> featureVector, Matrix<T> originalMatrix)
     {
-        var selectedIndices = selectedFeatures.Select(v => GetFeatureIndex(v)).ToList();
-        return SelectFeatures(X, selectedIndices);
-    }
-
-    /// <summary>
-    /// Determines which feature is represented by a feature vector.
-    /// </summary>
-    /// <param name="featureVector">A vector representing a feature.</param>
-    /// <returns>The index of the feature represented by this vector.</returns>
-    private static int GetFeatureIndex(Vector<T> featureVector)
-    {
-        if (featureVector == null || featureVector.Length == 0)
+        // We need the original matrix to compare against
+        for (int colIndex = 0; colIndex < originalMatrix.Columns; colIndex++)
         {
-            throw new ArgumentException("Feature vector cannot be null or empty.", nameof(featureVector));
-        }
-
-        // Case 1: Binary feature vector (e.g., [0, 1, 0, 0])
-        if (featureVector.All(v => _numOps.Equals(v, _numOps.Zero) || _numOps.Equals(v, _numOps.One)))
-        {
-            return featureVector.IndexOf(_numOps.One);
-        }
-
-        // Case 2: One-hot encoded vector (e.g., [0, 0, 1, 0])
-        if (featureVector.Count(v => !_numOps.Equals(v, _numOps.Zero)) == 1)
-        {
-            return featureVector.IndexOfMax();
-        }
-
-        // Case 3: Continuous values (e.g., weights or importances)
-        var threshold = _numOps.FromDouble(0.5); // Adjust this threshold as needed
-        var maxValue = featureVector.Max();
-        var normalizedVector = new Vector<T>(featureVector.Select(v => _numOps.Divide(v, maxValue)));
-
-        for (int i = 0; i < normalizedVector.Length; i++)
-        {
-            if (_numOps.GreaterThan(normalizedVector[i], threshold))
+            var columnVector = originalMatrix.GetColumn(colIndex);
+            if (VectorsEqual(columnVector, featureVector))
             {
-                return i;
+                return colIndex;
             }
         }
 
-        // If no value is above the threshold, return the index of the maximum value
-        return featureVector.IndexOfMax();
+        throw new ArgumentException("Feature vector does not match any column in the original matrix.");
+    }
+
+    private static bool VectorsEqual(Vector<T> v1, Vector<T> v2)
+    {
+        if (v1.Length != v2.Length)
+            return false;
+
+        for (int i = 0; i < v1.Length; i++)
+        {
+            if (!_numOps.Equals(v1[i], v2[i]))
+                return false;
+        }
+
+        return true;
     }
 
     /// <summary>

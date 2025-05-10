@@ -22,7 +22,7 @@ namespace AiDotNet.Regression;
 /// to all points when measuring distance perpendicular to the line, rather than just vertically.
 /// </para>
 /// </remarks>
-public class OrthogonalRegression<T> : RegressionBase<T>
+public class OrthogonalRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the orthogonal regression model.

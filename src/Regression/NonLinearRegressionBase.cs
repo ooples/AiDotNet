@@ -22,7 +22,7 @@ namespace AiDotNet.Regression;
 /// straight line.
 /// </para>
 /// </remarks>
-public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
+public abstract class NonLinearRegressionModelBase<T> : INonLinearRegression<T>
 {
     /// <summary>
     /// Gets the numeric operations provider for the specified type T.
@@ -140,7 +140,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     protected T B { get; set; }
 
     /// <summary>
-    /// Initializes a new instance of the NonLinearRegressionBase class with the specified options and regularization.
+    /// Initializes a new instance of the NonLinearRegressionModelBase class with the specified options and regularization.
     /// </summary>
     /// <param name="options">Configuration options for the non-linear regression model. If null, default options will be used.</param>
     /// <param name="regularization">Regularization method to prevent overfitting. If null, no regularization will be applied.</param>
@@ -155,7 +155,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// before you actually train it with data.
     /// </para>
     /// </remarks>
-    protected NonLinearRegressionBase(NonLinearRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+    protected NonLinearRegressionModelBase(NonLinearRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
     {
         Options = options ?? new NonLinearRegressionOptions();
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
@@ -693,7 +693,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         }
     
         // Create a new instance of the model
-        var clone = (NonLinearRegressionBase<T>)this.Clone();
+        var clone = (NonLinearRegressionModelBase<T>)this.Clone();
     
         // Set the bias term
         clone.B = parameters[0];
@@ -822,7 +822,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         // Create a new instance through cloning
-        var clone = (NonLinearRegressionBase<T>)this.Clone();
+        var clone = (NonLinearRegressionModelBase<T>)this.Clone();
     
         // Perform deep copy of all mutable fields
         clone.SupportVectors = SupportVectors.Clone();
@@ -861,7 +861,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         // Create a new instance using the factory method
-        var clone = (NonLinearRegressionBase<T>)CreateInstance();
+        var clone = (NonLinearRegressionModelBase<T>)CreateInstance();
     
         // Copy the model parameters
         clone.SupportVectors = SupportVectors;  // Shallow copy

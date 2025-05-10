@@ -166,11 +166,13 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(L[j, k], L[j, k]));
             }
+
             T diagonalValue = _numOps.Subtract(matrix[j, j], sum);
             if (_numOps.LessThanOrEquals(diagonalValue, _numOps.Zero))
             {
                 throw new ArgumentException("Matrix is not positive definite.");
             }
+
             L[j, j] = _numOps.Sqrt(diagonalValue);
 
             for (int i = j + 1; i < n; i++)
@@ -180,6 +182,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
                 {
                     sum = _numOps.Add(sum, _numOps.Multiply(L[i, k], L[j, k]));
                 }
+
                 L[i, j] = _numOps.Divide(_numOps.Subtract(matrix[i, j], sum), L[j, j]);
             }
         }

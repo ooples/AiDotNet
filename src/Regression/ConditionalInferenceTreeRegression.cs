@@ -26,7 +26,7 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegressionModelBase<T>
 {
     /// <summary>
     /// The options that control the behavior of the conditional inference tree.

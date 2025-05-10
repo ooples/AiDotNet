@@ -29,7 +29,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class IsotonicRegression<T> : NonLinearRegressionBase<T>
+public class IsotonicRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// The sorted input values from the training data.

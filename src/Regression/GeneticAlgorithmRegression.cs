@@ -27,7 +27,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GeneticAlgorithmRegression<T> : RegressionBase<T>
+public class GeneticAlgorithmRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the genetic algorithm optimizer.

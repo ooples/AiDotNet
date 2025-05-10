@@ -27,6 +27,27 @@
 public enum MatrixDecompositionType
 {
     /// <summary>
+    /// Indicates that no matrix decomposition method is selected or should be applied.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This option means "don't decompose the matrix" or "no decomposition method has been chosen yet."
+    /// 
+    /// Think of it as:
+    /// - Leaving the matrix in its original form
+    /// - Skipping the decomposition step entirely
+    /// - A default or placeholder value
+    /// 
+    /// Best used for:
+    /// - When decomposition is optional and you want to indicate it shouldn't be performed
+    /// - As a default value before a specific decomposition method is selected
+    /// - When the matrix is already in a desired form and doesn't need decomposition
+    /// - For testing or comparing results with and without decomposition
+    /// </para>
+    /// </remarks>
+    None,
+
+    /// <summary>
     /// A method for solving systems of linear equations using determinants.
     /// </summary>
     /// <remarks>

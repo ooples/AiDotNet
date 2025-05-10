@@ -24,7 +24,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class RobustRegression<T> : RegressionBase<T>
+public class RobustRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Gets the configuration options used by this robust regression model.

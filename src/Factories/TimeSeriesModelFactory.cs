@@ -20,6 +20,8 @@ namespace AiDotNet.Factories;
 /// </remarks>
 public class TimeSeriesModelFactory<T, TInput, TOutput>
 {
+    private static INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Creates a time series model of the specified type with custom options.
     /// </summary>
@@ -46,6 +48,7 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
     /// </remarks>
     public static ITimeSeriesModel<T> CreateModel(TimeSeriesModelType modelType, TimeSeriesRegressionOptions<T> options)
     {
+        var inputData = DefaultInputCache.GetDefaultInputData<T, Matrix<T>, Vector<T>>();
         return (modelType, options) switch
         {
             (TimeSeriesModelType.ARIMA, ARIMAOptions<T> arimaOptions) => new ARIMAModel<T>(arimaOptions),
@@ -68,7 +71,7 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
             (TimeSeriesModelType.GARCH, GARCHModelOptions<T> garchOptions) => new GARCHModel<T>(garchOptions),
             (TimeSeriesModelType.VAR, VARModelOptions<T> varOptions) => new VectorAutoRegressionModel<T>(varOptions),
             (TimeSeriesModelType.VARMA, VARMAModelOptions<T> varmaOptions) => new VARMAModel<T>(varmaOptions),
-            (TimeSeriesModelType.ProphetModel, ProphetOptions<T, TInput, TOutput> prophetOptions) => new ProphetModel<T, TInput, TOutput>(prophetOptions),
+            (TimeSeriesModelType.ProphetModel, ProphetOptions<T, TInput, TOutput> prophetOptions) => CreateProphetModel(inputData.XTrain, inputData.YTrain),
             (TimeSeriesModelType.NeuralNetworkARIMA, NeuralNetworkARIMAOptions<T> nnarimaOptions) => new NeuralNetworkARIMAModel<T>(nnarimaOptions),
             (TimeSeriesModelType.BayesianStructuralTimeSeriesModel, BayesianStructuralTimeSeriesOptions<T> bstsOptions) => new BayesianStructuralTimeSeriesModel<T>(bstsOptions),
             (TimeSeriesModelType.SpectralAnalysis, SpectralAnalysisOptions<T> saOptions) => new SpectralAnalysisModel<T>(saOptions),
@@ -81,69 +84,267 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Creates a time series model of the specified type with default options.
+    /// Creates a simplified ProphetModel with auto-configured settings based on the data.
     /// </summary>
-    /// <param name="modelType">The type of time series model to create.</param>
-    /// <returns>An implementation of ITimeSeriesModel<T> for the specified model type.</returns>
-    /// <exception cref="ArgumentException">Thrown when an unsupported model type is specified.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method creates a time series model with default settings. It's a simpler 
-    /// version of the other CreateModel method that doesn't require you to specify custom options.
-    /// </para>
-    /// <para>
-    /// This is useful when you're just getting started and don't yet know which specific settings to use. 
-    /// The default options provide a reasonable starting point for most common scenarios.
-    /// </para>
-    /// <para>
-    /// For more control over the model's behavior, use the other CreateModel method that accepts custom options.
-    /// </para>
-    /// </remarks>
-    public static ITimeSeriesModel<T> CreateModel(TimeSeriesModelType modelType)
+    /// <param name="timeSeriesData">The input time series data matrix (first column is time).</param>
+    /// <param name="targetValues">The target values to predict.</param>
+    /// <param name="forecastHorizon">The number of time steps to forecast.</param>
+    /// <returns>A configured ProphetModel ready for training.</returns>
+    public static ITimeSeriesModel<T> CreateProphetModel(
+        Matrix<T> timeSeriesData,
+        Vector<T> targetValues, int forecastHorizon = 7)
     {
-        TimeSeriesRegressionOptions<T> options = modelType switch
+        // Automatically analyze data to find appropriate settings
+        var options = new ProphetOptions<T, Matrix<T>, Vector<T>>
         {
-            TimeSeriesModelType.ARIMA => new ARIMAOptions<T>(),
-            TimeSeriesModelType.SARIMA => new SARIMAOptions<T>(),
-            TimeSeriesModelType.ARMA => new ARMAOptions<T>(),
-            TimeSeriesModelType.AR => new ARModelOptions<T>(),
-            TimeSeriesModelType.MA => new MAModelOptions<T>(),
-            TimeSeriesModelType.ExponentialSmoothing => new ExponentialSmoothingOptions<T>(),
-            TimeSeriesModelType.SimpleExponentialSmoothing => new ExponentialSmoothingOptions<T> 
-            { 
-                UseTrend = false, 
-                UseSeasonal = false 
-            },
-            TimeSeriesModelType.DoubleExponentialSmoothing => new ExponentialSmoothingOptions<T> 
-            { 
-                UseTrend = true, 
-                UseSeasonal = false 
-            },
-            TimeSeriesModelType.TripleExponentialSmoothing => new ExponentialSmoothingOptions<T> 
-            { 
-                UseTrend = true, 
-                UseSeasonal = true,
-                SeasonalPeriod = 12  // Default to monthly seasonality
-            },
-            TimeSeriesModelType.StateSpace => new StateSpaceModelOptions<T>(),
-            TimeSeriesModelType.TBATS => new TBATSModelOptions<T>(),
-            TimeSeriesModelType.DynamicRegressionWithARIMAErrors => new DynamicRegressionWithARIMAErrorsOptions<T>(),
-            TimeSeriesModelType.ARIMAX => new ARIMAXModelOptions<T>(),
-            TimeSeriesModelType.GARCH => new GARCHModelOptions<T>(),
-            TimeSeriesModelType.VAR => new VARModelOptions<T>(),
-            TimeSeriesModelType.VARMA => new VARMAModelOptions<T>(),
-            TimeSeriesModelType.ProphetModel => new ProphetOptions<T, TInput, TOutput>(),
-            TimeSeriesModelType.NeuralNetworkARIMA => new NeuralNetworkARIMAOptions<T>(),
-            TimeSeriesModelType.BayesianStructuralTimeSeriesModel => new BayesianStructuralTimeSeriesOptions<T>(),
-            TimeSeriesModelType.SpectralAnalysis => new SpectralAnalysisOptions<T>(),
-            TimeSeriesModelType.STLDecomposition => new STLDecompositionOptions<T>(),
-            TimeSeriesModelType.InterventionAnalysis => new InterventionAnalysisOptions<T, TInput, TOutput>(),
-            TimeSeriesModelType.TransferFunctionModel => new TransferFunctionOptions<T, TInput, TOutput>(),
-            TimeSeriesModelType.UnobservedComponentsModel => new UnobservedComponentsOptions<T, TInput, TOutput>(),
-            TimeSeriesModelType.Custom => throw new ArgumentException("Custom models require custom options to be provided explicitly"),
-            _ => throw new ArgumentException($"Unsupported model type: {modelType}")
+            // Auto-detect trend from data
+            InitialTrendValue = Convert.ToDouble(DetectInitialTrend(timeSeriesData, targetValues)),
+
+            // Auto-detect seasonal periods
+            SeasonalPeriods = DetectSeasonalPeriods(timeSeriesData, targetValues),
+
+            // Auto-generate reasonable changepoints
+            Changepoints = GenerateDefaultChangepoints(timeSeriesData),
+
+            // Set reasonable defaults for other options
+            FourierOrder = 3,
+            InitialChangepointValue = Convert.ToDouble(EstimateChangepointValue(timeSeriesData, targetValues)),
+            ForecastHorizon = forecastHorizon
         };
-    
-        return CreateModel(modelType, options);
+
+        return (ITimeSeriesModel<T>)new ProphetModel<T, Matrix<T>, Vector<T>>(options);
+    }
+
+    /// <summary>
+    /// Detects if the data likely has a yearly pattern.
+    /// </summary>
+    private static bool DetectYearlyPattern(Matrix<T> timeData, Vector<T> values)
+    {
+        // Need at least 2 years of data
+        if (values.Length < 730)
+            return false;
+
+        T yearlyCorrelation = TimeSeriesHelper<T>.CalculateAutoCorrelation(values, 365);
+        return _numOps.GreaterThan(yearlyCorrelation, _numOps.FromDouble(0.3)); // Threshold for detection
+    }
+
+    /// <summary>
+    /// Detects if the data likely has a monthly pattern.
+    /// </summary>
+    private static bool DetectMonthlyPattern(Matrix<T> timeData, Vector<T> values)
+    {
+        // Need at least 2 months of data
+        if (values.Length < 60)
+            return false;
+
+        T monthlyCorrelation = TimeSeriesHelper<T>.CalculateAutoCorrelation(values, 30);
+        return _numOps.GreaterThan(monthlyCorrelation, _numOps.FromDouble(0.3)); // Threshold for detection
+    }
+
+    /// <summary>
+    /// Detects if the data likely has a weekly pattern.
+    /// </summary>
+    private static bool DetectWeeklyPattern(Matrix<T> timeData, Vector<T> values)
+    {
+        // Simple correlation test for weekly pattern
+        if (values.Length < 14) // Need at least 2 weeks of data
+            return false;
+
+        T weeklyCorrelation = TimeSeriesHelper<T>.CalculateAutoCorrelation(values, 7);
+        return _numOps.GreaterThan(weeklyCorrelation, _numOps.FromDouble(0.3)); // Threshold for detection
+    }
+
+    /// <summary>
+    /// Detects the initial trend value from the data, making it easy for beginners.
+    /// </summary>
+    private static T DetectInitialTrend(Matrix<T> timeData, Vector<T> values)
+    {
+        // Use the first few data points to estimate trend
+        T startValue;
+
+        if (values.Length >= 10)
+        {
+            // Use average of first 10 points for stability
+            startValue = _numOps.Zero;
+            for (int i = 0; i < 10; i++)
+            {
+                startValue = _numOps.Add(startValue, values[i]);
+            }
+            startValue = _numOps.Divide(startValue, _numOps.FromDouble(10));
+        }
+        else if (values.Length > 0)
+        {
+            // Use first point if we don't have enough data
+            startValue = values[0];
+        }
+        else
+        {
+            // Fallback
+            startValue = _numOps.Zero;
+        }
+
+        Console.WriteLine($"Auto-detected initial trend: {startValue}");
+        return startValue;
+    }
+
+    /// <summary>
+    /// Automatically detects likely seasonal periods in the data.
+    /// </summary>
+    private static List<int> DetectSeasonalPeriods(Matrix<T> timeData, Vector<T> values)
+    {
+        var periods = new List<int>();
+
+        // Check if we have enough data for seasonality detection
+        if (values.Length < 14)
+        {
+            // Not enough data for reliable detection
+            return periods;
+        }
+
+        // Check common periods
+
+        // Daily data often has weekly seasonality (7 days)
+        bool weeklyPattern = DetectWeeklyPattern(timeData, values);
+        if (weeklyPattern)
+        {
+            periods.Add(7);
+            Console.WriteLine("Auto-detected weekly (7-day) seasonality");
+        }
+
+        // Monthly pattern (around 30 days)
+        bool monthlyPattern = DetectMonthlyPattern(timeData, values);
+        if (monthlyPattern)
+        {
+            periods.Add(30);
+            Console.WriteLine("Auto-detected monthly (30-day) seasonality");
+        }
+
+        // Yearly pattern (365/366 days)
+        bool yearlyPattern = DetectYearlyPattern(timeData, values);
+        if (yearlyPattern)
+        {
+            periods.Add(365);
+            Console.WriteLine("Auto-detected yearly (365-day) seasonality");
+        }
+
+        // If no patterns detected, suggest common patterns based on data size
+        if (periods.Count == 0)
+        {
+            if (values.Length >= 14 && values.Length < 60)
+            {
+                // For short series, suggest weekly pattern
+                periods.Add(7);
+                Console.WriteLine("Suggesting weekly (7-day) seasonality based on data length");
+            }
+            else if (values.Length >= 60)
+            {
+                // For longer series, suggest both weekly and monthly
+                periods.Add(7);
+                periods.Add(30);
+                Console.WriteLine("Suggesting weekly (7-day) and monthly (30-day) seasonality based on data length");
+            }
+        }
+
+        return periods;
+    }
+
+    /// <summary>
+    /// Generates reasonable default changepoints spaced throughout the data.
+    /// </summary>
+    private static List<T> GenerateDefaultChangepoints(Matrix<T> timeData)
+    {
+        var changepoints = new List<T>();
+
+        // If we don't have enough data, don't add changepoints
+        if (timeData.Rows < 20)
+        {
+            return changepoints;
+        }
+
+        // Get the time range
+        T startTime = timeData[0, 0];
+        T endTime = timeData[timeData.Rows - 1, 0];
+        T timeRange = _numOps.Subtract(endTime, startTime);
+
+        // Create changepoints avoiding the very beginning and end
+        T padding = _numOps.Multiply(timeRange, _numOps.FromDouble(0.05)); // 5% padding
+        T effectiveStart = _numOps.Add(startTime, padding);
+        T effectiveEnd = _numOps.Subtract(endTime, padding);
+        T effectiveRange = _numOps.Subtract(effectiveEnd, effectiveStart);
+
+        // Determine reasonable number of changepoints based on data size
+        int numChangepoints;
+        if (timeData.Rows < 50)
+            numChangepoints = 3;
+        else if (timeData.Rows < 100)
+            numChangepoints = 5;
+        else if (timeData.Rows < 200)
+            numChangepoints = 10;
+        else
+            numChangepoints = 15;
+
+        // Generate evenly spaced changepoints
+        for (int i = 1; i <= numChangepoints; i++)
+        {
+            T position = _numOps.Add(
+                effectiveStart,
+                _numOps.Multiply(
+                    _numOps.FromDouble(i),
+                    _numOps.Divide(effectiveRange, _numOps.FromDouble(numChangepoints + 1))
+                )
+            );
+            changepoints.Add(position);
+        }
+
+        Console.WriteLine($"Auto-generated {numChangepoints} changepoints");
+        return changepoints;
+    }
+
+    /// <summary>
+    /// Estimates a reasonable changepoint value based on data trends.
+    /// </summary>
+    private static T EstimateChangepointValue(Matrix<T> timeData, Vector<T> values)
+    {
+        if (values.Length < 10)
+            return _numOps.FromDouble(0.01); // Default for very short series
+
+        // Calculate average rate of change
+        T firstAvg = _numOps.Zero;
+        T lastAvg = _numOps.Zero;
+        int sampleSize = Math.Min(5, values.Length / 4); // Use 5 points or 1/4 of data
+
+        // Average of first few points
+        for (int i = 0; i < sampleSize; i++)
+            firstAvg = _numOps.Add(firstAvg, values[i]);
+        firstAvg = _numOps.Divide(firstAvg, _numOps.FromDouble(sampleSize));
+
+        // Average of last few points
+        for (int i = 0; i < sampleSize; i++)
+            lastAvg = _numOps.Add(lastAvg, values[values.Length - 1 - i]);
+        lastAvg = _numOps.Divide(lastAvg, _numOps.FromDouble(sampleSize));
+
+        // Time difference
+        T timeDiff = _numOps.Subtract(timeData[timeData.Rows - 1, 0], timeData[0, 0]);
+
+        // If time difference is zero or very small, return a small default value
+        if (_numOps.LessThan(timeDiff, _numOps.FromDouble(1)))
+            return _numOps.FromDouble(0.01);
+
+        // Calculate slope
+        T slope = _numOps.Divide(_numOps.Subtract(lastAvg, firstAvg), timeDiff);
+
+        // Scale the slope for changepoint value (typical trend change rate)
+        T changeValue = _numOps.Multiply(_numOps.Abs(slope), _numOps.FromDouble(0.1));
+
+        // Bound the value to reasonable limits
+        changeValue = _numOps.LessThan(changeValue, _numOps.FromDouble(0.001)) ?
+            _numOps.FromDouble(0.001) : changeValue;
+
+        // Then ensure it's at most 0.5
+        changeValue = _numOps.GreaterThan(changeValue, _numOps.FromDouble(0.5)) ?
+            _numOps.FromDouble(0.5) : changeValue;
+
+        Console.WriteLine($"Auto-estimated changepoint value: {changeValue}");
+        return changeValue;
     }
 }

@@ -26,7 +26,7 @@ namespace AiDotNet.Regression;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class RegressionBase<T> : IRegressionModel<T>
+public abstract class RegressionModelBase<T> : IRegressionModel<T>
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -63,6 +63,20 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
     protected RegressionOptions<T> Options { get; private set; }
 
     /// <summary>
+    /// Gets the actual decomposition method that was successfully used in the most recent solve operation.
+    /// </summary>
+    /// <remarks>
+    /// This property may return null if no decomposition has been performed yet or if the
+    /// decomposition method wasn't retained after solving.
+    /// </remarks>
+    protected IMatrixDecomposition<T>? LastUsedDecomposition { get; private set; }
+
+    /// <summary>
+    /// Gets the name of the decomposition method that was successfully used in the most recent solve operation.
+    /// </summary>
+    protected string LastUsedDecompositionName { get; private set; } = "None";
+
+    /// <summary>
     /// Gets the regularization method used to prevent overfitting.
     /// </summary>
     /// <value>
@@ -87,6 +101,11 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
     public T Intercept { get; protected set; }
 
     /// <summary>
+    /// Gets the number of features that this model was trained on.
+    /// </summary>
+    public int FeatureCount { get; protected set; }
+
+    /// <summary>
     /// Gets a value indicating whether the model includes an intercept term.
     /// </summary>
     /// <value>
@@ -95,7 +114,7 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
     public bool HasIntercept => Options.UseIntercept;
 
     /// <summary>
-    /// Initializes a new instance of the RegressionBase class with the specified options and regularization.
+    /// Initializes a new instance of the RegressionModelBase class with the specified options and regularization.
     /// </summary>
     /// <param name="options">Configuration options for the regression model. If null, default options will be used.</param>
     /// <param name="regularization">Regularization method to prevent overfitting. If null, no regularization will be applied.</param>
@@ -110,7 +129,7 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
     /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    protected RegressionBase(RegressionOptions<T> options, IRegularization<T, Matrix<T>, Vector<T>> regularization)
+    protected RegressionModelBase(RegressionOptions<T> options, IRegularization<T, Matrix<T>, Vector<T>> regularization)
     {
         Regularization = regularization;
         NumOps = MathHelper.GetNumericOperations<T>();
@@ -138,32 +157,107 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
     public abstract void Train(Matrix<T> x, Vector<T> y);
 
     /// <summary>
-    /// Makes predictions for the given input data.
+    /// Predicts output values based on input features using the trained model coefficients.
     /// </summary>
-    /// <param name="input">The input features matrix where each row is an example and each column is a feature.</param>
-    /// <returns>A vector of predicted values for each input example.</returns>
+    /// <param name="input">The input matrix containing only the selected features.</param>
+    /// <returns>A vector of predicted values.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
+    /// <exception cref="ArgumentException">Thrown when the input matrix doesn't match the expected feature count.</exception>
     /// <remarks>
-    /// <para>
-    /// This method calculates predictions by multiplying the input features by the model coefficients
-    /// and adding the intercept if one is used.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// After training, this method is used to make predictions on new data. It applies the learned
-    /// coefficients to the input features and adds the intercept (if used) to produce the final prediction.
-    /// For linear regression, this is simply the dot product of the features and coefficients plus the intercept.
-    /// </para>
+    /// <b>For Beginners:</b> This method applies the trained model to make predictions.
+    /// It multiplies each feature by its respective coefficient and sums the results.
+    /// If an intercept is used, it adds that constant value to each prediction.
     /// </remarks>
     public virtual Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = input.Multiply(Coefficients);
-
-        if (Options.UseIntercept)
+        // Validate that the model has been trained
+        if (Coefficients.Length == 0 && !Options.UseIntercept)
         {
-            predictions = predictions.Add(Intercept);
+            throw new InvalidOperationException("Model has not been trained.");
         }
 
-        return predictions;
+        // Get active feature indices
+        var activeIndices = GetActiveFeatureIndices().ToArray();
+
+        // Case 1: Input has exactly the number of features the model expects
+        if (input.Columns == FeatureCount)
+        {
+            // Standard prediction
+            var predictions = new Vector<T>(input.Rows);
+            for (int i = 0; i < predictions.Length; i++)
+            {
+                predictions[i] = NumOps.Zero;
+            }
+
+            for (int col = 0; col < input.Columns; col++)
+            {
+                for (int row = 0; row < input.Rows; row++)
+                {
+                    var contribution = NumOps.Multiply(input[row, col], Coefficients[col]);
+                    predictions[row] = NumOps.Add(predictions[row], contribution);
+                }
+            }
+
+            // Add intercept if used
+            if (Options.UseIntercept)
+            {
+                for (int row = 0; row < predictions.Length; row++)
+                {
+                    predictions[row] = NumOps.Add(predictions[row], Intercept);
+                }
+            }
+
+            return predictions;
+        }
+        // Case 2: Input has more columns than the model was trained on
+        else if (activeIndices.Length > 0 && input.Columns > FeatureCount)
+        {
+            // Check if all active indices are within range of input columns
+            foreach (int index in activeIndices)
+            {
+                if (index >= input.Columns)
+                {
+                    throw new ArgumentException(
+                        $"Active feature index {index} is out of range for input with {input.Columns} columns.");
+                }
+            }
+
+            // Create a prediction vector initialized with zeros
+            var predictions = new Vector<T>(input.Rows);
+            for (int i = 0; i < predictions.Length; i++)
+            {
+                predictions[i] = NumOps.Zero;
+            }
+
+            // Use only the active features for prediction
+            for (int i = 0; i < activeIndices.Length; i++)
+            {
+                int featureIndex = activeIndices[i];
+
+                for (int row = 0; row < input.Rows; row++)
+                {
+                    var contribution = NumOps.Multiply(input[row, featureIndex], Coefficients[i]);
+                    predictions[row] = NumOps.Add(predictions[row], contribution);
+                }
+            }
+
+            // Add intercept if used
+            if (Options.UseIntercept)
+            {
+                for (int row = 0; row < predictions.Length; row++)
+                {
+                    predictions[row] = NumOps.Add(predictions[row], Intercept);
+                }
+            }
+
+            return predictions;
+        }
+        else
+        {
+            throw new ArgumentException(
+                $"Input matrix has {input.Columns} columns but model expects {FeatureCount} features. " +
+                "Make sure to apply appropriate feature selection during prediction.");
+        }
     }
 
     /// <summary>
@@ -195,7 +289,8 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
             {
                 { "HasIntercept", HasIntercept },
                 { "CoefficientNorm", Coefficients.Norm()! },
-                { "FeatureImportances", CalculateFeatureImportances().ToArray() }
+                { "FeatureImportances", CalculateFeatureImportances().ToArray() },
+                { "DecompositionUsed", LastUsedDecompositionName }
             }
         };
     }
@@ -241,43 +336,85 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
     /// <summary>
     /// Serializes the model to a byte array.
     /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
+    /// <returns>A byte array containing the serialized model.</returns>
     /// <remarks>
     /// <para>
-    /// This method serializes the model's parameters, including coefficients, intercept, and regularization options,
-    /// to a JSON format and then converts it to a byte array.
+    /// This method serializes the model's parameters, including coefficients, intercept, and options,
+    /// to a binary format for storage or transmission.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b>
-    /// Serialization converts the model's internal state into a format that can be saved to disk or
-    /// transmitted over a network. This allows you to save a trained model and load it later without
+    /// Serialization converts the model's state into a format that can be saved to disk
+    /// or transmitted over a network. This allows you to save a trained model and load it later without
     /// having to retrain it. Think of it like saving your progress in a video game.
     /// </para>
     /// </remarks>
     public virtual byte[] Serialize()
     {
-        var modelData = new Dictionary<string, object>
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize common options
+        writer.Write(Options.UseIntercept);
+
+        // First get the active feature indices
+        var activeIndices = GetActiveFeatureIndices().ToArray();
+
+        // Write the number of active features
+        writer.Write(activeIndices.Length);
+
+        // Write the active feature indices
+        foreach (var index in activeIndices)
         {
-            { "Coefficients", Coefficients.ToArray() },
-            { "Intercept", Intercept ?? NumOps.Zero! },
-            { "RegularizationOptions", Regularization.GetOptions() }
-        };
+            writer.Write(index);
+        }
 
-        var modelMetadata = GetModelMetaData();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        // Serialize coefficients (should match the number of active features)
+        writer.Write(Coefficients.Length);
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(Coefficients[i]));
+        }
 
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+        // Serialize intercept
+        writer.Write(Convert.ToDouble(Intercept));
+
+        // Serialize regularization options
+        var regularizationOptions = Regularization.GetOptions();
+        writer.Write((int)regularizationOptions.Type);
+
+        // Serialize decomposition method used
+        writer.Write(LastUsedDecompositionName);
+
+        // Serialize explicitly set active features flag
+        bool hasExplicitActiveFeatures = _explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0;
+        writer.Write(hasExplicitActiveFeatures);
+
+        if (hasExplicitActiveFeatures)
+        {
+            writer.Write(_explicitlySetActiveFeatures?.Count ?? 0);
+            foreach (var index in _explicitlySetActiveFeatures ?? [])
+            {
+                writer.Write(index);
+            }
+        }
+
+        // Let derived classes serialize their specific data
+        SerializeCore(writer);
+
+        return ms.ToArray();
     }
 
     /// <summary>
     /// Deserializes the model from a byte array.
     /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model data.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization fails.</exception>
+    /// <param name="data">The byte array containing the serialized model data.</param>
+    /// <exception cref="ArgumentNullException">Thrown when data is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the serialized data is corrupted or incompatible.</exception>
     /// <remarks>
     /// <para>
     /// This method reconstructs the model's parameters from a serialized byte array, including coefficients,
-    /// intercept, and regularization options.
+    /// intercept, and options.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b>
@@ -286,32 +423,134 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
     /// predictions without having to retrain it. It's like loading a saved game to continue where you left off.
     /// </para>
     /// </remarks>
-    public virtual void Deserialize(byte[] modelData)
+    public virtual void Deserialize(byte[] data)
     {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetaData<T>>(jsonString);
-
-        if (modelMetadata == null || modelMetadata.ModelData == null)
+        if (data == null)
         {
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+            throw new ArgumentNullException(nameof(data), "Serialized data cannot be null.");
         }
 
-        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(modelDataString);
-
-        if (modelDataDict == null)
+        try
         {
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+            using var ms = new MemoryStream(data);
+            using var reader = new BinaryReader(ms);
+
+            // Deserialize common options
+            Options.UseIntercept = reader.ReadBoolean();
+
+            // Read the number of active features
+            int activeFeatureCount = reader.ReadInt32();
+
+            // Read the active feature indices
+            int[] activeIndices = new int[activeFeatureCount];
+            for (int i = 0; i < activeFeatureCount; i++)
+            {
+                activeIndices[i] = reader.ReadInt32();
+            }
+
+            // Set FeatureCount from the active feature count
+            FeatureCount = activeFeatureCount;
+
+            // Deserialize coefficients
+            int coefficientCount = reader.ReadInt32();
+            Coefficients = new Vector<T>(coefficientCount);
+            for (int i = 0; i < coefficientCount; i++)
+            {
+                Coefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+
+            // Verify that coefficient count matches active feature count
+            if (coefficientCount != activeFeatureCount)
+            {
+                throw new InvalidOperationException(
+                    $"Serialized model has {coefficientCount} coefficients but {activeFeatureCount} active features.");
+            }
+
+            // Deserialize intercept
+            Intercept = NumOps.FromDouble(reader.ReadDouble());
+
+            // Deserialize regularization options
+            var regType = (RegularizationType)reader.ReadInt32();
+
+            // Recreate regularization with the deserialized options
+            var regOptions = new RegularizationOptions
+            {
+                Type = regType
+            };
+            Regularization = RegularizationFactory.CreateRegularization<T, Matrix<T>, Vector<T>>(regOptions);
+
+            LastUsedDecompositionName = reader.ReadString();
+
+            // Deserialize explicitly set active features
+            bool hasExplicitActiveFeatures = reader.ReadBoolean();
+
+            if (hasExplicitActiveFeatures)
+            {
+                _explicitlySetActiveFeatures = new HashSet<int>();
+                int count = reader.ReadInt32();
+
+                for (int i = 0; i < count; i++)
+                {
+                    int featureIndex = reader.ReadInt32();
+                    _explicitlySetActiveFeatures.Add(featureIndex);
+                }
+            }
+            else
+            {
+                _explicitlySetActiveFeatures = null;
+            }
+
+            // Let derived classes deserialize their specific data
+            DeserializeCore(reader);
         }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Failed to deserialize model data. The data may be corrupted or incompatible with this model version.", ex);
+        }
+    }
 
-        Coefficients = new Vector<T>((T[])modelDataDict["Coefficients"]);
-        Intercept = (T)modelDataDict["Intercept"];
+    /// <summary>
+    /// Serializes model-specific data to the binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method should be overridden by derived classes to serialize their specific data.
+    /// The base implementation does nothing.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method allows specific regression model types to save additional data
+    /// that isn't part of the common regression model structure. Different regression
+    /// algorithms might need to store different types of information.
+    /// </para>
+    /// </remarks>
+    protected virtual void SerializeCore(BinaryWriter writer)
+    {
+        // Base implementation does nothing
+        // Derived classes should override this to serialize their specific data
+    }
 
-        var regularizationOptionsJson = JsonConvert.SerializeObject(modelDataDict["RegularizationOptions"]);
-        var regularizationOptions = JsonConvert.DeserializeObject<RegularizationOptions>(regularizationOptionsJson) 
-            ?? throw new InvalidOperationException("Deserialization failed: Unable to deserialize regularization options.");
-    
-        Regularization = RegularizationFactory.CreateRegularization<T, Matrix<T>, Vector<T>>(regularizationOptions);
+    /// <summary>
+    /// Deserializes model-specific data from the binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method should be overridden by derived classes to deserialize their specific data.
+    /// The base implementation does nothing.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method allows specific regression model types to load additional data
+    /// that isn't part of the common regression model structure. It should read
+    /// exactly what was written by the corresponding SerializeCore method.
+    /// </para>
+    /// </remarks>
+    protected virtual void DeserializeCore(BinaryReader reader)
+    {
+        // Base implementation does nothing
+        // Derived classes should override this to deserialize their specific data
     }
 
     /// <summary>
@@ -335,45 +574,134 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
     /// </remarks>
     protected Vector<T> SolveSystem(Matrix<T> a, Vector<T> b)
     {
-        var decomposition = Options.DecompositionMethod;
+        // Reset the last used decomposition tracker
+        LastUsedDecompositionName = "None";
+        LastUsedDecomposition = null;
 
-        if (decomposition != null)
+        // Check if regularization should be applied
+        var regOptions = Regularization.GetOptions();
+        bool shouldApplyRegularization =
+            regOptions.Type != RegularizationType.None &&
+            regOptions.Strength > 0.0;
+
+        // Apply regularization if needed
+        if (shouldApplyRegularization)
         {
-            return decomposition.Solve(b);
+            // Apply regularization to input features
+            a = Regularization.Regularize(a);
         }
-        else
+
+        // Use specified decomposition method if provided
+        if (Options.DecompositionMethod != null)
         {
-            // Use normal equation if specifically selected or as a fallback
-            return SolveNormalEquation(a, b);
+            try
+            {
+                var solution = Options.DecompositionMethod.Solve(b);
+                LastUsedDecompositionName = Options.DecompositionMethod.GetType().Name;
+                LastUsedDecomposition = Options.DecompositionMethod;
+                return solution;
+            }
+            catch (Exception ex)
+            {
+                // If fallbacks are not allowed, rethrow the exception
+                if (!Options.AllowDecompositionFallbacks)
+                {
+                    throw new InvalidOperationException(
+                        $"The specified decomposition method ({Options.DecompositionMethod.GetType().Name}) failed and fallbacks are disabled.", ex);
+                }
+                // Otherwise continue to fallback methods
+            }
         }
+
+        // Attempt different solution strategies if allowed
+        return SolveWithFallbackStrategies(a, b);
     }
 
     /// <summary>
-    /// Solves a linear system using the normal equation.
+    /// Attempts to solve a linear system using multiple decomposition strategies.
     /// </summary>
     /// <param name="a">The coefficient matrix.</param>
     /// <param name="b">The right-hand side vector.</param>
     /// <returns>The solution vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method solves the normal equation (A^T A)x = A^T b using LU decomposition.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// The normal equation is a way to solve linear regression problems by transforming them into
-    /// a form that can be solved directly. It's computationally efficient for small to medium-sized
-    /// problems but can be numerically unstable for ill-conditioned matrices. This method is used
-    /// as a fallback when no specific decomposition method is specified.
-    /// </para>
-    /// </remarks>
-    private Vector<T> SolveNormalEquation(Matrix<T> a, Vector<T> b)
+    private Vector<T> SolveWithFallbackStrategies(Matrix<T> a, Vector<T> b)
     {
         var aTa = a.Transpose().Multiply(a);
         var aTb = a.Transpose().Multiply(b);
 
-        // Use LU decomposition for solving the normal equation
-        var normalDecomposition = new NormalDecomposition<T>(aTa);
-        return normalDecomposition.Solve(aTb);
+        // Determine epsilon for regularization
+        var regOptions = Regularization.GetOptions();
+        double epsilonBase = regOptions.Strength > 0 ? regOptions.Strength : 1e-8;
+        var epsilon = NumOps.FromDouble(epsilonBase * 1e-2);
+        string lastError = string.Empty;
+
+        // Define a list of solution strategies to try in order
+        var strategies = new List<(string Name, Func<(Vector<T> Solution, IMatrixDecomposition<T> Decomposition)> SolveMethod)>
+        {
+            // 1. First try Normal decomposition (your original approach)
+            ("Normal", () => {
+                var decomp = new NormalDecomposition<T>(aTa);
+                return (decomp.Solve(aTb), decomp);
+            }),
+        
+            // 2. Try Cholesky decomposition (also fast)
+            ("Cholesky", () => {
+                var decomp = new CholeskyDecomposition<T>(aTa);
+                return (decomp.Solve(aTb), decomp);
+            }),
+        
+            // 3. Try Cholesky with regularization
+            ("Regularized Cholesky", () => {
+                var regularizedMatrix = aTa.Clone();
+                for (int i = 0; i < regularizedMatrix.Rows; i++)
+                {
+                    regularizedMatrix[i, i] = NumOps.Add(regularizedMatrix[i, i], epsilon);
+                }
+                var decomp = new CholeskyDecomposition<T>(regularizedMatrix);
+                return (decomp.Solve(aTb), decomp);
+            }),
+        
+            // 4. Try QR decomposition
+            ("QR", () => {
+                var decomp = new QrDecomposition<T>(a);
+                return (decomp.Solve(b), decomp);
+            }),
+        
+            // 5. Try LU decomposition
+            ("LU", () => {
+                var decomp = new LuDecomposition<T>(aTa);
+                return (decomp.Solve(aTb), decomp);
+            }),
+        
+            // 6. Last resort: SVD (most robust but slowest)
+            ("SVD", () => {
+                var decomp = new SvdDecomposition<T>(a);
+                return (decomp.Solve(b), decomp);
+            })
+        };
+
+        // Try each strategy in sequence until one succeeds
+        foreach (var (name, method) in strategies)
+        {
+            try
+            {
+                var (solution, decomposition) = method();
+
+                // Record which decomposition was used
+                LastUsedDecompositionName = name;
+                LastUsedDecomposition = decomposition;
+
+                return solution;
+            }
+            catch (Exception ex)
+            {
+                // Remember the last error but continue to next strategy
+                lastError = $"{name} decomposition failed: {ex.Message}";
+            }
+        }
+
+        // If we get here, all methods failed
+        throw new InvalidOperationException(
+            "Unable to solve the linear system. All decomposition methods failed. Last error: " + lastError);
     }
 
     /// <summary>
@@ -398,22 +726,32 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
     /// </remarks>
     public virtual Vector<T> GetParameters()
     {
-        // Create a new vector with enough space for coefficients + intercept (if used)
+        // Get active feature indices
+        var activeIndices = GetActiveFeatureIndices().ToArray();
+
+        // Ensure that coefficient count matches active feature count
+        if (Coefficients.Length != activeIndices.Length)
+        {
+            throw new InvalidOperationException(
+                $"Model has {Coefficients.Length} coefficients but {activeIndices.Length} active features.");
+        }
+
+        // Create a new vector with enough space for active coefficients + intercept (if used)
         int paramCount = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
         Vector<T> parameters = new Vector<T>(paramCount);
-    
+
         // Copy coefficients to the parameters vector
         for (int i = 0; i < Coefficients.Length; i++)
         {
             parameters[i] = Coefficients[i];
         }
-    
+
         // Add the intercept as the last element (if used)
         if (Options.UseIntercept)
         {
             parameters[Coefficients.Length] = Intercept;
         }
-    
+
         return parameters;
     }
 
@@ -444,37 +782,51 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
+        // Get active feature indices
+        var activeIndices = GetActiveFeatureIndices().ToArray();
+
         // Calculate expected parameter count
-        int expectedParamCount = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
-    
+        int expectedParamCount = activeIndices.Length + (Options.UseIntercept ? 1 : 0);
+
         if (parameters.Length != expectedParamCount)
         {
-            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}");
+            throw new ArgumentException(
+                $"Expected {expectedParamCount} parameters ({activeIndices.Length} active features + {(Options.UseIntercept ? 1 : 0)} intercept), but got {parameters.Length}");
         }
-    
+
         // Create a new instance of the model
-        var newModel = (RegressionBase<T>)Clone();
-    
-        // Extract coefficients
-        Vector<T> newCoefficients = new Vector<T>(Coefficients.Length);
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            newCoefficients[i] = parameters[i];
-        }
-    
+        var newModel = (RegressionModelBase<T>)Clone();
+
         // Set the coefficients in the new model
-        newModel.Coefficients = newCoefficients;
-    
+        newModel.Coefficients = new Vector<T>(activeIndices.Length);
+        for (int i = 0; i < activeIndices.Length; i++)
+        {
+            newModel.Coefficients[i] = parameters[i];
+        }
+
+        // Set the FeatureCount to match active feature count
+        newModel.FeatureCount = activeIndices.Length;
+
         // Set the intercept if used
         if (Options.UseIntercept)
         {
-            newModel.Intercept = parameters[Coefficients.Length];
+            newModel.Intercept = parameters[activeIndices.Length];
         }
         else
         {
             newModel.Intercept = NumOps.Zero;
         }
-    
+
+        // Copy the active feature set to the new model
+        if (_explicitlySetActiveFeatures != null)
+        {
+            newModel.SetActiveFeatureIndices(_explicitlySetActiveFeatures);
+        }
+        else
+        {
+            newModel.SetActiveFeatureIndices(activeIndices);
+        }
+
         return newModel;
     }
 
@@ -698,16 +1050,34 @@ public abstract class RegressionBase<T> : IRegressionModel<T>
         // Clear existing explicitly set features
         _explicitlySetActiveFeatures.Clear();
 
-        // Add the new feature indices
-        foreach (var index in featureIndices)
+        // Add the new feature indices - with special handling when coefficients aren't initialized
+        if (Coefficients.Length == 0)
         {
-            if (index < 0 || index >= Coefficients.Length)
+            // When coefficients aren't initialized yet, we can only validate that indices are non-negative
+            foreach (var index in featureIndices)
             {
-                throw new ArgumentOutOfRangeException(nameof(featureIndices),
-                    $"Feature index {index} must be between 0 and {Coefficients.Length - 1}");
-            }
+                if (index < 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                        $"Feature index {index} cannot be negative");
+                }
 
-            _explicitlySetActiveFeatures.Add(index);
+                _explicitlySetActiveFeatures.Add(index);
+            }
+        }
+        else
+        {
+            // Normal case - coefficients are initialized
+            foreach (var index in featureIndices)
+            {
+                if (index < 0 || index >= Coefficients.Length)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                        $"Feature index {index} must be between 0 and {Coefficients.Length - 1}");
+                }
+
+                _explicitlySetActiveFeatures.Add(index);
+            }
         }
     }
 }

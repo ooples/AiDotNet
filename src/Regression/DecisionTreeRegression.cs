@@ -26,7 +26,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
+public class DecisionTreeRegression<T> : DecisionTreeRegressionModelBase<T>
 {
     /// <summary>
     /// The configuration options for the decision tree algorithm.

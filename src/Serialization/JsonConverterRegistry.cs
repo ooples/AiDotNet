@@ -24,9 +24,63 @@
 /// </remarks>
 public static class JsonConverterRegistry
 {
+    /// <summary>
+    /// Indicates whether the converters have been initialized.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This flag prevents multiple initializations of the converters, ensuring the registration
+    /// process only happens once even if RegisterAllConverters is called multiple times.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like a checkbox that gets marked once initialization is complete,
+    /// preventing the same setup work from being repeated unnecessarily.
+    /// </para>
+    /// </remarks>
     private static bool _isInitialized = false;
+
+    /// <summary>
+    /// Provides thread synchronization for the initialization process.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This object is used for thread synchronization to ensure that registration occurs
+    /// atomically even when called from multiple threads simultaneously.
+    /// </para>
+    /// <para><b>For Beginners:</b> This acts like a lock on a door, making sure only one thread
+    /// can enter the initialization code at a time, preventing conflicts when multiple parts of
+    /// your application try to initialize converters simultaneously.
+    /// </para>
+    /// </remarks>
     private static readonly object _lockObject = new object();
+
+    /// <summary>
+    /// Stores the registered converters for each numeric type.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This dictionary caches converter instances for each numeric type (float, double, etc.),
+    /// allowing them to be reused without creating new instances each time.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like an organized cabinet that stores all the different
+    /// converters by type, so we can quickly find the right ones when needed without creating new ones.
+    /// </para>
+    /// </remarks>
     private static readonly Dictionary<Type, List<JsonConverter>> _cachedConverters = [];
+
+    /// <summary>
+    /// Stores general converters that are not specific to numeric types.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This list contains converters for complex types like TimeSeriesModel and RegressionModel
+    /// that don't need separate instances for each numeric type.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores specialized converters for complex objects
+    /// like prediction models that need special handling during serialization regardless of
+    /// what number type they use internally.
+    /// </para>
+    /// </remarks>
+    private static readonly List<JsonConverter> _generalConverters = [];
 
     /// <summary>
     /// Registers all custom JSON converters for the library.
@@ -64,11 +118,39 @@ public static class JsonConverterRegistry
             RegisterConverters<int>();
             RegisterConverters<long>();
 
+            // Register general converters not specific to a numeric type
+            RegisterGeneralConverters();
+
             // Set up the global Newtonsoft.Json settings
             SetupGlobalJsonSettings();
 
             _isInitialized = true;
         }
+    }
+
+    /// <summary>
+    /// Registers general converters that are not specific to numeric types.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method registers converters for complex types like TimeSeriesModel and RegressionModel
+    /// that don't need separate instances for each numeric type.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up the specialized converters for more complex objects 
+    /// like prediction models that need special handling during serialization.
+    /// </para>
+    /// </remarks>
+    private static void RegisterGeneralConverters()
+    {
+        // Add TimeSeriesModelConverter
+        //_generalConverters.Add(new TimeSeriesModelConverter());
+
+        // Add RegressionModelConverter
+        //_generalConverters.Add(new RegressionModelConverter());
+
+        _generalConverters.Add(new TimeSeriesModelConverter());
+        _generalConverters.Add(new RegressionModelConverter());
+        _generalConverters.Add(new InterfaceJsonConverter());
     }
 
     /// <summary>
@@ -135,7 +217,10 @@ public static class JsonConverterRegistry
                 allConverters.AddRange(settings.Converters);
             }
 
-            // Add our cached converters
+            // Add our general converters first
+            allConverters.AddRange(_generalConverters);
+
+            // Add our cached type-specific converters
             foreach (var converterList in _cachedConverters.Values)
             {
                 allConverters.AddRange(converterList);
@@ -143,6 +228,12 @@ public static class JsonConverterRegistry
 
             // Update the settings
             settings.Converters = allConverters;
+
+            // Ensure type handling is set appropriately for polymorphic types
+            if (settings.TypeNameHandling == TypeNameHandling.None)
+            {
+                settings.TypeNameHandling = TypeNameHandling.Auto;
+            }
 
             return settings;
         };
@@ -176,5 +267,38 @@ public static class JsonConverterRegistry
         }
 
         return converters;
+    }
+
+    /// <summary>
+    /// Gets all registered JSON converters, including both type-specific and general converters.
+    /// </summary>
+    /// <returns>A list of all registered converters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns a complete list of all registered converters, including both
+    /// the type-specific converters and the general converters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you all registered converters at once, which is useful
+    /// when you need to set up custom JSON serialization that includes all supported types.
+    /// </para>
+    /// </remarks>
+    public static List<JsonConverter> GetAllConverters()
+    {
+        // Ensure we're initialized
+        RegisterAllConverters();
+
+        // Create a list for all converters
+        var allConverters = new List<JsonConverter>();
+
+        // Add general converters first
+        allConverters.AddRange(_generalConverters);
+
+        // Add all type-specific converters
+        foreach (var converterList in _cachedConverters.Values)
+        {
+            allConverters.AddRange(converterList);
+        }
+
+        return allConverters;
     }
 }

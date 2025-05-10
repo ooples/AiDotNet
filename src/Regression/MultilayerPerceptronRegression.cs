@@ -26,7 +26,7 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
+public class MultilayerPerceptronRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// The configuration options for the multilayer perceptron.

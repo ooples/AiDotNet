@@ -28,7 +28,7 @@ namespace AiDotNet.Regression;
 /// features are most important for accurate predictions and discard the rest.
 /// </para>
 /// </remarks>
-public class StepwiseRegression<T> : RegressionBase<T>
+public class StepwiseRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the stepwise regression model.

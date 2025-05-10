@@ -6903,24 +6903,37 @@ public static class StatisticsHelper<T>
     public static (T Lower, T Upper) CalculateJackknifeInterval(Vector<T> actual, Vector<T> predicted)
     {
         int n = actual.Length;
-        var jackknifeSamples = new List<T>();
 
+        // Jackknife requires at least 2 observations to be meaningful
+        // (typically 3+ is recommended for statistical validity)
+        if (n <= 1)
+        {
+            // For a single observation, we can't calculate a confidence interval with jackknife
+            // Return the predicted value with a default margin
+            T prediction = predicted[0];
+            T defaultMargin = _numOps.Multiply(prediction, _numOps.FromDouble(0.2)); // 20% margin
+            return (_numOps.Subtract(prediction, defaultMargin), _numOps.Add(prediction, defaultMargin));
+        }
+
+        var jackknifeSamples = new List<T>();
         for (int i = 0; i < n; i++)
         {
-            var sample = new Vector<T>(n - 1);
-            int index = 0;
+            // Create a vector containing all predictions except the one at index i
+            var sampleValues = new List<T>(n - 1);
             for (int j = 0; j < n; j++)
             {
                 if (j != i)
                 {
-                    sample[index++] = predicted[j];
+                    sampleValues.Add(predicted[j]);
                 }
             }
+
+            var sample = new Vector<T>(sampleValues);
             jackknifeSamples.Add(sample.Average());
         }
 
-        T jackknifeEstimate = new Vector<T>([.. jackknifeSamples]).Average();
-        T jackknifeStdError = CalculateStandardDeviation(new Vector<T>([.. jackknifeSamples]));
+        T jackknifeEstimate = new Vector<T>(jackknifeSamples).Average();
+        T jackknifeStdError = CalculateStandardDeviation(new Vector<T>(jackknifeSamples));
         T tValue = CalculateTValue(n - 1, _numOps.FromDouble(0.95));
         T margin = _numOps.Multiply(tValue, jackknifeStdError);
 
@@ -7004,6 +7017,17 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateMaxError(Vector<T> actual, Vector<T> predicted)
     {
+        if (actual.IsEmpty && predicted.IsEmpty)
+        {
+            return _numOps.Zero;
+        }
+        // Handle single-element vectors specially
+        else if (actual.Length == 1 && predicted.Length == 1)
+        {
+            // For a single value, just return the absolute difference directly
+            return _numOps.Abs(_numOps.Subtract(actual[0], predicted[0]));
+        }
+
         return actual.Subtract(predicted).Select(_numOps.Abs).Max();
     }
 

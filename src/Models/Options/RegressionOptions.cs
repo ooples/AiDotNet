@@ -117,4 +117,31 @@ public class RegressionOptions<T> : ModelOptions
     /// </para>
     /// </remarks>
     public bool UseIntercept { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to allow fallback to alternative decomposition methods when the primary method fails.
+    /// </summary>
+    /// <value>True to allow fallbacks; otherwise, false. Defaults to true.</value>
+    /// <remarks>
+    /// <para>
+    /// When set to true, if the specified decomposition method fails, the system will automatically try
+    /// alternative methods in order of robustness. When set to false, only the specified method (or the default
+    /// Normal decomposition if none is specified) will be attempted.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the system can try different mathematical 
+    /// approaches if the first one fails.
+    /// 
+    /// - True (default): The system will try multiple methods to solve your problem, starting with faster
+    ///   methods and moving to more robust ones as needed. This is like having multiple tools available
+    ///   and using whichever one works.
+    ///   
+    /// - False: The system will only use the exact method you specified. If that method fails, the system
+    ///   will report an error rather than trying alternative approaches.
+    ///   
+    /// Set to False when you specifically need a particular decomposition method for consistency or
+    /// mathematical reasons. Otherwise, leaving this as True gives the best chance of successfully
+    /// solving your problem.
+    /// </para>
+    /// </remarks>
+    public bool AllowDecompositionFallbacks { get; set; } = true;
 }

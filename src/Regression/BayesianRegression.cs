@@ -44,7 +44,7 @@
 /// - You need to incorporate prior knowledge about the problem
 /// </para>
 /// </remarks>
-public class BayesianRegression<T> : RegressionBase<T>
+public class BayesianRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Options specific to Bayesian regression.

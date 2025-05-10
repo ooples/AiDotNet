@@ -22,7 +22,7 @@
 /// questions and answers based on numerical data.
 /// </para>
 /// </remarks>
-public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<T>
+public abstract class AsyncDecisionTreeRegressionModelBase<T> : IAsyncTreeBasedModel<T>
 {
     /// <summary>
     /// Gets the numeric operations for the type T.
@@ -108,11 +108,11 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     protected Random Random => new(Options.Seed ?? Environment.TickCount);
 
     /// <summary>
-    /// Initializes a new instance of the AsyncDecisionTreeRegressionBase class.
+    /// Initializes a new instance of the AsyncDecisionTreeRegressionModelBase class.
     /// </summary>
     /// <param name="options">The options for configuring the decision tree.</param>
     /// <param name="regularization">The regularization method to use.</param>
-    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions options, IRegularization<T, Matrix<T>, Vector<T>> regularization)
+    protected AsyncDecisionTreeRegressionModelBase(DecisionTreeOptions options, IRegularization<T, Matrix<T>, Vector<T>> regularization)
     {
         Options = options;
         NumOps = MathHelper.GetNumericOperations<T>();
@@ -466,13 +466,13 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     
         // Reconstruct the tree from the parameter vector
         int currentIndex = 1;
-        ((AsyncDecisionTreeRegressionBase<T>)newModel).Root = DeserializeNodeFromVector(parameters, ref currentIndex);
+        ((AsyncDecisionTreeRegressionModelBase<T>)newModel).Root = DeserializeNodeFromVector(parameters, ref currentIndex);
     
         // Assume the feature importances are already calculated and stored in the parameters
         // or recalculate them based on the reconstructed tree
         if (FeatureImportances.Length > 0)
         {
-            ((AsyncDecisionTreeRegressionBase<T>)newModel).FeatureImportances = new Vector<T>(FeatureImportances);
+            ((AsyncDecisionTreeRegressionModelBase<T>)newModel).FeatureImportances = new Vector<T>(FeatureImportances);
         }
     
         return newModel;
@@ -617,13 +617,13 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         // Deep copy the tree structure
         if (Root != null)
         {
-            ((AsyncDecisionTreeRegressionBase<T>)clone).Root = DeepCloneNode(Root);
+            ((AsyncDecisionTreeRegressionModelBase<T>)clone).Root = DeepCloneNode(Root);
         }
     
         // Copy feature importances
         if (FeatureImportances.Length > 0)
         {
-            ((AsyncDecisionTreeRegressionBase<T>)clone).FeatureImportances = new Vector<T>(FeatureImportances);
+            ((AsyncDecisionTreeRegressionModelBase<T>)clone).FeatureImportances = new Vector<T>(FeatureImportances);
         }
     
         return clone;

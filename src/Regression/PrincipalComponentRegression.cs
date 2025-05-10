@@ -24,7 +24,7 @@ namespace AiDotNet.Regression;
 /// problems in standard regression.
 /// </para>
 /// </remarks>
-public class PrincipalComponentRegression<T> : RegressionBase<T>
+public class PrincipalComponentRegression<T> : RegressionModelBase<T>
 {
     /// <summary>
     /// Configuration options for the principal component regression model.

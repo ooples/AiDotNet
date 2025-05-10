@@ -32,7 +32,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
+public class GaussianProcessRegression<T> : NonLinearRegressionModelBase<T>
 {
     /// <summary>
     /// The kernel matrix (also known as the covariance matrix) that represents the similarity between all training points.

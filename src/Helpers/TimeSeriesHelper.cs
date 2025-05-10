@@ -167,16 +167,62 @@ public static class TimeSeriesHelper<T>
     /// </remarks>
     public static T CalculateAutoCorrelation(Vector<T> y, int lag)
     {
-        T sum = _numOps.Zero;
-        T sumSquared = _numOps.Zero;
-        int n = y.Length;
+        if (y == null || y.Length <= lag)
+            return _numOps.Zero;
 
-        for (int i = 0; i < n - lag; i++)
+        int n = y.Length;
+        int validPoints = n - lag;
+
+        // Calculate the mean of the time series
+        T sum = _numOps.Zero;
+        for (int i = 0; i < n; i++)
         {
-            sum = _numOps.Add(sum, _numOps.Multiply(y[i], y[i + lag]));
-            sumSquared = _numOps.Add(sumSquared, _numOps.Multiply(y[i], y[i]));
+            sum = _numOps.Add(sum, y[i]);
+        }
+        T mean = _numOps.Divide(sum, _numOps.FromDouble(n));
+
+        // Calculate the numerator (covariance)
+        T numerator = _numOps.Zero;
+        // Calculate the denominator (variance of the original series)
+        T denominator = _numOps.Zero;
+
+        for (int i = 0; i < validPoints; i++)
+        {
+            // Calculate (y[i] - mean)
+            T diff1 = _numOps.Subtract(y[i], mean);
+            // Calculate (y[i+lag] - mean)
+            T diff2 = _numOps.Subtract(y[i + lag], mean);
+
+            // Add to numerator: (y[i] - mean) * (y[i+lag] - mean)
+            numerator = _numOps.Add(numerator, _numOps.Multiply(diff1, diff2));
+
+            // Add to denominator: (y[i] - mean)²
+            denominator = _numOps.Add(denominator, _numOps.Multiply(diff1, diff1));
         }
 
-        return _numOps.Divide(sum, sumSquared);
+        // Calculate variance of the full series for more stable results
+        T fullVariance = _numOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            T diff = _numOps.Subtract(y[i], mean);
+            fullVariance = _numOps.Add(fullVariance, _numOps.Multiply(diff, diff));
+        }
+
+        // Use the full series variance for a more stable denominator
+        if (_numOps.GreaterThan(fullVariance, _numOps.Zero))
+        {
+            return _numOps.Divide(numerator, fullVariance);
+        }
+
+        // Handle the case where variance is zero (constant series)
+        if (_numOps.Equals(numerator, _numOps.Zero))
+        {
+            // If both numerator and denominator are zero, return 1 (perfect correlation)
+            return _numOps.One;
+        }
+
+        // If variance is zero but numerator isn't, something is wrong
+        // In real applications, you might want to throw an exception here
+        return _numOps.Zero;
     }
 }

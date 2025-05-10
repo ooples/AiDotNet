@@ -27,7 +27,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegressionModelBase<T>
 {
     /// <summary>
     /// The configuration options for the Extremely Randomized Trees algorithm.
