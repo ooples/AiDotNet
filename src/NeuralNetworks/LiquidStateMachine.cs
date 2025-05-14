@@ -437,7 +437,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
 
         // Backpropagate to get parameter gradients
-        Vector<T> gradients = Backpropagate(outputGradients);
+       var gradients = Backpropagate(Tensor<T>.FromVector(outputGradients, expectedOutput.Shape));
 
         // Get parameter gradients for all trainable layers
         Vector<T> parameterGradients = GetParameterGradients();

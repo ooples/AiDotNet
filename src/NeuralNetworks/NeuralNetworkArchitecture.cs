@@ -55,6 +55,33 @@ public class NeuralNetworkArchitecture<T>
     public List<ILayer<T>>? Layers { get; }
 
     /// <summary>
+    /// Our version of lazy initialization to be used with setting architecture settings after they are cached
+    /// </summary>
+    public bool IsInitialized { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the input height will be determined at runtime.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When this property is true, it indicates that the input height (number of samples)
+    /// will be determined at runtime rather than being fixed during architecture initialization.
+    /// This is common for classification and regression tasks where the number of samples can vary.
+    /// </para>
+    /// <para><b>For Beginners:</b> This indicates that your network can handle any number of examples.
+    /// 
+    /// For normal machine learning workflows, you don't know ahead of time exactly how many
+    /// examples (samples) your network will process. This property tells the system that
+    /// the number of samples will be provided when actually using the network, not when
+    /// designing it.
+    /// 
+    /// Think of it like a recipe that says "serves 4" vs "serves any number of people".
+    /// This property, when true, indicates your network can adapt to any number of input samples.
+    /// </para>
+    /// </remarks>
+    public bool IsDynamicSampleCount { get; }
+
+    /// <summary>
     /// Gets the type of input the neural network is designed to handle.
     /// </summary>
     /// <remarks>
@@ -75,7 +102,7 @@ public class NeuralNetworkArchitecture<T>
     /// vertically, or across color channels have different kinds of relationships.
     /// </para>
     /// </remarks>
-    public InputType InputType { get; }
+    public InputType InputType { get; private set; }
 
     /// <summary>
     /// Gets or sets the size of the input vector.
@@ -118,7 +145,7 @@ public class NeuralNetworkArchitecture<T>
     /// Think of this as how many answers your network gives at once.
     /// </para>
     /// </remarks>
-    public int OutputSize { get; }
+    public int OutputSize { get; private set; }
 
     /// <summary>
     /// Gets the height dimension for 2D or 3D inputs.
@@ -137,7 +164,7 @@ public class NeuralNetworkArchitecture<T>
     /// For simple lists of values, you'd use InputSize instead.
     /// </para>
     /// </remarks>
-    public int InputHeight { get; }
+    public int InputHeight { get; private set; }
 
     /// <summary>
     /// Gets the width dimension for 2D or 3D inputs.
@@ -156,7 +183,7 @@ public class NeuralNetworkArchitecture<T>
     /// For simple lists of values, you'd use InputSize instead.
     /// </para>
     /// </remarks>
-    public int InputWidth { get; }
+    public int InputWidth { get; private set; }
 
     /// <summary>
     /// Gets the depth dimension for 3D inputs.
@@ -176,7 +203,7 @@ public class NeuralNetworkArchitecture<T>
     /// For simpler data types, it's usually set to 1 and doesn't affect the network.
     /// </para>
     /// </remarks>
-    public int InputDepth { get; }
+    public int InputDepth { get; private set; }
 
     /// <summary>
     /// Gets the type of task the neural network is designed to perform.
@@ -200,7 +227,7 @@ public class NeuralNetworkArchitecture<T>
     /// might end with a linear activation to output any numerical value.
     /// </para>
     /// </remarks>
-    public NeuralNetworkTaskType TaskType { get; }
+    public NeuralNetworkTaskType TaskType { get; private set; }
 
     /// <summary>
     /// Gets the complexity level of the neural network.
@@ -272,7 +299,7 @@ public class NeuralNetworkArchitecture<T>
         InputType switch
         {
             InputType.OneDimensional => InputSize > 0 ? InputSize : throw new InvalidOperationException("InputSize must be set for OneDimensional input."),
-            InputType.TwoDimensional => InputHeight * InputWidth,
+            InputType.TwoDimensional => IsDynamicSampleCount && InputHeight == 0 ? InputWidth : InputHeight * InputWidth,
             InputType.ThreeDimensional => InputHeight * InputWidth * InputDepth,
             _ => throw new InvalidOperationException("Invalid InputDimensionality"),
         };
@@ -284,24 +311,62 @@ public class NeuralNetworkArchitecture<T>
     public bool ShouldReturnFullSequence { get; }
 
     /// <summary>
+    /// A cache name to be used to look for a custom input cache
+    /// </summary>
+    public string CacheName { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this architecture instance is a placeholder.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if this instance is a placeholder with minimal validation; otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// A placeholder architecture is a special type of neural network architecture that bypasses
+    /// strict dimension validation. It's primarily used for serialization, default model creation,
+    /// or when an architecture needs to be initialized before all dimensions are known.
+    /// </para>
+    /// <para>
+    /// Placeholder architectures typically have zero or undefined dimensions and are expected to
+    /// be properly configured before actual training begins. They allow for model templates to be
+    /// created and stored without requiring complete specifications.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of a placeholder as an "incomplete blueprint" for your neural network.
+    /// 
+    /// A placeholder is useful when:
+    /// - You need to create a default or empty model
+    /// - You want to save a model structure without all the details filled in
+    /// - You're creating a model programmatically and will set the dimensions later
+    /// 
+    /// When IsPlaceholder is true, the system won't complain about missing dimensions
+    /// or other validation issues that would normally cause errors. This gives you more
+    /// flexibility, but you'll need to ensure the model is properly configured before
+    /// using it for actual training.
+    /// </para>
+    /// </remarks>
+    public bool IsPlaceholder { get; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="NeuralNetworkArchitecture{T}"/> class with the specified parameters.
     /// </summary>
     /// <param name="inputType">The type of input data (one-dimensional, two-dimensional, or three-dimensional).</param>
     /// <param name="taskType">The type of task the neural network will perform (classification, regression, etc.).</param>
     /// <param name="complexity">The complexity level of the neural network. Default is Medium.</param>
-    /// <param name="inputSize">The size of the input vector (for one-dimensional input). Default is 0.</param>
-    /// <param name="inputHeight">The height of the input (for two/three-dimensional input). Default is 0.</param>
-    /// <param name="inputWidth">The width of the input (for two/three-dimensional input). Default is 0.</param>
-    /// <param name="inputDepth">The depth of the input (for three-dimensional input). Default is 1.</param>
-    /// <param name="outputSize">The size of the output vector. Default is 0.</param>
     /// <param name="layers">Optional predefined layers for the neural network. Default is null.</param>
-    /// <param name="rbmLayers">Optional RBM layers for pre-training. Default is null.</param>
-    /// <exception cref="ArgumentException">Thrown when the input dimensions are invalid or inconsistent.</exception>
+    /// <param name="shouldReturnFullSequence">Indicates whether sequence models should return full sequence or just the final output. Default is false.</param>
+    /// <param name="isDynamicSampleCount">Indicates whether the network can handle varying sample counts. Default is false.</param>
+    /// <param name="isPlaceholder">Disables validation and should only be used in special circumstances like when a default model value is necessary. Default is false.</param>
+    /// <exception cref="ArgumentException">Thrown when the input dimensions are invalid or inconsistent, unless the architecture is created as a placeholder.</exception>
     /// <remarks>
     /// <para>
     /// This constructor initializes a neural network architecture with the specified parameters and validates
     /// that the input dimensions are consistent and appropriate for the selected input type. It also checks
     /// that any provided layers are compatible with the input and output dimensions.
+    /// </para>
+    /// <para>
+    /// For placeholder models (where all dimensions are zero), validation will be more lenient to allow
+    /// for serialization and default model creation. Full validation occurs during actual model training.
     /// </para>
     /// <para><b>For Beginners:</b> This creates the blueprint for your neural network with your chosen settings.
     /// 
@@ -322,36 +387,153 @@ public class NeuralNetworkArchitecture<T>
     ///    - Input dimensions (size, height, width, depth)
     ///    - Output size (how many values to predict)
     ///    - Optional custom layers
+    ///    - Whether to return full sequences (for time series or text data)
+    ///    - Whether the network can handle varying batch sizes
     /// 
-    /// The constructor checks that all your settings make sense together.
-    /// For example, it will catch errors like trying to use both InputSize=100
-    /// and InputHeight=10, InputWidth=20 (which would imply InputSize=200).
+    /// The constructor checks that all your settings make sense together,
+    /// unless you're creating a placeholder model where zero dimensions are allowed.
     /// </para>
     /// </remarks>
     public NeuralNetworkArchitecture(
-        InputType inputType,
-        NeuralNetworkTaskType taskType,
         NetworkComplexity complexity = NetworkComplexity.Medium,
-        int inputSize = 0,
-        int inputHeight = 0,
-        int inputWidth = 0,
-        int inputDepth = 1,
-        int outputSize = 0,
+        NeuralNetworkTaskType? taskType = null,
+        bool shouldReturnFullSequence = false,
         List<ILayer<T>>? layers = null,
-        bool shouldReturnFullSequence = false)
+        bool isDynamicSampleCount = true,
+        bool isPlaceholder = false,
+        string? cacheName = null)
     {
-        InputType = inputType;
-        TaskType = taskType;
+        // Set only the parameters that don't depend on data dimensions
         Complexity = complexity;
-        InputSize = inputSize;
-        InputHeight = inputHeight;
-        InputWidth = inputWidth;
-        InputDepth = inputDepth;
         ShouldReturnFullSequence = shouldReturnFullSequence;
         Layers = layers;
-        OutputSize = outputSize;
+        IsInitialized = false;  // Mark this as a placeholder until dimensions are set
 
-        ValidateInputDimensions();
+        // Set other properties to default/placeholder values
+        InputType = InputType.OneDimensional;  // Will be updated later
+        TaskType = taskType ?? NeuralNetworkTaskType.Custom;  // Default to regression if not specified
+        InputSize = 0;
+        InputHeight = 0;
+        InputWidth = 0;
+        InputDepth = 1;
+        OutputSize = 0;
+        IsDynamicSampleCount = true;
+        IsPlaceholder = isPlaceholder;  // Allow placeholder behavior
+        IsDynamicSampleCount = isDynamicSampleCount;  // Allow dynamic sample count
+        CacheName = cacheName ?? string.Empty;  // Default to empty string if not provided
+    }
+
+    /// <summary>
+    /// Initializes this architecture using the current cached input data.
+    /// This should be called before training begins.
+    /// </summary>
+    public void InitializeFromCachedData<TInput, TOutput>()
+    {
+        if (IsInitialized) return;  // Already initialized
+
+        var inputExists = DefaultInputCache.TryGetDefaultInputData<T, Tensor<T>, Tensor<T>>(out var inputData);
+
+        if (!inputExists || inputData == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot initialize neural network architecture: No default input data has been cached.");
+        }
+
+        // Get input and output tensors
+        var inputTensor = inputData.XFull;
+        var outputTensor = inputData.YFull;
+
+        // Set dimensions based on tensor shapes
+        var inputShape = inputTensor.Shape;
+
+        switch (inputShape.Length)
+        {
+            case 1:
+                InputType = InputType.OneDimensional;
+                InputSize = inputShape[0];
+                InputHeight = 0;
+                InputWidth = 0;
+                InputDepth = 1;
+                break;
+
+            case 2:
+                InputType = InputType.TwoDimensional;
+                InputHeight = inputShape[0];
+                InputWidth = inputShape[1];
+                InputSize = InputHeight * InputWidth;
+                InputDepth = 1;
+                break;
+
+            case 3:
+                InputType = InputType.ThreeDimensional;
+                InputDepth = inputShape[0];
+                InputHeight = inputShape[1];
+                InputWidth = inputShape[2];
+                InputSize = InputDepth * InputHeight * InputWidth;
+                break;
+
+            default:
+                throw new ArgumentException("Input tensor must have 1, 2, or 3 dimensions.");
+        }
+
+        // Set output size
+        var outputShape = outputTensor.Shape;
+        OutputSize = outputShape[outputShape.Length - 1];
+
+        // Infer task type if not explicitly set
+        if (TaskType == NeuralNetworkTaskType.Regression)  // Only overwrite if using default
+        {
+            TaskType = InferTaskType(outputTensor);
+        }
+
+        // Mark as initialized and no longer a placeholder
+        IsInitialized = true;
+    }
+
+    /// <summary>
+    /// Infers the neural network task type from an output tensor.
+    /// </summary>
+    private NeuralNetworkTaskType InferTaskType(Tensor<T> outputTensor)
+    {
+        var shape = outputTensor.Shape;
+
+        // For one output value
+        if (shape.Length == 1 || (shape.Length > 1 && shape[shape.Length - 1] == 1))
+        {
+            // Check if it contains only 0s and 1s
+            if (ContainsOnlyZerosAndOnes(outputTensor))
+                return NeuralNetworkTaskType.BinaryClassification;
+            else
+                return NeuralNetworkTaskType.Regression;
+        }
+
+        // For multiple output values
+        if (shape.Length > 0 && shape[shape.Length - 1] > 1 && ContainsOnlyZerosAndOnes(outputTensor))
+            return NeuralNetworkTaskType.MultiClassClassification;
+
+        // Default to regression
+        return NeuralNetworkTaskType.Regression;
+    }
+
+    /// <summary>
+    /// Checks if the tensor contains only values that are effectively 0 or 1.
+    /// </summary>
+    private bool ContainsOnlyZerosAndOnes(Tensor<T> tensor)
+    {
+        // Use the IEnumerable implementation to iterate through all values
+        foreach (var value in tensor)
+        {
+            double doubleVal = Convert.ToDouble(value);
+
+            // Use the MathHelper.AlmostEqual method for more robust comparison
+            if (!MathHelper.AlmostEqual(doubleVal, 0) &&
+                !MathHelper.AlmostEqual(doubleVal, 1))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -387,16 +569,11 @@ public class NeuralNetworkArchitecture<T>
     /// </para>
     /// </remarks>
     public NeuralNetworkArchitecture(
-        int inputFeatures,
-        int outputSize,
         NetworkComplexity complexity = NetworkComplexity.Medium)
         : this(
-            inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             complexity: complexity,
-            inputHeight: 0,  // This will be determined by the number of samples at runtime
-            inputWidth: inputFeatures,
-            outputSize: outputSize)
+            isDynamicSampleCount: true)
     {
         // The base constructor handles validation and setup
         // We don't need to create custom layers here as the neural network will create
@@ -437,17 +614,11 @@ public class NeuralNetworkArchitecture<T>
     /// </para>
     /// </remarks>
     public NeuralNetworkArchitecture(
-        int inputFeatures,
-        int numClasses,
         bool isMultiClass = true,
         NetworkComplexity complexity = NetworkComplexity.Medium)
         : this(
-            inputType: InputType.TwoDimensional,
             taskType: isMultiClass ? NeuralNetworkTaskType.MultiClassClassification : NeuralNetworkTaskType.BinaryClassification,
-            complexity: complexity,
-            inputHeight: 0,  // This will be determined by the number of samples at runtime
-            inputWidth: inputFeatures,
-            outputSize: isMultiClass ? numClasses : 1)  // For binary classification, we only need 1 output (probability)
+            complexity: complexity)  // For binary classification, we only need 1 output (probability)
     {
         // The base constructor handles validation and setup
     }
@@ -706,10 +877,18 @@ public class NeuralNetworkArchitecture<T>
                 break;
 
             case InputType.TwoDimensional:
-                if (InputHeight <= 0 || InputWidth <= 0)
+                // Special handling for dynamic sample count
+                if (IsDynamicSampleCount && InputHeight == 0 && InputWidth > 0)
+                {
+                    // This is fine - height (samples) will be determined at runtime
+                    // Using a placeholder value of 1 for calculated size
+                    calculatedSize = InputWidth;
+                }
+                else if (InputHeight <= 0 || InputWidth <= 0)
                 {
                     throw new ArgumentException("Both InputHeight and InputWidth must be greater than 0 for TwoDimensional input.");
                 }
+
                 if (InputDepth != 1)
                 {
                     throw new ArgumentException("InputDepth should be 1 for TwoDimensional input.");
@@ -727,14 +906,25 @@ public class NeuralNetworkArchitecture<T>
                 throw new ArgumentException("Invalid InputDimensionality specified.");
         }
 
-        if (InputSize > 0 && InputSize != calculatedSize)
+        // Special case for dynamic sample count where InputSize might be unknown
+        if (IsDynamicSampleCount && InputType == InputType.TwoDimensional && InputHeight == 0)
+        {
+            // If InputSize is specified, it should match InputWidth
+            if (InputSize > 0 && InputSize != InputWidth)
+            {
+                throw new ArgumentException($"For dynamic sample count with TwoDimensional input, InputSize ({InputSize}) should match InputWidth ({InputWidth}).");
+            }
+
+            // Set InputSize to InputWidth as a placeholder
+            InputSize = InputWidth;
+        }
+        else if (InputSize > 0 && InputSize != calculatedSize)
         {
             throw new ArgumentException($"Provided InputSize ({InputSize}) does not match the calculated size based on dimensions ({calculatedSize}). For {InputType} input, use either InputSize or the appropriate dimension parameters, not both.");
         }
-
-        // If InputSize wasn't provided, set it to the calculated size
-        if (InputSize == 0)
+        else if (InputSize == 0)
         {
+            // If InputSize wasn't provided, set it to the calculated size
             InputSize = calculatedSize;
         }
 
@@ -743,8 +933,17 @@ public class NeuralNetworkArchitecture<T>
         {
             var firstLayer = Layers[0];
             int firstLayerInputSize = firstLayer.GetInputShape().Aggregate(1, (a, b) => a * b);
-        
-            if (firstLayerInputSize != InputSize)
+
+            // Special case for dynamic sample count
+            if (IsDynamicSampleCount && InputType == InputType.TwoDimensional)
+            {
+                // For dynamic sample count, the first layer's input size should match the InputWidth
+                if (firstLayerInputSize != InputWidth)
+                {
+                    throw new ArgumentException($"For dynamic sample count, the first layer's input size ({firstLayerInputSize}) must match the input width ({InputWidth}).");
+                }
+            }
+            else if (firstLayerInputSize != InputSize)
             {
                 throw new ArgumentException($"The first layer's input size ({firstLayerInputSize}) must match the input size ({InputSize}).");
             }

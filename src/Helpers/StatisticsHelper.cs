@@ -49,6 +49,218 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
+    /// Calculates the Cross-Entropy Loss between predicted probabilities and actual values.
+    /// </summary>
+    /// <param name="actual">The actual values (typically one-hot encoded for classification).</param>
+    /// <param name="predicted">The predicted probabilities.</param>
+    /// <returns>The cross-entropy loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Cross-Entropy Loss measures how well your neural network's predicted 
+    /// probabilities match the actual outcomes. It's widely used for classification tasks and
+    /// is particularly sensitive to predictions that are confidently wrong. Lower values indicate
+    /// better performance.
+    /// </para>
+    /// </remarks>
+    public static T CalculateCrossEntropyLoss(Vector<T> actual, Vector<T> predicted)
+    {
+        if (actual.Length != predicted.Length)
+            throw new ArgumentException("Actual and predicted vectors must have the same length.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var epsilon = numOps.FromDouble(1e-15); // Small constant to avoid log(0)
+        var n = numOps.FromDouble(actual.Length);
+        var sum = numOps.Zero;
+
+        for (int i = 0; i < actual.Length; i++)
+        {
+            // Clip predicted values to avoid numerical instability
+            var min = numOps.LessThan(predicted[i], numOps.FromDouble(1.0 - 1e-15)) ? predicted[i] : numOps.FromDouble(1.0 - 1e-15);
+            var predictedClipped = numOps.GreaterThan(min, epsilon) ? min : epsilon;
+
+            // Calculate -y * log(p) - (1-y) * log(1-p) for each sample
+            var actualVal = actual[i];
+            var term1 = numOps.Multiply(actualVal, numOps.Log(predictedClipped));
+
+            var oneMinusActual = numOps.Subtract(numOps.One, actualVal);
+            var oneMinusPredicted = numOps.Subtract(numOps.One, predictedClipped);
+            var term2 = numOps.Multiply(oneMinusActual, numOps.Log(oneMinusPredicted));
+
+            var sampleLoss = numOps.Negate(numOps.Add(term1, term2));
+            sum = numOps.Add(sum, sampleLoss);
+        }
+
+        // Return the average loss
+        return numOps.Divide(sum, n);
+    }
+
+    /// <summary>
+    /// Calculates the Perplexity based on the Cross-Entropy Loss.
+    /// </summary>
+    /// <param name="actual">The actual values.</param>
+    /// <param name="predicted">The predicted probabilities.</param>
+    /// <returns>The perplexity score.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Perplexity is a measurement of how well a model predicts a sample,
+    /// commonly used in natural language processing. It can be interpreted as the weighted average
+    /// number of choices the model is "perplexed" by when predicting the next token.
+    /// Lower perplexity values indicate better performance.
+    /// </para>
+    /// </remarks>
+    public static T CalculatePerplexity(Vector<T> actual, Vector<T> predicted)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Calculate cross-entropy loss first
+        var crossEntropyLoss = CalculateCrossEntropyLoss(actual, predicted);
+
+        // Perplexity = 2^(cross-entropy)
+        return numOps.Power(numOps.FromDouble(2.0), crossEntropyLoss);
+    }
+
+    /// <summary>
+    /// Calculates the Kullback-Leibler Divergence between actual and predicted probability distributions.
+    /// </summary>
+    /// <param name="actual">The actual probability distribution.</param>
+    /// <param name="predicted">The predicted probability distribution.</param>
+    /// <returns>The KL divergence.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> KL Divergence measures how one probability distribution differs from another.
+    /// It's often used in generative models to measure how closely the generated distribution matches
+    /// the target distribution. Lower values indicate that the distributions are more similar.
+    /// </para>
+    /// </remarks>
+    public static T CalculateKLDivergence(Vector<T> actual, Vector<T> predicted)
+    {
+        if (actual.Length != predicted.Length)
+            throw new ArgumentException("Actual and predicted vectors must have the same length.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var epsilon = numOps.FromDouble(1e-15); // Small constant to avoid log(0)
+        var sum = numOps.Zero;
+
+        for (int i = 0; i < actual.Length; i++)
+        {
+            // Skip if actual probability is zero (0 * log(x) = 0)
+            if (MathHelper.AlmostEqual(actual[i], numOps.Zero))
+                continue;
+
+            // Clip predicted values to avoid numerical instability
+            var predictedClipped = numOps.GreaterThan(predicted[i], epsilon) ? predicted[i] : epsilon;
+
+            // KL divergence: p * log(p/q)
+            var ratio = numOps.Divide(actual[i], predictedClipped);
+            var logRatio = numOps.Log(ratio);
+            var contribution = numOps.Multiply(actual[i], logRatio);
+
+            sum = numOps.Add(sum, contribution);
+        }
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Calculates the Log-Likelihood of the predicted values given the actual values.
+    /// </summary>
+    /// <param name="actual">The actual values.</param>
+    /// <param name="predicted">The predicted probabilities.</param>
+    /// <returns>The log-likelihood.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Log-Likelihood measures how likely the observed data is given the model's
+    /// predictions. Higher values indicate that the model's predictions better match the observed data.
+    /// It's often used for model comparison and evaluation.
+    /// </para>
+    /// </remarks>
+    public static T CalculateLogLikelihood(Vector<T> actual, Vector<T> predicted)
+    {
+        if (actual.Length != predicted.Length)
+            throw new ArgumentException("Actual and predicted vectors must have the same length.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var epsilon = numOps.FromDouble(1e-15); // Small constant to avoid log(0)
+        var sum = numOps.Zero;
+
+        for (int i = 0; i < actual.Length; i++)
+        {
+            // Clip predicted values to avoid numerical instability
+            var predictedClipped = numOps.GreaterThan(predicted[i], epsilon) ? predicted[i] : epsilon;
+
+            // For binary classification: y * log(p) + (1-y) * log(1-p)
+            // For multi-class, we'd take the log of the predicted probability for the actual class
+            var actualVal = actual[i];
+            var term1 = numOps.Multiply(actualVal, numOps.Log(predictedClipped));
+
+            var oneMinusActual = numOps.Subtract(numOps.One, actualVal);
+            var oneMinusPredicted = numOps.Subtract(numOps.One, predictedClipped);
+            var term2 = numOps.Multiply(oneMinusActual, numOps.Log(oneMinusPredicted));
+
+            var sampleLogLikelihood = numOps.Add(term1, term2);
+            sum = numOps.Add(sum, sampleLogLikelihood);
+        }
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Calculates the Dynamic Time Warping distance between two time series.
+    /// </summary>
+    /// <param name="actual">The actual time series.</param>
+    /// <param name="predicted">The predicted time series.</param>
+    /// <returns>The DTW distance.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Dynamic Time Warping (DTW) measures the similarity between two temporal
+    /// sequences that may vary in speed. It finds the optimal alignment between the sequences
+    /// and is particularly useful for comparing patterns in time series data, like speech
+    /// recognition or any time-based measurements. Lower values indicate more similar sequences.
+    /// </para>
+    /// </remarks>
+    public static T CalculateDynamicTimeWarping(Vector<T> actual, Vector<T> predicted)
+    {
+        int n = actual.Length;
+        int m = predicted.Length;
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var infinity = numOps.FromDouble(double.MaxValue / 2); // Use a large value as "infinity"
+
+        // Create DTW matrix
+        T[,] dtw = new T[n + 1, m + 1];
+
+        // Initialize first row and column to infinity
+        for (int i = 0; i <= n; i++)
+            dtw[i, 0] = infinity;
+
+        for (int j = 0; j <= m; j++)
+            dtw[0, j] = infinity;
+
+        // Set the starting point
+        dtw[0, 0] = numOps.Zero;
+
+        // Fill the DTW matrix
+        for (int i = 1; i <= n; i++)
+        {
+            for (int j = 1; j <= m; j++)
+            {
+                // Calculate the cost (distance) between points
+                var cost = numOps.Abs(numOps.Subtract(actual[i - 1], predicted[j - 1]));
+
+                // Find the minimum of the three adjacent cells
+                var min1 = numOps.LessThan(dtw[i - 1, j], dtw[i, j - 1]) ? dtw[i - 1, j] : dtw[i, j - 1];
+                var min = numOps.LessThan(min1, dtw[i - 1, j - 1]) ? min1 : dtw[i - 1, j - 1];
+
+                // Update the current cell
+                dtw[i, j] = numOps.Add(cost, min);
+            }
+        }
+
+        // The bottom-right cell contains the DTW distance
+        return dtw[n, m];
+    }
+
+    /// <summary>
     /// Calculates the Mean Absolute Deviation (MAD) of a vector of values from a given median.
     /// </summary>
     /// <param name="values">The vector of values to calculate MAD for.</param>
@@ -8184,38 +8396,6 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
-    /// Calculates the log-likelihood of a model given actual and predicted values.
-    /// </summary>
-    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    /// <param name="actualValues">The actual observed values.</param>
-    /// <param name="predictedValues">The predicted values from a model.</param>
-    /// <returns>The log-likelihood value.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The log-likelihood measures how well a model fits the observed data. It's 
-    /// calculated by summing the logarithms of the absolute residuals (differences between actual and 
-    /// predicted values) and multiplying by -0.5. Higher log-likelihood values (closer to zero) indicate 
-    /// better fit. Log-likelihood is used in many statistical contexts, including maximum likelihood 
-    /// estimation and information criteria like AIC and BIC. Working with log-likelihood instead of 
-    /// likelihood directly helps avoid numerical underflow with very small probability values. This 
-    /// particular implementation assumes a Laplace distribution for the errors, which is more robust to 
-    /// outliers than the normal distribution typically used in log-likelihood calculations.
-    /// </para>
-    /// </remarks>
-    public static T CalculateLogLikelihood(Vector<T> actualValues, Vector<T> predictedValues)
-    {
-        T logLikelihood = _numOps.Zero;
-
-        for (int i = 0; i < actualValues.Length; i++)
-        {
-            T residual = _numOps.Subtract(actualValues[i], predictedValues[i]);
-            logLikelihood = _numOps.Add(logLikelihood, _numOps.Log(_numOps.Abs(residual)));
-        }
-
-        return _numOps.Multiply(_numOps.FromDouble(-0.5), logLikelihood);
-    }
-
-    /// <summary>
     /// Calculates the effective number of parameters in a model using the trace of the hat matrix.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -10044,49 +10224,6 @@ public static class StatisticsHelper<T>
         }
 
         return _numOps.Divide(sum, _numOps.FromDouble(n));
-    }
-
-    /// <summary>
-    /// Calculates the Dynamic Time Warping (DTW) distance between two time series.
-    /// </summary>
-    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    /// <param name="series1">The first time series.</param>
-    /// <param name="series2">The second time series.</param>
-    /// <returns>The DTW distance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Dynamic Time Warping (DTW) is a technique for measuring similarity between two 
-    /// temporal sequences that may vary in speed or timing. Unlike Euclidean distance, which compares points 
-    /// at the same time index, DTW finds the optimal alignment between sequences by warping the time axis. 
-    /// This method implements DTW using dynamic programming to build a matrix of distances and find the path 
-    /// with minimal cumulative distance. Lower DTW distances indicate more similar sequences. DTW is particularly 
-    /// useful for comparing patterns in time series data, such as speech recognition, gesture recognition, 
-    /// and financial time series analysis. It can detect similarities even when sequences are shifted, stretched, 
-    /// or compressed in time, making it more robust than point-by-point comparison methods.
-    /// </para>
-    /// </remarks>
-    public static T CalculateDynamicTimeWarping(Vector<T> series1, Vector<T> series2)
-    {
-        int n = series1.Length;
-        int m = series2.Length;
-        var dtw = new T[n + 1, m + 1];
-
-        for (int i = 0; i <= n; i++)
-            for (int j = 0; j <= m; j++)
-                dtw[i, j] = _numOps.MaxValue;
-
-        dtw[0, 0] = _numOps.Zero;
-
-        for (int i = 1; i <= n; i++)
-        {
-            for (int j = 1; j <= m; j++)
-            {
-                var cost = _numOps.Abs(_numOps.Subtract(series1[i - 1], series2[j - 1]));
-                dtw[i, j] = _numOps.Add(cost, MathHelper.Min(dtw[i - 1, j], MathHelper.Min(dtw[i, j - 1], dtw[i - 1, j - 1])));
-            }
-        }
-
-        return dtw[n, m];
     }
 
     /// <summary>

@@ -6,17 +6,57 @@
 public static class InputHelper<T, TInput>
 {
     /// <summary>
+    /// Validates that the input and output data have compatible dimensions.
+    /// </summary>
+    /// <typeparam name="T1">The type of input data.</typeparam>
+    /// <typeparam name="T2">The type of output data.</typeparam>
+    /// <param name="input">The input data.</param>
+    /// <param name="output">The output data.</param>
+    /// <exception cref="ArgumentNullException">Thrown when input or output is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when input and output dimensions are incompatible.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method checks that the number of samples in the input matches the number of values in the output.
+    /// For matrices and vectors, this means the number of rows in the matrix should equal the length of the vector.
+    /// For tensors, the first dimension (batch size) should match.
+    /// </para>
+    /// <para><b>For Beginners:</b> This ensures your input features and output labels have the same number of examples.
+    /// If you have 100 houses with features, you need exactly 100 price labels to match them.
+    /// </para>
+    /// </remarks>
+    public static void ValidateInputOutputDimensions<T1, T2>(T1 input, T2 output)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input), "Input data cannot be null.");
+
+        if (output == null)
+            throw new ArgumentNullException(nameof(output), "Output data cannot be null.");
+
+        int inputBatchSize = GetBatchSize(input);
+        int outputBatchSize = GetBatchSize(output);
+
+        if (inputBatchSize != outputBatchSize)
+        {
+            throw new ArgumentException(
+                $"Number of samples in input ({inputBatchSize}) must match number of values in output ({outputBatchSize}).",
+                nameof(input));
+        }
+    }
+
+    /// <summary>
     /// Gets the batch size from the input data.
     /// </summary>
     /// <param name="input">The input data.</param>
     /// <returns>The batch size of the input data.</returns>
-    public static int GetBatchSize(TInput input)
+    /// <exception cref="ArgumentException">Thrown when the input type is not supported.</exception>
+    public static int GetBatchSize<TData>(TData input)
     {
         return input switch
         {
             Matrix<T> matrix => matrix.Rows,
+            Vector<T> vector => vector.Length,
             Tensor<T> tensor => tensor.Shape[0],
-            _ => throw new ArgumentException("Unsupported input type")
+            _ => throw new ArgumentException($"Unsupported data type: {input?.GetType().Name ?? "null"}")
         };
     }
 

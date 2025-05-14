@@ -1,3 +1,5 @@
+using System;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -567,21 +569,21 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
                 // Accumulate gradients for each example in the batch
                 for (int i = 0; i < actualBatchSize; i++)
                 {
-                    var x = batchX.GetRow(i);
-                    var y = batchY.GetRow(i);
-                    
+                    var x = ExtractSingleExample(batchX, i);
+                    var y = ExtractSingleExample(batchY, i).ToVector();
+
                     // Forward pass with memory to save intermediate states
-                    var prediction = ForwardWithMemory(x);
-                    
+                    var prediction = ForwardWithMemory(x).ToVector();
+
                     // Calculate loss and gradients for this example
-                    T loss = CalculateLoss(Tensor<T>.FromVector(prediction), Tensor<T>.FromVector(y));
+                    T loss = _lossFunction.CalculateLoss(prediction, y);
                     totalLoss = NumOps.Add(totalLoss, loss);
                     
                     // Calculate output gradients
-                    Vector<T> outputGradients = CalculateOutputGradients(prediction, y);
-                    
+                    Vector<T> outputGradients = _lossFunction.CalculateDerivative(prediction, y);
+
                     // Backpropagate to compute gradients for all parameters
-                    Backpropagate(outputGradients);
+                    Backpropagate(Tensor<T>.FromVector(outputGradients, expectedOutput.Shape));
                     
                     // Accumulate gradients
                     var gradients = GetParameterGradients();
@@ -656,61 +658,6 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         }
 
         return [.. shape];
-    }
-    
-    /// <summary>
-    /// Calculates the loss between predicted and expected outputs using the appropriate loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted output from the network.</param>
-    /// <param name="expected">The expected (ground truth) output.</param>
-    /// <returns>The loss value based on the selected loss function.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the loss between the network's prediction and the expected output
-    /// using the loss function specified during initialization or a default one based on the task type.
-    /// The loss value provides a measure of how well the network is performing on the task.
-    /// </para>
-    /// <para><b>For Beginners:</b> This measures how wrong the network's predictions are.
-    /// 
-    /// The loss function:
-    /// - Compares the network's prediction with the correct answer
-    /// - Produces a number that's higher when predictions are worse
-    /// - Uses the appropriate calculation based on your task type
-    /// 
-    /// During training, we aim to minimize this loss, meaning the network gets better at
-    /// making accurate predictions for the specific task.
-    /// </para>
-    /// </remarks>
-    private T CalculateLoss(Tensor<T> predicted, Tensor<T> expected)
-    {
-        return _lossFunction.CalculateLoss(predicted.ToVector(), expected.ToVector());
-    }
-    
-    /// <summary>
-    /// Calculates the gradients of the loss with respect to the network outputs.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the network.</param>
-    /// <param name="expected">The expected (target) values.</param>
-    /// <returns>A vector of gradients for the output layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates how the loss changes with respect to changes in the network's outputs.
-    /// These gradients are used during backpropagation to update the network's parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates how to adjust the network's outputs to reduce errors.
-    /// 
-    /// The gradient tells the network:
-    /// - How much each output value contributes to the overall error
-    /// - Which direction to adjust each output to reduce the error
-    /// - The size of adjustment needed for each output
-    /// 
-    /// This information flows backward through the network during training,
-    /// helping all parts of the network learn from its mistakes.
-    /// </para>
-    /// </remarks>
-    private Vector<T> CalculateOutputGradients(Vector<T> predicted, Vector<T> expected)
-    {
-        return _lossFunction.CalculateDerivative(predicted, expected);
     }
     
     /// <summary>

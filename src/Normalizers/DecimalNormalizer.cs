@@ -182,7 +182,7 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
         {
             var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < matrix.Columns; i++)
             {
                 var column = matrix.GetColumn(i);
@@ -200,56 +200,93 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             return ((TInput)(object)normalizedMatrix, parametersList);
         }
         else if (data is Tensor<T> tensor && tensor.Shape.Length == 2)
         {
-            // Convert 2D tensor to matrix for column-wise normalization
+            // Get tensor dimensions
             var rows = tensor.Shape[0];
             var cols = tensor.Shape[1];
-            var newMatrix = new Matrix<T>(rows, cols);
-            
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    newMatrix[i, j] = tensor[i, j];
-                }
-            }
-            
-            // Normalize each column separately
-            var normalizedColumns = new List<Vector<T>>();
+
+            // Create a new tensor for the normalized result
+            var normalizedTensor = new Tensor<T>(tensor.Shape);
             var parametersList = new List<NormalizationParameters<T>>();
-            
-            for (int i = 0; i < cols; i++)
+
+            // Process each column (feature) separately
+            for (int colIndex = 0; colIndex < cols; colIndex++)
             {
-                var column = newMatrix.GetColumn(i);
-                // Convert column to TOutput for normalize method
-                var (normalizedColumn, parameters) = NormalizeOutput((TOutput)(object)column);
-                // Convert back to Vector<T>
-                if (normalizedColumn is Vector<T> normalizedVector)
+                // Extract this column as a 1D tensor (for a single feature)
+                var columnTensor = new Tensor<T>(new[] { rows, 1 });
+                for (int rowIndex = 0; rowIndex < rows; rowIndex++)
                 {
-                    normalizedColumns.Add(normalizedVector);
-                    parametersList.Add(parameters);
+                    columnTensor[rowIndex, 0] = tensor[rowIndex, colIndex];
                 }
-                else
+
+                // Normalize this column tensor
+                var (normalizedColumnTensor, parameters) = NormalizeFeatureColumn(columnTensor, rows);
+                parametersList.Add(parameters);
+
+                // Copy normalized values back to the result tensor
+                for (int rowIndex = 0; rowIndex < rows; rowIndex++)
                 {
-                    throw new InvalidOperationException(
-                        $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
+                    normalizedTensor[rowIndex, colIndex] = normalizedColumnTensor[rowIndex, 0];
                 }
             }
-            
-            // Convert back to tensor
-            var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
-            var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
-            
+
             return ((TInput)(object)normalizedTensor, parametersList);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TInput).Name}. " +
             $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
+    }
+
+    /// <summary>
+    /// Helper method to normalize a single feature column (represented as a tensor).
+    /// </summary>
+    private (Tensor<T>, NormalizationParameters<T>) NormalizeFeatureColumn(Tensor<T> columnTensor, int rowCount)
+    {
+        // Calculate mean
+        T sum = NumOps.Zero;
+        for (int i = 0; i < rowCount; i++)
+        {
+            sum = NumOps.Add(sum, columnTensor[i, 0]);
+        }
+        T mean = NumOps.Divide(sum, NumOps.FromDouble(rowCount));
+
+        // Calculate standard deviation
+        T sumSquaredDiff = NumOps.Zero;
+        for (int i = 0; i < rowCount; i++)
+        {
+            T diff = NumOps.Subtract(columnTensor[i, 0], mean);
+            sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
+        }
+        T variance = NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(rowCount));
+        T stdDev = NumOps.Sqrt(variance);
+
+        // Handle zero standard deviation
+        if (NumOps.Equals(stdDev, NumOps.Zero))
+        {
+            stdDev = NumOps.One;
+        }
+
+        // Create parameters object
+        var parameters = new NormalizationParameters<T>
+        {
+            Mean = mean,
+            StdDev = stdDev
+        };
+
+        // Apply normalization
+        var normalizedColumn = new Tensor<T>(columnTensor.Shape);
+        for (int i = 0; i < rowCount; i++)
+        {
+            T centered = NumOps.Subtract(columnTensor[i, 0], mean);
+            normalizedColumn[i, 0] = NumOps.Divide(centered, stdDev);
+        }
+
+        return (normalizedColumn, parameters);
     }
 
     /// <summary>

@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -30,6 +32,21 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class NeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    /// <summary>
+    /// Indicates whether this network supports training (learning from data).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The standard neural network supports training through backpropagation.
+    /// This property is overridden to return true, allowing the network to learn from data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells the system that this neural network can learn.
+    /// Unlike some specialized networks that can only make predictions with pre-set values,
+    /// this network can adjust its internal parameters based on examples you provide during training.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => true;
+
     /// <summary>
     /// Creates a new neural network with the specified architecture.
     /// </summary>
@@ -64,7 +81,6 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : 
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        InitializeLayers();
     }
 
     /// <summary>
@@ -227,12 +243,14 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Ensure we have architecture initialized
+        EnsureArchitectureInitialized();
+
         // Ensure we're in training mode
         SetTrainingMode(true);
 
         // Step 1: Forward pass with memory for backpropagation
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> outputVector = ForwardWithMemory(inputVector);
+        Vector<T> outputVector = ForwardWithMemory(input).ToVector();
 
         // Step 2: Calculate loss/error (e.g., mean squared error)
         Vector<T> expectedVector = expectedOutput.ToVector();
@@ -248,7 +266,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
 
         // Step 3: Backpropagation to compute gradients
-        Backpropagate(errorVector);
+        Backpropagate(Tensor<T>.FromVector(errorVector, expectedOutput.Shape));
 
         // Step 4: Update parameters using gradients and learning rate
         T learningRate = NumOps.FromDouble(0.01);

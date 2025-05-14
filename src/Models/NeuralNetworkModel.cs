@@ -174,7 +174,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public NeuralNetworkModel(NeuralNetworkArchitecture<T> architecture)
     {
-        Architecture = architecture ?? throw new ArgumentNullException(nameof(architecture));
+        Architecture = architecture;
         Network = new NeuralNetwork<T>(architecture);
         _learningRate = _numOps.FromDouble(0.01); // Default learning rate
     }
@@ -361,17 +361,16 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         Network.SetTrainingMode(true);
         
         // Convert tensors to the format expected by the network
-        Vector<T> inputVector = input.ToVector();
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
         
         // Forward pass with memory to store intermediate values for backpropagation
-        Vector<T> outputVector = Network.ForwardWithMemory(inputVector);
+        var output = Network.ForwardWithMemory(input);
         
         // Calculate error gradient
-        Vector<T> error = CalculateError(outputVector, expectedOutputVector);
+        Vector<T> error = CalculateError(output.ToVector(), expectedOutputVector);
         
         // Backpropagate error
-        Network.Backpropagate(error);
+        Network.Backpropagate(Tensor<T>.FromVector(error, expectedOutput.Shape));
         
         // Update weights using the calculated gradients
         Vector<T> gradients = Network.GetParameterGradients();
@@ -417,62 +416,6 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     
         // Forward pass through the network
         return Network.Predict(input);
-    }
-
-    /// <summary>
-    /// Trains the network with the provided input and expected output vectors.
-    /// </summary>
-    /// <param name="input">The input vector.</param>
-    /// <param name="expectedOutput">The expected output vector.</param>
-    /// <remarks>
-    /// <para>
-    /// This method implements the actual training of the neural network. It performs forward propagation to compute
-    /// the network's output, calculates the error gradient, and then performs backpropagation to update the network's
-    /// parameters. This is the core of the learning process for neural networks. The specific implementation may vary
-    /// depending on the type of neural network and the training algorithm being used.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method handles the details of teaching the neural network.
-    /// 
-    /// During training:
-    /// 1. The input data is sent through the network (forward propagation)
-    /// 2. The error between the network's output and the expected output is calculated
-    /// 3. This error is sent backward through the network (backpropagation)
-    /// 4. The network adjusts its weights to reduce the error
-    /// 
-    /// This process is repeated many times over different examples,
-    /// gradually improving the network's accuracy.
-    /// </para>
-    /// </remarks>
-    private void TrainNetwork(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Implementation depends on the specific neural network type
-        if (!Network.SupportsTraining)
-        {
-            throw new InvalidOperationException("This neural network does not support training.");
-        }
-        
-        // Forward pass with memory to store intermediate values
-        Vector<T> output = Network.ForwardWithMemory(input.ToVector());
-        
-        // Calculate error gradient
-        Vector<T> error = CalculateError(output, expectedOutput.ToVector());
-        
-        // Backpropagate error
-        Network.Backpropagate(error);
-        
-        // Update weights using the calculated gradients
-        Vector<T> gradients = Network.GetParameterGradients();
-        Vector<T> currentParams = Network.GetParameters();
-        Vector<T> newParams = new Vector<T>(currentParams.Length);
-        
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            // Simple gradient descent: param = param - learningRate * gradient
-            T update = _numOps.Multiply(_learningRate, gradients[i]);
-            newParams[i] = _numOps.Subtract(currentParams[i], update);
-        }
-        
-        Network.UpdateParameters(newParams);
     }
 
     /// <summary>

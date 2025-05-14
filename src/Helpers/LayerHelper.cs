@@ -1915,8 +1915,22 @@ public static class LayerHelper<T>
             throw new ArgumentNullException(nameof(architecture));
         }
 
-        // Get input shape and output size
-        int inputSize = architecture.GetInputShape()[0];
+        // Get the effective input size - we want the feature dimension, not the sample dimension
+        int inputSize;
+
+        // For TwoDimensional input with dynamic sample count, use InputWidth rather than InputHeight
+        if (architecture.InputType == InputType.TwoDimensional && architecture.IsDynamicSampleCount)
+        {
+            // Use the feature dimension (width) for neural network initialization
+            inputSize = architecture.InputWidth;
+        }
+        else
+        {
+            // For other cases, get the first dimension from the shape as before
+            int[] inputShape = architecture.GetInputShape();
+            inputSize = inputShape[0];
+        }
+
         int outputSize = architecture.OutputSize;
 
         if (inputSize <= 0)
@@ -1929,29 +1943,31 @@ public static class LayerHelper<T>
             throw new InvalidOperationException("Output size must be greater than zero.");
         }
 
+        IActivationFunction<T> hiddenActivation = new ReLUActivation<T>();
+        IActivationFunction<T> outputActivation = NeuralNetworkHelper<T>.GetDefaultActivationFunction(architecture.TaskType);
+
         // Determine hidden layer sizes based on network complexity
-        List<int> hiddenLayerSizes = new List<int>();
-    
+        var hiddenLayerSizes = new List<int>();
         switch (architecture.Complexity)
         {
             case NetworkComplexity.Simple:
                 // One hidden layer with size between input and output
                 hiddenLayerSizes.Add((inputSize + outputSize) / 2);
                 break;
-        
+
             case NetworkComplexity.Medium:
                 // Two hidden layers
                 hiddenLayerSizes.Add(inputSize * 2);
                 hiddenLayerSizes.Add(inputSize);
                 break;
-        
+
             case NetworkComplexity.Deep:
                 // Three hidden layers
                 hiddenLayerSizes.Add(inputSize * 2);
                 hiddenLayerSizes.Add(inputSize * 2);
                 hiddenLayerSizes.Add(inputSize);
                 break;
-        
+
             default:
                 // Default to one hidden layer
                 hiddenLayerSizes.Add(inputSize);
@@ -1960,33 +1976,33 @@ public static class LayerHelper<T>
 
         // Create input layer to first hidden layer
         int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
-        yield return new DenseLayer<T>(inputSize, firstHiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ActivationLayer<T>([firstHiddenLayerSize], new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Create dense layer with activation
+        yield return new DenseLayer<T>(inputSize, firstHiddenLayerSize, hiddenActivation);
 
         // Create hidden layers
         for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
         {
             int currentLayerSize = hiddenLayerSizes[i];
             int nextLayerSize = hiddenLayerSizes[i + 1];
-    
-            yield return new DenseLayer<T>(currentLayerSize, nextLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new ActivationLayer<T>([nextLayerSize], new ReLUActivation<T>() as IActivationFunction<T>);
+
+            // Create dense layer with hidden activation
+            yield return new DenseLayer<T>(currentLayerSize, nextLayerSize, hiddenActivation);
         }
 
         // Create last hidden layer to output layer
         if (hiddenLayerSizes.Count > 0)
         {
             int lastHiddenLayerSize = hiddenLayerSizes[hiddenLayerSizes.Count - 1];
-            yield return new DenseLayer<T>(lastHiddenLayerSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+
+            // Create final dense layer with output activation
+            yield return new DenseLayer<T>(lastHiddenLayerSize, outputSize, outputActivation);
         }
         else
         {
             // If no hidden layers, connect input directly to output
-            yield return new DenseLayer<T>(inputSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(inputSize, outputSize, outputActivation);
         }
-
-        // Final activation layer for output
-        yield return new ActivationLayer<T>(new[] { outputSize }, new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>

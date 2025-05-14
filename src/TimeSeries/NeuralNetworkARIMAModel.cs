@@ -268,9 +268,8 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         var outputLayer = new DenseLayer<T>(hiddenSize, outputSize, activationFunction: linearActivation);
 
         var defaultArchitecture = new NeuralNetworkArchitecture<T>(
-            InputType.OneDimensional,           // Input type
-            NeuralNetworkTaskType.Regression,   // Task type
-            NetworkComplexity.Simple,           // Network complexity,
+            taskType: NeuralNetworkTaskType.Regression,   // Task type
+            complexity: NetworkComplexity.Simple,           // Network complexity,
             layers: new List<ILayer<T>>         // Default layers
             {
                 inputLayer,

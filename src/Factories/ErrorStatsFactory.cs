@@ -12,6 +12,9 @@ public static class ErrorStatsFactory
     /// <param name="actual">Vector of actual values (ground truth).</param>
     /// <param name="predicted">Vector of predicted values from your model.</param>
     /// <param name="modelType">The type of model being evaluated.</param>
+    /// <param name="taskType">Optional task type for neural networks.</param>
+    /// <param name="progress">Optional progress reporting.</param>
+    /// <param name="cancellationToken">Optional cancellation token.</param>
     /// <param name="featureCount">Number of features or parameters in your model.</param>
     /// <returns>An ErrorStats instance with calculated metrics appropriate for the model type.</returns>
     /// <remarks>
@@ -21,7 +24,7 @@ public static class ErrorStatsFactory
     /// and optionally the number of features in your model. It then creates an ErrorStats
     /// object with all the appropriate error metrics calculated.
     /// </remarks>
-    public static ErrorStats<T> Create<T>(Vector<T> actual, Vector<T> predicted, ModelType modelType, int featureCount = 1)
+    public static ErrorStats<T> Create<T>(Vector<T> actual, Vector<T> predicted, ModelType modelType, NeuralNetworkTaskType? taskType = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default, int featureCount = 1)
     {
         var inputs = new ErrorStatsInputs<T>
         {
@@ -30,7 +33,7 @@ public static class ErrorStatsFactory
             FeatureCount = featureCount
         };
 
-        return new ErrorStats<T>(inputs, modelType);
+        return new ErrorStats<T>(inputs, modelType, taskType, progress, cancellationToken);
     }
 
     /// <summary>
@@ -56,6 +59,7 @@ public static class ErrorStatsFactory
         Vector<T> predicted,
         ModelType modelType,
         int featureCount = 1,
+        NeuralNetworkTaskType? taskType = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -66,6 +70,6 @@ public static class ErrorStatsFactory
             FeatureCount = featureCount
         };
 
-        return new ErrorStats<T>(inputs, modelType, progress, cancellationToken);
+        return new ErrorStats<T>(inputs, modelType, taskType, progress, cancellationToken);
     }
 }

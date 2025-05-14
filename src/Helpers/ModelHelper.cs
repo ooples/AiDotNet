@@ -94,7 +94,7 @@ public static class ModelHelper<T, TInput, TOutput>
         {
             // For neural network models (tensor input and output)
             return (IFullModel<T, TInput, TOutput>)new NeuralNetworkModel<T>(
-                new NeuralNetworkArchitecture<T>(InputType.ThreeDimensional, NeuralNetworkTaskType.Custom));
+                new NeuralNetworkArchitecture<T>(taskType: NeuralNetworkTaskType.Custom, isPlaceholder: true));
         }
         else
         {
@@ -387,11 +387,8 @@ public static class ModelHelper<T, TInput, TOutput>
     {
         // Create a neural network architecture
         var architecture = new NeuralNetworkArchitecture<T>(
-            InputType.OneDimensional,
-            NeuralNetworkTaskType.Regression,
             NetworkComplexity.Simple,
-            inputSize: totalFeatures,
-            outputSize: 1  // Assuming regression task with single output
+            NeuralNetworkTaskType.Regression
         );
     
         // Create the neural network model

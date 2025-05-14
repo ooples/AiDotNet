@@ -48,55 +48,76 @@ public static class DeserializationHelper
     /// </remarks>
     public static ILayer<T> CreateLayerFromType<T>(string layerType, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams = null)
     {
-        if (!LayerTypes.TryGetValue(layerType, out Type? type))
+        // Get the base generic type definition
+        if (!LayerTypes.TryGetValue(layerType, out Type? genericTypeDefinition))
         {
             throw new NotSupportedException($"Layer type {layerType} is not supported for deserialization.");
         }
-
-        if (type == null)
+        if (genericTypeDefinition == null)
         {
             throw new InvalidOperationException($"Type for layer {layerType} was registered as null.");
         }
 
-        // Prepare constructor parameters
-        var parameters = new List<object> { inputShape };
-        
-        if (type == typeof(DenseLayer<T>))
+        // Create the concrete type with the specific T parameter
+        Type specificType;
+        if (genericTypeDefinition.IsGenericTypeDefinition)
         {
-            parameters.Add(outputShape[0]);
+            specificType = genericTypeDefinition.MakeGenericType(typeof(T));
         }
-        else if (type == typeof(ConvolutionalLayer<T>))
+        else
         {
-            int filterSize = additionalParams?.TryGetValue("FilterSize", out var fs) == true ? (int)fs : 3;
-            int filterCount = outputShape[0];
-            parameters.Add(filterSize);
-            parameters.Add(filterCount);
+            specificType = genericTypeDefinition;
         }
-        else if (type == typeof(PoolingLayer<T>))
+
+        try
         {
-            int poolSize = additionalParams?.TryGetValue("PoolSize", out var ps) == true ? (int)ps : 2;
-            int stride = additionalParams?.TryGetValue("Stride", out var s) == true ? (int)s : 2;
-            PoolingType poolingType = additionalParams?.TryGetValue("PoolingType", out var pt) == true 
-                ? (PoolingType)pt : PoolingType.Max;
-            parameters.Add(poolSize);
-            parameters.Add(stride);
-            parameters.Add(poolingType);
+            // Handle different layer types
+            if (genericTypeDefinition == typeof(DenseLayer<>))
+            {
+                int inputSize = inputShape[0];
+                int outputSize = outputShape[0];
+                var activationFunction = new ReLUActivation<T>();
+
+                var constructor = specificType.GetConstructor(new Type[] {
+                typeof(int), typeof(int), typeof(IActivationFunction<T>)
+            });
+
+                if (constructor == null)
+                {
+                    var constructors = specificType.GetConstructors();
+                    string constructorInfo = string.Join(", ", constructors.Select(c =>
+                        $"{c.Name}({string.Join(", ", c.GetParameters().Select(p => p.ParameterType.Name))})"));
+
+                    throw new InvalidOperationException(
+                        $"Could not find constructor for {layerType}. Available constructors: {constructorInfo}");
+                }
+
+                // Invoke the constructor directly
+                return (ILayer<T>)constructor.Invoke(new object[] { inputSize, outputSize, activationFunction });
+            }
+            else
+            {
+                throw new NotImplementedException($"Layer type {layerType} is not yet implemented for deserialization.");
+            }
         }
-        else if (type == typeof(ActivationLayer<T>))
+        catch (Exception ex)
         {
-            ActivationFunction activationFunction = additionalParams?.TryGetValue("ActivationFunction", out var af) == true 
-                ? (ActivationFunction)af : ActivationFunction.ReLU;
-            parameters.Add(activationFunction);
+            throw new InvalidOperationException($"Error creating layer of type {layerType}: {ex.Message}", ex);
         }
-        
-        // Use reflection to create the instance
-        object? instance = Activator.CreateInstance(type, [.. parameters]);
-        if (instance == null)
+    }
+
+    private static IActivationFunction<T> CreateActivationFunction<T>(ActivationFunction activationType)
+    {
+        return activationType switch
         {
-            throw new InvalidOperationException($"Failed to create instance of layer type {layerType}.");
-        }
-        
-        return (ILayer<T>)instance;
+            ActivationFunction.ReLU => new ReLUActivation<T>(),
+            ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
+            ActivationFunction.Tanh => new TanhActivation<T>(),
+            ActivationFunction.LeakyReLU => new LeakyReLUActivation<T>(),
+            ActivationFunction.Softmax => new SoftmaxActivation<T>(),
+            ActivationFunction.Linear => new IdentityActivation<T>(),
+            _ => new ReLUActivation<T>() // Default
+        };
     }
 
     /// <summary>

@@ -122,9 +122,9 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// Lower values for these metrics indicate better model performance.
     /// </remarks>
-    private static ErrorStats<T> CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int featureCount, ModelType modelType)
+    private static ErrorStats<T> CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int featureCount, ModelType modelType, NeuralNetworkTaskType? taskType = null)
     {
-        return new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = actual, Predicted = predicted, FeatureCount = featureCount }, modelType);
+        return new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = actual, Predicted = predicted, FeatureCount = featureCount }, modelType, taskType);
     }
 
     /// <summary>

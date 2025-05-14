@@ -281,8 +281,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
     /// <param name="discriminatorArchitecture">The neural network architecture for the discriminator.</param>
-    /// <param name="fitnessCalculator">The fitness calculator used to compute loss values during training.</param>
-    /// <param name="inputType">The type of input the GAN will process.</param>
     /// <param name="initialLearningRate">The initial learning rate for the optimizer. Default is 0.001.</param>
     /// <remarks>
     /// <para>
@@ -304,17 +302,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public GenerativeAdversarialNetwork(NeuralNetworkArchitecture<T> generatorArchitecture, 
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
-        InputType inputType,
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.001)
         : base(new NeuralNetworkArchitecture<T>(
-            inputType,
-            NeuralNetworkTaskType.Generative, 
-            NetworkComplexity.Medium, 
-            generatorArchitecture.InputSize, 
-            discriminatorArchitecture.OutputSize, 
-            0, 0, 0, 
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
+            NetworkComplexity.Medium,
+            NeuralNetworkTaskType.Generative), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         _initialLearningRate = initialLearningRate;
         _currentLearningRate = initialLearningRate;
@@ -1630,7 +1622,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         return new GenerativeAdversarialNetwork<T>(
             Generator.Architecture,
             Discriminator.Architecture,
-            Architecture.InputType,
             _lossFunction,
             _initialLearningRate);
     }

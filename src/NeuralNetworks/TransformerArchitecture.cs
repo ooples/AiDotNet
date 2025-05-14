@@ -306,7 +306,6 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// </para>
     /// </remarks>
     public TransformerArchitecture(
-        InputType inputType,
         NeuralNetworkTaskType taskType,
         int numEncoderLayers,
         int numDecoderLayers,
@@ -314,8 +313,6 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         int modelDimension,
         int feedForwardDimension,
         NetworkComplexity complexity = NetworkComplexity.Medium,
-        int inputSize = 0,
-        int outputSize = 0,
         double dropoutRate = 0.1,
         int maxSequenceLength = 512,
         int vocabularySize = 0,
@@ -323,11 +320,8 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         double temperature = 1.0,
         List<ILayer<T>>? layers = null)
         : base(
-            inputType: inputType, 
             taskType: taskType, 
             complexity: complexity,
-            inputSize: inputSize, 
-            outputSize: outputSize,
             layers: layers)
     {
         NumEncoderLayers = numEncoderLayers;

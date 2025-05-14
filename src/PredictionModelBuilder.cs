@@ -205,16 +205,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public IPredictiveModel<T, TInput, TOutput> Build(TInput x, TOutput y)
     {
-        var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
-        var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
-
-        // Validate inputs
-        if (x == null)
-            throw new ArgumentNullException(nameof(x), "Input features matrix can't be null");
-        if (y == null)
-            throw new ArgumentNullException(nameof(y), "Output vector can't be null");
-        if (convertedX.Rows != convertedY.Length)
-            throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
+        // Validate inputs and their compatibility
+        InputHelper<T, TInput>.ValidateInputOutputDimensions(x, y);
 
         // Use defaults for these interfaces if they aren't set
         IFullModel<T, TInput, TOutput> model;
@@ -247,7 +239,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         // Optimize the model
-        var inputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
+        var inputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest, preprocessedX, preprocessedY);
         DefaultInputCache.CacheDefaultInputData(inputData);
         var optimizationResult = optimizer.Optimize(inputData);
 

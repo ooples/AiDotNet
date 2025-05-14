@@ -821,32 +821,87 @@ public abstract class LayerBase<T> : ILayer<T>
     }
 
     /// <summary>
-    /// Applies the activation function to a rank-1 tensor (vector).
+    /// Applies the activation function to each element of the input tensor while preserving its shape.
     /// </summary>
-    /// <param name="input">The input tensor to activate.</param>
-    /// <returns>The activated tensor.</returns>
-    /// <exception cref="ArgumentException">Thrown when the input tensor is not rank-1.</exception>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>A new tensor with the same shape as the input, where the activation function has been applied to each element.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the input tensor is null.</exception>
     /// <remarks>
-    /// <para>
-    /// This method applies the layer's activation function to a rank-1 tensor (a vector). It first converts
-    /// the tensor to a vector, applies the activation, and then converts it back to a tensor.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method applies the activation function to a 1D array of values.
-    /// 
-    /// When processing a single "row" of data:
-    /// - This method converts it to a format the activation function can process
-    /// - Applies either the scalar or vector activation function
-    /// - Converts the result back to a tensor
-    /// 
-    /// This is a utility method used internally by various layer types.
-    /// </para>
+    /// This method efficiently applies the activation function to all elements while preserving the tensor's shape.
+    /// For large tensors, parallel processing is used to improve performance.
     /// </remarks>
     protected Tensor<T> ApplyActivation(Tensor<T> input)
     {
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> outputVector = ApplyActivation(inputVector);
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
 
-        return Tensor<T>.FromVector(outputVector);
+        var result = new Tensor<T>(input.Shape);
+
+        // For small tensors, use simple iteration
+        if (input.Length < 10000) // Threshold can be tuned based on benchmarks
+        {
+            // Use indexers to process any rank tensor
+            var indices = new int[input.Rank];
+            ApplyActivationRecursive(input, result, indices, 0);
+        }
+        // For larger tensors, use parallel processing
+        else
+        {
+            // For rank-2 tensors, parallelize over the first dimension
+            if (input.Rank == 2)
+            {
+                Parallel.For(0, input.Shape[0], i =>
+                {
+                    for (int j = 0; j < input.Shape[1]; j++)
+                    {
+                        result[i, j] = Activation(input[i, j]);
+                    }
+                });
+            }
+            // For other ranks, use vector processing
+            else
+            {
+                // Use a thread-safe implementation
+                var inputArray = input.ToArray();
+                var resultVector = new Vector<T>(inputArray.Length);
+
+                Parallel.For(0, inputArray.Length, i =>
+                {
+                    result[i] = Activation(inputArray[i]);
+                });
+
+                result = Tensor<T>.FromVector(resultVector, input.Shape);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Recursively applies the activation function to each element of the tensor.
+    /// </summary>
+    private void ApplyActivationRecursive(Tensor<T> input, Tensor<T> result, int[] indices, int dimension)
+    {
+        if (dimension == input.Rank)
+        {
+            // We have full indices, apply activation
+            result[indices] = Activation(input[indices]);
+            return;
+        }
+
+        for (int i = 0; i < input.Shape[dimension]; i++)
+        {
+            indices[dimension] = i;
+            ApplyActivationRecursive(input, result, indices, dimension + 1);
+        }
+    }
+
+    /// <summary>
+    /// Applies activation function to a single value.
+    /// </summary>
+    private T Activation(T value)
+    {
+        return ScalarActivation != null ? ScalarActivation.Activate(value) : value;
     }
 
     /// <summary>

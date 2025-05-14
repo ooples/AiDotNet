@@ -238,7 +238,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// needs to keep track of intermediate steps to understand how to improve.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForwardWithMemory(Tensor<T> input)
+    public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         var current = input;
     

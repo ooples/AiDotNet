@@ -340,7 +340,7 @@ public class Transformer<T> : NeuralNetworkBase<T>
         var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedOutput);
 
         // Backpropagate to get gradients for all layers
-        Backpropagate(outputGradients);
+        Backpropagate(Tensor<T>.FromVector(outputGradients, expectedOutput.Shape));
 
         // Get parameter gradients
         Vector<T> parameterGradients = GetParameterGradients();

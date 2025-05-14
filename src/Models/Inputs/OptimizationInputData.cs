@@ -39,6 +39,16 @@ public class OptimizationInputData<T, TInput, TOutput>
     public TOutput YTest { get; set; }
 
     /// <summary>
+    /// Gets or sets the input features for the test dataset.
+    /// </summary>
+    public TInput XFull { get; set; }
+
+    /// <summary>
+    /// Gets or sets the target values for the test dataset.
+    /// </summary>
+    public TOutput YFull { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the OptimizationInputData class with empty datasets.
     /// </summary>
     public OptimizationInputData()
@@ -46,5 +56,6 @@ public class OptimizationInputData<T, TInput, TOutput>
         (XTrain, YTrain, _) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
         (XValidation, YValidation, _) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
         (XTest, YTest, _) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
+        (XFull, YFull, _) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
     }
 }

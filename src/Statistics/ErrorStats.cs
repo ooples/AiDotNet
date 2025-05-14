@@ -1,10 +1,24 @@
-﻿namespace AiDotNet.Statistics;
+﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+
+namespace AiDotNet.Enums;
 
 /// <summary>
-/// Provides comprehensive error statistics for model evaluation, calculating only metrics
-/// that are appropriate for the specific model type.
+/// Provides statistical error metrics for model evaluation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> This class calculates various error metrics that help you understand
+/// how well your model is performing. It automatically selects appropriate metrics based on
+/// your model type or neural network task, and provides convenient access to the results.
+/// </para>
+/// </remarks>
 [Serializable]
 public class ErrorStats<T> : StatisticsBase<T>
 {
@@ -12,6 +26,11 @@ public class ErrorStats<T> : StatisticsBase<T>
     /// Number of features or parameters in the model.
     /// </summary>
     private readonly int _numberOfParameters;
+
+    /// <summary>
+    /// The neural network task type, if applicable.
+    /// </summary>
+    private readonly NeuralNetworkTaskType? _neuralNetworkTaskType;
 
     /// <summary>
     /// List of individual prediction errors (residuals).
@@ -22,7 +41,7 @@ public class ErrorStats<T> : StatisticsBase<T>
     /// This lets you examine individual errors, create visualizations like histograms,
     /// or perform additional analyses beyond summary statistics.
     /// </remarks>
-    public List<T> ErrorList { get; private set; } = [];
+    public List<T> ErrorList { get; private set; } = new List<T>();
 
     #region Property Accessors for Backward Compatibility
 
@@ -261,45 +280,18 @@ public class ErrorStats<T> : StatisticsBase<T>
     /// </summary>
     /// <param name="inputs">The inputs containing actual and predicted values.</param>
     /// <param name="modelType">The type of model being evaluated.</param>
-    /// <remarks>
-    /// For Beginners:
-    /// This constructor takes your actual values (ground truth), predicted values,
-    /// and the type of model you're evaluating. It then calculates only the error metrics
-    /// that are appropriate for that type of model.
-    /// </remarks>
-    internal ErrorStats(ErrorStatsInputs<T> inputs, ModelType modelType) : base(modelType)
-    {
-        if (inputs == null)
-            throw new ArgumentNullException(nameof(inputs));
-
-        if (modelType != ModelType.None)
-        {
-            DetermineValidMetrics();
-        }
-
-        _numberOfParameters = inputs.FeatureCount;
-
-        // Calculate all valid metrics
-        if (inputs.Actual != null && inputs.Predicted != null &&
-            !inputs.Actual.IsEmpty && !inputs.Predicted.IsEmpty)
-        {
-            CalculateValidMetrics(inputs.Actual, inputs.Predicted);
-        }
-    }
-
-    /// <summary>
-    /// Creates a new ErrorStats instance and calculates appropriate error metrics based on the model type.
-    /// </summary>
-    /// <param name="inputs">The inputs containing actual and predicted values.</param>
-    /// <param name="modelType">The type of model being evaluated.</param>
+    /// <param name="neuralNetworkTaskType">Optional. The neural network task type if applicable.</param>
     /// <param name="progress">Optional progress reporting.</param>
     /// <param name="cancellationToken">Optional cancellation token.</param>
     internal ErrorStats(ErrorStatsInputs<T> inputs, ModelType modelType,
+                       NeuralNetworkTaskType? neuralNetworkTaskType = null,
                        IProgress<double>? progress = null,
                        CancellationToken cancellationToken = default) : base(modelType)
     {
         if (inputs == null)
             throw new ArgumentNullException(nameof(inputs));
+
+        _neuralNetworkTaskType = neuralNetworkTaskType;
 
         if (modelType != ModelType.None)
         {
@@ -320,6 +312,7 @@ public class ErrorStats<T> : StatisticsBase<T>
     /// Creates an empty ErrorStats instance with appropriate metrics set to zero based on model type.
     /// </summary>
     /// <param name="modelType">The type of model.</param>
+    /// <param name="neuralNetworkTaskType">Optional. The neural network task type if applicable.</param>
     /// <returns>An ErrorStats instance with appropriate metrics initialized to zero.</returns>
     /// <remarks>
     /// For Beginners:
@@ -327,7 +320,7 @@ public class ErrorStats<T> : StatisticsBase<T>
     /// for the specified model type are set to zero. It's useful when you need a placeholder
     /// or default instance, or when you want to compare against a baseline of "no errors."
     /// </remarks>
-    public static ErrorStats<T> Empty(ModelType modelType = ModelType.None)
+    public static ErrorStats<T> Empty(ModelType modelType = ModelType.None, NeuralNetworkTaskType? neuralNetworkTaskType = null)
     {
         // Create properly initialized empty inputs
         var emptyInputs = new ErrorStatsInputs<T>
@@ -337,7 +330,35 @@ public class ErrorStats<T> : StatisticsBase<T>
             FeatureCount = 0
         };
 
-        return new ErrorStats<T>(emptyInputs, modelType);
+        return new ErrorStats<T>(emptyInputs, modelType, neuralNetworkTaskType);
+    }
+
+    /// <summary>
+    /// Creates an ErrorStats instance specifically for neural network evaluation.
+    /// </summary>
+    /// <param name="inputs">The inputs containing actual and predicted values.</param>
+    /// <param name="taskType">The specific neural network task type.</param>
+    /// <param name="progress">Optional progress reporting.</param>
+    /// <param name="cancellationToken">Optional cancellation token.</param>
+    /// <returns>An ErrorStats instance configured for the specified neural network task.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method makes it easy to evaluate a neural network by automatically
+    /// selecting the appropriate metrics for the specific task your network is performing (like 
+    /// image classification, text generation, etc.). You don't need to know which model type to use - 
+    /// just specify the task type and this method handles the rest.
+    /// </para>
+    /// </remarks>
+    public static ErrorStats<T> ForNeuralNetwork(
+        ErrorStatsInputs<T> inputs,
+        NeuralNetworkTaskType taskType,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Map the neural network task type to an appropriate model type
+        ModelType modelType = NeuralNetworkMetricHelper.MapTaskTypeToModelType(taskType);
+
+        return new ErrorStats<T>(inputs, modelType, taskType, progress, cancellationToken);
     }
 
     #endregion
@@ -350,12 +371,30 @@ public class ErrorStats<T> : StatisticsBase<T>
     protected override void DetermineValidMetrics()
     {
         _validMetrics.Clear();
-        var cache = MetricValidationCache.Instance;
-        var modelMetrics = cache.GetValidMetrics(ModelType, IsErrorStatisticMetric);
 
-        foreach (var metric in modelMetrics)
+        // Check if this is a neural network model with a specified task type
+        if (_neuralNetworkTaskType.HasValue &&
+            ModelTypeHelper.GetCategory(ModelType) == ModelCategory.NeuralNetwork)
         {
-            _validMetrics.Add(metric);
+            // Use the neural network validation cache for task-specific metrics
+            var cache = NeuralNetworkMetricValidationCache.Instance;
+            var taskMetrics = cache.GetValidMetrics(_neuralNetworkTaskType.Value, IsErrorStatisticMetric);
+
+            foreach (var metric in taskMetrics)
+            {
+                _validMetrics.Add(metric);
+            }
+        }
+        else
+        {
+            // Use the regular model validation cache for model-specific metrics
+            var cache = MetricValidationCache.Instance;
+            var modelMetrics = cache.GetValidMetrics(ModelType, IsErrorStatisticMetric);
+
+            foreach (var metric in modelMetrics)
+            {
+                _validMetrics.Add(metric);
+            }
         }
     }
 
@@ -408,6 +447,15 @@ public class ErrorStats<T> : StatisticsBase<T>
             MetricType.SMAPE => true,
             MetricType.MeanSquaredLogError => true,
 
+            // Neural network specific metrics
+            MetricType.CrossEntropyLoss => true,
+            MetricType.LogLikelihood => true,
+            MetricType.Perplexity => true,
+            MetricType.KLDivergence => true,
+
+            // Time series metrics
+            MetricType.DynamicTimeWarping => true,
+
             // For any other metric type
             _ => false,
         };
@@ -429,7 +477,7 @@ public class ErrorStats<T> : StatisticsBase<T>
             }
 
             // Calculate residuals for all model types
-            ErrorList = [.. StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
+            ErrorList = new List<T>(StatisticsHelper<T>.CalculateResiduals(actual, predicted));
 
             // Check for cancellation
             cancellationToken.ThrowIfCancellationRequested();
@@ -670,6 +718,21 @@ public class ErrorStats<T> : StatisticsBase<T>
                 case MetricType.MeanSquaredLogError:
                     return StatisticsHelper<T>.CalculateMeanSquaredLogError(actual, predicted);
 
+                case MetricType.CrossEntropyLoss:
+                    return StatisticsHelper<T>.CalculateCrossEntropyLoss(actual, predicted);
+
+                case MetricType.LogLikelihood:
+                    return StatisticsHelper<T>.CalculateLogLikelihood(actual, predicted);
+
+                case MetricType.Perplexity:
+                    return StatisticsHelper<T>.CalculatePerplexity(actual, predicted);
+
+                case MetricType.KLDivergence:
+                    return StatisticsHelper<T>.CalculateKLDivergence(actual, predicted);
+
+                case MetricType.DynamicTimeWarping:
+                    return StatisticsHelper<T>.CalculateDynamicTimeWarping(actual, predicted);
+
                 default:
                     throw new NotImplementedException($"Calculation for metric {metricType} is not implemented.");
             }
@@ -716,6 +779,45 @@ public class ErrorStats<T> : StatisticsBase<T>
         return false;
     }
 
+    /// <summary>
+    /// Gets information about which neural network task type was used to select metrics.
+    /// </summary>
+    /// <returns>The neural network task type if one was specified, or null if not applicable.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method tells you which neural network task type (like image classification
+    /// or text generation) was used to determine the appropriate metrics. This can be helpful for 
+    /// understanding why certain metrics were calculated.
+    /// </para>
+    /// </remarks>
+    public NeuralNetworkTaskType? GetNeuralNetworkTaskType()
+    {
+        return _neuralNetworkTaskType;
+    }
+
+    /// <summary>
+    /// Gets a descriptive name for this error stats instance based on model type or neural network task.
+    /// </summary>
+    /// <returns>A user-friendly description of the model or task being evaluated.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method provides a readable name describing what kind of model
+    /// or neural network task these error statistics are for. It's useful for labeling reports,
+    /// charts, or logs.
+    /// </para>
+    /// </remarks>
+    public string GetDescriptiveName()
+    {
+        if (_neuralNetworkTaskType.HasValue)
+        {
+            return NeuralNetworkMetricHelper.GetTaskName(_neuralNetworkTaskType.Value);
+        }
+        else
+        {
+            return $"{ModelType} Evaluation";
+        }
+    }
+
     #endregion
 
     #region Serialization
@@ -740,6 +842,11 @@ public class ErrorStats<T> : StatisticsBase<T>
             ["ValidMetrics"] = _validMetrics.Select(m => m.ToString()).ToArray(),
             ["CalculatedMetrics"] = _calculatedMetrics.Select(m => m.ToString()).ToArray()
         };
+
+        if (_neuralNetworkTaskType.HasValue)
+        {
+            result["NeuralNetworkTaskType"] = _neuralNetworkTaskType.Value.ToString();
+        }
 
         return JsonConvert.SerializeObject(result);
     }

@@ -64,13 +64,8 @@ public class DefaultModelSelector<T, TInput, TOutput> : IModelSelector<T, TInput
 
                 // Create a properly configured CNN
                 model = (IFullModel<T, TInput, TOutput>)new ConvolutionalNeuralNetwork<T>(new NeuralNetworkArchitecture<T>(
-                    inputType: InputType.ThreeDimensional,
                     taskType: isCategorical ? NeuralNetworkTaskType.MultiClassClassification : NeuralNetworkTaskType.Regression,
                     complexity: NetworkComplexity.Medium,
-                    inputHeight: inputHeight,
-                    inputWidth: inputWidth,
-                    inputDepth: inputChannels,
-                    outputSize: outputFeatures,
                     shouldReturnFullSequence: false
                 ));
             }
@@ -240,11 +235,8 @@ public class DefaultModelSelector<T, TInput, TOutput> : IModelSelector<T, TInput
 
                     // Create a properly configured LSTM network
                     return (IFullModel<T, TInput, TOutput>)new LSTMNeuralNetwork<T>(new NeuralNetworkArchitecture<T>(
-                        inputType: InputType.TwoDimensional,
                         taskType: isCategorical ? NeuralNetworkTaskType.MultiClassClassification : NeuralNetworkTaskType.Regression,
                         complexity: NetworkComplexity.Medium,
-                        inputSize: inputFeatures,
-                        outputSize: outputFeatures,
                         shouldReturnFullSequence: false
                     ), outputActivation: null as IActivationFunction<T>);
                 }
@@ -266,13 +258,8 @@ public class DefaultModelSelector<T, TInput, TOutput> : IModelSelector<T, TInput
 
                     // Create a properly configured CNN
                     return (IFullModel<T, TInput, TOutput>)new ConvolutionalNeuralNetwork<T>(new NeuralNetworkArchitecture<T>(
-                        inputType: InputType.ThreeDimensional,
                         taskType: isCategorical ? NeuralNetworkTaskType.MultiClassClassification : NeuralNetworkTaskType.Regression,
                         complexity: NetworkComplexity.Medium,
-                        inputHeight: inputHeight,
-                        inputWidth: inputWidth,
-                        inputDepth: inputChannels,
-                        outputSize: outputFeatures,
                         shouldReturnFullSequence: false
                     ));
                 }

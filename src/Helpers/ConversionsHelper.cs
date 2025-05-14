@@ -75,10 +75,112 @@ public static class ConversionsHelper
         }
         else if (output is Tensor<T> tensor)
         {
-            // Use the built-in Flatten method to convert tensor to vector
-            return tensor.ToVector();
+            // Check tensor shape and handle based on dimensions
+            if (tensor.Shape.Length == 2 && tensor.Shape[1] == 1)
+            {
+                // It's already a column vector format ([n, 1]), just extract the column
+                var result = new Vector<T>(tensor.Shape[0]);
+                for (int i = 0; i < tensor.Shape[0]; i++)
+                {
+                    result[i] = tensor[i, 0];
+                }
+                return result;
+            }
+            else if (tensor.Shape.Length == 1)
+            {
+                // It's a 1D tensor, convert directly
+                var result = new Vector<T>(tensor.Shape[0]);
+                for (int i = 0; i < tensor.Shape[0]; i++)
+                {
+                    result[i] = tensor[i];
+                }
+                return result;
+            }
+            else if (tensor.Shape.Length == 2)
+            {
+                // For multi-class classification with one-hot encoding
+                // Extract class indices (or create a summary value)
+                int numSamples = tensor.Shape[0];
+                var result = new Vector<T>(numSamples);
+                var numOps = MathHelper.GetNumericOperations<T>();
+
+                // For each sample, find the index of the max value (for classification)
+                // or average the values (for regression with multiple outputs)
+                for (int i = 0; i < numSamples; i++)
+                {
+                    if (tensor.Shape[1] > 1)
+                    {
+                        // For classification: find the most likely class
+                        int maxIndex = 0;
+                        var maxValue = tensor[i, 0];
+
+                        for (int j = 1; j < tensor.Shape[1]; j++)
+                        {
+                            var currentValue = tensor[i, j];
+                            if (numOps.GreaterThan(currentValue, maxValue))
+                            {
+                                maxValue = currentValue;
+                                maxIndex = j;
+                            }
+                        }
+
+                        // Store the class index as a numeric value
+                        result[i] = numOps.FromDouble(maxIndex);
+                    }
+                    else
+                    {
+                        // Single column tensor (should be handled by first case, but just in case)
+                        result[i] = tensor[i, 0];
+                    }
+                }
+
+                return result;
+            }
+            else
+            {
+                // For higher-dimensional tensors, create sample-preserving projection
+                // Collapse all dimensions except the first
+                int numSamples = tensor.Shape[0];
+                var result = new Vector<T>(numSamples);
+                var numOps = MathHelper.GetNumericOperations<T>();
+
+                // Calculate elements per sample
+                int elementsPerSample = 1;
+                for (int i = 1; i < tensor.Shape.Length; i++)
+                {
+                    elementsPerSample *= tensor.Shape[i];
+                }
+
+                // For each sample, compute a representative value (e.g., average)
+                for (int sampleIdx = 0; sampleIdx < numSamples; sampleIdx++)
+                {
+                    var sum = numOps.Zero;
+                    int count = 0;
+
+                    // Calculate flat index range for this sample
+                    int startIdx = sampleIdx * elementsPerSample;
+                    int endIdx = startIdx + elementsPerSample;
+
+                    // Sum all elements for this sample
+                    for (int flatIdx = startIdx; flatIdx < endIdx; flatIdx++)
+                    {
+                        // Convert flat index to multi-dimensional indices
+                        int[] indices = new int[tensor.Shape.Length];
+                        tensor.GetIndicesFromFlatIndex(flatIdx, indices);
+
+                        // Add to sum
+                        sum = numOps.Add(sum, tensor[indices]);
+                        count++;
+                    }
+
+                    // Store average as the representative value
+                    result[sampleIdx] = numOps.Divide(sum, numOps.FromDouble(count));
+                }
+
+                return result;
+            }
         }
-        
+
         throw new InvalidOperationException($"Cannot convert {typeof(TOutput).Name} to Vector<{typeof(T).Name}>. Expected Vector<T> or Tensor<T>.");
     }
 

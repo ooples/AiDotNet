@@ -311,7 +311,8 @@ public static class OptimizerHelper<T, TInput, TOutput>
     public static OptimizationInputData<T, TInput, TOutput> CreateOptimizationInputData(
         TInput xTrain, TOutput yTrain,
         TInput xValidation, TOutput yValidation,
-        TInput xTest, TOutput yTest)
+        TInput xTest, TOutput yTest,
+        TInput xFull, TOutput yFull)
     {
         return new OptimizationInputData<T, TInput, TOutput>
         {
@@ -320,7 +321,9 @@ public static class OptimizerHelper<T, TInput, TOutput>
             XValidation = xValidation,
             YValidation = yValidation,
             XTest = xTest,
-            YTest = yTest
+            YTest = yTest,
+            XFull = xFull,
+            YFull = yFull
         };
     }
 }

@@ -201,18 +201,12 @@ public class EnhancedNeuralNetworkExample
 
             // Standard architecture
             var standardArchitecture = new NeuralNetworkArchitecture<double>(
-                inputFeatures: NUMBER_OF_FEATURES,
-                numClasses: NUMBER_OF_CLASSES,
                 complexity: NetworkComplexity.Medium
             );
 
             var deepArchitecture = new NeuralNetworkArchitecture<double>(
-                InputType.TwoDimensional,  // For tabular data, each row is a sample
-                NeuralNetworkTaskType.MultiClassClassification,
-                NetworkComplexity.VeryDeep,
-                inputHeight: 0,            // Will be determined by the number of samples
-                inputWidth: NUMBER_OF_FEATURES,
-                outputSize: NUMBER_OF_CLASSES,
+                taskType: NeuralNetworkTaskType.MultiClassClassification,
+                complexity: NetworkComplexity.VeryDeep,
                 layers: CreateCustomLayers(NUMBER_OF_FEATURES, NUMBER_OF_CLASSES)
             );
 

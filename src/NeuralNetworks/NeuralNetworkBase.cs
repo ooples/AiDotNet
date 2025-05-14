@@ -328,67 +328,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when the network is not in training mode or doesn't support training.</exception>
-    public virtual Vector<T> Backpropagate(Vector<T> outputGradients)
-    {
-        if (!IsTrainingMode)
-        {
-            throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
-        }
-        
-        if (!SupportsTraining)
-        {
-            throw new InvalidOperationException("This network does not support backpropagation");
-        }
-        
-        // Convert output gradients to tensor format
-        var gradientTensor = Tensor<T>.FromVector(outputGradients);
-        
-        // Backpropagate through layers in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = Layers[i].Backward(gradientTensor);
-        }
-        
-        // Convert input gradients back to vector format
-        return gradientTensor.ToVector();
-    }
-
-    /// <summary>
-    /// Performs backpropagation to compute gradients for network parameters.
-    /// </summary>
-    /// <param name="outputGradients">The gradients of the loss with respect to the network outputs.</param>
-    /// <returns>The gradients of the loss with respect to the network inputs.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. After making a prediction, the network
-    /// calculates how wrong it was (the error). Then it works backward through the layers to figure out
-    /// how each parameter contributed to that error. This method handles that backward flow of information.
-    /// </para>
-    /// <para>
-    /// The "gradients" are numbers that tell us how to adjust each parameter to reduce the error.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when the network is not in training mode or doesn't support training.</exception>
     public virtual Tensor<T> Backpropagate(Tensor<T> outputGradients)
     {
         if (!IsTrainingMode)
         {
             throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
         }
-        
+
         if (!SupportsTraining)
         {
             throw new InvalidOperationException("This network does not support backpropagation");
         }
-        
+
         // Backpropagate through layers in reverse order
+        var gradientTensor = outputGradients;
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            outputGradients = Layers[i].Backward(outputGradients);
+            gradientTensor = Layers[i].Backward(gradientTensor);
         }
-        
-        // Convert input gradients back to vector format
-        return outputGradients;
+
+        return gradientTensor;
+    }
+
+    /// <summary>
+    /// Extracts a single example from a batch tensor and formats it as a tensor with shape [1, features].
+    /// </summary>
+    /// <param name="batchTensor">The batch tensor to extract from.</param>
+    /// <param name="index">The index of the example to extract.</param>
+    /// <returns>A tensor containing a single example with shape [1, features].</returns>
+    protected Tensor<T> ExtractSingleExample(Tensor<T> batchTensor, int index)
+    {
+        // Get the vector for this example
+        Vector<T> row = batchTensor.GetRow(index);
+
+        // Create a tensor with shape [1, features]
+        return new Tensor<T>([1, row.Length], row);
     }
 
     /// <summary>
@@ -404,27 +378,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when the network doesn't support training.</exception>
-    public virtual Vector<T> ForwardWithMemory(Vector<T> input)
+    public virtual Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         if (!SupportsTraining)
         {
             throw new InvalidOperationException("This network does not support training mode");
         }
-        
-        var current = input;
-        
+
+        Tensor<T> current = input;
+
         for (int i = 0; i < Layers.Count; i++)
         {
             // Store input to each layer for backpropagation
-            _layerInputs[i] = Tensor<T>.FromVector(current);
-            
+            _layerInputs[i] = current;
+
             // Forward pass through layer
-            current = Layers[i].Forward(Tensor<T>.FromVector(current)).ToVector();
-            
+            current = Layers[i].Forward(current);
+
             // Store output from each layer for backpropagation
-            _layerOutputs[i] = Tensor<T>.FromVector(current);
+            _layerOutputs[i] = current;
         }
-        
+
         return current;
     }
 
@@ -620,51 +594,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     }
 
     /// <summary>
-    /// Performs backpropagation through the network using explicit input values.
-    /// </summary>
-    /// <param name="outputGradients">The gradients of the loss with respect to the network outputs.</param>
-    /// <param name="inputs">The input data used for the forward pass.</param>
-    /// <returns>The gradients of the loss with respect to the network inputs.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. This method takes both the network's inputs 
-    /// and the error gradients from the output, then calculates how to adjust the network's internal values to 
-    /// reduce errors. Think of it as the network figuring out which knobs to turn (and by how much) to get better results.
-    /// </para>
-    /// <para>
-    /// This version of backpropagation requires you to provide the original inputs because it needs to recalculate 
-    /// all the intermediate values in the network.
-    /// </para>
-    /// </remarks>
-    protected virtual Vector<T> Backpropagate(Vector<T> outputGradients, Vector<T> inputs)
-    {
-        // Store the original input for later use
-        var originalInput = inputs;
-    
-        // Forward pass to compute all intermediate activations
-        var activations = new List<Vector<T>> { inputs };
-        var current = inputs;
-    
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-            activations.Add(current);
-        }
-    
-        // Backward pass
-        var gradient = outputGradients;
-    
-        // Go through layers in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(Tensor<T>.FromVector(gradient)).ToVector();
-        }
-    
-        // Return gradient with respect to inputs
-        return gradient;
-    }
-
-    /// <summary>
     /// Retrieves the gradients for all trainable parameters in the network.
     /// </summary>
     /// <returns>A vector containing all parameter gradients.</returns>
@@ -698,6 +627,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         }
     
         return Vector<T>.Concatenate(allGradients.ToArray());
+    }
+
+    /// <summary>
+    /// Ensures the architecture is initialized before training begins.
+    /// </summary>
+    protected void EnsureArchitectureInitialized()
+    {
+        if (!Architecture.IsInitialized)
+        {
+            // Initialize from cached data
+            Architecture.InitializeFromCachedData<Tensor<T>, Tensor<T>>();
+
+            // Initialize network-specific layers
+            InitializeLayers();
+        }
     }
 
     /// <summary>
@@ -925,17 +869,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// Deserializes the neural network from a byte array.
     /// </summary>
     /// <param name="data">The byte array containing the serialized neural network data.</param>
+    /// <summary>
+    /// Deserializes the neural network from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized neural network data.</param>
     public virtual void Deserialize(byte[] data)
     {
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
-        
+
         // Clear existing layers
         Layers.Clear();
-        
+
         // Read the number of layers
         int layerCount = reader.ReadInt32();
-        
+
         // Read and recreate each layer
         for (int i = 0; i < layerCount; i++)
         {
@@ -961,21 +909,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             // Read parameter count
             int paramCount = reader.ReadInt32();
 
-            // Read additional parameters if any
-            Dictionary<string, object>? additionalParams = null;
-            if (reader.ReadBoolean()) // Indicates presence of additional params
-            {
-                additionalParams = [];
-                int additionalParamCount = reader.ReadInt32();
-                for (int j = 0; j < additionalParamCount; j++)
-                {
-                    string key = reader.ReadString();
-                    string valueType = reader.ReadString();
-                    additionalParams[key] = Convert.ToDouble(valueType);
-                }
-            }
-
-            var layer = DeserializationHelper.CreateLayerFromType<T>(layerType, inputShape, outputShape, additionalParams);
+            // Create the layer (without checking for additional params)
+            var layer = DeserializationHelper.CreateLayerFromType<T>(layerType, inputShape, outputShape, null);
 
             // Read and set parameters if any
             if (paramCount > 0)
@@ -985,7 +920,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
                 {
                     parameters[j] = NumOps.FromDouble(reader.ReadDouble());
                 }
-
                 // Update layer parameters
                 layer.UpdateParameters(parameters);
             }
@@ -993,7 +927,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             // Add the layer to the network
             Layers.Add(layer);
         }
-        
+
         // Read network-specific data
         DeserializeNetworkSpecificData(reader);
     }

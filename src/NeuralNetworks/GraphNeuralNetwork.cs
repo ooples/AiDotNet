@@ -507,8 +507,25 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// by understanding how nodes in a graph influence each other.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Trains the Graph Neural Network on a single input-output pair.
+    /// </summary>
+    /// <param name="input">The input tensor containing node features and adjacency information. 
+    /// First half contains node features, second half contains the adjacency matrix.</param>
+    /// <param name="expectedOutput">The expected output tensor for the given graph input.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any input parameter is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when input tensor cannot be properly divided into features and adjacency components.</exception>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Validate inputs
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (expectedOutput == null) throw new ArgumentNullException(nameof(expectedOutput));
+
+        // Validate input shape is divisible by 2 for proper splitting
+        if (input.Shape[0] % 2 != 0)
+            throw new ArgumentException("Input tensor must have an even dimension to be split into features and adjacency matrix.");
+
+        // Ensure we're in training mode
         if (!IsTrainingMode)
         {
             SetTrainingMode(true);
@@ -516,11 +533,9 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
 
         // Extract node features and adjacency matrix from the input tensor
         int featuresDimension = input.Shape[0] / 2; // First half contains features
-        
-        // Extract node features
+
+        // Extract node features and adjacency matrix
         Tensor<T> nodeFeatures = input.Slice(0, featuresDimension);
-        
-        // Extract adjacency matrix
         Tensor<T> adjacencyMatrix = input.Slice(featuresDimension, featuresDimension);
 
         // Forward pass with graph data
@@ -534,8 +549,9 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         // Calculate output gradients
         var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
 
-        // Backpropagate to get parameter gradients
-        Vector<T> gradients = Backpropagate(outputGradients);
+        // Backpropagate through the network
+        // No need to store the result since we use GetParameterGradients() directly
+        Backpropagate(Tensor<T>.FromVector(outputGradients, expectedOutput.Shape));
 
         // Get parameter gradients for all trainable layers
         Vector<T> parameterGradients = GetParameterGradients();
@@ -599,7 +615,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         var outputGradients = new MeanSquaredErrorLoss<T>().CalculateDerivative(flattenedPredictions, flattenedExpected);
 
         // Back-propagate the gradients
-        Vector<T> backpropGradients = Backpropagate(outputGradients);
+        var backpropGradients = Backpropagate(Tensor<T>.FromVector(outputGradients, expectedOutput.Shape));
         
         // Get parameter gradients
         Vector<T> parameterGradients = GetParameterGradients();

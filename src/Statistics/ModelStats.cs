@@ -605,63 +605,259 @@ public class ModelStats<T, TInput, TOutput> : ModelStatisticsBase<T>
     /// <summary>
     /// Calculates basic metrics that are common across many model types.
     /// </summary>
+    /// <param name="matrix">The feature matrix used for training the model.</param>
+    /// <param name="actual">The actual target values.</param>
+    /// <param name="predicted">The predicted values from the model.</param>
+    /// <param name="inputs">The input data and model information.</param>
+    /// <remarks>
+    /// <para>
+    /// This method calculates fundamental statistical metrics that apply to most machine learning models.
+    /// It first determines which metrics can be calculated based on the provided data, then computes
+    /// matrix-based metrics (like correlation and covariance) and vector-based metrics (like distance measures).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates the basic performance measures for your model.
+    /// 
+    /// It works in three main steps:
+    /// 1. First, it checks what metrics can actually be calculated with your data
+    /// 2. Then it calculates matrix-based metrics (which show relationships between your features)
+    /// 3. Finally, it calculates vector-based metrics (which show how close your predictions are to actual values)
+    /// 
+    /// The method is smart enough to skip calculations that wouldn't work with your data.
+    /// For example, if your data matrix doesn't have enough samples, it won't try to calculate
+    /// a correlation matrix that would be unreliable.
+    /// 
+    /// Think of this as running a series of tests on your model and recording the results,
+    /// but only running the tests that make sense for your specific data.
+    /// </para>
+    /// </remarks>
     private void CalculateBasicMetrics(Matrix<T> matrix, Vector<T> actual, Vector<T> predicted, ModelStatsInputs<T, TInput, TOutput> inputs)
     {
-        // Calculate basic metrics based on valid metrics for the model type
-        if (_validMetrics.Contains(MetricType.CorrelationMatrix))
+        // Determine what metrics can actually be calculated with the provided data
+        bool canCalculateMatrixMetrics = CanCalculateMatrixMetrics(matrix);
+        bool canCalculateVectorMetrics = CanCalculateVectorMetrics(actual, predicted);
+
+        // Create a working set of valid metrics based on what's actually computable
+        var computeMetrics = new HashSet<MetricType>(_validMetrics);
+
+        // If we can't calculate matrix metrics, remove them from consideration
+        if (!canCalculateMatrixMetrics)
         {
-            CorrelationMatrix = StatisticsHelper<T>.CalculateCorrelationMatrix(matrix, _options);
+            computeMetrics.Remove(MetricType.CorrelationMatrix);
+            computeMetrics.Remove(MetricType.CovarianceMatrix);
+            computeMetrics.Remove(MetricType.VIF);
+            computeMetrics.Remove(MetricType.ConditionNumber);
         }
 
-        if (_validMetrics.Contains(MetricType.CovarianceMatrix))
+        // If we can't calculate vector metrics, remove them from consideration
+        if (!canCalculateVectorMetrics)
         {
-            CovarianceMatrix = StatisticsHelper<T>.CalculateCovarianceMatrix(matrix);
+            computeMetrics.Remove(MetricType.EuclideanDistance);
+            computeMetrics.Remove(MetricType.ManhattanDistance);
+            computeMetrics.Remove(MetricType.CosineSimilarity);
+            computeMetrics.Remove(MetricType.JaccardSimilarity);
+            computeMetrics.Remove(MetricType.HammingDistance);
+            computeMetrics.Remove(MetricType.MahalanobisDistance);
         }
 
-        if (_validMetrics.Contains(MetricType.VIF))
+        // Calculate matrix-based metrics first
+        if (canCalculateMatrixMetrics)
         {
-            VIFList = StatisticsHelper<T>.CalculateVIF(matrix, _options);
-            _calculatedMetrics.Add(MetricType.VIF);
+            if (computeMetrics.Contains(MetricType.CorrelationMatrix))
+            {
+                CorrelationMatrix = StatisticsHelper<T>.CalculateCorrelationMatrix(matrix, _options);
+            }
+
+            if (computeMetrics.Contains(MetricType.CovarianceMatrix))
+            {
+                CovarianceMatrix = StatisticsHelper<T>.CalculateCovarianceMatrix(matrix);
+            }
+
+            // Metrics that depend on correlation matrix
+            if (computeMetrics.Contains(MetricType.VIF) && CorrelationMatrix != null)
+            {
+                VIFList = StatisticsHelper<T>.CalculateVIF(CorrelationMatrix, _options);
+                _calculatedMetrics.Add(MetricType.VIF);
+            }
+
+            if (computeMetrics.Contains(MetricType.ConditionNumber))
+            {
+                _metrics[MetricType.ConditionNumber] = StatisticsHelper<T>.CalculateConditionNumber(matrix, _options);
+                _calculatedMetrics.Add(MetricType.ConditionNumber);
+            }
         }
 
-        if (_validMetrics.Contains(MetricType.ConditionNumber))
+        // Calculate vector-based metrics
+        if (canCalculateVectorMetrics)
         {
-            _metrics[MetricType.ConditionNumber] = StatisticsHelper<T>.CalculateConditionNumber(matrix, _options);
-            _calculatedMetrics.Add(MetricType.ConditionNumber);
+            CalculateDistanceMetrics(actual, predicted, computeMetrics);
+        }
+    }
+
+    /// <summary>
+    /// Determines if matrix-based metrics can be calculated with the provided matrix.
+    /// </summary>
+    /// <param name="matrix">The feature matrix to evaluate.</param>
+    /// <returns>True if matrix metrics can be calculated; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs several validation checks on the input matrix to ensure it's suitable for
+    /// statistical calculations such as correlation and covariance matrices.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method checks if your data matrix is usable for calculations.
+    /// 
+    /// It checks for several potential issues:
+    /// - If the matrix is empty or null
+    /// - If it contains any invalid numbers (like NaN or infinity)
+    /// - If there's enough data for reliable calculations
+    /// 
+    /// For statistical calculations to work properly, you need:
+    /// - More data points (rows) than features (columns)
+    /// - At least 2 columns to calculate relationships between variables
+    /// 
+    /// If any of these conditions aren't met, the method returns false, indicating that
+    /// matrix-based metrics (like correlation) can't be reliably calculated.
+    /// </para>
+    /// </remarks>
+    private bool CanCalculateMatrixMetrics(Matrix<T> matrix)
+    {
+        // Check if matrix is valid for calculations
+        if (matrix == null || matrix.Rows == 0 || matrix.Columns == 0)
+        {
+            return false;
         }
 
-        // Distance metrics
-        if (_validMetrics.Contains(MetricType.EuclideanDistance))
+        // Check for NaN or Infinity values which would cause calculation issues
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                if (!IsValidNumber(matrix[i, j]))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Check if matrix is well-conditioned for calculations
+        if (matrix.Rows < matrix.Columns || matrix.Columns < 2)
+        {
+            // Not enough data for reliable correlation/covariance
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Determines if vector-based metrics can be calculated with the provided actual and predicted vectors.
+    /// </summary>
+    /// <param name="actual">The actual target values.</param>
+    /// <param name="predicted">The predicted values from the model.</param>
+    /// <returns>True if vector metrics can be calculated; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method validates that the actual and predicted vectors are suitable for calculating
+    /// distance and similarity metrics between them.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method checks if your actual and predicted values can be used
+    /// to calculate how well your model performed.
+    /// 
+    /// It checks for several potential issues:
+    /// - If either vector is empty or null
+    /// - If they have different lengths (you need the same number of predictions as actual values)
+    /// - If they contain any invalid numbers (like NaN or infinity)
+    /// 
+    /// These checks are important because distance calculations (like Euclidean distance) require
+    /// valid, matching pairs of values to work correctly.
+    /// 
+    /// If any of these conditions aren't met, the method returns false, indicating that
+    /// vector-based metrics can't be reliably calculated.
+    /// </para>
+    /// </remarks>
+    private bool CanCalculateVectorMetrics(Vector<T> actual, Vector<T> predicted)
+    {
+        // Check if vectors are valid for calculations
+        if (actual == null || predicted == null || actual.Length == 0 || predicted.Length == 0)
+        {
+            return false;
+        }
+
+        if (actual.Length != predicted.Length)
+        {
+            return false;
+        }
+
+        // Check for NaN or Infinity values
+        for (int i = 0; i < actual.Length; i++)
+        {
+            if (!IsValidNumber(actual[i]) || !IsValidNumber(predicted[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Calculates various distance and similarity metrics between actual and predicted values.
+    /// </summary>
+    /// <param name="actual">The actual target values.</param>
+    /// <param name="predicted">The predicted values from the model.</param>
+    /// <param name="computeMetrics">The set of metrics that should be calculated.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method calculates different ways to measure how close or similar
+    /// your model's predictions are to the actual values.
+    /// 
+    /// Think of these metrics as different ways to measure distance between two points:
+    /// - Euclidean distance is like measuring with a straight line (as the crow flies)
+    /// - Manhattan distance is like following city blocks
+    /// - Cosine similarity measures the angle between vectors (how aligned they are)
+    /// - Jaccard similarity compares how much two sets overlap
+    /// - Hamming distance counts how many positions differ between two sequences
+    /// - Mahalanobis distance accounts for correlations between variables (needs a covariance matrix)
+    /// 
+    /// Each metric gives you a different perspective on how well your predictions match the actual values.
+    /// The method checks which metrics you've requested and calculates only those, storing the results
+    /// in the metrics collection and marking them as calculated.
+    /// </para>
+    /// </remarks>
+    private void CalculateDistanceMetrics(Vector<T> actual, Vector<T> predicted, HashSet<MetricType> computeMetrics)
+    {
+        // Calculate standard distance metrics 
+        if (computeMetrics.Contains(MetricType.EuclideanDistance))
         {
             _metrics[MetricType.EuclideanDistance] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Euclidean);
             _calculatedMetrics.Add(MetricType.EuclideanDistance);
         }
 
-        if (_validMetrics.Contains(MetricType.ManhattanDistance))
+        if (computeMetrics.Contains(MetricType.ManhattanDistance))
         {
             _metrics[MetricType.ManhattanDistance] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Manhattan);
             _calculatedMetrics.Add(MetricType.ManhattanDistance);
         }
 
-        if (_validMetrics.Contains(MetricType.CosineSimilarity))
+        if (computeMetrics.Contains(MetricType.CosineSimilarity))
         {
             _metrics[MetricType.CosineSimilarity] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Cosine);
             _calculatedMetrics.Add(MetricType.CosineSimilarity);
         }
 
-        if (_validMetrics.Contains(MetricType.JaccardSimilarity))
+        if (computeMetrics.Contains(MetricType.JaccardSimilarity))
         {
             _metrics[MetricType.JaccardSimilarity] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Jaccard);
             _calculatedMetrics.Add(MetricType.JaccardSimilarity);
         }
 
-        if (_validMetrics.Contains(MetricType.HammingDistance))
+        if (computeMetrics.Contains(MetricType.HammingDistance))
         {
             _metrics[MetricType.HammingDistance] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Hamming);
             _calculatedMetrics.Add(MetricType.HammingDistance);
         }
 
-        if (_validMetrics.Contains(MetricType.MahalanobisDistance))
+        // Metrics that depend on covariance matrix
+        if (computeMetrics.Contains(MetricType.MahalanobisDistance) && CanCalculateMatrixMetrics(CovarianceMatrix))
         {
             _metrics[MetricType.MahalanobisDistance] = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Mahalanobis, CovarianceMatrix);
             _calculatedMetrics.Add(MetricType.MahalanobisDistance);
@@ -669,8 +865,50 @@ public class ModelStats<T, TInput, TOutput> : ModelStatisticsBase<T>
     }
 
     /// <summary>
+    /// Determines if a value is a valid number for statistical calculations.
+    /// </summary>
+    /// <param name="value">The value to check.</param>
+    /// <returns>True if the value is a valid number (not NaN and not infinity), false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method checks if a number is usable for calculations.
+    /// 
+    /// In mathematics and statistics, some operations can produce special values that aren't
+    /// regular numbers, such as:
+    /// - NaN (Not a Number): Results from operations like dividing 0 by 0
+    /// - Infinity: Results from operations like dividing by zero
+    /// 
+    /// These special values can cause problems in calculations, so we need to check for them
+    /// before performing statistical operations.
+    /// </para>
+    /// </remarks>
+    private bool IsValidNumber(T value)
+    {
+        return !(_numOps.IsNaN(value) || _numOps.IsInfinity(value));
+    }
+
+    /// <summary>
     /// Calculates metrics that are specific to certain model types.
     /// </summary>
+    /// <param name="matrix">The feature matrix used for model training.</param>
+    /// <param name="actual">The actual target values.</param>
+    /// <param name="predicted">The predicted values from the model.</param>
+    /// <param name="coefficients">The model coefficients or parameters.</param>
+    /// <param name="inputs">Additional inputs required for metric calculation.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method calculates specialized metrics based on the type of machine learning model.
+    /// Different types of models (like clustering, time series, or ranking models) require different evaluation metrics.
+    /// 
+    /// For example:
+    /// - Clustering models need metrics like Silhouette Score that measure how well data points are grouped
+    /// - Time series models need metrics that analyze patterns over time
+    /// - Ranking models need metrics that evaluate how well items are ordered
+    /// 
+    /// This method identifies the model type and calculates only the relevant metrics for that type,
+    /// making the evaluation process more efficient and meaningful.
+    /// </para>
+    /// </remarks>
     private void CalculateModelSpecificMetrics(Matrix<T> matrix, Vector<T> actual, Vector<T> predicted, Vector<T> coefficients, ModelStatsInputs<T, TInput, TOutput> inputs)
     {
         var modelCategory = ModelTypeHelper.GetCategory(ModelType);
@@ -821,6 +1059,27 @@ public class ModelStats<T, TInput, TOutput> : ModelStatisticsBase<T>
     /// <summary>
     /// Calculates metrics that depend on other metrics, ensuring proper calculation order.
     /// </summary>
+    /// <param name="matrix">The feature matrix used for model training.</param>
+    /// <param name="actual">The actual target values.</param>
+    /// <param name="predicted">The predicted values from the model.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method handles the calculation of metrics that depend on other metrics.
+    /// 
+    /// In statistics and machine learning, some evaluation metrics can't be calculated directly - 
+    /// they need other metrics to be calculated first. This is like needing to know your test scores
+    /// before you can calculate your average grade.
+    /// 
+    /// For example:
+    /// - The Mahalanobis distance needs the covariance matrix to be calculated first
+    /// - Some clustering metrics need cluster centroids to be determined first
+    /// - Time series metrics might depend on autocorrelation values
+    /// 
+    /// This method checks which metrics have already been calculated, and then calculates any
+    /// dependent metrics in the correct order, ensuring that all prerequisites are met before
+    /// attempting to calculate more complex metrics.
+    /// </para>
+    /// </remarks>
     private void CalculateDependentMetrics(Matrix<T> matrix, Vector<T> actual, Vector<T> predicted)
     {
         // MahalanobisDistance depends on CovarianceMatrix if not already calculated
