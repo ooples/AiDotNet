@@ -9,10 +9,14 @@ global using AiDotNet.FitDetectors;
 
 namespace AiDotNet;
 
+using AiDotNet.Logging;
+
 /// <summary>
 /// A builder class that helps create and configure machine learning prediction models.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of input data.</typeparam>
+/// <typeparam name="TOutput">The type of output data.</typeparam>
 /// <remarks>
 /// <para>
 /// This class uses the builder pattern to configure various components of a machine learning model
@@ -27,13 +31,15 @@ namespace AiDotNet;
 /// </remarks>
 public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
 {
+    private readonly ILogging _logger;
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
-    private readonly IFullModel<T, TInput, TOutput>? _model;
+    private IFullModel<T, TInput, TOutput>? _model;
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
     private IModelSelector<T, TInput, TOutput>? _modelSelector;
+    private LoggingOptions? _loggingOptions;
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelBuilder class with a required model.
@@ -55,6 +61,53 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public PredictionModelBuilder(IFullModel<T, TInput, TOutput>? model = null)
     {
         _model = model;
+        _logger = LoggingFactory.GetLogger<PredictionModelBuilder<T, TInput, TOutput>>();
+        _logger.Information("Creating new PredictionModelBuilder with model: {ModelType}",
+            model != null ? model.GetType().Name : "null");
+    }
+    
+    /// <summary>
+    /// Sets the model to use for this prediction builder.
+    /// </summary>
+    /// <param name="model">The model to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method sets the machine learning model that will be trained and used for predictions.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to specify which machine learning algorithm you want to use.
+    /// Different models are better for different types of problems.
+    /// </para>
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> SetModel(IFullModel<T, TInput, TOutput> model)
+    {
+        _model = model;
+        _logger.Information("Model set to: {ModelType}", model.GetType().Name);
+        return this;
+    }
+    
+    /// <summary>
+    /// Gets the current model from the builder.
+    /// </summary>
+    /// <returns>The current model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the currently configured model.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This gives you access to the machine learning model
+    /// that has been configured in this builder.
+    /// </para>
+    /// </remarks>
+    public IFullModel<T, TInput, TOutput> GetModel()
+    {
+        if (_model == null)
+        {
+            throw new InvalidOperationException("No model has been set. Use SetModel or a configuration method that sets a model.");
+        }
+        
+        return _model;
     }
 
     /// <summary>
@@ -71,6 +124,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector)
     {
         _featureSelector = selector;
+        _logger.Debug("Feature selector configured: {FeatureSelectorType}", selector.GetType().Name);
         return this;
     }
 
@@ -88,6 +142,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer)
     {
         _normalizer = normalizer;
+        _logger.Debug("Normalizer configured: {NormalizerType}", normalizer.GetType().Name);
         return this;
     }
 
@@ -104,6 +159,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _optimizer = optimizationAlgorithm;
+        _logger.Debug("Optimizer configured: {OptimizerType}", optimizationAlgorithm.GetType().Name);
         return this;
     }
 
@@ -120,6 +176,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor)
     {
         _dataPreprocessor = dataPreprocessor;
+        _logger.Debug("Data preprocessor configured: {PreprocessorType}", dataPreprocessor.GetType().Name);
         return this;
     }
 
@@ -137,6 +194,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval)
     {
         _outlierRemoval = outlierRemoval;
+        _logger.Debug("Outlier removal configured: {OutlierRemovalType}", outlierRemoval.GetType().Name);
         return this;
     }
 
@@ -158,6 +216,36 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelSelector(IModelSelector<T, TInput, TOutput> modelSelector)
     {
         _modelSelector = modelSelector;
+        _logger.Debug("Model selector configured: {ModelSelectorType}", modelSelector.GetType().Name);
+        return this;
+    }
+
+    /// <summary>
+    /// Configures logging for the model building and prediction process.
+    /// </summary>
+    /// <param name="options">Options that control logging behavior.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method lets you control how detailed the logs should be and where they should be saved.
+    /// Logs help you understand what's happening inside the AI model and can help diagnose problems.
+    /// </para>
+    /// <para>
+    /// More detailed logs (like Debug level) provide deep insights but create larger files.
+    /// In production, you typically use Information level or higher to capture important events
+    /// without excessive detail.
+    /// </para>
+    /// <para>
+    /// If you need help from technical support, you can share these log files to help them
+    /// understand exactly what's happening in your application.
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureLogging(LoggingOptions options)
+    {
+        _loggingOptions = options;
+        LoggingFactory.Configure(options);
+        _logger.Information("Logging configured with minimum level: {LogLevel}, enabled: {IsEnabled}",
+            options.MinimumLevel, options.IsEnabled);
         return this;
     }
 
@@ -183,8 +271,34 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public List<ModelRecommendation<T, TInput, TOutput>> GetModelRecommendations(TInput sampleX, TOutput sampleY)
     {
+        _logger.Information("Getting model recommendations for provided data samples");
         _modelSelector = _modelSelector ?? new DefaultModelSelector<T, TInput, TOutput>();
-        return _modelSelector.GetModelRecommendations(sampleX, sampleY);
+        try
+        {
+            var recommendations = _modelSelector.GetModelRecommendations(sampleX, sampleY);
+            _logger.Information("Retrieved {Count} model recommendations", recommendations.Count);
+
+            if (_logger.IsEnabled(LoggingLevel.Debug))
+            {
+                foreach (var recommendation in recommendations)
+                {
+                    _logger.Debug("Model recommendation: {ModelName}, confidence: {ConfidenceScore}",
+                        recommendation.ModelName, recommendation.ConfidenceScore);
+                        
+                    if (_logger.IsEnabled(LoggingLevel.Trace))
+                    {
+                        _logger.Trace("Recommendation explanation: {Explanation}", recommendation.Explanation);
+                    }
+                }
+            }
+
+            return recommendations;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error getting model recommendations");
+            throw;
+        }
     }
 
     /// <summary>
@@ -205,45 +319,99 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public IPredictiveModel<T, TInput, TOutput> Build(TInput x, TOutput y)
     {
-        // Validate inputs and their compatibility
-        InputHelper<T, TInput>.ValidateInputOutputDimensions(x, y);
+        _logger.Information("Starting model build process");
 
-        // Use defaults for these interfaces if they aren't set
-        IFullModel<T, TInput, TOutput> model;
-        if (_model != null)
+        try
         {
-            // User explicitly configured a model, use it
-            model = _model;
+            // Apply logging configuration if it was set
+            if (_loggingOptions != null)
+            {
+                LoggingFactory.Configure(_loggingOptions);
+            }
+
+            // Validate inputs and their compatibility
+            _logger.Debug("Validating input and output dimensions");
+            InputHelper<T, TInput>.ValidateInputOutputDimensions(x, y);
+
+            // Log input and output information if debug is enabled
+            if (_logger.IsEnabled(LoggingLevel.Debug))
+            {
+                _logger.Debug("Input shape: {InputShape}, Output shape: {OutputShape}",
+                    InputHelper<T, TInput>.GetInputSize(x),
+                    InputHelper<T, TInput>.GetBatchSize(y));
+            }
+
+            // Use defaults for these interfaces if they aren't set
+            IFullModel<T, TInput, TOutput> model;
+            if (_model != null)
+            {
+                // User explicitly configured a model, use it
+                model = _model;
+                _logger.Information("Using user-configured model: {ModelType}", model.GetType().Name);
+            }
+            else if (_optimizer != null)
+            {
+                // Use the model from the optimizer
+                model = _optimizer.Model;
+                _logger.Information("Using model from optimizer: {ModelType}", model.GetType().Name);
+            }
+            else
+            {
+                // No model specified and no optimizer with a model, use default selection
+                _logger.Information("No model explicitly configured, using automatic model selection");
+                model = new DefaultModelSelector<T, TInput, TOutput>().SelectModel(x, y);
+                _logger.Information("Auto-selected model: {ModelType}", model.GetType().Name);
+            }
+
+            _logger.Debug("Initializing model components");
+            var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
+            _logger.Debug("Using normalizer: {NormalizerType}", normalizer.GetType().Name);
+
+            var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(model);
+            _logger.Debug("Using optimizer: {OptimizerType}", optimizer.GetType().Name);
+
+            var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
+            _logger.Debug("Using feature selector: {FeatureSelectorType}", featureSelector.GetType().Name);
+
+            var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
+            _logger.Debug("Using outlier removal: {OutlierRemovalType}", outlierRemoval.GetType().Name);
+
+            var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
+            _logger.Debug("Using data preprocessor: {PreprocessorType}", dataPreprocessor.GetType().Name);
+
+            // Preprocess the data
+            _logger.Information("Starting data preprocessing");
+            var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
+            _logger.Information("Data preprocessing completed");
+
+            // Split the data
+            _logger.Information("Splitting data into training, validation, and test sets");
+            var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
+            _logger.Debug("Data split complete - Training set size: {TrainingSize}", InputHelper<T, TInput>.GetInputSize(XTrain));
+
+            // Optimize the model
+            _logger.Information("Starting model optimization");
+            var inputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest, preprocessedX, preprocessedY);
+            DefaultInputCache.CacheDefaultInputData(inputData);
+            var optimizationResult = optimizer.Optimize(inputData);
+            _logger.Information("Model optimization completed");
+
+            var result = new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo);
+            _logger.Information("Model building completed successfully");
+
+            // Log model metrics if available
+            if (_logger.IsEnabled(LoggingLevel.Debug))
+            {
+                LogModelMetrics(optimizationResult);
+            }
+
+            return result;
         }
-        else if (_optimizer != null)
+        catch (Exception ex)
         {
-            // Use the model from the optimizer
-            model = _optimizer.Model;
+            _logger.Error(ex, "Error occurred during model building");
+            throw;
         }
-        else
-        {
-            // No model specified and no optimizer with a model, use default selection
-            model = new DefaultModelSelector<T, TInput, TOutput>().SelectModel(x, y);
-        }
-
-        var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
-        var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(model);
-        var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
-        var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
-        var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
-
-        // Preprocess the data
-        var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
-
-        // Split the data
-        var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
-
-        // Optimize the model
-        var inputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest, preprocessedX, preprocessedY);
-        DefaultInputCache.CacheDefaultInputData(inputData);
-        var optimizationResult = optimizer.Optimize(inputData);
-
-        return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo);
     }
 
     /// <summary>
@@ -262,7 +430,23 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public TOutput Predict(TInput newData, IPredictiveModel<T, TInput, TOutput> modelResult)
     {
-        return modelResult.Predict(newData);
+        try
+        {
+            _logger.Information("Making predictions on new data");
+            _logger.Debug("Input data shape: {InputShape}", InputHelper<T, TInput>.GetInputSize(newData));
+
+            var result = modelResult.Predict(newData);
+
+            _logger.Information("Prediction completed successfully");
+            _logger.Debug("Output shape: {OutputShape}", InputHelper<T, TInput>.GetBatchSize(result));
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error occurred during prediction");
+            throw;
+        }
     }
 
     /// <summary>
@@ -280,7 +464,17 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public void SaveModel(IPredictiveModel<T, TInput, TOutput> modelResult, string filePath)
     {
-        File.WriteAllBytes(filePath, SerializeModel(modelResult));
+        try
+        {
+            _logger.Information("Saving model to file: {FilePath}", filePath);
+            File.WriteAllBytes(filePath, SerializeModel(modelResult));
+            _logger.Information("Model saved successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error saving model to file: {FilePath}", filePath);
+            throw;
+        }
     }
 
     /// <summary>
@@ -297,8 +491,26 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public IPredictiveModel<T, TInput, TOutput> LoadModel(string filePath)
     {
-        byte[] modelData = File.ReadAllBytes(filePath);
-        return DeserializeModel(modelData);
+        try
+        {
+            _logger.Information("Loading model from file: {FilePath}", filePath);
+            if (!File.Exists(filePath))
+            {
+                var ex = new FileNotFoundException("Model file not found", filePath);
+                _logger.Error(ex, "Model file not found: {FilePath}", filePath);
+                throw ex;
+            }
+
+            byte[] modelData = File.ReadAllBytes(filePath);
+            var model = DeserializeModel(modelData);
+            _logger.Information("Model loaded successfully");
+            return model;
+        }
+        catch (Exception ex) when (!(ex is FileNotFoundException))
+        {
+            _logger.Error(ex, "Error loading model from file: {FilePath}", filePath);
+            throw;
+        }
     }
 
     /// <summary>
@@ -315,7 +527,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public byte[] SerializeModel(IPredictiveModel<T, TInput, TOutput> modelResult)
     {
-        return modelResult.Serialize();
+        try
+        {
+            _logger.Debug("Serializing model");
+            var result = modelResult.Serialize();
+            _logger.Debug("Model serialized successfully, size: {SizeBytes} bytes", result.Length);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error serializing model");
+            throw;
+        }
     }
 
     /// <summary>
@@ -332,9 +555,217 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public IPredictiveModel<T, TInput, TOutput> DeserializeModel(byte[] modelData)
     {
-        var result = new PredictionModelResult<T, TInput, TOutput>();
-        result.Deserialize(modelData);
+        try
+        {
+            _logger.Debug("Deserializing model, data size: {SizeBytes} bytes", modelData.Length);
+            var result = new PredictionModelResult<T, TInput, TOutput>();
+            result.Deserialize(modelData);
+            _logger.Debug("Model deserialized successfully");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error deserializing model");
+            throw;
+        }
+    }
 
-        return result;
+    /// <summary>
+    /// Creates a zip file containing all log files for sending to customer support.
+    /// </summary>
+    /// <param name="destinationPath">Optional path where the zip file should be saved. If not specified, uses the current directory.</param>
+    /// <returns>The full path to the created zip file, or null if creation failed.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> If you encounter problems with your model and need help from technical
+    /// support, this method creates a single compressed file containing all log files. This makes
+    /// it easy to share the logs with support staff who can help diagnose the issue.
+    /// </para>
+    /// </remarks>
+    public string CreateSupportPackage(string? destinationPath = null)
+    {
+        try
+        {
+            _logger.Information("Creating support package");
+            var packagePath = LoggingFactory.CreateLogArchive(destinationPath);
+            if (packagePath != null)
+            {
+                _logger.Information("Support package created successfully: {PackagePath}", packagePath);
+            }
+            else
+            {
+                _logger.Warning("Support package creation returned null path");
+            }
+
+            return packagePath ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error creating support package");
+            return string.Empty;
+        }
+    }
+    
+    /// <summary>
+    /// Logs metrics from the optimization result in a structured way
+    /// </summary>
+    /// <param name="optimizationResult">The optimization result containing metrics to log</param>
+    private void LogModelMetrics(OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        // Log overall model information
+        _logger.Debug("Overall model information:");
+        _logger.Debug("  Best fitness score: {BestFitnessScore}", Convert.ToDouble(optimizationResult.BestFitnessScore));
+        _logger.Debug("  Optimization iterations: {Iterations}", optimizationResult.Iterations);
+        
+        if (optimizationResult.SelectedFeatures != null)
+        {
+            _logger.Debug("  Selected features count: {FeatureCount}", optimizationResult.SelectedFeatures.Count);
+        }
+        
+        // Log training data metrics
+        if (optimizationResult.TrainingResult != null)
+        {
+            _logger.Debug("Training data metrics:");
+            LogDatasetResultMetrics(optimizationResult.TrainingResult, "Training");
+        }
+        
+        // Log validation data metrics
+        if (optimizationResult.ValidationResult != null)
+        {
+            _logger.Debug("Validation data metrics:");
+            LogDatasetResultMetrics(optimizationResult.ValidationResult, "Validation");
+        }
+        
+        // Log test data metrics
+        if (optimizationResult.TestResult != null)
+        {
+            _logger.Debug("Test data metrics:");
+            LogDatasetResultMetrics(optimizationResult.TestResult, "Test");
+        }
+        
+        // Log fit detection results if available
+        if (optimizationResult.FitDetectionResult != null)
+        {
+            _logger.Debug("Fit detection results:");
+            _logger.Debug("  Fit type: {FitType}", optimizationResult.FitDetectionResult.FitType);
+            
+            if (optimizationResult.FitDetectionResult.ConfidenceLevel != null)
+            {
+                _logger.Debug("  Confidence level: {ConfidenceLevel}", Convert.ToDouble(optimizationResult.FitDetectionResult.ConfidenceLevel));
+            }
+            
+            if (optimizationResult.FitDetectionResult.Recommendations != null && 
+                optimizationResult.FitDetectionResult.Recommendations.Count > 0)
+            {
+                _logger.Debug("  Recommendations:");
+                foreach (var recommendation in optimizationResult.FitDetectionResult.Recommendations)
+                {
+                    _logger.Debug("    - {Recommendation}", recommendation);
+                }
+            }
+            
+            if (optimizationResult.FitDetectionResult.AdditionalInfo != null && 
+                optimizationResult.FitDetectionResult.AdditionalInfo.Count > 0)
+            {
+                _logger.Debug("  Additional information:");
+                foreach (var info in optimizationResult.FitDetectionResult.AdditionalInfo)
+                {
+                    _logger.Debug("    {Key}: {Value}", info.Key, info.Value);
+                }
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Logs metrics from a dataset result
+    /// </summary>
+    /// <param name="datasetResult">The dataset result containing statistics</param>
+    /// <param name="datasetName">Name of the dataset (Training, Validation, Test)</param>
+    private void LogDatasetResultMetrics(OptimizationResult<T, TInput, TOutput>.DatasetResult datasetResult, string datasetName)
+    {
+        // Log error statistics
+        if (datasetResult.ErrorStats != null)
+        {
+            _logger.Debug("  {DatasetName} Error Statistics:", datasetName);
+            LogStatisticsMetrics(datasetResult.ErrorStats, datasetName, "Error");
+        }
+        
+        // Log prediction statistics
+        if (datasetResult.PredictionStats != null)
+        {
+            _logger.Debug("  {DatasetName} Prediction Statistics:", datasetName);
+            LogStatisticsMetrics(datasetResult.PredictionStats, datasetName, "Prediction");
+        }
+        
+        // Log actual value statistics
+        if (datasetResult.ActualBasicStats != null)
+        {
+            _logger.Debug("  {DatasetName} Actual Value Statistics:", datasetName);
+            LogStatisticsMetrics(datasetResult.ActualBasicStats, datasetName, "Actual");
+        }
+        
+        // Log predicted value statistics
+        if (datasetResult.PredictedBasicStats != null)
+        {
+            _logger.Debug("  {DatasetName} Predicted Value Statistics:", datasetName);
+            LogStatisticsMetrics(datasetResult.PredictedBasicStats, datasetName, "Predicted");
+        }
+    }
+    
+    /// <summary>
+    /// Logs metrics from a statistics object
+    /// </summary>
+    /// <param name="statsObject">The statistics object containing metrics</param>
+    /// <param name="datasetName">Name of the dataset (Training, Validation, Test)</param>
+    /// <param name="statsType">Type of statistics (Error, Prediction, etc.)</param>
+    private void LogStatisticsMetrics(object statsObject, string datasetName, string statsType)
+    {
+        if (statsObject == null)
+        {
+            return;
+        }
+        
+        // Use reflection to get metrics from the stats object
+        // First try to get a Metrics property or dictionary if it exists
+        var metricsProperty = statsObject.GetType().GetProperty("Metrics");
+        if (metricsProperty != null)
+        {
+            var metrics = metricsProperty.GetValue(statsObject) as IDictionary<object, object>;
+            if (metrics != null && metrics.Count > 0)
+            {
+                foreach (var metric in metrics)
+                {
+                    _logger.Debug("    {MetricName}: {MetricValue}", metric.Key, metric.Value);
+                }
+                return;
+            }
+        }
+        
+        // If Metrics property doesn't exist or doesn't work as expected,
+        // log all public property values
+        var properties = statsObject.GetType().GetProperties();
+        foreach (var property in properties)
+        {
+            // Skip complex objects and collections to avoid excessive logging
+            if (property.PropertyType.IsPrimitive || 
+                property.PropertyType == typeof(string) || 
+                property.PropertyType == typeof(decimal) ||
+                property.PropertyType == typeof(double) ||
+                property.PropertyType == typeof(float))
+            {
+                try
+                {
+                    var value = property.GetValue(statsObject);
+                    if (value != null)
+                    {
+                        _logger.Debug("    {PropertyName}: {PropertyValue}", property.Name, value);
+                    }
+                }
+                catch
+                {
+                    // Ignore properties that can't be read
+                }
+            }
+        }
     }
 }

@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace AiDotNet.Helpers;
 
 /// <summary>
@@ -579,5 +581,117 @@ public static class SerializationHelper<T>
     public static void SerializeInterface<TInterface>(BinaryWriter writer, TInterface? instance) where TInterface : class
     {
         writer.Write(instance?.GetType().FullName ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Saves a vector to a file on disk.
+    /// </summary>
+    /// <param name="vector">The vector to save.</param>
+    /// <param name="filePath">The path to the file where the vector will be saved.</param>
+    /// <remarks>
+    /// <para>
+    /// This method saves a vector to a binary file on disk. The file can later be loaded
+    /// using the LoadVectorFromFile method. The directory path will be created if it doesn't exist.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like saving your AI model's learned knowledge to a file.
+    /// You can then load it later to continue where you left off, without having to retrain.
+    /// </para>
+    /// </remarks>
+    public static void SaveVectorToFile(Vector<T> vector, string filePath)
+    {
+        // Ensure directory exists
+        string? directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        using FileStream fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+        using BinaryWriter writer = new BinaryWriter(fs);
+        SerializeVector(writer, vector);
+    }
+
+    /// <summary>
+    /// Loads a vector from a file on disk.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the vector data.</param>
+    /// <returns>The loaded vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method loads a vector that was previously saved using SaveVectorToFile.
+    /// The file must exist and contain valid vector data.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This loads your AI model's saved knowledge from a file,
+    /// allowing you to resume using a previously trained model without retraining.
+    /// </para>
+    /// </remarks>
+    public static Vector<T> LoadVectorFromFile(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Vector file not found: {filePath}");
+        }
+
+        using FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+        using BinaryReader reader = new BinaryReader(fs);
+        return DeserializeVector(reader);
+    }
+
+    /// <summary>
+    /// Saves a matrix to a file on disk.
+    /// </summary>
+    /// <param name="matrix">The matrix to save.</param>
+    /// <param name="filePath">The path to the file where the matrix will be saved.</param>
+    /// <remarks>
+    /// <para>
+    /// This method saves a matrix to a binary file on disk. The file can later be loaded
+    /// using the LoadMatrixFromFile method. The directory path will be created if it doesn't exist.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Matrices often represent the weights in neural network layers.
+    /// This method saves those weights so you can reload your trained network later.
+    /// </para>
+    /// </remarks>
+    public static void SaveMatrixToFile(Matrix<T> matrix, string filePath)
+    {
+        // Ensure directory exists
+        string? directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        using FileStream fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+        using BinaryWriter writer = new BinaryWriter(fs);
+        SerializeMatrix(writer, matrix);
+    }
+
+    /// <summary>
+    /// Loads a matrix from a file on disk.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the matrix data.</param>
+    /// <returns>The loaded matrix.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method loads a matrix that was previously saved using SaveMatrixToFile.
+    /// The file must exist and contain valid matrix data.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This loads saved neural network weights from a file,
+    /// allowing you to use a previously trained network without retraining.
+    /// </para>
+    /// </remarks>
+    public static Matrix<T> LoadMatrixFromFile(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Matrix file not found: {filePath}");
+        }
+
+        using FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+        using BinaryReader reader = new BinaryReader(fs);
+        return DeserializeMatrix(reader);
     }
 }

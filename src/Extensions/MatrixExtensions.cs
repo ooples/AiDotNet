@@ -612,11 +612,8 @@ public static class MatrixExtensions
     {
         var ops = MathHelper.GetNumericOperations<T>();
 
-        // If tolerance is not provided (i.e., it's default(T)), use a small value based on the type
-        if (tolerance?.Equals(default(T)) ?? true)
-        {
-            tolerance = ops.FromDouble(1e-10); // Use a small value as default tolerance
-        }
+        // Set default tolerance if not provided
+        tolerance ??= ops.FromDouble(1e-10);
 
         for (int i = 1; i < matrix.Rows; i++)
         {

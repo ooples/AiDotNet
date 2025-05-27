@@ -135,7 +135,7 @@ public class DenseLayer<T> : LayerBase<T>
         if (input.Shape[input.Shape.Length - 1] != InputShape[0])
             throw new ArgumentException($"Expected input features dimension {InputShape[0]}, got {input.Shape[input.Shape.Length - 1]}");
 
-        // Perform dense layer computation: output = input · weights^T + biases
+        // Perform dense layer computation: output = input ï¿½ weights^T + biases
         // Optimization: Use efficient tensor operations without creating intermediate tensors
         var output = input.MatrixMultiply(_weights.Transpose());
         output = output.Add(_biases);
@@ -235,7 +235,7 @@ public class DenseLayer<T> : LayerBase<T>
             }
         }
 
-        // 2. Calculate weight gradients: weightsGradient = activationGradient^T · input
+        // 2. Calculate weight gradients: weightsGradient = activationGradient^T ï¿½ input
         // Ensure input has correct shape [batchSize, inputFeatures]
         int batchSize = _lastInput.Shape[0];
         var inputReshaped = _lastInput;
@@ -252,7 +252,7 @@ public class DenseLayer<T> : LayerBase<T>
         // 3. Calculate bias gradients by summing over batch dimension
         _biasesGradient = activationGradient.Sum([0]);
 
-        // 4. Calculate input gradients: inputGradient = activationGradient · weights
+        // 4. Calculate input gradients: inputGradient = activationGradient ï¿½ weights
         var inputGradient = activationGradient.MatrixMultiply(_weights);
 
         // Ensure output gradient has same shape as original input
@@ -362,5 +362,49 @@ public class DenseLayer<T> : LayerBase<T>
         copy._biases = _biases.Clone();
 
         return copy;
+    }
+
+    /// <summary>
+    /// Gets the weights tensor of this layer.
+    /// </summary>
+    /// <returns>The weights tensor.</returns>
+    public Tensor<T> GetWeights()
+    {
+        return _weights.Clone();
+    }
+
+    /// <summary>
+    /// Sets the weights tensor of this layer.
+    /// </summary>
+    /// <param name="weights">The new weights tensor.</param>
+    public void SetWeights(Tensor<T> weights)
+    {
+        if (weights.Shape[0] != _weights.Shape[0] || weights.Shape[1] != _weights.Shape[1])
+        {
+            throw new ArgumentException($"Weight shape mismatch. Expected {_weights.Shape[0]}x{_weights.Shape[1]}, got {weights.Shape[0]}x{weights.Shape[1]}");
+        }
+        _weights = weights.Clone();
+    }
+
+    /// <summary>
+    /// Gets the biases tensor of this layer.
+    /// </summary>
+    /// <returns>The biases tensor.</returns>
+    public Tensor<T> GetBiases()
+    {
+        return _biases.Clone();
+    }
+
+    /// <summary>
+    /// Sets the biases tensor of this layer.
+    /// </summary>
+    /// <param name="biases">The new biases tensor.</param>
+    public void SetBiases(Tensor<T> biases)
+    {
+        if (biases.Length != _biases.Length)
+        {
+            throw new ArgumentException($"Bias length mismatch. Expected {_biases.Length}, got {biases.Length}");
+        }
+        _biases = biases.Clone();
     }
 }

@@ -480,4 +480,55 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         _gammaGradient = null;
         _betaGradient = null;
     }
+
+    /// <summary>
+    /// Copies the parameters from another layer normalization layer.
+    /// </summary>
+    /// <param name="source">The source layer to copy parameters from.</param>
+    public void CopyParameters(LayerNormalizationLayer<T> source)
+    {
+        if (source == null)
+        {
+            throw new ArgumentNullException(nameof(source));
+        }
+
+        if (source._gamma.Length != _gamma.Length || source._beta.Length != _beta.Length)
+        {
+            throw new ArgumentException("Source layer has incompatible dimensions");
+        }
+
+        _gamma = source._gamma.Clone();
+        _beta = source._beta.Clone();
+    }
+
+    /// <summary>
+    /// Performs a soft update of the parameters using Polyak averaging.
+    /// </summary>
+    /// <param name="source">The source layer to update from.</param>
+    /// <param name="tau">The interpolation parameter (0 < tau <= 1).</param>
+    public void SoftUpdate(LayerNormalizationLayer<T> source, T tau)
+    {
+        if (source == null)
+        {
+            throw new ArgumentNullException(nameof(source));
+        }
+
+        if (source._gamma.Length != _gamma.Length || source._beta.Length != _beta.Length)
+        {
+            throw new ArgumentException("Source layer has incompatible dimensions");
+        }
+
+        // Soft update: θ' = (1 - τ) * θ' + τ * θ
+        for (int i = 0; i < _gamma.Length; i++)
+        {
+            _gamma[i] = NumOps.Add(
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, tau), _gamma[i]),
+                NumOps.Multiply(tau, source._gamma[i])
+            );
+            _beta[i] = NumOps.Add(
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, tau), _beta[i]),
+                NumOps.Multiply(tau, source._beta[i])
+            );
+        }
+    }
 }

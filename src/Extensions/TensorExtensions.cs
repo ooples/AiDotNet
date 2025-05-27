@@ -885,4 +885,104 @@ public static class TensorExtensions
 
         return indices;
     }
+
+    /// <summary>
+    /// Finds the indices of the maximum values along a specified axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the tensor elements.</typeparam>
+    /// <param name="tensor">The tensor to search.</param>
+    /// <param name="axis">The axis along which to find the maximum values.</param>
+    /// <returns>A vector containing the indices of the maximum values.</returns>
+    public static Vector<int> ArgMax<T>(this Tensor<T> tensor, int axis)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        
+        if (axis == 1 && tensor.Rank == 2)
+        {
+            // For a 2D tensor, find argmax along axis 1 (columns)
+            var result = new Vector<int>(tensor.Shape[0]);
+            
+            for (int i = 0; i < tensor.Shape[0]; i++)
+            {
+                int maxIndex = 0;
+                T maxValue = tensor[i, 0];
+                
+                for (int j = 1; j < tensor.Shape[1]; j++)
+                {
+                    if (numOps.GreaterThan(tensor[i, j], maxValue))
+                    {
+                        maxValue = tensor[i, j];
+                        maxIndex = j;
+                    }
+                }
+                
+                result[i] = maxIndex;
+            }
+            
+            return result;
+        }
+        else if (axis == 0 && tensor.Rank == 1)
+        {
+            // For a 1D tensor, find the single argmax
+            int maxIndex = 0;
+            T maxValue = tensor[0];
+            
+            for (int i = 1; i < tensor.Length; i++)
+            {
+                if (numOps.GreaterThan(tensor[i], maxValue))
+                {
+                    maxValue = tensor[i];
+                    maxIndex = i;
+                }
+            }
+            
+            return new Vector<int>(new[] { maxIndex });
+        }
+        else
+        {
+            throw new NotImplementedException($"ArgMax not implemented for axis {axis} on tensor with rank {tensor.Rank}");
+        }
+    }
+    
+    /// <summary>
+    /// Gathers values from a tensor using indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the tensor elements.</typeparam>
+    /// <param name="tensorObj">The tensor object to gather from.</param>
+    /// <param name="indices">The indices to use for gathering.</param>
+    /// <returns>A vector containing the gathered values.</returns>
+    public static Vector<T> GatherValues<T>(this object tensorObj, Vector<int> indices)
+    {
+        if (tensorObj is Tensor<T> tensor)
+        {
+            var result = new Vector<T>(indices.Length);
+            
+            if (tensor.Rank == 2)
+            {
+                // For 2D tensor, gather from each row using the corresponding index
+                for (int i = 0; i < indices.Length; i++)
+                {
+                    result[i] = tensor[i, indices[i]];
+                }
+            }
+            else if (tensor.Rank == 1)
+            {
+                // For 1D tensor, gather using indices directly
+                for (int i = 0; i < indices.Length; i++)
+                {
+                    result[i] = tensor[indices[i]];
+                }
+            }
+            else
+            {
+                throw new NotImplementedException($"GatherValues not implemented for tensor with rank {tensor.Rank}");
+            }
+            
+            return result;
+        }
+        else
+        {
+            throw new ArgumentException("Input must be a Tensor<T>");
+        }
+    }
 }

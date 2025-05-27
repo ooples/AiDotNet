@@ -37,7 +37,7 @@ public enum ModelType
     /// <para>
     /// <b>For Beginners:</b> Linear Regression is a fundamental model that finds the best-fitting straight line (or hyperplane) 
     /// through your data. It assumes that outputs change proportionally with inputs - for example, if increasing temperature 
-    /// by 1° typically increases ice cream sales by $20, then increasing it by 2° should increase sales by $40. 
+    /// by 1ï¿½ typically increases ice cream sales by $20, then increasing it by 2ï¿½ should increase sales by $40. 
     /// 
     /// Linear Regression models are:
     /// - Easy to understand and interpret
@@ -259,7 +259,7 @@ public enum ModelType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Decision Tree works like a flowchart of yes/no questions. For example,
-    /// to predict if someone will buy ice cream: "Is temperature > 75°F? If yes, is it a weekend?
+    /// to predict if someone will buy ice cream: "Is temperature > 75ï¿½F? If yes, is it a weekend?
     /// If no, is there a special event?" and so on. It's easy to understand but can be less
     /// accurate than more complex models.
     /// </para>
@@ -634,7 +634,7 @@ public enum ModelType
     /// <para>
     /// <b>For Beginners:</b> Symbolic Regression tries to find an actual mathematical formula that explains 
     /// your data. Instead of just fitting parameters to a pre-defined equation, it searches for the 
-    /// equation itself. For example, it might discover that your data follows "y = x² + 3x - 2" rather 
+    /// equation itself. For example, it might discover that your data follows "y = xï¿½ + 3x - 2" rather 
     /// than just giving you numbers. This provides insights into the underlying relationships and can 
     /// be more interpretable than other complex models.
     /// </para>
@@ -1471,7 +1471,7 @@ public enum ModelType
     /// <b>For Beginners:</b> Polynomial models use curved lines (like parabolas) instead of straight lines to
     /// represent relationships in data. They can capture more complex patterns where the rate of change varies.
     /// For example, a plant's growth might accelerate then slow down over time, forming an S-curve. Polynomial
-    /// models can represent these curved relationships by including squared terms (x²), cubed terms (x³), and
+    /// models can represent these curved relationships by including squared terms (xï¿½), cubed terms (xï¿½), and
     /// so on. They're more flexible than linear models but need to be used carefully to avoid overfitting.
     /// </para>
     /// </remarks>
@@ -1487,7 +1487,7 @@ public enum ModelType
     /// <para>
     /// <b>For Beginners:</b> Symbolic models try to find actual mathematical formulas that explain your data.
     /// Instead of just fitting parameters to a pre-defined equation, they search for the equation itself.
-    /// For example, they might discover that your data follows "y = sin(x) + x²" rather than just giving
+    /// For example, they might discover that your data follows "y = sin(x) + xï¿½" rather than just giving
     /// you numbers. This provides insights into the underlying relationships and can be more interpretable
     /// than black-box models. Symbolic models are particularly useful when you want to understand the
     /// mathematical laws governing a system.
@@ -1739,5 +1739,294 @@ public enum ModelType
     [ModelInfo(ModelCategory.TimeSeries,
               new[] { MetricGroups.TimeSeries, MetricGroups.General },
               "Time series analysis using frequency and cyclical components")]
-    SpectralAnalysisModel
+    SpectralAnalysisModel,
+
+    //
+    // Reinforcement Learning Models
+    //
+
+    /// <summary>
+    /// A Deep Q-Network model for value-based reinforcement learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Deep Q-Network (DQN) is a breakthrough algorithm that combines neural networks 
+    /// with Q-learning to solve complex decision-making problems. It learns to estimate the value of taking 
+    /// each action in different states, like learning which chess moves are good in which positions by 
+    /// playing many games and remembering which moves led to wins or losses. DQN uses a neural network 
+    /// to approximate the Q-function, which predicts the expected future rewards for each action. It also 
+    /// uses experience replay (storing and randomly sampling past experiences) and target networks (a 
+    /// separate network for stable targets) to improve learning stability. DQN is particularly effective 
+    /// for problems with discrete actions and has been used to master Atari games, trading strategies, 
+    /// and robotic control tasks.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Deep Q-Network for value-based reinforcement learning")]
+    DQNModel,
+
+    /// <summary>
+    /// A Proximal Policy Optimization model for policy-based reinforcement learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Proximal Policy Optimization (PPO) is a state-of-the-art policy gradient method 
+    /// that learns a policy (strategy) directly, deciding which actions to take in different situations. 
+    /// Unlike value-based methods that learn which actions are good, PPO learns the probability of taking 
+    /// each action. What makes PPO special is its "proximal" constraint - it prevents the policy from 
+    /// changing too much in a single update, making training much more stable. This stability, combined 
+    /// with its effectiveness, has made PPO the go-to algorithm for many applications. It's widely used 
+    /// for training AI agents in games (like OpenAI's Dota 2 bot), robotics (for learning complex 
+    /// movements), and trading applications (for portfolio management). PPO works well with both discrete 
+    /// and continuous actions, making it versatile for different types of problems.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Proximal Policy Optimization for stable policy learning")]
+    PPOModel,
+
+    /// <summary>
+    /// A REINFORCE policy gradient model for reinforcement learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> REINFORCE is one of the classic and most straightforward policy gradient methods 
+    /// that learns by trial and error. It works by completing entire episodes (sequences of actions), then 
+    /// adjusting the probability of actions based on whether they led to good or bad outcomes. Think of it 
+    /// like a student taking a test, seeing the final grade, and then figuring out which answers to change 
+    /// for next time. REINFORCE uses the total reward from an episode to update its policy - if an episode 
+    /// resulted in high rewards, it increases the probability of the actions taken; if rewards were low, 
+    /// it decreases them. While conceptually simple and easy to understand, REINFORCE can have high variance 
+    /// in its learning (results can be inconsistent), which is why more advanced methods like PPO were 
+    /// developed. However, it remains valuable for its simplicity and theoretical importance.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Classic policy gradient algorithm using Monte Carlo returns")]
+    REINFORCEModel,
+
+    /// <summary>
+    /// A Soft Actor-Critic model for continuous control reinforcement learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Soft Actor-Critic (SAC) is an advanced algorithm designed specifically for 
+    /// continuous actions (like steering angles, motor torques, or trading amounts). What makes SAC unique 
+    /// is its focus on "entropy" - it not only tries to maximize rewards but also maintains randomness 
+    /// in its actions. This built-in exploration means SAC naturally balances trying new things with 
+    /// exploiting what it knows works. Think of it like a chef who not only makes dishes they know are 
+    /// good but also experiments with new recipes to potentially discover even better ones. SAC is 
+    /// particularly robust and requires less hyperparameter tuning than many other algorithms. It's become 
+    /// extremely popular for robotics (controlling robot arms and legs), autonomous driving (smooth steering 
+    /// and acceleration), and algorithmic trading (determining optimal buy/sell amounts). Its stability and 
+    /// effectiveness with continuous actions make it a top choice for real-world control problems.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Soft Actor-Critic for robust continuous control")]
+    SACModel,
+
+    /// <summary>
+    /// A Deep Deterministic Policy Gradient model for continuous control.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Deep Deterministic Policy Gradient (DDPG) combines ideas from DQN with 
+    /// policy gradient methods to handle continuous actions. Unlike stochastic policies that output 
+    /// probabilities, DDPG learns deterministic policies - meaning it always outputs the same action 
+    /// for the same state, like a precise formula. Think of it as learning the exact angle to turn 
+    /// a steering wheel rather than a probability distribution over angles. DDPG uses an actor-critic 
+    /// architecture: the actor decides what action to take, and the critic evaluates how good that 
+    /// action is. To explore, it adds noise to the actions during training. DDPG was one of the first 
+    /// successful algorithms for continuous control in deep RL and paved the way for more advanced 
+    /// methods like TD3 and SAC. It's particularly effective for robotic control tasks, physics 
+    /// simulations, and any problem requiring precise, continuous outputs.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Deep Deterministic Policy Gradient for continuous control")]
+    DDPGModel,
+
+    /// <summary>
+    /// A Twin Delayed Deep Deterministic policy gradient model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Twin Delayed Deep Deterministic Policy Gradient (TD3) is an improved version 
+    /// of DDPG that addresses its main weakness: overestimation bias. TD3 uses three key tricks to make 
+    /// learning more stable and reliable. First, it uses twin critic networks (hence the "twin" in the name) 
+    /// and takes the minimum of their estimates to avoid overoptimistic value estimates. Second, it delays 
+    /// policy updates, updating the actor less frequently than the critics to ensure the critics have 
+    /// accurate estimates before the policy changes. Third, it adds noise to the target actions to smooth 
+    /// out the value estimates. These improvements make TD3 much more stable and reliable than DDPG, often 
+    /// matching or exceeding the performance of SAC. It's particularly effective for robotic control, 
+    /// continuous action games, and any application where stable, reliable learning is crucial. TD3 has 
+    /// become a standard baseline for continuous control problems.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Twin Delayed DDPG with improved stability")]
+    TD3Model,
+
+    /// <summary>
+    /// A Model-Based Policy Optimization algorithm that combines model-free and model-based approaches.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Model-Based Policy Optimization (MBPO) represents a breakthrough in sample 
+    /// efficiency for reinforcement learning. It learns a model of the environment (predicting what will 
+    /// happen next given current state and action) and uses this model to generate synthetic experiences 
+    /// for training. Think of it like a chess player who can imagine future moves without actually playing 
+    /// them out. MBPO carefully balances using the learned model with real environment interactions to 
+    /// avoid the pitfalls of pure model-based methods (which can fail if the model is inaccurate). By 
+    /// generating many simulated experiences from each real interaction, MBPO can learn effective policies 
+    /// with 10-100x fewer real environment steps than model-free methods. This dramatic improvement in 
+    /// sample efficiency is crucial for real-world applications where data collection is expensive or 
+    /// risky, such as robotics, autonomous driving, or financial trading. MBPO combines the best of both 
+    /// worlds: the sample efficiency of model-based methods with the asymptotic performance of model-free methods.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Model-Based Policy Optimization for sample-efficient learning")]
+    MBPOModel,
+
+    /// <summary>
+    /// A Quantile Regression Deep Q-Network for distributional reinforcement learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Quantile Regression DQN (QR-DQN) is a powerful extension of DQN that doesn't 
+    /// just predict expected returns but the full distribution of possible returns. Instead of learning 
+    /// "this action is worth 10 points on average," QR-DQN learns "this action has a 10% chance of -5 points, 
+    /// 60% chance of 8-12 points, and 30% chance of 15+ points." This distributional approach provides 
+    /// much richer information about uncertainty and risk. QR-DQN estimates multiple quantiles of the 
+    /// return distribution, giving you a complete picture of possible outcomes. This is particularly 
+    /// valuable in scenarios where understanding risk is crucial, such as financial trading (where you 
+    /// need to know potential losses, not just average returns) or safety-critical robotics (where you 
+    /// need to avoid catastrophic failures). The algorithm can also be configured for risk-sensitive 
+    /// decision-making, choosing actions based on worst-case scenarios (risk-averse) or best-case 
+    /// scenarios (risk-seeking) rather than just averages.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Quantile Regression DQN for distributional RL")]
+    QRDQNModel,
+
+    /// <summary>
+    /// A Hierarchical Reinforcement Learning model using Advantage Actor-Critic.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hierarchical Reinforcement Learning with Advantage Actor-Critic (HRARL) tackles 
+    /// complex tasks by breaking them down into simpler subtasks, learning both high-level strategies and 
+    /// low-level actions hierarchically. Think of it like a manager and workers: the high-level policy 
+    /// (manager) decides what task to do (e.g., "go to the kitchen"), while low-level policies (workers) 
+    /// figure out how to do it (the specific steps to walk there). This hierarchical approach makes it 
+    /// much easier to learn complex, long-horizon tasks that would be difficult for flat RL algorithms. 
+    /// HRARL uses the Advantage Actor-Critic (A2C) algorithm at each level, providing stable and efficient 
+    /// learning. It's particularly effective for tasks with natural hierarchical structure, such as 
+    /// navigation (room-to-room then within-room movement), manipulation (reaching then grasping), or 
+    /// strategic games (choosing strategy then executing tactics). The hierarchy also improves transfer 
+    /// learning - low-level skills learned for one task can often be reused for other tasks.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Hierarchical RL with Advantage Actor-Critic")]
+    HRARLModel,
+
+    /// <summary>
+    /// A Decision Transformer model that treats reinforcement learning as sequence modeling.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Decision Transformer represents a paradigm shift in reinforcement learning by 
+    /// treating it as a sequence modeling problem rather than value estimation or policy optimization. 
+    /// Using the powerful Transformer architecture (the same technology behind GPT and BERT), it learns 
+    /// from sequences of states, actions, and rewards. Instead of learning "what action is best here," 
+    /// it learns "given that I want a high return, what sequence of actions have led to high returns 
+    /// in the past?" This approach is particularly powerful for offline RL, where you learn from a 
+    /// fixed dataset without interacting with the environment. Decision Transformer can leverage patterns 
+    /// in historical data to generate good action sequences, similar to how language models generate text. 
+    /// It's especially effective when you have diverse demonstration data and want to extract different 
+    /// behaviors based on the desired outcome. This makes it valuable for learning from human demonstrations, 
+    /// historical trading data, or any scenario where you have logs of past behavior and outcomes.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Transformer-based offline reinforcement learning")]
+    DecisionTransformerModel,
+
+    /// <summary>
+    /// A Multi-Agent Transformer model for coordinated multi-agent reinforcement learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Multi-Agent Transformer extends the Transformer architecture to handle multiple 
+    /// AI agents that need to coordinate their actions. Using attention mechanisms, each agent can "pay 
+    /// attention" to what other agents are doing and planning, enabling sophisticated team coordination. 
+    /// Think of it like a sports team where each player needs to be aware of their teammates' positions 
+    /// and intentions to execute complex plays. The transformer's attention mechanism naturally handles 
+    /// the variable number of agents and their interactions. This is particularly powerful for scenarios 
+    /// like multi-robot coordination (multiple robots working together in a warehouse), team-based games 
+    /// (coordinating different units in strategy games), traffic optimization (multiple autonomous vehicles 
+    /// coordinating at intersections), or financial markets (multiple trading agents avoiding conflicts). 
+    /// The model learns both individual policies for each agent and how they should coordinate, handling 
+    /// the complex dynamics of cooperation, competition, and communication that arise in multi-agent systems.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Transformer-based multi-agent coordination")]
+    MultiAgentTransformerModel,
+
+    /// <summary>
+    /// An Actor-Critic model combining value estimation with policy learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Actor-Critic is a fundamental architecture that combines the strengths of 
+    /// value-based and policy-based reinforcement learning methods. It uses two components: an "actor" 
+    /// that decides which actions to take (the policy), and a "critic" that evaluates how good those 
+    /// actions are (the value function). Think of it like learning to cook with a mentor - the actor 
+    /// is you trying different cooking techniques, while the critic is your mentor providing feedback 
+    /// on whether each technique improved the dish. This combination addresses key limitations of each 
+    /// approach used alone: pure policy methods can have high variance (inconsistent learning), while 
+    /// pure value methods can struggle with continuous actions. Actor-Critic provides more stable and 
+    /// efficient learning by using the critic's value estimates to reduce the variance of policy updates. 
+    /// Many modern RL algorithms (A2C, A3C, PPO, SAC, TD3) are built on the actor-critic foundation, 
+    /// making it one of the most important concepts in reinforcement learning.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Fundamental actor-critic architecture for RL")]
+    ActorCriticModel,
+
+    /// <summary>
+    /// A Rainbow DQN model combining multiple DQN improvements.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Rainbow DQN combines seven different improvements to the basic DQN algorithm
+    /// into one powerful model. It includes double Q-learning, prioritized replay, dueling networks,
+    /// multi-step learning, distributional RL, and noisy networks. Think of it as a "best of all worlds"
+    /// approach that takes the most effective enhancements to DQN and uses them together. This makes it
+    /// one of the most powerful value-based reinforcement learning algorithms, particularly effective
+    /// for complex decision-making tasks.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Rainbow DQN combining multiple DQN improvements")]
+    RainbowDQNModel
 }

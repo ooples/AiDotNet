@@ -945,7 +945,10 @@ public static class LayerHelper<T>
         // Add positional encoding if specified
         if (usePositionalEncoding)
         {
-            yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
+            yield return PositionalEncodingFactory.Create<T>(
+                architecture.PositionalEncodingType,
+                maxSequenceLength,
+                modelDimension);
         }
     
         // Add dropout layer after embedding
@@ -958,7 +961,8 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             // Self-attention block
-            yield return new MultiHeadAttentionLayer<T>(
+            yield return AttentionLayerFactory.Create<T>(
+                positionalEncodingType: architecture.PositionalEncodingType,
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: modelDimension,
                 headCount: numHeads,
@@ -993,7 +997,8 @@ public static class LayerHelper<T>
             for (int i = 0; i < numDecoderLayers; i++)
             {
                 // Self-attention block
-                yield return new MultiHeadAttentionLayer<T>(
+                yield return AttentionLayerFactory.Create<T>(
+                    positionalEncodingType: architecture.PositionalEncodingType,
                     sequenceLength: maxSequenceLength,
                     embeddingDimension: modelDimension,
                     headCount: numHeads,
@@ -1009,7 +1014,8 @@ public static class LayerHelper<T>
                 }
             
                 // Cross-attention block
-                yield return new MultiHeadAttentionLayer<T>(
+                yield return AttentionLayerFactory.Create<T>(
+                    positionalEncodingType: architecture.PositionalEncodingType,
                     sequenceLength: maxSequenceLength,
                     embeddingDimension: modelDimension,
                     headCount: numHeads,
@@ -1063,7 +1069,7 @@ public static class LayerHelper<T>
                     yield return new LambdaLayer<T>(
                         [outputSize], 
                         [outputSize],
-                        input => input.Scale(NumOps.FromDouble(1.0 / temperature)),
+                        input => input.Scale(NumOps.Divide(NumOps.FromDouble(1.0), NumOps.FromDouble(temperature))),
                         (input, gradient) => gradient.Scale(NumOps.FromDouble(temperature)),
                         new IdentityActivation<T>() as IActivationFunction<T>);
                 }

@@ -234,6 +234,30 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// </para>
     /// </remarks>
     public bool UsePositionalEncoding { get; }
+    
+    /// <summary>
+    /// Gets the type of positional encoding used in the Transformer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property specifies which method of positional encoding the Transformer uses. Different
+    /// positional encoding schemes have different characteristics and are suited to different tasks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This determines how we encode position information for the Transformer.
+    /// 
+    /// Different position encoding methods are like different ways to mark page order in a book:
+    /// - Sinusoidal: Uses mathematical patterns (like the original Transformer paper)
+    /// - Learned: The model learns what each position means (like BERT)
+    /// - Relative: Focuses on how far apart words are, not their absolute positions (like Transformer-XL)
+    /// - Rotary: "Rotates" word representations based on position (like in GPT-Neo-X)
+    /// - ALiBi: Modifies how words pay attention to each other based on distance (like in Bloom)
+    /// - T5RelativeBias: Uses bucketed relative positions (like in T5)
+    /// 
+    /// The choice of encoding can affect how well the model handles longer sequences or
+    /// generalizes to unseen sequence lengths.
+    /// </para>
+    /// </remarks>
+    public PositionalEncodingType PositionalEncodingType { get; }
 
     /// <summary>
     /// Gets the temperature parameter used for controlling randomness in text generation.
@@ -263,7 +287,6 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="TransformerArchitecture{T}"/> class with the specified parameters.
     /// </summary>
-    /// <param name="inputType">The type of input the network will process (e.g., text, image).</param>
     /// <param name="taskType">The type of task the network will perform (e.g., classification, generation).</param>
     /// <param name="numEncoderLayers">The number of encoder layers in the Transformer.</param>
     /// <param name="numDecoderLayers">The number of decoder layers in the Transformer.</param>
@@ -271,18 +294,13 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// <param name="modelDimension">The dimension of the model's internal representations.</param>
     /// <param name="feedForwardDimension">The dimension of the feed-forward networks within the Transformer layers.</param>
     /// <param name="complexity">The overall complexity level of the network. Defaults to Medium.</param>
-    /// <param name="inputSize">The size of the input for simple vector inputs. Defaults to 0.</param>
-    /// <param name="inputHeight">The height of the input for 2D inputs like images. Defaults to 0.</param>
-    /// <param name="inputWidth">The width of the input for 2D inputs like images. Defaults to 0.</param>
-    /// <param name="inputDepth">The depth of the input for multi-channel inputs. Defaults to 1.</param>
-    /// <param name="outputSize">The size of the output of the network. Defaults to 0.</param>
     /// <param name="dropoutRate">The dropout rate used for regularization. Defaults to 0.1.</param>
     /// <param name="maxSequenceLength">The maximum length of input sequences. Defaults to 512.</param>
     /// <param name="vocabularySize">The size of the vocabulary for text-based tasks. Defaults to 0.</param>
     /// <param name="usePositionalEncoding">Whether to use positional encoding. Defaults to true.</param>
+    /// <param name="positionalEncodingType">The type of positional encoding to use. Defaults to Sinusoidal.</param>
     /// <param name="temperature">The temperature parameter for text generation. Defaults to 1.0.</param>
     /// <param name="layers">Optional custom layers for the network. Defaults to null.</param>
-    /// <param name="rbmLayers">Optional Restricted Boltzmann Machine layers for the network. Defaults to null.</param>
     /// <remarks>
     /// <para>
     /// This constructor initializes a new TransformerArchitecture with the specified parameters, which will
@@ -293,10 +311,10 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// <para><b>For Beginners:</b> This constructor is where you set all the options for your Transformer.
     /// 
     /// When creating a new Transformer architecture, you need to decide:
-    /// - What kind of input it will process (text, images, etc.)
     /// - What task it will perform (translation, classification, etc.)
     /// - How big and powerful the model should be
     /// - How it will handle and process sequences
+    /// - What type of positional encoding to use
     /// 
     /// Many parameters have default values that work well for common cases, so you only need to specify
     /// the ones that are important for your specific task.
@@ -317,6 +335,7 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         int maxSequenceLength = 512,
         int vocabularySize = 0,
         bool usePositionalEncoding = true,
+        PositionalEncodingType positionalEncodingType = PositionalEncodingType.Sinusoidal,
         double temperature = 1.0,
         List<ILayer<T>>? layers = null)
         : base(
@@ -333,6 +352,7 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         MaxSequenceLength = maxSequenceLength;
         VocabularySize = vocabularySize;
         UsePositionalEncoding = usePositionalEncoding;
+        PositionalEncodingType = positionalEncodingType;
         Temperature = temperature;
     }
 }

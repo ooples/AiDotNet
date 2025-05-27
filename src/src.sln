@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNet", "AiDotNet.csproj", "{6CBBC428-5882-F526-5659-94AAE5A781A9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6CBBC428-5882-F526-5659-94AAE5A781A9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6CBBC428-5882-F526-5659-94AAE5A781A9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6CBBC428-5882-F526-5659-94AAE5A781A9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6CBBC428-5882-F526-5659-94AAE5A781A9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {94C15B27-6103-4F6D-B2B6-D5074686FD56}
+	EndGlobalSection
+EndGlobal

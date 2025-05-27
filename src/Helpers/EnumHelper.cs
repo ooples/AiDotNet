@@ -39,7 +39,7 @@ public static class EnumHelper
     /// or when you need to process all enum values except for specific cases.
     /// </para>
     /// </remarks>
-    public static List<T> GetEnumValues<T>(string? ignoreName = null) where T : struct
+    public static List<T> GetEnumValues<T>(string? ignoreName = null) where T : struct, Enum
     {
         var members = typeof(T).GetMembers();
         var result = new List<T>();

@@ -401,6 +401,8 @@ public class Transformer<T> : NeuralNetworkBase<T>
                 { "MaxSequenceLength", _transformerArchitecture.MaxSequenceLength },
                 { "VocabularySize", _transformerArchitecture.VocabularySize },
                 { "DropoutRate", _transformerArchitecture.DropoutRate },
+                { "UsePositionalEncoding", _transformerArchitecture.UsePositionalEncoding },
+                { "PositionalEncodingType", _transformerArchitecture.PositionalEncodingType.ToString() },
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() },
                 { "LossFunction", LossFunction.GetType().Name },
@@ -437,6 +439,8 @@ public class Transformer<T> : NeuralNetworkBase<T>
         writer.Write(_transformerArchitecture.MaxSequenceLength);
         writer.Write(_transformerArchitecture.VocabularySize);
         writer.Write(Convert.ToDouble(_transformerArchitecture.DropoutRate));
+        writer.Write(_transformerArchitecture.UsePositionalEncoding);
+        writer.Write((int)_transformerArchitecture.PositionalEncodingType);
 
         // Write loss function and optimizer types
         SerializationHelper<T>.SerializeInterface(writer, LossFunction);
@@ -470,6 +474,8 @@ public class Transformer<T> : NeuralNetworkBase<T>
         int maxSequenceLength = reader.ReadInt32();
         int vocabularySize = reader.ReadInt32();
         T dropoutRate = NumOps.FromDouble(reader.ReadDouble());
+        bool usePositionalEncoding = reader.ReadBoolean();
+        PositionalEncodingType positionalEncodingType = (PositionalEncodingType)reader.ReadInt32();
 
         // Read and reconstruct loss function and optimizer
         _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);

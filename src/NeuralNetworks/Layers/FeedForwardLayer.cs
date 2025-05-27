@@ -22,7 +22,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - Input: [0.2, 0.5, 0.1] (representing features from previous layer)
 /// - Weights: [[0.1, 0.8], [0.4, 0.3], [0.7, 0.2]] (each input's influence on each output)
 /// - Biases: [0.1, -0.2] (starting values for each output)
-/// - Output before activation: [0.2×0.1 + 0.5×0.4 + 0.1×0.7 + 0.1, 0.2×0.8 + 0.5×0.3 + 0.1×0.2 - 0.2]
+/// - Output before activation: [0.2ï¿½0.1 + 0.5ï¿½0.4 + 0.1ï¿½0.7 + 0.1, 0.2ï¿½0.8 + 0.5ï¿½0.3 + 0.1ï¿½0.2 - 0.2]
 ///                           = [0.39, 0.33]
 /// - After activation (e.g., ReLU): [0.39, 0.33] (since both are already positive)
 /// 
@@ -129,6 +129,26 @@ public class FeedForwardLayer<T> : LayerBase<T>
     private Tensor<T> Output { get; set; }
 
     /// <summary>
+    /// The dropout rate applied for regularization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the dropout rate used during training. Dropout is a regularization technique
+    /// that randomly sets a portion of the layer's outputs to zero during training to prevent overfitting.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much dropout regularization is applied.
+    /// 
+    /// Dropout helps prevent overfitting by:
+    /// - Randomly "turning off" some neurons during training
+    /// - Forcing the network to not rely too heavily on any single neuron
+    /// - Improving the model's ability to generalize to new data
+    /// 
+    /// A value of 0.0 means no dropout, while 0.5 means 50% of neurons are randomly turned off.
+    /// </para>
+    /// </remarks>
+    private readonly double _dropoutRate;
+
+    /// <summary>
     /// The gradients for the weights, computed during backpropagation.
     /// </summary>
     /// <remarks>
@@ -226,7 +246,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create a layer with 784 inputs (e.g., from a 28×28 image), 
+    /// // Create a layer with 784 inputs (e.g., from a 28ï¿½28 image), 
     /// // 128 outputs, and ReLU activation
     /// var hiddenLayer = new FeedForwardLayer<float>(784, 128, new ReLUActivation<float>());
     /// 
@@ -242,6 +262,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        _dropoutRate = 0.0; // No dropout for this constructor
         Weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
         Biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
         WeightsGradient = Tensor<T>.Empty();
@@ -281,6 +302,80 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public FeedForwardLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        _dropoutRate = 0.0; // No dropout for this constructor
+        Weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
+        Biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
+        WeightsGradient = Tensor<T>.Empty();
+        BiasesGradient = Tensor<T>.Empty();
+        Input = Tensor<T>.Empty();
+        Output = Tensor<T>.Empty();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FeedForwardLayer{T}"/> class with dropout support.
+    /// </summary>
+    /// <param name="inputSize">The number of input neurons.</param>
+    /// <param name="outputSize">The number of output neurons.</param>
+    /// <param name="activationFunction">The activation function to apply after the linear transformation.</param>
+    /// <param name="dropoutRate">The dropout rate to apply for regularization.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new feed-forward layer with the specified input size, output size, activation function,
+    /// and dropout rate. The weights are initialized with small random values, and the biases are initialized to zero.
+    /// Dropout is applied during training to prevent overfitting.
+    /// </para>
+    /// <para><b>For Beginners:</b> This constructor includes dropout for better training stability.
+    /// 
+    /// Dropout is a regularization technique that:
+    /// - Randomly sets some neurons to zero during training
+    /// - Helps prevent the model from memorizing the training data too closely
+    /// - Usually improves performance on new, unseen data
+    /// - Is only active during training, not during inference
+    /// 
+    /// Common dropout rates are between 0.1 and 0.5, where:
+    /// - 0.0 means no dropout (all neurons active)
+    /// - 0.5 means 50% of neurons are randomly turned off during training
+    /// </para>
+    /// </remarks>
+    public FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction, double dropoutRate)
+        : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
+    {
+        _dropoutRate = dropoutRate;
+        Weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
+        Biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
+        WeightsGradient = Tensor<T>.Empty();
+        BiasesGradient = Tensor<T>.Empty();
+        Input = Tensor<T>.Empty();
+        Output = Tensor<T>.Empty();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FeedForwardLayer{T}"/> class with dropout support and vector activation.
+    /// </summary>
+    /// <param name="inputSize">The number of input neurons.</param>
+    /// <param name="outputSize">The number of output neurons.</param>
+    /// <param name="activationFunction">The vector activation function to apply after the linear transformation.</param>
+    /// <param name="dropoutRate">The dropout rate to apply for regularization.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new feed-forward layer with the specified input size, output size, vector activation function,
+    /// and dropout rate. Unlike the scalar activation function version, this uses vector activation functions that
+    /// operate on entire vectors rather than individual scalar values, with dropout for regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This constructor combines vector activation functions with dropout regularization.
+    /// 
+    /// Vector activation functions like Softmax:
+    /// - Process the entire output vector at once
+    /// - Can create dependencies between different outputs
+    /// - Are useful for classification tasks where outputs represent probabilities
+    /// 
+    /// Combined with dropout, this helps create more robust models that generalize better to new data.
+    /// </para>
+    /// </remarks>
+    public FeedForwardLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? activationFunction, double dropoutRate)
+        : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
+    {
+        _dropoutRate = dropoutRate;
         Weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
         Biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
         WeightsGradient = Tensor<T>.Empty();
@@ -423,7 +518,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques that need all parameters together
     /// 
     /// For example, a layer with 100 inputs and 10 outputs would have:
-    /// - 1,000 weight parameters (100 × 10)
+    /// - 1,000 weight parameters (100 ï¿½ 10)
     /// - 10 bias parameters (one per output)
     /// - Totaling 1,010 parameters in the returned vector
     /// </para>

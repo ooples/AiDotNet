@@ -86,12 +86,17 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// <b>For Beginners:</b> Think of this as the number of "experts" or different perspectives
     /// that will analyze the same input data.
     /// </remarks>
-    private readonly int _headCount;
+    protected readonly int _headCount;
     
     /// <summary>
     /// The size of each attention head.
     /// </summary>
     private readonly int _headDimension;
+
+    /// <summary>
+    /// The dropout rate applied for regularization.
+    /// </summary>
+    private readonly double _dropoutRate;
 
     /// <summary>
     /// Indicates whether this layer supports training.
@@ -118,6 +123,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     {
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
+        _dropoutRate = 0.0; // No dropout for this constructor
 
         _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
         _keyWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
@@ -140,6 +146,61 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     {
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
+        _dropoutRate = 0.0; // No dropout for this constructor
+
+        _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
+        _keyWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
+        _valueWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
+        _outputWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
+        _outputBias = new Vector<T>(embeddingDimension);
+
+        InitializeParameters();
+    }
+
+    /// <summary>
+    /// Creates a new multi-head attention layer with the specified dimensions, head count, and dropout.
+    /// </summary>
+    /// <param name="sequenceLength">The length of the input sequence.</param>
+    /// <param name="embeddingDimension">The dimension of each element in the sequence.</param>
+    /// <param name="headCount">The number of attention heads to use.</param>
+    /// <param name="activationFunction">The activation function to apply (defaults to identity function if null).</param>
+    /// <param name="dropoutRate">The dropout rate to apply for regularization.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor includes dropout for regularization during training.
+    /// Dropout randomly sets some values to zero during training, which helps prevent overfitting.
+    /// </para>
+    /// </remarks>
+    public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IActivationFunction<T>? activationFunction, double dropoutRate)
+        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], activationFunction ?? new IdentityActivation<T>())
+    {
+        _headCount = headCount;
+        _headDimension = embeddingDimension / headCount;
+        _dropoutRate = dropoutRate;
+
+        _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
+        _keyWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
+        _valueWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
+        _outputWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
+        _outputBias = new Vector<T>(embeddingDimension);
+
+        InitializeParameters();
+    }
+
+    /// <summary>
+    /// Creates a new multi-head attention layer with the specified dimensions, head count, and dropout.
+    /// </summary>
+    /// <param name="sequenceLength">The length of the input sequence.</param>
+    /// <param name="embeddingDimension">The dimension of each element in the sequence.</param>
+    /// <param name="headCount">The number of attention heads to use.</param>
+    /// <param name="vectorActivationFunction">The vector activation function to apply (defaults to identity function if null).</param>
+    /// <param name="dropoutRate">The dropout rate to apply for regularization.</param>
+    public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T>? vectorActivationFunction, double dropoutRate)
+        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction ?? new IdentityActivation<T>())
+    {
+        _headCount = headCount;
+        _headDimension = embeddingDimension / headCount;
+        _dropoutRate = dropoutRate;
 
         _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
         _keyWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
@@ -201,6 +262,28 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// like characters, plot, and setting all at once. Each "head" is like focusing on one of these aspects.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Computes attention scores between query and key tensors.
+    /// </summary>
+    /// <param name="queries">The query tensor.</param>
+    /// <param name="keys">The key tensor.</param>
+    /// <param name="mask">Optional attention mask tensor.</param>
+    /// <returns>The attention scores tensor.</returns>
+    protected virtual Tensor<T> ComputeAttentionScores(Tensor<T> queries, Tensor<T> keys, Tensor<T>? mask)
+    {
+        var attentionScores = queries.Multiply(keys.Transpose([0, 1, 3, 2]));
+        attentionScores = attentionScores.Multiply(NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
+        
+        // Apply mask if provided
+        if (mask != null)
+        {
+            // Apply mask - typically mask values are 0 for positions to attend to and very negative for positions to ignore
+            attentionScores = attentionScores.Add(mask);
+        }
+        
+        return attentionScores;
+    }
+    
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
@@ -216,8 +299,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
         keys = keys.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
         values = values.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
 
-        var attentionScores = queries.Multiply(keys.Transpose([0, 1, 3, 2]));
-        attentionScores = attentionScores.Multiply(NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
+        var attentionScores = ComputeAttentionScores(queries, keys, null);
 
         var softmaxActivation = new SoftmaxActivation<T>();
         var attentionWeights = softmaxActivation.Activate(attentionScores);

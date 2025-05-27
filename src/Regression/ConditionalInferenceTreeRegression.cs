@@ -324,7 +324,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
             return null;
         }
 
-        var bestSplit = (Threshold: default(T), PValue: NumOps.MaxValue);
+        var bestSplit = (Threshold: NumOps.Zero, PValue: NumOps.MaxValue);
 
         for (int i = 0; i < uniqueValues.Count - 1; i++)
         {

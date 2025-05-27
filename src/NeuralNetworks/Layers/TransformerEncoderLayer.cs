@@ -1,3 +1,6 @@
+using AiDotNet.NeuralNetworks.Layers.PositionalEncoding;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -177,6 +180,26 @@ public class TransformerEncoderLayer<T> : LayerBase<T>
     private LayerNormalizationLayer<T> _norm2;
 
     /// <summary>
+    /// The dropout rate applied to attention and feed-forward layers.
+    /// </summary>
+    private readonly double _dropoutRate;
+
+    /// <summary>
+    /// The number of encoder layers to stack.
+    /// </summary>
+    private readonly int _numLayers;
+
+    /// <summary>
+    /// The positional encoding applied to input embeddings.
+    /// </summary>
+    private readonly IPositionalEncoding<T> _positionalEncoding;
+
+    /// <summary>
+    /// Additional encoder layers when numLayers > 1.
+    /// </summary>
+    private List<TransformerEncoderLayer<T>>? _additionalLayers;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -201,24 +224,28 @@ public class TransformerEncoderLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="TransformerEncoderLayer{T}"/> class.
+    /// Initializes a new instance of the <see cref="TransformerEncoderLayer{T}"/> class with basic configuration.
     /// </summary>
     /// <param name="embeddingSize">The size of the embeddings.</param>
     /// <param name="numHeads">The number of attention heads.</param>
     /// <param name="feedForwardDim">The dimension of the feed-forward network.</param>
     /// <remarks>
     /// <para>
-    /// This constructor creates a transformer encoder layer with the specified dimensions. It initializes the
-    /// self-attention, layer normalization, and feed-forward sublayers with appropriate dimensions and activation functions.
+    /// This constructor creates a basic transformer encoder layer with the specified dimensions. It automatically
+    /// uses sensible defaults: no dropout (0.0), single layer, and sinusoidal positional encoding with max sequence length of 8192.
     /// </para>
-    /// <para><b>For Beginners:</b> This constructor creates a new transformer encoder layer with the specified settings.
+    /// <para><b>For Beginners:</b> This is the simplest way to create a transformer encoder layer.
     /// 
     /// The parameters you provide determine:
     /// - embeddingSize: How rich the representation of each token is (more = more expressive)
     /// - numHeads: How many different "perspectives" the attention mechanism can have
     /// - feedForwardDim: How much processing capacity the feed-forward network has
     /// 
-    /// These settings control the capacity, expressiveness, and computational requirements of the encoder.
+    /// This constructor automatically includes:
+    /// - No dropout (good for inference or when you don't want regularization)
+    /// - Classic sinusoidal positional encoding (proven and widely used)
+    /// - Single encoder layer (not stacked)
+    /// 
     /// Typical values might be 512 for embedding size, 8 attention heads, and 2048 for the feed-forward dimension,
     /// similar to those used in the original transformer paper.
     /// </para>
@@ -229,6 +256,11 @@ public class TransformerEncoderLayer<T> : LayerBase<T>
         _embeddingSize = embeddingSize;
         _numHeads = numHeads;
         _feedForwardDim = feedForwardDim;
+
+        // Initialize new fields with default values
+        _dropoutRate = 0.0; // No dropout for this basic constructor
+        _numLayers = 1; // Single layer
+        _positionalEncoding = new SinusoidalPositionalEncoding<T>(8192, embeddingSize); // Default sinusoidal encoding
 
         int sequenceLength = 1; // Default to 1
         _selfAttention = new MultiHeadAttentionLayer<T>(
@@ -245,6 +277,128 @@ public class TransformerEncoderLayer<T> : LayerBase<T>
             new GELUActivation<T>() as IActivationFunction<T>);
             
         _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
+        
+        // No additional layers for this basic constructor
+        _additionalLayers = null;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TransformerEncoderLayer{T}"/> class with dropout and optional positional encoding.
+    /// </summary>
+    /// <param name="embeddingSize">The size of the embeddings.</param>
+    /// <param name="numHeads">The number of attention heads.</param>
+    /// <param name="feedForwardDim">The dimension of the feed-forward network.</param>
+    /// <param name="dropoutRate">The dropout rate to apply after attention and feed-forward layers.</param>
+    /// <param name="positionalEncoding">The positional encoding to apply to the input embeddings. If null, uses SinusoidalPositionalEncoding with a default max sequence length of 8192.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a single transformer encoder layer with the specified dimensions and dropout rate.
+    /// It's a simpler version for users who don't need to stack multiple layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a simplified constructor for creating a single transformer encoder layer.
+    /// 
+    /// Use this constructor when you want:
+    /// - A single transformer encoder layer (not stacked)
+    /// - Dropout regularization for better training
+    /// - Optional custom positional encoding (or automatic default)
+    /// 
+    /// If you don't specify a positional encoding, the constructor will use the classic
+    /// sinusoidal positional encoding which works well for most tasks.
+    /// </para>
+    /// </remarks>
+    public TransformerEncoderLayer(
+        int embeddingSize,
+        int numHeads,
+        int feedForwardDim,
+        double dropoutRate,
+        IPositionalEncoding<T>? positionalEncoding = null)
+        : this(embeddingSize, numHeads, feedForwardDim, dropoutRate, 1, positionalEncoding)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TransformerEncoderLayer{T}"/> class with additional parameters.
+    /// </summary>
+    /// <param name="embeddingSize">The size of the embeddings.</param>
+    /// <param name="numHeads">The number of attention heads.</param>
+    /// <param name="feedForwardDim">The dimension of the feed-forward network.</param>
+    /// <param name="dropoutRate">The dropout rate to apply after attention and feed-forward layers.</param>
+    /// <param name="numLayers">The number of transformer encoder layers to stack.</param>
+    /// <param name="positionalEncoding">The positional encoding to apply to the input embeddings. If null, uses SinusoidalPositionalEncoding with a default max sequence length of 8192.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a transformer encoder layer with the specified dimensions and additional parameters
+    /// for dropout, layer stacking, and positional encoding. It initializes the self-attention, layer normalization,
+    /// and feed-forward sublayers with appropriate dimensions and activation functions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This constructor creates a more configurable transformer encoder layer.
+    /// 
+    /// The additional parameters provide more control:
+    /// - dropoutRate: Controls regularization by randomly dropping some values during training
+    /// - numLayers: Determines how many identical encoder layers to stack for deeper processing
+    /// - positionalEncoding: Adds information about position in the sequence to each element
+    /// 
+    /// If you don't specify a positional encoding, the constructor will automatically use the classic
+    /// sinusoidal positional encoding from the original Transformer paper, which works well for most tasks.
+    /// 
+    /// These settings allow for more sophisticated transformer architectures that can handle
+    /// more complex tasks and potentially achieve better performance.
+    /// </para>
+    /// </remarks>
+    public TransformerEncoderLayer(
+        int embeddingSize,
+        int numHeads,
+        int feedForwardDim,
+        double dropoutRate,
+        int numLayers,
+        IPositionalEncoding<T>? positionalEncoding = null)
+        : base([embeddingSize], [embeddingSize])
+    {
+        _embeddingSize = embeddingSize;
+        _numHeads = numHeads;
+        _feedForwardDim = feedForwardDim;
+
+        // Store additional parameters as fields
+        _dropoutRate = dropoutRate;
+        _numLayers = numLayers;
+        
+        // Use default sinusoidal positional encoding if none provided
+        _positionalEncoding = positionalEncoding ?? new SinusoidalPositionalEncoding<T>(8192, embeddingSize);
+
+        // Default sequence length (can be adjusted based on input)
+        int sequenceLength = 1024;
+
+        // Create the self-attention layer with dropout
+        _selfAttention = new MultiHeadAttentionLayer<T>(
+            sequenceLength,
+            _embeddingSize,
+            _numHeads,
+            new GELUActivation<T>() as IActivationFunction<T>,
+            dropoutRate);
+
+        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
+
+        // Create the feed-forward layer with dropout
+        _feedForward = new FeedForwardLayer<T>(
+            _embeddingSize,
+            _feedForwardDim,
+            new GELUActivation<T>() as IActivationFunction<T>,
+            dropoutRate);
+
+        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
+
+        // Initialize additional layers if numLayers > 1
+        if (numLayers > 1)
+        {
+            _additionalLayers = new List<TransformerEncoderLayer<T>>(numLayers - 1);
+            for (int i = 0; i < numLayers - 1; i++)
+            {
+                _additionalLayers.Add(new TransformerEncoderLayer<T>(
+                    embeddingSize,
+                    numHeads,
+                    feedForwardDim));
+            }
+        }
     }
 
     /// <summary>
@@ -284,10 +438,27 @@ public class TransformerEncoderLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        var attention = _selfAttention.Forward(input);
-        var normalized1 = _norm1.Forward(input + attention);
+        // Apply positional encoding if available
+        var encodedInput = input;
+        if (_positionalEncoding != null)
+        {
+            encodedInput = _positionalEncoding.AddPositionalEncoding(input);
+        }
+
+        // Process through the first layer (this instance)
+        var attention = _selfAttention.Forward(encodedInput);
+        var normalized1 = _norm1.Forward(encodedInput + attention);
         var feedForward = _feedForward.Forward(normalized1);
         var output = _norm2.Forward(normalized1 + feedForward);
+
+        // Process through additional layers if any
+        if (_additionalLayers != null && _additionalLayers.Count > 0)
+        {
+            foreach (var layer in _additionalLayers)
+            {
+                output = layer.Forward(output);
+            }
+        }
 
         return output;
     }
