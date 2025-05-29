@@ -1,6 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 using System;
 using System.Collections.Generic;
 

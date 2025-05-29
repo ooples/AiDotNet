@@ -387,7 +387,18 @@ namespace AiDotNet.ReinforcementLearning.Models
         public override Vector<T> GetParameters()
         {
             // TODO: Implement GetParameters in PPOAgent
-            throw new NotImplementedException("GetParameters is not yet implemented for PPOModel");
+            // Get parameters from the appropriate agent
+            if (IsContinuous && _continuousAgent != null)
+            {
+                return _continuousAgent.GetParameters();
+            }
+            else if (!IsContinuous && _discreteAgent != null)
+            {
+                return _discreteAgent.GetParameters();
+            }
+            
+            // No agent initialized
+            return new Vector<T>(0);
         }
         
         /// <summary>
@@ -397,7 +408,15 @@ namespace AiDotNet.ReinforcementLearning.Models
         public override void SetParameters(Vector<T> parameters)
         {
             // TODO: Implement SetParameters in PPOAgent
-            throw new NotImplementedException("SetParameters is not yet implemented for PPOModel");
+            // Set parameters to the appropriate agent
+            if (IsContinuous && _continuousAgent != null)
+            {
+                _continuousAgent.SetParameters(parameters);
+            }
+            else if (!IsContinuous && _discreteAgent != null)
+            {
+                _discreteAgent.SetParameters(parameters);
+            }
         }
         
         /// <summary>

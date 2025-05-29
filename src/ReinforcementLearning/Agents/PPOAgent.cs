@@ -725,6 +725,147 @@ public class PPOAgent<TState, TAction, T> : AgentBase<TState, TAction, T>
     }
 
     /// <summary>
+    /// Gets the parameters of the agent (both actor and critic).
+    /// </summary>
+    /// <returns>A vector containing all parameters.</returns>
+    public Vector<T> GetParameters()
+    {
+        var allParameters = new List<T>();
+        
+        // Get actor parameters
+        if (_actor is DiscreteStochasticPolicy<T> discretePolicy)
+        {
+            var actorParams = discretePolicy.GetParameters();
+            foreach (var paramVector in actorParams)
+            {
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    allParameters.Add(paramVector[i]);
+                }
+            }
+        }
+        else if (_actor is ContinuousStochasticPolicy<T> continuousPolicy)
+        {
+            var (commonParams, meanParams, stdDevParams) = continuousPolicy.GetParameters();
+            
+            // Add common layer parameters
+            foreach (var paramVector in commonParams)
+            {
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    allParameters.Add(paramVector[i]);
+                }
+            }
+            
+            // Add mean layer parameters
+            foreach (var paramVector in meanParams)
+            {
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    allParameters.Add(paramVector[i]);
+                }
+            }
+            
+            // Add std dev layer parameters
+            foreach (var paramVector in stdDevParams)
+            {
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    allParameters.Add(paramVector[i]);
+                }
+            }
+        }
+        
+        // Get critic parameters
+        var criticParams = _critic.GetParameters();
+        for (int i = 0; i < criticParams.Length; i++)
+        {
+            allParameters.Add(criticParams[i]);
+        }
+        
+        return new Vector<T>([.. allParameters]);
+    }
+
+    /// <summary>
+    /// Sets the parameters of the agent (both actor and critic).
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters.</param>
+    public void SetParameters(Vector<T> parameters)
+    {
+        int index = 0;
+        
+        // Set actor parameters
+        if (_actor is DiscreteStochasticPolicy<T> discretePolicy)
+        {
+            var actorParams = discretePolicy.GetParameters();
+            var newActorParams = new List<Vector<T>>();
+            
+            foreach (var paramVector in actorParams)
+            {
+                var newVector = new Vector<T>(paramVector.Length);
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    newVector[i] = parameters[index++];
+                }
+                newActorParams.Add(newVector);
+            }
+            
+            discretePolicy.SetParameters(newActorParams);
+        }
+        else if (_actor is ContinuousStochasticPolicy<T> continuousPolicy)
+        {
+            var (commonParams, meanParams, stdDevParams) = continuousPolicy.GetParameters();
+            var newCommonParams = new List<Vector<T>>();
+            var newMeanParams = new List<Vector<T>>();
+            var newStdDevParams = new List<Vector<T>>();
+            
+            // Extract common layer parameters
+            foreach (var paramVector in commonParams)
+            {
+                var newVector = new Vector<T>(paramVector.Length);
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    newVector[i] = parameters[index++];
+                }
+                newCommonParams.Add(newVector);
+            }
+            
+            // Extract mean layer parameters
+            foreach (var paramVector in meanParams)
+            {
+                var newVector = new Vector<T>(paramVector.Length);
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    newVector[i] = parameters[index++];
+                }
+                newMeanParams.Add(newVector);
+            }
+            
+            // Extract std dev layer parameters
+            foreach (var paramVector in stdDevParams)
+            {
+                var newVector = new Vector<T>(paramVector.Length);
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    newVector[i] = parameters[index++];
+                }
+                newStdDevParams.Add(newVector);
+            }
+            
+            continuousPolicy.SetParameters((newCommonParams, newMeanParams, newStdDevParams));
+        }
+        
+        // Set critic parameters
+        var criticParams = _critic.GetParameters();
+        var newCriticParams = new Vector<T>(criticParams.Length);
+        for (int i = 0; i < criticParams.Length; i++)
+        {
+            newCriticParams[i] = parameters[index++];
+        }
+        _critic.SetParameters(newCriticParams);
+    }
+
+    /// <summary>
     /// Helper class to calculate advantages and returns, reusing logic from A2C.
     /// </summary>
     /// <typeparam name="TStateType">The type used to represent states.</typeparam>

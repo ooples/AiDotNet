@@ -747,7 +747,9 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         // Serialize target network
         for (int i = 0; i < _targetNetwork.Layers.Count; i++)
         {
-            _targetNetwork.Layers[i].Serialize(writer);
+            var layerData = _targetNetwork.Layers[i].Serialize();
+            writer.Write(layerData.Length);
+            writer.Write(layerData);
         }
     }
 
@@ -786,7 +788,9 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         // Deserialize target network
         for (int i = 0; i < _targetNetwork.Layers.Count; i++)
         {
-            _targetNetwork.Layers[i].Deserialize(reader);
+            var layerDataLength = reader.ReadInt32();
+            var layerData = reader.ReadBytes(layerDataLength);
+            _targetNetwork.Layers[i].Deserialize(layerData);
         }
     }
 

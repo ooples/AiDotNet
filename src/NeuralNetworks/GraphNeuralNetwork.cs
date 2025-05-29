@@ -795,6 +795,34 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        throw new NotImplementedException();
+        GraphNeuralNetwork<T> newNetwork;
+        
+        // Create a new instance with the same configuration
+        // Check which type of activation functions we're using
+        if (_graphConvolutionalVectorActivation != null || _activationLayerVectorActivation != null ||
+            _finalDenseLayerVectorActivation != null || _finalActivationLayerVectorActivation != null)
+        {
+            // Using vector activation functions
+            newNetwork = new GraphNeuralNetwork<T>(
+                Architecture,
+                LossFunction,
+                _graphConvolutionalVectorActivation,
+                _activationLayerVectorActivation,
+                _finalDenseLayerVectorActivation,
+                _finalActivationLayerVectorActivation);
+        }
+        else
+        {
+            // Using scalar activation functions
+            newNetwork = new GraphNeuralNetwork<T>(
+                Architecture,
+                LossFunction,
+                _graphConvolutionalScalarActivation,
+                _activationLayerScalarActivation,
+                _finalDenseLayerScalarActivation,
+                _finalActivationLayerScalarActivation);
+        }
+        
+        return newNetwork;
     }
 }

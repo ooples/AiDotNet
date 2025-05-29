@@ -370,7 +370,9 @@ public class DecoderLayer<T> : LayerBase<T>
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        throw new NotImplementedException();
+        throw new InvalidOperationException(
+            "DecoderLayer requires both decoder input and encoder output. " +
+            "Please use the Forward(decoderInput, encoderOutput, attentionMask) overload instead.");
     }
 
     /// <summary>

@@ -1,6 +1,6 @@
 using AiDotNet.ReinforcementLearning.Environments.Trading.Portfolio;
 
-namespace AiDotNet.ReinforcementLearning.Environments.Trading.Rewards
+namespace AiDotNet.Interfaces
 {
     /// <summary>
     /// Interface for reward functions in trading environments.

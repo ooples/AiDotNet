@@ -2,11 +2,11 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Interfaces;
 using AiDotNet.ReinforcementLearning.Models.Options;
 using AiDotNet.ReinforcementLearning.Exploration;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
-using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
 using System.IO;
 
@@ -919,7 +919,12 @@ namespace AiDotNet.ReinforcementLearning.Agents
                         typedAction = (TActionType)action;
                     } catch {
                         // If direct casting fails, try creating a new instance
-                        typedAction = (TActionType)Activator.CreateInstance(typeof(TActionType), new object[] { action });
+                        var instance = Activator.CreateInstance(typeof(TActionType), new object[] { action });
+                        if (instance == null)
+                        {
+                            throw new InvalidOperationException($"Failed to create instance of {typeof(TActionType)}");
+                        }
+                        typedAction = (TActionType)instance;
                     }
                     
                     // Evaluate Q-value

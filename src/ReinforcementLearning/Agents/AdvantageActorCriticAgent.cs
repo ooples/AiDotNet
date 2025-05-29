@@ -2,10 +2,10 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Interfaces;
 using AiDotNet.ReinforcementLearning.Models.Options;
 using AiDotNet.ReinforcementLearning.Policies;
-using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
 using System;
 using System.Collections.Generic;
@@ -465,13 +465,175 @@ namespace AiDotNet.ReinforcementLearning.Agents
         }
 
         /// <summary>
+        /// Gets the parameters of the agent (both actor and critic).
+        /// </summary>
+        /// <returns>A vector containing all parameters.</returns>
+        public Vector<T> GetParameters()
+        {
+            var allParameters = new List<T>();
+            
+            // Get actor parameters
+            if (_actor is DiscreteStochasticPolicy<T> discretePolicy)
+            {
+                var actorParams = discretePolicy.GetParameters();
+                foreach (var paramVector in actorParams)
+                {
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        allParameters.Add(paramVector[i]);
+                    }
+                }
+            }
+            else if (_actor is ContinuousStochasticPolicy<T> continuousPolicy)
+            {
+                var (commonParams, meanParams, stdDevParams) = continuousPolicy.GetParameters();
+                
+                // Add common layer parameters
+                foreach (var paramVector in commonParams)
+                {
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        allParameters.Add(paramVector[i]);
+                    }
+                }
+                
+                // Add mean layer parameters
+                foreach (var paramVector in meanParams)
+                {
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        allParameters.Add(paramVector[i]);
+                    }
+                }
+                
+                // Add std dev layer parameters
+                foreach (var paramVector in stdDevParams)
+                {
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        allParameters.Add(paramVector[i]);
+                    }
+                }
+            }
+            
+            // Get critic parameters
+            var criticParams = _critic.GetParameters();
+            for (int i = 0; i < criticParams.Length; i++)
+            {
+                allParameters.Add(criticParams[i]);
+            }
+            
+            // Get target critic parameters if applicable
+            if (_useCriticTargetNetwork && _criticTarget != null)
+            {
+                var targetParams = _criticTarget.GetParameters();
+                for (int i = 0; i < targetParams.Length; i++)
+                {
+                    allParameters.Add(targetParams[i]);
+                }
+            }
+            
+            return new Vector<T>([.. allParameters]);
+        }
+
+        /// <summary>
+        /// Sets the parameters of the agent (both actor and critic).
+        /// </summary>
+        /// <param name="parameters">A vector containing all parameters.</param>
+        public void SetParameters(Vector<T> parameters)
+        {
+            int index = 0;
+            
+            // Set actor parameters
+            if (_actor is DiscreteStochasticPolicy<T> discretePolicy)
+            {
+                var actorParams = discretePolicy.GetParameters();
+                var newActorParams = new List<Vector<T>>();
+                
+                foreach (var paramVector in actorParams)
+                {
+                    var newVector = new Vector<T>(paramVector.Length);
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        newVector[i] = parameters[index++];
+                    }
+                    newActorParams.Add(newVector);
+                }
+                
+                discretePolicy.SetParameters(newActorParams);
+            }
+            else if (_actor is ContinuousStochasticPolicy<T> continuousPolicy)
+            {
+                var (commonParams, meanParams, stdDevParams) = continuousPolicy.GetParameters();
+                var newCommonParams = new List<Vector<T>>();
+                var newMeanParams = new List<Vector<T>>();
+                var newStdDevParams = new List<Vector<T>>();
+                
+                // Extract common layer parameters
+                foreach (var paramVector in commonParams)
+                {
+                    var newVector = new Vector<T>(paramVector.Length);
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        newVector[i] = parameters[index++];
+                    }
+                    newCommonParams.Add(newVector);
+                }
+                
+                // Extract mean layer parameters
+                foreach (var paramVector in meanParams)
+                {
+                    var newVector = new Vector<T>(paramVector.Length);
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        newVector[i] = parameters[index++];
+                    }
+                    newMeanParams.Add(newVector);
+                }
+                
+                // Extract std dev layer parameters
+                foreach (var paramVector in stdDevParams)
+                {
+                    var newVector = new Vector<T>(paramVector.Length);
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        newVector[i] = parameters[index++];
+                    }
+                    newStdDevParams.Add(newVector);
+                }
+                
+                continuousPolicy.SetParameters((newCommonParams, newMeanParams, newStdDevParams));
+            }
+            
+            // Set critic parameters
+            var criticParams = _critic.GetParameters();
+            var newCriticParams = new Vector<T>(criticParams.Length);
+            for (int i = 0; i < criticParams.Length; i++)
+            {
+                newCriticParams[i] = parameters[index++];
+            }
+            _critic.SetParameters(newCriticParams);
+            
+            // Set target critic parameters if applicable
+            if (_useCriticTargetNetwork && _criticTarget != null)
+            {
+                var targetParams = _criticTarget.GetParameters();
+                var newTargetParams = new Vector<T>(targetParams.Length);
+                for (int i = 0; i < targetParams.Length; i++)
+                {
+                    newTargetParams[i] = parameters[index++];
+                }
+                _criticTarget.SetParameters(newTargetParams);
+            }
+        }
+
+        /// <summary>
         /// Saves the agent's state to a file.
         /// </summary>
         /// <param name="filePath">The path where the agent's state should be saved.</param>
         public override void Save(string filePath)
         {
-            // TODO: Implement serialization
-            throw new NotImplementedException();
+            base.Save(filePath);
         }
 
         /// <summary>
@@ -480,8 +642,78 @@ namespace AiDotNet.ReinforcementLearning.Agents
         /// <param name="filePath">The path from which to load the agent's state.</param>
         public override void Load(string filePath)
         {
-            // TODO: Implement deserialization
-            throw new NotImplementedException();
+            base.Load(filePath);
+        }
+        
+        /// <summary>
+        /// Saves agent-specific state.
+        /// </summary>
+        /// <param name="writer">The binary writer to write state to.</param>
+        protected override void SaveAgentSpecificState(BinaryWriter writer)
+        {
+            // Save A2C-specific parameters
+            writer.Write(Convert.ToDouble(_actorLearningRate));
+            writer.Write(Convert.ToDouble(_criticLearningRate));
+            writer.Write(Convert.ToDouble(_entropyCoefficient));
+            writer.Write(Convert.ToDouble(_valueLossCoefficient));
+            writer.Write(_useGAE);
+            writer.Write(Convert.ToDouble(_gaeParameter));
+            writer.Write(_normalizeAdvantages);
+            writer.Write(_standardizeRewards);
+            writer.Write(_useCriticTargetNetwork);
+            writer.Write(_stepsPerUpdate);
+            writer.Write(_useNStepReturns);
+            writer.Write(_nSteps);
+            writer.Write(Convert.ToDouble(_maxGradientNorm));
+            writer.Write(_stepsCollected);
+            
+            // Save experience buffer size (not the actual experiences as they're transient)
+            writer.Write(_experienceBuffer.Count);
+            
+            // Save network parameters
+            var parameters = GetParameters();
+            writer.Write(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                writer.Write(Convert.ToDouble(parameters[i]));
+            }
+        }
+        
+        /// <summary>
+        /// Loads agent-specific state.
+        /// </summary>
+        /// <param name="reader">The binary reader to read state from.</param>
+        protected override void LoadAgentSpecificState(BinaryReader reader)
+        {
+            // Skip A2C-specific parameters (they are readonly and set in constructor)
+            // We need to read them to maintain file format compatibility
+            reader.ReadDouble(); // _actorLearningRate
+            reader.ReadDouble(); // _criticLearningRate
+            reader.ReadDouble(); // _entropyCoefficient
+            reader.ReadDouble(); // _valueLossCoefficient
+            reader.ReadBoolean(); // _useGAE
+            reader.ReadDouble(); // _gaeParameter
+            reader.ReadBoolean(); // _normalizeAdvantages
+            reader.ReadBoolean(); // _standardizeRewards
+            reader.ReadBoolean(); // _useCriticTargetNetwork
+            reader.ReadInt32(); // _stepsPerUpdate
+            reader.ReadBoolean(); // _useNStepReturns
+            reader.ReadInt32(); // _nSteps
+            reader.ReadDouble(); // _maxGradientNorm
+            _stepsCollected = reader.ReadInt32();
+            
+            // Read experience buffer size (we don't restore the actual experiences)
+            int bufferCount = reader.ReadInt32();
+            _experienceBuffer.Clear();
+            
+            // Load network parameters
+            int paramCount = reader.ReadInt32();
+            var parameters = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            SetParameters(parameters);
         }
 
         /// <summary>

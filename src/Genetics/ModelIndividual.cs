@@ -465,6 +465,50 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     }
 
     /// <summary>
+    /// Sets the parameters of the model.
+    /// </summary>
+    /// <param name="parameters">The parameters to set.</param>
+    /// <exception cref="ArgumentNullException">Thrown when parameters is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the inner model to set its parameters from a vector.
+    /// These parameters define the behavior of the model and can be adjusted during training
+    /// or evolution.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like changing all the settings and configuration values of the model.
+    /// 
+    /// The parameters:
+    /// - Replace the current settings that control how the model works
+    /// - Change the model's behavior and predictions
+    /// - Must be compatible with the inner model's structure
+    /// 
+    /// This is useful when loading saved models or applying parameter updates
+    /// from optimization algorithms.
+    /// </para>
+    /// </remarks>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+        
+        // Try to find and invoke SetParameters method on inner model
+        var setParametersMethod = _innerModel.GetType().GetMethod("SetParameters", [typeof(Vector<T>)]);
+        
+        if (setParametersMethod != null)
+        {
+            setParametersMethod.Invoke(_innerModel, [parameters]);
+        }
+        else
+        {
+            // If SetParameters is not available, create a new inner model with the parameters
+            _innerModel = _innerModel.WithParameters(parameters);
+        }
+    }
+
+    /// <summary>
     /// Updates the parameters of the model.
     /// </summary>
     /// <param name="parameters">The new parameters.</param>

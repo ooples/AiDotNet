@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Interfaces;
 
 namespace AiDotNet.ReinforcementLearning.Environments

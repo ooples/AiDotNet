@@ -1,7 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Memory;
 using System;
 using System.Collections.Generic;

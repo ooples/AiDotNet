@@ -708,6 +708,49 @@ public abstract class NonLinearRegressionModelBase<T> : INonLinearRegression<T>
     }
 
     /// <summary>
+    /// Sets the parameters of the model.
+    /// </summary>
+    /// <param name="parameters">A vector containing all model parameters (bias term followed by alpha coefficients).</param>
+    /// <exception cref="ArgumentNullException">Thrown when parameters is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector doesn't match the expected length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates the model's parameters in place. The first element of the parameters vector
+    /// is interpreted as the bias term, and the remaining elements are interpreted as alpha coefficients.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method updates the model's internal values (parameters) with new ones you provide.
+    /// It's like adjusting the settings on a machine to change how it operates.
+    /// This is useful when loading saved models or applying parameter updates
+    /// from optimization algorithms.
+    /// </para>
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        // Verify that the parameters vector has the correct length
+        if (parameters.Length != Alphas.Length + 1)
+        {
+            throw new ArgumentException($"Parameters vector length ({parameters.Length}) " +
+                                       $"does not match expected length ({Alphas.Length + 1}).", nameof(parameters));
+        }
+
+        // Set the bias term
+        B = parameters[0];
+
+        // Set the alpha coefficients
+        for (int i = 0; i < Alphas.Length; i++)
+        {
+            Alphas[i] = parameters[i + 1];
+        }
+    }
+
+    /// <summary>
     /// Gets the indices of features that are actively used by the model.
     /// </summary>
     /// <returns>A collection of feature indices that have non-zero weight in the model.</returns>

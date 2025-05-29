@@ -1,10 +1,10 @@
 using System;
 using System.IO;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.ReinforcementLearning.Interfaces;
-using AiDotNet.ReinforcementLearning.ReplayBuffers;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Interfaces;
+using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.Extensions
@@ -73,19 +73,11 @@ namespace AiDotNet.Extensions
             if (!File.Exists(filePath))
                 throw new FileNotFoundException($"Model file not found: {filePath}");
             
-            // TODO: Implement proper deserialization
-            // This would require:
-            // 1. Reading the architecture from the file
-            // 2. Recreating the network with that architecture
-            // 3. Loading the parameters into the recreated network
-            // 
-            // For now, throw NotImplementedException with a helpful message
-            throw new NotImplementedException(
-                "Neural network deserialization is not yet fully implemented. " +
-                "To load a model, you need to: " +
-                "1. Create a new network with the same architecture as the saved model, " +
-                "2. Then load the parameters from the saved file. " +
-                "This functionality will be added in a future update.");
+            // Read the serialized data
+            byte[] data = File.ReadAllBytes(filePath);
+            
+            // Deserialize the network
+            network.Deserialize(data);
         }
         
         /// <summary>

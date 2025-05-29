@@ -247,6 +247,38 @@ public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInpu
     }
 
     /// <summary>
+    /// Sets the parameter values.
+    /// </summary>
+    /// <param name="parameters">The new parameter values.</param>
+    /// <remarks>
+    /// <para>
+    /// This method updates the current parameter values from a vector.
+    /// </para>
+    /// <para><b>For Beginners:</b> This updates the model's parameters in place,
+    /// which is useful during training when parameters need to be adjusted.
+    /// </para>
+    /// </remarks>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+        
+        if (parameters.Length != _parameters.Length)
+        {
+            throw new ArgumentException($"Parameter count mismatch. Expected {_parameters.Length} parameters, got {parameters.Length}");
+        }
+        
+        // Copy the new parameters
+        _parameters = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _parameters[i] = parameters[i];
+        }
+    }
+
+    /// <summary>
     /// Gets the indices of features used by the model.
     /// </summary>
     /// <returns>A collection containing active feature indices.</returns>

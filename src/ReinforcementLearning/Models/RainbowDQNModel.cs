@@ -3,7 +3,7 @@ using System.IO;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Models.Options;
 using AiDotNet.ReinforcementLearning.Memory;
 

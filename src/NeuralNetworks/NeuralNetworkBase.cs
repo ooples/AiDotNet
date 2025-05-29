@@ -1269,4 +1269,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             _explicitlySetActiveFeatures.Add(index);
         }
     }
+
+    /// <summary>
+    /// Sets the parameters of the neural network.
+    /// </summary>
+    /// <param name="parameters">The parameters to set.</param>
+    /// <remarks>
+    /// <para>
+    /// This method distributes the parameters to all layers in the network.
+    /// The parameters should be in the same format as returned by GetParameters.
+    /// </para>
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        int totalParameterCount = GetParameterCount();
+        if (parameters.Length != totalParameterCount)
+        {
+            throw new ArgumentException($"Expected {totalParameterCount} parameters, got {parameters.Length}");
+        }
+
+        int currentIndex = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = layer.ParameterCount;
+            if (layerParameterCount > 0)
+            {
+                // Extract parameters for this layer
+                var layerParameters = new Vector<T>(layerParameterCount);
+                for (int i = 0; i < layerParameterCount; i++)
+                {
+                    layerParameters[i] = parameters[currentIndex + i];
+                }
+                
+                // Set the layer's parameters
+                layer.SetParameters(layerParameters);
+                currentIndex += layerParameterCount;
+            }
+        }
+    }
 }

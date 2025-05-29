@@ -197,7 +197,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// better recall. This process is different from training in most neural networks because:
     /// - It happens in one pass, not through repeated iterations
     /// - It doesn't use backpropagation or gradients
-    /// - It has limited capacity (can only store approximately 0.14 × network size patterns reliably)
+    /// - It has limited capacity (can only store approximately 0.14 ï¿½ network size patterns reliably)
     /// </para>
     /// </remarks>
     public void Train(List<Vector<T>> patterns)
@@ -311,8 +311,11 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // Hopfield networks typically don't use gradient-based updates
-        throw new NotImplementedException("Hopfield networks do not support gradient-based parameter updates.");
+        // Hopfield networks use Hebbian learning, not gradient-based updates
+        // To train a Hopfield network, use the StorePattern method instead
+        throw new NotSupportedException(
+            "Hopfield networks do not support gradient-based parameter updates. " +
+            "Use the StorePattern method to train the network with Hebbian learning.");
     }
 
     /// <summary>

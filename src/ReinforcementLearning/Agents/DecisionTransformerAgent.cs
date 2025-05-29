@@ -1,3 +1,15 @@
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
+using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.ReinforcementLearning.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Helpers;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 namespace AiDotNet.ReinforcementLearning.Agents;
 
 /// <summary>

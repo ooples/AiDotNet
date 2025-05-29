@@ -1,7 +1,8 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Interfaces;
+using AiDotNet.ReinforcementLearning.Environments.Trading.MarketData;
 
-namespace AiDotNet.ReinforcementLearning.Environments.Trading.MarketData
+namespace AiDotNet.Interfaces
 {
     /// <summary>
     /// Represents a financial market data feed that provides price and other market information.

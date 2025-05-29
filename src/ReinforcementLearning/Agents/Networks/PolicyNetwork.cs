@@ -335,7 +335,7 @@ public class PolicyNetwork<T> : NeuralNetworkBase<T>
     /// Sets all parameters of the policy network from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
-    public void SetParameters(Vector<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         int index = 0;
         

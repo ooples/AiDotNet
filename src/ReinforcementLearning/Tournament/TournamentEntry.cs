@@ -1,5 +1,5 @@
 using AiDotNet.Interfaces;
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.ReinforcementLearning.Tournament
 {

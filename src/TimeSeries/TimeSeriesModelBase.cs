@@ -1592,4 +1592,20 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IGradientTra
             _explicitlySetActiveFeatures.Add(index);
         }
     }
+
+    /// <summary>
+    /// Sets the parameters of the model.
+    /// </summary>
+    /// <param name="parameters">The parameters to set.</param>
+    /// <remarks>
+    /// <para>
+    /// This method sets the model parameters from a vector. It delegates to
+    /// the protected ApplyParameters method which derived classes can override
+    /// to handle their specific parameter structures.
+    /// </para>
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        ApplyParameters(parameters);
+    }
 }

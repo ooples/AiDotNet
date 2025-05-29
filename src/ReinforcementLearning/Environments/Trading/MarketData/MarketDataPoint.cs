@@ -74,14 +74,20 @@ namespace AiDotNet.ReinforcementLearning.Environments.Trading.MarketData
         /// <returns>True if the value was found, false otherwise.</returns>
         public bool TryGetValue(string symbol, string feature, out T value)
         {
-            value = default!;
-
             if (!Data.TryGetValue(symbol, out var featureDict))
             {
+                value = default(T)!;
                 return false;
             }
 
-            return featureDict.TryGetValue(feature, out value);
+            if (featureDict.TryGetValue(feature, out var tempValue))
+            {
+                value = tempValue;
+                return true;
+            }
+            
+            value = default(T)!;
+            return false;
         }
 
         /// <summary>

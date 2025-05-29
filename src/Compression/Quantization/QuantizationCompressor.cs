@@ -279,24 +279,7 @@ public class QuantizationCompressor<TModel, TInput, TOutput> :
         return Compress(model, options);
     }
     
-    /// <summary>
-    /// Serializes a model to a stream.
-    /// </summary>
-    /// <param name="model">The model to serialize.</param>
-    /// <param name="stream">The stream to which the model should be serialized.</param>
-    protected override void SerializeModelToStream(TModel model, Stream stream)
-    {
-        // Delegate to the model's own serialization mechanism
-        if (model is IModelSerializer serializer)
-        {
-            var data = serializer.Serialize();
-            stream.Write(data, 0, data.Length);
-        }
-        else
-        {
-            throw new NotImplementedException("Model does not support serialization");
-        }
-    }
+    // SerializeModelToStream is now handled by the base class
     
     /// <summary>
     /// Runs inference with the model on a single input.
@@ -618,7 +601,7 @@ public class QuantizationCompressor<TModel, TInput, TOutput> :
         // Quantize each value
         for (int i = 0; i < parameter.Length; i++)
         {
-            float originalValue = (float)parameter.GetValue(i);
+            float originalValue = (float)(parameter.GetValue(i) ?? 0f);
             int quantizedValue = (int)Math.Round(originalValue / scale);
             
             // Clamp to representable range
@@ -708,7 +691,7 @@ public class QuantizationCompressor<TModel, TInput, TOutput> :
         // Quantize each value
         for (int i = 0; i < parameter.Length; i++)
         {
-            float originalValue = (float)parameter.GetValue(i);
+            float originalValue = (float)(parameter.GetValue(i) ?? 0f);
             int quantizedValue = (int)Math.Round(originalValue / scale) + zeroPoint;
             
             // Clamp to representable range

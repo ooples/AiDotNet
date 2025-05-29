@@ -660,6 +660,48 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     }
 
     /// <summary>
+    /// Sets the parameters of the neural network.
+    /// </summary>
+    /// <param name="parameters">The parameters to set.</param>
+    /// <exception cref="ArgumentNullException">Thrown when parameters is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when parameters has a different length than the network's parameter count.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets all trainable parameters of the neural network from a single vector.
+    /// These parameters include weights and biases from all layers that support training.
+    /// The parameter vector must have the same length as the network's total parameter count.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the learned weights and biases in the neural network
+    /// from a single list. This is useful for loading saved models or applying optimizations.
+    /// 
+    /// The parameters:
+    /// - Replace all the current weights and biases in the network
+    /// - Must be in the same order as returned by GetParameters()
+    /// - Must have exactly the right number of values
+    /// 
+    /// This is commonly used when:
+    /// - Loading a saved model
+    /// - Applying optimization algorithms
+    /// - Transferring knowledge between models
+    /// </para>
+    /// </remarks>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+        
+        var currentParams = Network.GetParameters();
+        if (parameters.Length != currentParams.Length)
+        {
+            throw new ArgumentException($"Parameters length ({parameters.Length}) must match network's parameter count ({currentParams.Length}).", nameof(parameters));
+        }
+        
+        Network.UpdateParameters(parameters);
+    }
+
+    /// <summary>
     /// Updates the model with new parameter values.
     /// </summary>
     /// <param name="parameters">The new parameter values to use.</param>

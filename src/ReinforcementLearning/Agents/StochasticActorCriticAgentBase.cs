@@ -164,4 +164,144 @@ public abstract class StochasticActorCriticAgentBase<TState, TAction, T>
         // Ensure entropy coefficient is positive
         EntropyCoefficient = MathHelper.Max(EntropyCoefficient, NumOps.FromDouble(1e-6));
     }
+    
+    /// <summary>
+    /// Gets the parameters of the agent (actor and critics).
+    /// </summary>
+    /// <returns>A vector containing all parameters.</returns>
+    public override Vector<T> GetParameters()
+    {
+        var allParameters = new List<T>();
+        
+        // Get actor parameters
+        if (Actor != null)
+        {
+            var actorParams = Actor.GetParameters();
+            for (int i = 0; i < actorParams.Length; i++)
+            {
+                allParameters.Add(actorParams[i]);
+            }
+        }
+        
+        // Get critic1 parameters
+        if (Critic1 != null)
+        {
+            var critic1Params = Critic1.GetParameters();
+            for (int i = 0; i < critic1Params.Length; i++)
+            {
+                allParameters.Add(critic1Params[i]);
+            }
+        }
+        
+        // Get critic2 parameters
+        if (Critic2 != null)
+        {
+            var critic2Params = Critic2.GetParameters();
+            for (int i = 0; i < critic2Params.Length; i++)
+            {
+                allParameters.Add(critic2Params[i]);
+            }
+        }
+        
+        // Get target network parameters if they exist
+        if (Critic1Target != null)
+        {
+            var critic1TargetParams = Critic1Target.GetParameters();
+            for (int i = 0; i < critic1TargetParams.Length; i++)
+            {
+                allParameters.Add(critic1TargetParams[i]);
+            }
+        }
+        
+        if (Critic2Target != null)
+        {
+            var critic2TargetParams = Critic2Target.GetParameters();
+            for (int i = 0; i < critic2TargetParams.Length; i++)
+            {
+                allParameters.Add(critic2TargetParams[i]);
+            }
+        }
+        
+        // Add entropy coefficient if auto-tuning
+        if (AutoTuneEntropyCoefficient)
+        {
+            allParameters.Add(EntropyCoefficient);
+        }
+        
+        return new Vector<T>([.. allParameters]);
+    }
+    
+    /// <summary>
+    /// Sets the parameters of the agent (actor and critics).
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters.</param>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int index = 0;
+        
+        // Set actor parameters
+        if (Actor != null)
+        {
+            var actorParams = Actor.GetParameters();
+            var newActorParams = new Vector<T>(actorParams.Length);
+            for (int i = 0; i < actorParams.Length; i++)
+            {
+                newActorParams[i] = parameters[index++];
+            }
+            Actor.SetParameters(newActorParams);
+        }
+        
+        // Set critic1 parameters
+        if (Critic1 != null)
+        {
+            var critic1Params = Critic1.GetParameters();
+            var newCritic1Params = new Vector<T>(critic1Params.Length);
+            for (int i = 0; i < critic1Params.Length; i++)
+            {
+                newCritic1Params[i] = parameters[index++];
+            }
+            Critic1.SetParameters(newCritic1Params);
+        }
+        
+        // Set critic2 parameters
+        if (Critic2 != null)
+        {
+            var critic2Params = Critic2.GetParameters();
+            var newCritic2Params = new Vector<T>(critic2Params.Length);
+            for (int i = 0; i < critic2Params.Length; i++)
+            {
+                newCritic2Params[i] = parameters[index++];
+            }
+            Critic2.SetParameters(newCritic2Params);
+        }
+        
+        // Set target network parameters if they exist
+        if (Critic1Target != null)
+        {
+            var critic1TargetParams = Critic1Target.GetParameters();
+            var newCritic1TargetParams = new Vector<T>(critic1TargetParams.Length);
+            for (int i = 0; i < critic1TargetParams.Length; i++)
+            {
+                newCritic1TargetParams[i] = parameters[index++];
+            }
+            Critic1Target.SetParameters(newCritic1TargetParams);
+        }
+        
+        if (Critic2Target != null)
+        {
+            var critic2TargetParams = Critic2Target.GetParameters();
+            var newCritic2TargetParams = new Vector<T>(critic2TargetParams.Length);
+            for (int i = 0; i < critic2TargetParams.Length; i++)
+            {
+                newCritic2TargetParams[i] = parameters[index++];
+            }
+            Critic2Target.SetParameters(newCritic2TargetParams);
+        }
+        
+        // Set entropy coefficient if auto-tuning
+        if (AutoTuneEntropyCoefficient && index < parameters.Length)
+        {
+            EntropyCoefficient = parameters[index++];
+        }
+    }
 }

@@ -2,7 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
 

@@ -105,7 +105,23 @@ namespace AiDotNet.ReinforcementLearning.Agents
         /// <param name="filePath">The path where the agent's state should be saved.</param>
         public virtual void Save(string filePath)
         {
-            throw new NotImplementedException($"Save method not implemented for {GetType().Name}");
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            using (var writer = new BinaryWriter(stream))
+            {
+                // Save base agent properties
+                writer.Write(GetType().FullName ?? GetType().Name);
+                writer.Write(Convert.ToDouble(Gamma));
+                writer.Write(Convert.ToDouble(Tau));
+                writer.Write(BatchSize);
+                writer.Write(Convert.ToDouble(LastLoss));
+                writer.Write(IsTraining);
+                
+                // Save current time for tracking when the model was saved
+                writer.Write(DateTime.UtcNow.ToBinary());
+                
+                // Derived classes should override this method to save additional state
+                SaveAgentSpecificState(writer);
+            }
         }
 
         /// <summary>
@@ -114,7 +130,52 @@ namespace AiDotNet.ReinforcementLearning.Agents
         /// <param name="filePath">The path from which to load the agent's state.</param>
         public virtual void Load(string filePath)
         {
-            throw new NotImplementedException($"Load method not implemented for {GetType().Name}");
+            using (var stream = new FileStream(filePath, FileMode.Open))
+            using (var reader = new BinaryReader(stream))
+            {
+                // Verify agent type
+                string savedType = reader.ReadString();
+                string currentType = GetType().FullName ?? GetType().Name;
+                if (savedType != currentType)
+                {
+                    throw new InvalidOperationException(
+                        $"Type mismatch: saved agent is {savedType}, but current agent is {currentType}");
+                }
+                
+                // Skip readonly base agent properties (they are set in constructor)
+                // We need to read them to maintain file format compatibility
+                reader.ReadDouble(); // Gamma
+                reader.ReadDouble(); // Tau
+                reader.ReadInt32(); // BatchSize
+                LastLoss = NumOps.FromDouble(reader.ReadDouble());
+                IsTraining = reader.ReadBoolean();
+                
+                // Read save time (for information purposes)
+                DateTime saveTime = DateTime.FromBinary(reader.ReadInt64());
+                
+                // Derived classes should override this method to load additional state
+                LoadAgentSpecificState(reader);
+            }
+        }
+        
+        /// <summary>
+        /// Saves agent-specific state. Override in derived classes to save additional state.
+        /// </summary>
+        /// <param name="writer">The binary writer to write state to.</param>
+        protected virtual void SaveAgentSpecificState(BinaryWriter writer)
+        {
+            // Default implementation saves nothing
+            // Derived classes should override to save their specific state
+        }
+        
+        /// <summary>
+        /// Loads agent-specific state. Override in derived classes to load additional state.
+        /// </summary>
+        /// <param name="reader">The binary reader to read state from.</param>
+        protected virtual void LoadAgentSpecificState(BinaryReader reader)
+        {
+            // Default implementation loads nothing
+            // Derived classes should override to load their specific state
         }
 
         /// <summary>

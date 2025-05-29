@@ -4,7 +4,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.ReinforcementLearning.Agents;
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Models.Options;
 using AiDotNet.Helpers;
 
@@ -388,8 +388,18 @@ namespace AiDotNet.ReinforcementLearning.Models
         /// <returns>A vector containing all parameters of the model.</returns>
         public override Vector<T> GetParameters()
         {
-            // TODO: Implement GetParameters in REINFORCEAgent
-            throw new NotImplementedException("GetParameters is not yet implemented for REINFORCEModel");
+            // Get parameters from the appropriate agent
+            if (IsContinuous && _continuousAgent != null)
+            {
+                return _continuousAgent.GetParameters();
+            }
+            else if (!IsContinuous && _discreteAgent != null)
+            {
+                return _discreteAgent.GetParameters();
+            }
+            
+            // No agent initialized
+            return new Vector<T>(0);
         }
         
         /// <summary>
@@ -398,8 +408,15 @@ namespace AiDotNet.ReinforcementLearning.Models
         /// <param name="parameters">A vector containing all parameters to set.</param>
         public override void SetParameters(Vector<T> parameters)
         {
-            // TODO: Implement SetParameters in REINFORCEAgent
-            throw new NotImplementedException("SetParameters is not yet implemented for REINFORCEModel");
+            // Set parameters to the appropriate agent
+            if (IsContinuous && _continuousAgent != null)
+            {
+                _continuousAgent.SetParameters(parameters);
+            }
+            else if (!IsContinuous && _discreteAgent != null)
+            {
+                _discreteAgent.SetParameters(parameters);
+            }
         }
         
         /// <summary>

@@ -938,9 +938,115 @@ public static class TensorExtensions
             
             return new Vector<int>(new[] { maxIndex });
         }
+        else if (axis == 0 && tensor.Rank == 2)
+        {
+            // For a 2D tensor, find argmax along axis 0 (rows)
+            var result = new Vector<int>(tensor.Shape[1]);
+            
+            for (int j = 0; j < tensor.Shape[1]; j++)
+            {
+                int maxIndex = 0;
+                T maxValue = tensor[0, j];
+                
+                for (int i = 1; i < tensor.Shape[0]; i++)
+                {
+                    if (numOps.GreaterThan(tensor[i, j], maxValue))
+                    {
+                        maxValue = tensor[i, j];
+                        maxIndex = i;
+                    }
+                }
+                
+                result[j] = maxIndex;
+            }
+            
+            return result;
+        }
+        else if (axis >= 0 && axis < tensor.Rank)
+        {
+            // General case for any tensor rank and axis
+            // Calculate the shape of the result
+            var resultShape = new List<int>();
+            for (int i = 0; i < tensor.Rank; i++)
+            {
+                if (i != axis)
+                    resultShape.Add(tensor.Shape[i]);
+            }
+            
+            // If result would be scalar, return single element vector
+            if (resultShape.Count == 0)
+            {
+                int maxIndex = 0;
+                T maxValue = tensor[new int[tensor.Rank]];
+                
+                var indices = new int[tensor.Rank];
+                tensor.ForEachPosition((position, value) =>
+                {
+                    if (numOps.GreaterThan(value, maxValue))
+                    {
+                        maxValue = value;
+                        maxIndex = position[axis];
+                    }
+                    return true;
+                });
+                
+                return new Vector<int>(new[] { maxIndex });
+            }
+            
+            // Calculate total size of result
+            int resultSize = resultShape.Aggregate(1, (a, b) => a * b);
+            var result = new Vector<int>(resultSize);
+            
+            // Iterate through all positions in the result
+            int resultIndex = 0;
+            var currentPosition = new int[resultShape.Count];
+            
+            do
+            {
+                // Map result position to tensor position
+                var tensorPosition = new int[tensor.Rank];
+                int dimIndex = 0;
+                for (int i = 0; i < tensor.Rank; i++)
+                {
+                    if (i != axis)
+                    {
+                        tensorPosition[i] = currentPosition[dimIndex++];
+                    }
+                }
+                
+                // Find max along the axis
+                int maxIndex = 0;
+                tensorPosition[axis] = 0;
+                T maxValue = tensor[tensorPosition];
+                
+                for (int i = 1; i < tensor.Shape[axis]; i++)
+                {
+                    tensorPosition[axis] = i;
+                    T value = tensor[tensorPosition];
+                    if (numOps.GreaterThan(value, maxValue))
+                    {
+                        maxValue = value;
+                        maxIndex = i;
+                    }
+                }
+                
+                result[resultIndex++] = maxIndex;
+                
+                // Increment position
+                for (int i = currentPosition.Length - 1; i >= 0; i--)
+                {
+                    currentPosition[i]++;
+                    if (currentPosition[i] < resultShape[i])
+                        break;
+                    currentPosition[i] = 0;
+                }
+            } while (resultIndex < resultSize);
+            
+            return result;
+        }
         else
         {
-            throw new NotImplementedException($"ArgMax not implemented for axis {axis} on tensor with rank {tensor.Rank}");
+            throw new ArgumentException($"Invalid axis {axis} for tensor with rank {tensor.Rank}");
         }
     }
     
@@ -973,9 +1079,73 @@ public static class TensorExtensions
                     result[i] = tensor[indices[i]];
                 }
             }
+            else if (tensor.Rank == 3)
+            {
+                // For 3D tensor, assume we're gathering from the last dimension
+                // This is common in neural networks (batch_size, sequence_length, features)
+                int batchSize = tensor.Shape[0];
+                int seqLength = tensor.Shape[1];
+                
+                if (indices.Length == batchSize * seqLength)
+                {
+                    // Gather from each position in the batch and sequence
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        for (int s = 0; s < seqLength; s++)
+                        {
+                            int idx = b * seqLength + s;
+                            result[idx] = tensor[b, s, indices[idx]];
+                        }
+                    }
+                }
+                else if (indices.Length == batchSize)
+                {
+                    // Gather one value per batch element (common in RL for action selection)
+                    for (int i = 0; i < batchSize; i++)
+                    {
+                        // Assuming we want the first sequence position
+                        result[i] = tensor[i, 0, indices[i]];
+                    }
+                }
+                else
+                {
+                    throw new ArgumentException($"Indices length {indices.Length} doesn't match expected dimensions for 3D tensor gathering");
+                }
+            }
             else
             {
-                throw new NotImplementedException($"GatherValues not implemented for tensor with rank {tensor.Rank}");
+                // General case for higher rank tensors
+                // Assume we're gathering from the last dimension
+                int lastDim = tensor.Rank - 1;
+                int totalElements = 1;
+                for (int i = 0; i < lastDim; i++)
+                {
+                    totalElements *= tensor.Shape[i];
+                }
+                
+                if (indices.Length != totalElements)
+                {
+                    throw new ArgumentException($"Indices length {indices.Length} doesn't match expected size {totalElements} for gathering from tensor with shape [{string.Join(", ", tensor.Shape)}]");
+                }
+                
+                // Iterate through all positions except the last dimension
+                var position = new int[tensor.Rank];
+                for (int i = 0; i < indices.Length; i++)
+                {
+                    // Calculate position from flat index
+                    int temp = i;
+                    for (int dim = lastDim - 1; dim >= 0; dim--)
+                    {
+                        position[dim] = temp % tensor.Shape[dim];
+                        temp /= tensor.Shape[dim];
+                    }
+                    
+                    // Set the last dimension using the gather index
+                    position[lastDim] = indices[i];
+                    
+                    // Get the value
+                    result[i] = tensor[position];
+                }
             }
             
             return result;

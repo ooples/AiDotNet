@@ -78,5 +78,17 @@ namespace AiDotNet.ReinforcementLearning.Interfaces
         /// </para>
         /// </remarks>
         void SoftUpdate(IStochasticPolicy<TState, TAction, T> source, T tau);
+        
+        /// <summary>
+        /// Gets all parameters of the stochastic policy as a flattened vector.
+        /// </summary>
+        /// <returns>A vector containing all parameters of the policy.</returns>
+        Vector<T> GetParameters();
+        
+        /// <summary>
+        /// Sets the parameters of the stochastic policy from a flattened vector.
+        /// </summary>
+        /// <param name="parameters">The parameters to set.</param>
+        void SetParameters(Vector<T> parameters);
     }
 }

@@ -1,5 +1,5 @@
 using AiDotNet.LinearAlgebra;
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Models.Options;
 using AiDotNet.ReinforcementLearning.Exploration;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;

@@ -1,6 +1,6 @@
 using AiDotNet.ReinforcementLearning.Tournament.Results;
 
-namespace AiDotNet.ReinforcementLearning.Tournament
+namespace AiDotNet.Interfaces
 {
     /// <summary>
     /// Interface for evaluation metrics used in tournaments.

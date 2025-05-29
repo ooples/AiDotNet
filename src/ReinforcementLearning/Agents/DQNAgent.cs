@@ -973,6 +973,16 @@ public class DQNAgent<TState, T> : AgentBase<TState, int, T>
             return _network.GetParameters();
         }
 
+        public void SetParameters(Vector<T> parameters)
+        {
+            if (parameters == null)
+            {
+                throw new ArgumentNullException(nameof(parameters));
+            }
+            
+            _network.UpdateParameters(parameters);
+        }
+
         public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
         {
             var clone = (QNetwork)Clone();

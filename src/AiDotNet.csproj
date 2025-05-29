@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-	  <TargetFramework>net462</TargetFramework>
+	  <TargetFrameworks>net462;net6.0;net8.0</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -57,13 +57,6 @@
 	  <Folder Include="Validation\" />
 	  <Folder Include="WindowFunctions\" />
 	  <Folder Include="WaveletFunctions\" />
-	</ItemGroup>
-
-	<!-- StockTradingTest is a separate project with its own csproj file and different target framework -->
-	<ItemGroup>
-	  <Compile Remove="StockTradingTest\**" />
-	  <EmbeddedResource Remove="StockTradingTest\**" />
-	  <None Remove="StockTradingTest\**" />
 	</ItemGroup>
 
 

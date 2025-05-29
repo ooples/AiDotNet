@@ -2,8 +2,8 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ReinforcementLearning.Interfaces;
 using AiDotNet.Interfaces;
+using AiDotNet.ReinforcementLearning.Interfaces;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.ReinforcementLearning.Policies
@@ -759,6 +759,106 @@ namespace AiDotNet.ReinforcementLearning.Policies
             {
                 throw new ArgumentException("Source policy must be a ContinuousStochasticPolicy");
             }
+        }
+        
+        /// <summary>
+        /// Gets all parameters of the stochastic policy as a flattened vector.
+        /// </summary>
+        /// <returns>A vector containing all parameters of the policy.</returns>
+        Vector<T> IStochasticPolicy<Tensor<T>, Vector<T>, T>.GetParameters()
+        {
+            var allParameters = new List<T>();
+            var (commonParams, meanParams, stdDevParams) = GetParameters();
+            
+            // Flatten common parameters
+            foreach (var paramVector in commonParams)
+            {
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    allParameters.Add(paramVector[i]);
+                }
+            }
+            
+            // Flatten mean parameters
+            foreach (var paramVector in meanParams)
+            {
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    allParameters.Add(paramVector[i]);
+                }
+            }
+            
+            // Flatten stdDev parameters if learned
+            if (_learnStdDev)
+            {
+                foreach (var paramVector in stdDevParams)
+                {
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        allParameters.Add(paramVector[i]);
+                    }
+                }
+            }
+            
+            return new Vector<T>([.. allParameters]);
+        }
+        
+        /// <summary>
+        /// Sets the parameters of the stochastic policy from a flattened vector.
+        /// </summary>
+        /// <param name="parameters">The parameters to set.</param>
+        void IStochasticPolicy<Tensor<T>, Vector<T>, T>.SetParameters(Vector<T> parameters)
+        {
+            var (commonParams, meanParams, stdDevParams) = GetParameters();
+            int offset = 0;
+            
+            // Reconstruct common parameters
+            var newCommonParams = new List<Vector<T>>();
+            foreach (var paramVector in commonParams)
+            {
+                var newParams = new Vector<T>(paramVector.Length);
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    newParams[i] = parameters[offset++];
+                }
+                newCommonParams.Add(newParams);
+            }
+            
+            // Reconstruct mean parameters
+            var newMeanParams = new List<Vector<T>>();
+            foreach (var paramVector in meanParams)
+            {
+                var newParams = new Vector<T>(paramVector.Length);
+                for (int i = 0; i < paramVector.Length; i++)
+                {
+                    newParams[i] = parameters[offset++];
+                }
+                newMeanParams.Add(newParams);
+            }
+            
+            // Reconstruct stdDev parameters if learned
+            var newStdDevParams = new List<Vector<T>>();
+            if (_learnStdDev)
+            {
+                foreach (var paramVector in stdDevParams)
+                {
+                    var newParams = new Vector<T>(paramVector.Length);
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        newParams[i] = parameters[offset++];
+                    }
+                    newStdDevParams.Add(newParams);
+                }
+            }
+            
+            // Check if we used all parameters
+            if (offset != parameters.Length)
+            {
+                throw new ArgumentException($"Parameter count mismatch. Expected {offset} parameters, got {parameters.Length}");
+            }
+            
+            // Apply the parameters
+            SetParameters((newCommonParams, newMeanParams, newStdDevParams));
         }
     }
 }

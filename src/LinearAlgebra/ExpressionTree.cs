@@ -769,6 +769,52 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Sets the parameters of this expression tree.
+    /// </summary>
+    /// <param name="parameters">The parameters to set.</param>
+    /// <exception cref="ArgumentNullException">Thrown when parameters is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when parameters has a different length than the tree's coefficient count.</exception>
+    /// <remarks>
+    /// <b>For Beginners:</b> This updates all the constant numbers in your formula.
+    /// For example, if your formula is "2x + 3y + 5" and you provide [4, 1, 7],
+    /// your formula becomes "4x + 1y + 7". The structure stays the same, only the numbers change.
+    /// </remarks>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+        
+        var currentCoefficients = Coefficients;
+        if (parameters.Length != currentCoefficients.Length)
+        {
+            throw new ArgumentException($"Parameters length ({parameters.Length}) must match coefficient count ({currentCoefficients.Length}).", nameof(parameters));
+        }
+        
+        // Update constant nodes with new parameter values
+        int coefficientIndex = 0;
+        
+        void UpdateConstantNodes(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node.Type == ExpressionNodeType.Constant)
+            {
+                node.Value = parameters[coefficientIndex++];
+            }
+            if (node.Left != null)
+            {
+                UpdateConstantNodes(node.Left);
+            }
+            if (node.Right != null)
+            {
+                UpdateConstantNodes(node.Right);
+            }
+        }
+        
+        UpdateConstantNodes(this);
+    }
+
+    /// <summary>
     /// Creates a new expression tree with updated parameters.
     /// </summary>
     /// <param name="parameters">The new parameter values to use.</param>

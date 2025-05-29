@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace AiDotNet.Enums;
+namespace AiDotNet.Caching;
 
 /// <summary>
 /// Provides a cache of valid metrics for neural network task types.

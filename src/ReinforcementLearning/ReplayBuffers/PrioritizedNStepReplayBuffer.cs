@@ -1,4 +1,4 @@
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Memory;
 using AiDotNet.Interfaces;
 using AiDotNet.Helpers;

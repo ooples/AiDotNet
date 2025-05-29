@@ -1080,4 +1080,42 @@ public abstract class RegressionModelBase<T> : IRegressionModel<T>
             }
         }
     }
+
+    /// <summary>
+    /// Sets the parameters of the model.
+    /// </summary>
+    /// <param name="parameters">The parameters to set.</param>
+    /// <remarks>
+    /// <para>
+    /// This method sets the model coefficients and intercept from a parameter vector.
+    /// The parameters should be in the same format as returned by GetParameters.
+    /// </para>
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        // Calculate expected parameter count
+        int expectedParamCount = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
+        
+        if (parameters.Length != expectedParamCount)
+        {
+            throw new ArgumentException($"Expected {expectedParamCount} parameters, got {parameters.Length}");
+        }
+
+        // Set coefficients
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            Coefficients[i] = parameters[i];
+        }
+
+        // Set intercept if used
+        if (Options.UseIntercept)
+        {
+            Intercept = parameters[Coefficients.Length];
+        }
+    }
 }

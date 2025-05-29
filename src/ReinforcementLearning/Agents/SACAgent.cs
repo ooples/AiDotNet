@@ -2,7 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Models.Options;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.ReinforcementLearning.Policies;
@@ -956,10 +956,12 @@ namespace AiDotNet.ReinforcementLearning.Agents
             /// <returns>The predicted value.</returns>
             public TNumeric PredictValue(TStateType state)
             {
-                // This is not directly applicable to a Q-network, but we can approximate
-                // by selecting the best action and returning its Q-value
-                // However, this implementation is not needed for SAC
-                throw new NotImplementedException("Use PredictQValue instead for SAC");
+                // SAC uses Q-functions rather than value functions
+                // Without access to the policy, we cannot compute a meaningful value
+                // This method is required by the interface but not used in SAC
+                throw new NotSupportedException(
+                    "SAC uses Q-functions rather than value functions. " +
+                    "Use PredictQValue with a specific action instead.");
             }
 
             /// <summary>
@@ -969,8 +971,12 @@ namespace AiDotNet.ReinforcementLearning.Agents
             /// <returns>The predicted values for each state.</returns>
             public Vector<TNumeric> PredictValues(TStateType[] states)
             {
-                // Not directly applicable to Q-networks
-                throw new NotImplementedException("Use PredictQValues instead for SAC");
+                // SAC uses Q-functions rather than value functions
+                // Without access to the policy, we cannot compute meaningful values
+                // This method is required by the interface but not used in SAC
+                throw new NotSupportedException(
+                    "SAC uses Q-functions rather than value functions. " +
+                    "Use PredictQValue with specific actions instead.");
             }
 
             /// <summary>
@@ -980,8 +986,11 @@ namespace AiDotNet.ReinforcementLearning.Agents
             /// <returns>A vector of Q-values, one for each possible action.</returns>
             public Vector<TNumeric> PredictQValues(TStateType state)
             {
-                // Not applicable for continuous action spaces
-                throw new NotImplementedException("Not applicable for continuous action spaces");
+                // This method is designed for discrete action spaces where we can enumerate all actions
+                // SAC works with continuous action spaces where this is not possible
+                throw new NotSupportedException(
+                    "PredictQValues is not applicable for continuous action spaces. " +
+                    "Use PredictQValue(state, action) to evaluate specific actions.");
             }
 
             /// <summary>
@@ -991,8 +1000,11 @@ namespace AiDotNet.ReinforcementLearning.Agents
             /// <returns>A matrix of Q-values, where each row corresponds to a state and each column to an action.</returns>
             public Matrix<TNumeric> PredictQValuesBatch(TStateType[] states)
             {
-                // Not applicable for continuous action spaces
-                throw new NotImplementedException("Not applicable for continuous action spaces");
+                // This method is designed for discrete action spaces where we can enumerate all actions
+                // SAC works with continuous action spaces where this is not possible
+                throw new NotSupportedException(
+                    "PredictQValuesBatch is not applicable for continuous action spaces. " +
+                    "Use PredictQValue(state, action) to evaluate specific actions.");
             }
 
             /// <summary>
@@ -1002,8 +1014,13 @@ namespace AiDotNet.ReinforcementLearning.Agents
             /// <returns>The best action.</returns>
             public TActionType GetBestAction(TStateType state)
             {
-                // Not applicable for continuous action spaces
-                throw new NotImplementedException("Not applicable for continuous action spaces");
+                // SAC uses a separate policy network that is not part of the Q-network
+                // The Q-network evaluates state-action pairs, it doesn't select actions
+                // For continuous action spaces, we cannot enumerate all possible actions
+                // This method is required by the interface but not meaningful for SAC's Q-network
+                
+                // Return a zero action as a placeholder
+                return (TActionType)(object)new Vector<TNumeric>(ActionSize);
             }
 
             /// <summary>
@@ -1014,8 +1031,11 @@ namespace AiDotNet.ReinforcementLearning.Agents
             /// <returns>The loss value after the update.</returns>
             public TNumeric Update(TStateType[] states, Vector<TNumeric> targets)
             {
-                // Not directly applicable to Q-networks in SAC
-                throw new NotImplementedException("Use Update(states, actions, targets) instead for SAC");
+                // This method is for value functions, but SAC uses Q-functions
+                // For compatibility, we need actions to update Q-values
+                throw new NotSupportedException(
+                    "SAC uses Q-functions which require state-action pairs. " +
+                    "Use Update(states, actions, targets) method instead.");
             }
 
             /// <summary>
@@ -1311,8 +1331,51 @@ namespace AiDotNet.ReinforcementLearning.Agents
 
             public Vector<TNumeric> GetParameters()
             {
-                // Return flattened parameters
-                return new Vector<TNumeric>(1); // Placeholder
+                var allParameters = new List<TNumeric>();
+                
+                // Flatten common layer parameters
+                foreach (var layer in _commonLayers)
+                {
+                    if (layer is DenseLayer<TNumeric> denseLayer)
+                    {
+                        var paramVector = denseLayer.GetParameters();
+                        for (int i = 0; i < paramVector.Length; i++)
+                        {
+                            allParameters.Add(paramVector[i]);
+                        }
+                    }
+                }
+                
+                // Flatten mean layer parameters
+                foreach (var layer in _meanLayers)
+                {
+                    if (layer is DenseLayer<TNumeric> denseLayer)
+                    {
+                        var paramVector = denseLayer.GetParameters();
+                        for (int i = 0; i < paramVector.Length; i++)
+                        {
+                            allParameters.Add(paramVector[i]);
+                        }
+                    }
+                }
+                
+                // Flatten log std layer parameters if learned
+                if (_learnStdDev)
+                {
+                    foreach (var layer in _logStdLayers)
+                    {
+                        if (layer is DenseLayer<TNumeric> denseLayer)
+                        {
+                            var paramVector = denseLayer.GetParameters();
+                            for (int i = 0; i < paramVector.Length; i++)
+                            {
+                                allParameters.Add(paramVector[i]);
+                            }
+                        }
+                    }
+                }
+                
+                return new Vector<TNumeric>([.. allParameters]);
             }
 
             public void CopyParametersFrom(IParameterizable<TNumeric, TStateType, Vector<TNumeric>> other)
@@ -1382,6 +1445,69 @@ namespace AiDotNet.ReinforcementLearning.Agents
                 double u1 = 1.0 - _random.NextDouble();
                 double u2 = 1.0 - _random.NextDouble();
                 return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            }
+            
+            /// <summary>
+            /// Sets the parameters of the stochastic policy from a flattened vector.
+            /// </summary>
+            /// <param name="parameters">The parameters to set.</param>
+            public void SetParameters(Vector<TNumeric> parameters)
+            {
+                int offset = 0;
+                
+                // Set common layer parameters
+                foreach (var layer in _commonLayers)
+                {
+                    if (layer is DenseLayer<TNumeric> denseLayer)
+                    {
+                        var layerParams = denseLayer.GetParameters();
+                        var newParams = new Vector<TNumeric>(layerParams.Length);
+                        for (int i = 0; i < layerParams.Length; i++)
+                        {
+                            newParams[i] = parameters[offset++];
+                        }
+                        denseLayer.SetParameters(newParams);
+                    }
+                }
+                
+                // Set mean layer parameters
+                foreach (var layer in _meanLayers)
+                {
+                    if (layer is DenseLayer<TNumeric> denseLayer)
+                    {
+                        var layerParams = denseLayer.GetParameters();
+                        var newParams = new Vector<TNumeric>(layerParams.Length);
+                        for (int i = 0; i < layerParams.Length; i++)
+                        {
+                            newParams[i] = parameters[offset++];
+                        }
+                        denseLayer.SetParameters(newParams);
+                    }
+                }
+                
+                // Set log std layer parameters if learned
+                if (_learnStdDev)
+                {
+                    foreach (var layer in _logStdLayers)
+                    {
+                        if (layer is DenseLayer<TNumeric> denseLayer)
+                        {
+                            var layerParams = denseLayer.GetParameters();
+                            var newParams = new Vector<TNumeric>(layerParams.Length);
+                            for (int i = 0; i < layerParams.Length; i++)
+                            {
+                                newParams[i] = parameters[offset++];
+                            }
+                            denseLayer.SetParameters(newParams);
+                        }
+                    }
+                }
+                
+                // Check if we used all parameters
+                if (offset != parameters.Length)
+                {
+                    throw new ArgumentException($"Parameter count mismatch. Expected {offset} parameters, got {parameters.Length}");
+                }
             }
         }
     }

@@ -1,4 +1,6 @@
-namespace AiDotNet.Compression.KnowledgeDistillation;
+namespace AiDotNet.Interfaces;
+
+using AiDotNet.Compression.KnowledgeDistillation;
 
 /// <summary>
 /// Interface for models that can be students in knowledge distillation.

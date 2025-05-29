@@ -1,6 +1,7 @@
-namespace AiDotNet.Compression.KnowledgeDistillation;
+namespace AiDotNet.Interfaces;
 
 using AiDotNet.Interfaces;
+using AiDotNet.Compression.KnowledgeDistillation;
 using System.IO;
 
 /// <summary>

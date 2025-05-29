@@ -485,7 +485,61 @@ public abstract class ModelCompressorBase<TModel, TInput, TOutput> : IModelCompr
     /// </summary>
     /// <param name="model">The model to serialize.</param>
     /// <param name="stream">The stream to which the model should be serialized.</param>
-    protected abstract void SerializeModelToStream(TModel model, Stream stream);
+    protected virtual void SerializeModelToStream(TModel model, Stream stream)
+    {
+        // First, try IModelSerializer interface
+        if (model is IModelSerializer serializer)
+        {
+            var data = serializer.Serialize();
+            stream.Write(data, 0, data.Length);
+            return;
+        }
+        
+        // Try to use reflection to find a Serialize method
+        var serializeMethod = model.GetType().GetMethod("Serialize", Type.EmptyTypes);
+        if (serializeMethod != null && serializeMethod.ReturnType == typeof(byte[]))
+        {
+            var data = (byte[]?)serializeMethod.Invoke(model, null);
+            if (data != null)
+            {
+                stream.Write(data, 0, data.Length);
+            }
+            return;
+        }
+        
+        // For models with parameters, try to serialize those
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
+        {
+            // Write model type name for deserialization
+            writer.Write(model.GetType().AssemblyQualifiedName ?? model.GetType().FullName ?? "Unknown");
+            
+            var getParamsMethod = model.GetType().GetMethod("GetParameters", Type.EmptyTypes);
+            if (getParamsMethod != null)
+            {
+                var parameters = getParamsMethod.Invoke(model, null);
+                if (parameters != null)
+                {
+                    var paramSerializeMethod = parameters.GetType().GetMethod("Serialize", Type.EmptyTypes);
+                    if (paramSerializeMethod != null && paramSerializeMethod.ReturnType == typeof(byte[]))
+                    {
+                        var paramData = (byte[]?)paramSerializeMethod.Invoke(parameters, null);
+                        if (paramData != null)
+                        {
+                            writer.Write(true); // Has parameters
+                            writer.Write(paramData.Length);
+                            writer.Write(paramData);
+                        }
+                        return;
+                    }
+                }
+            }
+            
+            // If we can't serialize, throw exception
+            writer.Write(false); // No parameters
+            throw new NotSupportedException($"Model type {model.GetType().Name} does not support serialization. " +
+                "The model must either implement IModelSerializer interface or have a Serialize() method.");
+        }
+    }
     
     /// <summary>
     /// Serializes a model to a file.

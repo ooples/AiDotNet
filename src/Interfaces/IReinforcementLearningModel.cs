@@ -80,17 +80,6 @@ public interface IReinforcementLearningModel<T> : IFullModel<T, Tensor<T>, Tenso
     T Update(Tensor<T> state, Vector<T> action, T reward, Tensor<T> nextState, bool done);
 
 
-    /// <summary>
-    /// Sets the parameters of the model from a vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <remarks>
-    /// <para>
-    /// This method sets all the parameters of the agent's neural networks from a single vector.
-    /// It's typically used when loading a saved model or after optimization.
-    /// </para>
-    /// </remarks>
-    void SetParameters(Vector<T> parameters);
     
     /// <summary>
     /// Gets the last computed loss value.

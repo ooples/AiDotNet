@@ -902,7 +902,9 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         writer.Write(Layers.Count);
         foreach (var layer in Layers)
         {
-            layer.Serialize(writer);
+            var layerData = layer.Serialize();
+            writer.Write(layerData.Length);
+            writer.Write(layerData);
         }
     }
 
@@ -960,7 +962,9 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     
         for (int i = 0; i < layerCount; i++)
         {
-            Layers[i].Deserialize(reader);
+            var layerDataLength = reader.ReadInt32();
+            var layerData = reader.ReadBytes(layerDataLength);
+            Layers[i].Deserialize(layerData);
         }
     }
 

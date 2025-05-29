@@ -576,6 +576,68 @@ public abstract class DecisionTreeRegressionModelBase<T> : ITreeBasedRegression<
     }
 
     /// <summary>
+    /// Sets the parameters of the model from a vector representation.
+    /// </summary>
+    /// <param name="parameters">A vector containing a serialized representation of the decision tree structure.</param>
+    /// <exception cref="ArgumentNullException">Thrown when parameters is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the parameter vector has an invalid length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs the decision tree model from a parameter vector that was previously
+    /// created using the GetParameters method. The current tree structure is replaced with the
+    /// structure defined in the parameter vector.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method rebuilds the decision tree from a flat list of numbers.
+    /// 
+    /// It takes the specialized vector representation created by GetParameters() and reconstructs
+    /// the decision tree from it, replacing the current tree structure. This is challenging because
+    /// decision trees are complex structures that don't easily convert to and from simple lists of numbers.
+    /// 
+    /// This method is primarily used when:
+    /// - Loading a saved model
+    /// - Applying parameter updates from optimization algorithms
+    /// - Transferring parameters between models
+    /// 
+    /// For most purposes, the Serialize and Deserialize methods provide a more reliable way to
+    /// save and load tree models.
+    /// </para>
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        // If the parameter vector is empty or invalid, clear the tree
+        if (parameters.Length < 1)
+        {
+            Root = null;
+            return;
+        }
+
+        // Get the node count from the first parameter
+        int nodeCount = NumOps.ToInt32(parameters[0]);
+
+        // If there are no nodes, clear the tree
+        if (nodeCount == 0)
+        {
+            Root = null;
+            return;
+        }
+
+        // Check if the parameter vector has the expected length
+        if (parameters.Length != nodeCount * 4 + 1)
+        {
+            throw new ArgumentException($"Invalid parameter vector length. Expected {nodeCount * 4 + 1} but got {parameters.Length}.", nameof(parameters));
+        }
+
+        // Reconstruct the tree from the parameter vector
+        int currentIndex = 1;
+        Root = DeserializeNodeFromVector(parameters, ref currentIndex);
+    }
+
+    /// <summary>
     /// Gets the indices of all features that are used in the decision tree.
     /// </summary>
     /// <returns>An enumerable collection of indices for features used in the tree.</returns>

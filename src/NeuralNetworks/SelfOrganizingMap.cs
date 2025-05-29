@@ -576,8 +576,10 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // This method is not typically used in SOMs
-        throw new NotImplementedException("UpdateParameters is not implemented for Self-Organizing Maps.");
+        // SOMs use competitive learning, not gradient-based parameter updates
+        throw new NotSupportedException(
+            "Self-Organizing Maps do not support gradient-based parameter updates. " +
+            "Training is performed through competitive learning using the Train method.");
     }
 
     /// <summary>

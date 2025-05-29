@@ -1488,4 +1488,144 @@ public abstract class LayerBase<T> : ILayer<T>
     /// </para>
     /// </remarks>
     public abstract void ResetState();
+
+    /// <summary>
+    /// Creates a new instance of the layer with the specified parameters.
+    /// </summary>
+    /// <param name="parameters">The parameters to use for the new instance.</param>
+    /// <returns>A new model instance with the specified parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new layer instance with the same configuration as the current layer
+    /// but with different parameter values. This is required by the IParameterizable interface
+    /// but is not typically used for layers since they are mutable.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        // Layers are not full models - they are components of models.
+        // This method is required by IParameterizable but doesn't make sense for layers.
+        // Most layers should use SetParameters instead for mutable updates.
+        throw new NotSupportedException(
+            "WithParameters is not supported for layers. Use SetParameters to update layer parameters in place. " +
+            "Layers are components of models, not full models themselves.");
+    }
+
+    /// <summary>
+    /// Serializes the layer to a byte array.
+    /// </summary>
+    /// <returns>A byte array containing the serialized layer data.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts the layer's configuration and parameters to a byte array
+    /// that can be saved to disk or transmitted over a network.
+    /// </para>
+    /// </remarks>
+    public virtual byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        
+        // Write layer type name
+        writer.Write(GetType().FullName ?? GetType().Name);
+        
+        // Write input and output shapes
+        var inputShape = GetInputShape();
+        var outputShape = GetOutputShape();
+        
+        writer.Write(inputShape.Length);
+        foreach (var dim in inputShape)
+        {
+            writer.Write(dim);
+        }
+        
+        writer.Write(outputShape.Length);
+        foreach (var dim in outputShape)
+        {
+            writer.Write(dim);
+        }
+        
+        // Write parameter count and parameters
+        writer.Write(ParameterCount);
+        if (ParameterCount > 0)
+        {
+            var parameters = GetParameters();
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                writer.Write(Convert.ToDouble(parameters[i]));
+            }
+        }
+        
+        // Write activation function info
+        var activationTypes = GetActivationTypes().ToList();
+        writer.Write(activationTypes.Count);
+        foreach (var activationType in activationTypes)
+        {
+            writer.Write((int)activationType);
+        }
+        
+        // Note: Training mode is typically managed externally
+        // and set via SetTrainingMode, so we don't serialize it
+        
+        return ms.ToArray();
+    }
+
+    /// <summary>
+    /// Deserializes the layer from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized layer data.</param>
+    /// <remarks>
+    /// <para>
+    /// This method restores the layer's configuration and parameters from a byte array
+    /// that was previously created by the Serialize method.
+    /// </para>
+    /// </remarks>
+    public virtual void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+        
+        // Read layer type name (for validation)
+        var typeName = reader.ReadString();
+        
+        // Read input shape
+        var inputShapeLength = reader.ReadInt32();
+        var inputShape = new int[inputShapeLength];
+        for (int i = 0; i < inputShapeLength; i++)
+        {
+            inputShape[i] = reader.ReadInt32();
+        }
+        
+        // Read output shape
+        var outputShapeLength = reader.ReadInt32();
+        var outputShape = new int[outputShapeLength];
+        for (int i = 0; i < outputShapeLength; i++)
+        {
+            outputShape[i] = reader.ReadInt32();
+        }
+        
+        // Read parameters
+        var paramCount = reader.ReadInt32();
+        if (paramCount > 0)
+        {
+            var parameters = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            SetParameters(parameters);
+        }
+        
+        // Read activation function info
+        var activationCount = reader.ReadInt32();
+        for (int i = 0; i < activationCount; i++)
+        {
+            var activationType = (ActivationFunction)reader.ReadInt32();
+            // Note: Activation functions are typically set in constructor,
+            // so we just read and discard here
+        }
+        
+        // Note: Training mode is typically managed externally
+        // and set via SetTrainingMode, so we don't deserialize it
+    }
 }

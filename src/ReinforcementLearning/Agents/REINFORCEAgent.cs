@@ -345,6 +345,153 @@ namespace AiDotNet.ReinforcementLearning.Agents
             return NumOps.Divide(totalLoss, NumOps.FromDouble(states.Length));
         }
 
+        /// <summary>
+        /// Gets the parameters of the agent.
+        /// </summary>
+        /// <returns>A vector containing all parameters.</returns>
+        public Vector<T> GetParameters()
+        {
+            var allParameters = new List<T>();
+            
+            // Get policy parameters
+            if (_policy is DiscreteStochasticPolicy<T> discretePolicy)
+            {
+                var policyParams = discretePolicy.GetParameters();
+                foreach (var paramVector in policyParams)
+                {
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        allParameters.Add(paramVector[i]);
+                    }
+                }
+            }
+            else if (_policy is ContinuousStochasticPolicy<T> continuousPolicy)
+            {
+                var (commonParams, meanParams, stdDevParams) = continuousPolicy.GetParameters();
+                
+                // Add common layer parameters
+                foreach (var paramVector in commonParams)
+                {
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        allParameters.Add(paramVector[i]);
+                    }
+                }
+                
+                // Add mean layer parameters
+                foreach (var paramVector in meanParams)
+                {
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        allParameters.Add(paramVector[i]);
+                    }
+                }
+                
+                // Add std dev layer parameters
+                foreach (var paramVector in stdDevParams)
+                {
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        allParameters.Add(paramVector[i]);
+                    }
+                }
+            }
+            
+            // Get baseline parameters if using baseline
+            if (_useBaseline && _baseline != null)
+            {
+                var baselineParams = _baseline.GetParameters();
+                for (int i = 0; i < baselineParams.Length; i++)
+                {
+                    allParameters.Add(baselineParams[i]);
+                }
+            }
+            
+            return new Vector<T>([.. allParameters]);
+        }
+
+        /// <summary>
+        /// Sets the parameters of the agent.
+        /// </summary>
+        /// <param name="parameters">A vector containing all parameters.</param>
+        public void SetParameters(Vector<T> parameters)
+        {
+            int index = 0;
+            
+            // Set policy parameters
+            if (_policy is DiscreteStochasticPolicy<T> discretePolicy)
+            {
+                var policyParams = discretePolicy.GetParameters();
+                var newPolicyParams = new List<Vector<T>>();
+                
+                foreach (var paramVector in policyParams)
+                {
+                    var newVector = new Vector<T>(paramVector.Length);
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        newVector[i] = parameters[index++];
+                    }
+                    newPolicyParams.Add(newVector);
+                }
+                
+                discretePolicy.SetParameters(newPolicyParams);
+            }
+            else if (_policy is ContinuousStochasticPolicy<T> continuousPolicy)
+            {
+                var (commonParams, meanParams, stdDevParams) = continuousPolicy.GetParameters();
+                var newCommonParams = new List<Vector<T>>();
+                var newMeanParams = new List<Vector<T>>();
+                var newStdDevParams = new List<Vector<T>>();
+                
+                // Extract common layer parameters
+                foreach (var paramVector in commonParams)
+                {
+                    var newVector = new Vector<T>(paramVector.Length);
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        newVector[i] = parameters[index++];
+                    }
+                    newCommonParams.Add(newVector);
+                }
+                
+                // Extract mean layer parameters
+                foreach (var paramVector in meanParams)
+                {
+                    var newVector = new Vector<T>(paramVector.Length);
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        newVector[i] = parameters[index++];
+                    }
+                    newMeanParams.Add(newVector);
+                }
+                
+                // Extract std dev layer parameters
+                foreach (var paramVector in stdDevParams)
+                {
+                    var newVector = new Vector<T>(paramVector.Length);
+                    for (int i = 0; i < paramVector.Length; i++)
+                    {
+                        newVector[i] = parameters[index++];
+                    }
+                    newStdDevParams.Add(newVector);
+                }
+                
+                continuousPolicy.SetParameters((newCommonParams, newMeanParams, newStdDevParams));
+            }
+            
+            // Set baseline parameters if using baseline
+            if (_useBaseline && _baseline != null)
+            {
+                var baselineParams = _baseline.GetParameters();
+                var newBaselineParams = new Vector<T>(baselineParams.Length);
+                for (int i = 0; i < baselineParams.Length; i++)
+                {
+                    newBaselineParams[i] = parameters[index++];
+                }
+                _baseline.SetParameters(newBaselineParams);
+            }
+        }
+
 
         /// <summary>
         /// Private helper class to generate random numbers of type T.
@@ -464,14 +611,42 @@ namespace AiDotNet.ReinforcementLearning.Agents
 
             public Vector<TNum> GetParameters()
             {
-                // TODO: Implement parameter extraction
-                throw new NotImplementedException();
+                var parameters = new List<TNum>();
+
+                foreach (var layer in _layers)
+                {
+                    if (layer is DenseLayer<TNum> denseLayer)
+                    {
+                        var layerParams = denseLayer.GetParameters();
+                        for (int i = 0; i < layerParams.Length; i++)
+                        {
+                            parameters.Add(layerParams[i]);
+                        }
+                    }
+                }
+
+                return new Vector<TNum>([.. parameters]);
             }
 
             public void SetParameters(Vector<TNum> parameters)
             {
-                // TODO: Implement parameter setting
-                throw new NotImplementedException();
+                int index = 0;
+
+                foreach (var layer in _layers)
+                {
+                    if (layer is DenseLayer<TNum> denseLayer)
+                    {
+                        var layerParams = denseLayer.GetParameters();
+                        var newParams = new Vector<TNum>(layerParams.Length);
+                        
+                        for (int i = 0; i < layerParams.Length; i++)
+                        {
+                            newParams[i] = parameters[index++];
+                        }
+                        
+                        denseLayer.SetParameters(newParams);
+                    }
+                }
             }
 
             public void CopyParametersFrom(IValueFunction<TState, TNum> source)
@@ -482,8 +657,25 @@ namespace AiDotNet.ReinforcementLearning.Agents
 
             public void SoftUpdate(IValueFunction<TState, TNum> source, TNum tau)
             {
-                // Not needed for REINFORCE
-                throw new NotImplementedException();
+                // Soft update: target = tau * source + (1 - tau) * target
+                var sourceParams = source.GetParameters();
+                var targetParams = GetParameters();
+                
+                if (sourceParams.Length != targetParams.Length)
+                {
+                    throw new InvalidOperationException("Parameter vectors must have the same length for soft update");
+                }
+                
+                // Apply soft update: targetParams = (1 - tau) * targetParams + tau * sourceParams
+                for (int i = 0; i < targetParams.Length; i++)
+                {
+                    targetParams[i] = NumOps.Add(
+                        NumOps.Multiply(NumOps.Subtract(NumOps.One, tau), targetParams[i]),
+                        NumOps.Multiply(tau, sourceParams[i])
+                    );
+                }
+                
+                SetParameters(targetParams);
             }
         }
     }

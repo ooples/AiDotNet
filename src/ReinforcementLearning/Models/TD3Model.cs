@@ -2,7 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Results;
 using AiDotNet.ReinforcementLearning.Agents;
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Models.Options;
 
 namespace AiDotNet.ReinforcementLearning.Models
@@ -257,8 +257,14 @@ namespace AiDotNet.ReinforcementLearning.Models
         /// </remarks>
         public override Vector<T> GetParameters()
         {
-            // TODO: Implement GetParameters in TD3Agent
-            throw new NotImplementedException("GetParameters is not yet implemented for TD3Model");
+            // Get parameters from the TD3 agent
+            if (_agent != null)
+            {
+                return _agent.GetParameters();
+            }
+            
+            // No agent initialized
+            return new Vector<T>(0);
         }
 
         /// <summary>
@@ -281,8 +287,11 @@ namespace AiDotNet.ReinforcementLearning.Models
         /// </remarks>
         public override void SetParameters(Vector<T> parameters)
         {
-            // TODO: Implement SetParameters in TD3Agent
-            throw new NotImplementedException("SetParameters is not yet implemented for TD3Model");
+            // Set parameters to the TD3 agent
+            if (_agent != null)
+            {
+                _agent.SetParameters(parameters);
+            }
         }
         
         /// <summary>

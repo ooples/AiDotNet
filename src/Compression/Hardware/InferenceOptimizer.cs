@@ -1,7 +1,6 @@
 using AiDotNet.Compression.Quantization;
 using AiDotNet.Compression.Pruning;
 using AiDotNet.Interfaces;
-using AiDotNet.Compression.KnowledgeDistillation;
 using AiDotNet.Enums;
 using System;
 using System.Collections.Generic;
@@ -731,24 +730,7 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
         return model.Predict(input);
     }
 
-    /// <summary>
-    /// Serializes a model to a stream.
-    /// </summary>
-    /// <param name="model">The model to serialize.</param>
-    /// <param name="stream">The stream to which the model should be serialized.</param>
-    protected override void SerializeModelToStream(TModel model, System.IO.Stream stream)
-    {
-        // Delegate to the model's own serialization mechanism if it's a model serializer
-        if (model is IModelSerializer serializer)
-        {
-            var data = serializer.Serialize();
-            stream.Write(data, 0, data.Length);
-        }
-        else
-        {
-            throw new NotImplementedException("Model does not support serialization");
-        }
-    }
+    // SerializeModelToStream is now handled by the base class
 
     /// <summary>
     /// Deserializes a model from a file.
@@ -757,9 +739,8 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
     /// <returns>The deserialized model.</returns>
     protected override TModel DeserializeModelFromFile(string filePath)
     {
-        // This implementation depends on a factory pattern or reflection to create the proper model type
-        // For now, this is a placeholder throwing NotImplementedException
-        throw new NotImplementedException("Model deserialization is not implemented in this version");
+        // Use the base class implementation from ModelCompressorBase
+        return DeserializeCompressedModel(filePath);
     }
 
     /// <summary>

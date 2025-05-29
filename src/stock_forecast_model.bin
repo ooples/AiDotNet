@@ -1,0 +1,800 @@
+{
+  "$type": "AiDotNet.Models.Results.PredictionModelResult`3[[System.Double, System.Private.CoreLib],[AiDotNet.LinearAlgebra.Matrix`1[[System.Double, System.Private.CoreLib]], AiDotNet],[AiDotNet.LinearAlgebra.Vector`1[[System.Double, System.Private.CoreLib]], AiDotNet]], AiDotNet",
+  "Model": {
+    "$type": "AiDotNet.TimeSeries.ProphetModel`3[[System.Double, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[AiDotNet.LinearAlgebra.Matrix`1[[System.Double, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], AiDotNet, Version=0.0.5.0, Culture=neutral, PublicKeyToken=null],[AiDotNet.LinearAlgebra.Vector`1[[System.Double, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], AiDotNet, Version=0.0.5.0, Culture=neutral, PublicKeyToken=null]], AiDotNet, Version=0.0.5.0, Culture=neutral, PublicKeyToken=null",
+    "BinaryData": "AQAAAAEAAAAAAQAAAAABCAAAAIQgP/u2/V5A3JjNJfkOFUBQsW7Kc5zoP3cfwZO0ALa/Lh7RqloCz7/dYPpTelDvP+hv66LlK+C/gOq7v/uHDsAAAAAAhCA/+7b9XkAGAAAA3JjNJfkOFUBQsW7Kc5zoP3cfwZO0ALa/Lh7RqloCz7/dYPpTelDvP+hv66LlK+C/AAAAAIDqu7/7hw7AAAAAAAEAAAAHAAAAAAAAAAAAAAA="
+  },
+  "OptimizationResult": {
+    "$type": "AiDotNet.Models.Results.OptimizationResult`3[[System.Double, System.Private.CoreLib],[AiDotNet.LinearAlgebra.Matrix`1[[System.Double, System.Private.CoreLib]], AiDotNet],[AiDotNet.LinearAlgebra.Vector`1[[System.Double, System.Private.CoreLib]], AiDotNet]], AiDotNet",
+    "BestSolution": {
+      "$type": "AiDotNet.TimeSeries.ProphetModel`3[[System.Double, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[AiDotNet.LinearAlgebra.Matrix`1[[System.Double, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], AiDotNet, Version=0.0.5.0, Culture=neutral, PublicKeyToken=null],[AiDotNet.LinearAlgebra.Vector`1[[System.Double, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], AiDotNet, Version=0.0.5.0, Culture=neutral, PublicKeyToken=null]], AiDotNet, Version=0.0.5.0, Culture=neutral, PublicKeyToken=null",
+      "BinaryData": "AQAAAAEAAAAAAQAAAAABCAAAAIQgP/u2/V5A3JjNJfkOFUBQsW7Kc5zoP3cfwZO0ALa/Lh7RqloCz7/dYPpTelDvP+hv66LlK+C/gOq7v/uHDsAAAAAAhCA/+7b9XkAGAAAA3JjNJfkOFUBQsW7Kc5zoP3cfwZO0ALa/Lh7RqloCz7/dYPpTelDvP+hv66LlK+C/AAAAAIDqu7/7hw7AAAAAAAEAAAAHAAAAAAAAAAAAAAA="
+    },
+    "BestIntercept": 0.0,
+    "BestFitnessScore": 0.07629378869996506,
+    "Iterations": 1,
+    "FitnessHistory": {
+      "Length": 1,
+      "Data": "AQAAAGCyWl/9h7M/"
+    },
+    "SelectedFeatures": {
+      "$type": "System.Collections.Generic.List`1[[AiDotNet.LinearAlgebra.Vector`1[[System.Double, System.Private.CoreLib]], AiDotNet]], System.Private.CoreLib",
+      "$values": [
+        {
+          "Length": 70,
+          "Data": "RgAAAAAAAAAAAFNAAAAAAACAQkAAAAAAAEBSQAAAAAAAAFFAAAAAAADAUkAAAAAAAIBOQAAAAAAAAFhAAAAAAACARUAAAAAAAMBTQAAAAAAAADFAAAAAAACAQEAAAAAAAAA6QAAAAAAAQFVAAAAAAACASkAAAAAAAABMQAAAAAAAAEZAAAAAAABAU0AAAAAAAABQQAAAAAAAgFBAAAAAAAAANkAAAAAAAIBHQAAAAAAAAABAAAAAAAAA8D8AAAAAAMBVQAAAAAAAAEpAAAAAAAAAPEAAAAAAAABFQAAAAAAAADVAAAAAAAAAEEAAAAAAAAAgQAAAAAAAAEBAAAAAAAAATkAAAAAAAAAkQAAAAAAAAEhAAAAAAAAAJkAAAAAAAAAuQAAAAAAAABRAAAAAAACAT0AAAAAAAABJQAAAAAAAAFdAAAAAAAAAQUAAAAAAAAAqQAAAAAAAwFhAAAAAAAAAT0AAAAAAAIBVQAAAAAAAwFRAAAAAAAAALEAAAAAAAIBEQAAAAAAAADRAAAAAAADAVkAAAAAAAIBMQAAAAAAAAFZAAAAAAACAUUAAAAAAAIBUQAAAAAAAwFBAAAAAAAAAUkAAAAAAAAAoQAAAAAAAABxAAAAAAADAUUAAAAAAAIBLQAAAAAAAAD9AAAAAAAAAMEAAAAAAAAAIQAAAAAAAgFZAAAAAAAAAQ0AAAAAAAAA5QAAAAAAAADNAAAAAAACAQUAAAAAAAIBXQAAAAAAAAEtA"
+        }
+      ]
+    },
+    "TrainingResult": {
+      "$type": "AiDotNet.Models.Results.OptimizationResult`3+DatasetResult[[System.Double, System.Private.CoreLib],[AiDotNet.LinearAlgebra.Matrix`1[[System.Double, System.Private.CoreLib]], AiDotNet],[AiDotNet.LinearAlgebra.Vector`1[[System.Double, System.Private.CoreLib]], AiDotNet]], AiDotNet",
+      "X": {
+        "Rows": 0,
+        "Columns": 0,
+        "Data": "AAAAAAAAAAA="
+      },
+      "Y": {
+        "Length": 70,
+        "Data": "RgAAAAPRIK0VmmBALjtxWkwLYEB8H2UgErdhQPV90ZWPg19AcmNiXQMEYUAHNd5wGH9fQNdQzxS2SmJAJuRYOutuXkD4FUvJsZhiQIH3LxlryltAThER3TvtXEBgyB24xGhaQN5MBgzbxGFAKJDDeGm5XkBPz+nbp4dgQKXf6uyHDWBAtrxWk1rOYUB4X5lUKH5gQAN7643WdGBAWgl/y4XhW0Aqo/cmKvZcQLQJIvxEAFtAkC6lXCBUWUBqaFhFibthQBQy+GhfcGBA5noGJHP9W0DCDO1tYYZeQPgxE//7+FtAo5EcdieaWUB/d5iBl9hbQF616QkELFxAGdm2neC9XkCTrjz088VbQE5+dMZOol5Ak9oPm56eWUBswIumDt1bQJXtQ0lf21dAx3NjbuOJYECKFqYvsXlgQFXxf54WB2NAcuyNfGAZXECmEbQN+4tZQM2V+TBSCWNAKhBbED2rXkBwusRb7ZpiQHt1mj9RnGBACukf2oT0W0BgNYGh1x1cQJVapzJykFlAoQVKuNHSYUABux/C7HtgQGr+wZje52FAPhjdAB+MYEDpB9zvPgZhQAMRVeEroWBAgXHRNnZWYUCDNjdu1l9aQBugLLUNcFlA7wMT52PAYUA8x2frxaZeQF6JFmNZU15AkJsIRjMJW0ClZUnPfEFZQPEZFNKM3mFATdIJiNBXXkBvbPbkjCdcQHF/KpNNZFpA1MP5SOqBXkDgDNLXxP1iQBns6kuhel9A"
+      },
+      "Predictions": {
+        "Length": 70,
+        "Data": "RgAAABfLUbDBH15AlRYm0TwDYEC06KJ3cqJfQIy529+n0l1Ajrnb36fSXUCNudvfp9JdQI6529+n0l1AVXP2ux0tYECVFibRPANgQLfoondyol9Aj7nb36fSXUCPudvfp9JdQFVz9rsdLWBA9aN30lj7XUB3vjjqFv9eQJUWJtE8A2BAdL446hb/XkBVc/a7HS1gQLfoondyol9AVXP2ux0tYECPudvfp9JdQJUWJtE8A2BAVXP2ux0tYEC06KJ3cqJfQLfoondyol9Ad7446hb/XkB3vjjqFv9eQHe+OOoW/15A9KN30lj7XUBVc/a7HS1gQPWjd9JY+11A9aN30lj7XUC26KJ3cqJfQBfLUbDBH15A9KN30lj7XUBVc/a7HS1gQI+529+n0l1Adr446hb/XkBVc/a7HS1gQFVz9rsdLWBAF8tRsMEfXkAXy1GwwR9eQFVz9rsdLWBAFstRsMEfXkCVFibRPANgQBfLUbDBH15Ad7446hb/XkAYy1GwwR9eQBfLUbDBH15AeL446hb/XkBWc/a7HS1gQPWjd9JY+11Adb446hb/XkCNudvfp9JdQPajd9JY+11AlRYm0TwDYECPudvfp9JdQHi+OOoW/15AVXP2ux0tYEAYy1GwwR9eQLfoondyol9AlRYm0TwDYEC26KJ3cqJfQBbLUbDBH15At+iid3KiX0D0o3fSWPtdQI+529+n0l1Ad7446hb/XkC46KJ3cqJfQI+529+n0l1A"
+      },
+      "ErrorStats": {
+        "$type": "AiDotNet.Enums.ErrorStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "ErrorList": {
+          "$type": "System.Collections.Generic.List`1[[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "$values": [
+            12.318949207514137,
+            0.251896521342843,
+            15.182726181426062,
+            6.764142503745134,
+            16.83391449698442,
+            6.69437051050582,
+            27.04323047670232,
+            -7.676772493878218,
+            20.670528480778643,
+            -15.37544976448848,
+            -3.5847174624514224,
+            -13.654489455690722,
+            12.74185946555761,
+            2.9697662106926117,
+            8.253466988797854,
+            0.32166851458214296,
+            18.462782968515853,
+            2.532543485839682,
+            5.112954188186663,
+            -17.886088473596146,
+            -3.4451734759728225,
+            -20.096963444853685,
+            -28.095404453314046,
+            15.322270167904662,
+            4.973410201708035,
+            -12.025620984159346,
+            -1.886076997680746,
+            -12.095392977398646,
+            -17.518637741982516,
+            -18.025632460074732,
+            -7.239549769025288,
+            3.0395382039319543,
+            -15.445221757727765,
+            2.0398612345569376,
+            -17.448865748743188,
+            -17.955860466835446,
+            -23.863805435408636,
+            8.323238982037196,
+            2.392999499361082,
+            22.81163145879691,
+            -8.099682751921662,
+            -18.30899873163959,
+            22.88140345203624,
+            2.1794052210355517,
+            20.74030047401797,
+            12.388721200753466,
+            -12.165164970637946,
+            -8.029910758682377,
+            -18.239226738400276,
+            18.60232695499431,
+            2.4627714926003534,
+            23.318626176889197,
+            8.39301097527651,
+            16.903686490223734,
+            13.109310197171226,
+            10.600756487539343,
+            -13.794033442169336,
+            -22.234936963877274,
+            12.602315479078982,
+            2.1096332277962233,
+            -5.235905778009865,
+            -19.957419458375085,
+            -25.514993750967065,
+            22.45849319399275,
+            -5.166133784770551,
+            -7.309321762264588,
+            -13.724261448930037,
+            -1.955848990920046,
+            25.392042161143877,
+            6.624598517266492
+          ]
+        },
+        "MAE": 12.412581633516174,
+        "MSE": 211.6207099894609,
+        "RMSE": 14.547189075194591,
+        "MAPE": 10.221213244596314,
+        "MeanBiasError": 0.03956555652053209,
+        "MedianAbsoluteError": 12.495518339916224,
+        "MaxError": 28.095404453314046,
+        "TheilUStatistic": 0.05845584779756281,
+        "DurbinWatsonStatistic": 1.7403704491674084,
+        "SampleStandardError": 1.751275766817283,
+        "PopulationStandardError": 14.547189075194591,
+        "AIC": 575.4870844430238,
+        "BIC": 379.08418503641906,
+        "AICAlt": 376.83568979436967,
+        "RSS": 14813.449699262263,
+        "AUCPR": 0.0,
+        "AUCROC": 0.0,
+        "SMAPE": 10.057582929138501,
+        "MeanSquaredLogError": 0.01377246665286225
+      },
+      "PredictionStats": {
+        "$type": "AiDotNet.Statistics.PredictionStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "ModelType": 61,
+        "PredictionInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 94.47186983293338,
+          "Item2": 153.3775856546105
+        },
+        "ConfidenceInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 122.99925842765985,
+          "Item2": 124.85019705988402
+        },
+        "CredibleInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": -1.9949975686451742,
+          "Item2": 1.9949975686451742
+        },
+        "ToleranceInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 116.07027966246879,
+          "Item2": 131.7791758250751
+        },
+        "ForecastInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 0.0,
+          "Item2": 0.0
+        },
+        "BootstrapInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 123.85802422669947,
+          "Item2": 123.92611684228898
+        },
+        "SimultaneousPredictionInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 103.87281140193629,
+          "Item2": 143.97664408560757
+        },
+        "JackknifeInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 123.81169964350039,
+          "Item2": 124.03775584404349
+        },
+        "PercentileInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 119.29149624307156,
+          "Item2": 129.40987966666094
+        },
+        "QuantileIntervals": {
+          "$type": "System.Collections.Generic.List`1[[System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib]], System.Private.CoreLib",
+          "$values": [
+            {
+              "$type": "System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+              "Item1": 0.25,
+              "Item2": 119.92729627307546,
+              "Item3": 119.91307375932732
+            },
+            {
+              "$type": "System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+              "Item1": 0.5,
+              "Item2": 123.985773616232,
+              "Item3": 123.98577361623198
+            },
+            {
+              "$type": "System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+              "Item1": 0.75,
+              "Item2": 126.57730996677721,
+              "Item3": 128.1011739486609
+            }
+          ]
+        },
+        "PredictionIntervalCoverage": 1.0,
+        "MeanPredictionError": 12.412581633516174,
+        "MedianPredictionError": 12.495518339916224,
+        "R2": 0.06332594839590966,
+        "AdjustedR2": 0.04955132998996725,
+        "ExplainedVarianceScore": 0.06333287730526271,
+        "LearningCurve": {
+          "$type": "System.Collections.Generic.List`1[[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "$values": [
+            -2.9474712463708035,
+            -0.15187056433301604,
+            -0.14788905470522495,
+            -0.0888699553415222,
+            -0.028841382793335812,
+            0.04507677823388789,
+            0.0939285669323755,
+            0.06357470784870267,
+            0.059152905506139386,
+            0.06332594839590966
+          ]
+        },
+        "Accuracy": 0.0,
+        "Precision": 0.0,
+        "Recall": 0.0,
+        "F1Score": 0.0,
+        "PearsonCorrelation": 0.25174347297807675,
+        "SpearmanCorrelation": 0.15045737269463366,
+        "KendallTau": 0.08115942028985507,
+        "DynamicTimeWarping": 755.7779930178847,
+        "BestDistributionFit": {
+          "$type": "AiDotNet.Models.Results.DistributionFitResult`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+          "DistributionType": 2,
+          "GoodnessOfFit": 160.63969473567792,
+          "Parameters": {
+            "$type": "System.Collections.Generic.Dictionary`2[[System.String, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+            "DegreesOfFreedom": 69.0,
+            "Mean": 123.92472774377194,
+            "StandardDeviation": 3.881223690416069
+          },
+          "PValue": 0.0
+        },
+        "PredictionType": 0,
+        "FeatureCount": 1
+      },
+      "ActualBasicStats": {
+        "$type": "AiDotNet.Statistics.BasicStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "Mean": 123.96429330029247,
+        "Variance": 225.92780234175623,
+        "StandardDeviation": 15.030894928172316,
+        "Skewness": 0.001551624596295307,
+        "Kurtosis": -0.955911657448481,
+        "Min": 95.42769080766296,
+        "Max": 152.29128311869718,
+        "N": 70,
+        "Median": 122.78633226390288,
+        "FirstQuartile": 111.5979955561971,
+        "ThirdQuartile": 132.99868435862393,
+        "InterquartileRange": 21.400688802426828,
+        "MAD": 12.762509075005983
+      },
+      "PredictedBasicStats": {
+        "$type": "AiDotNet.Statistics.BasicStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "Mean": 123.92472774377194,
+        "Variance": 15.063897335037275,
+        "StandardDeviation": 3.881223690414825,
+        "Skewness": 0.0020460034124066243,
+        "Kurtosis": -1.5734384591288628,
+        "Min": 119.29149624307155,
+        "Max": 129.40987966666097,
+        "N": 70,
+        "Median": 123.98577361623198,
+        "FirstQuartile": 119.92729627307547,
+        "ThirdQuartile": 128.1011739486609,
+        "InterquartileRange": 8.173877675585416,
+        "MAD": 3.4730945605535477
+      }
+    },
+    "ValidationResult": {
+      "$type": "AiDotNet.Models.Results.OptimizationResult`3+DatasetResult[[System.Double, System.Private.CoreLib],[AiDotNet.LinearAlgebra.Matrix`1[[System.Double, System.Private.CoreLib]], AiDotNet],[AiDotNet.LinearAlgebra.Vector`1[[System.Double, System.Private.CoreLib]], AiDotNet]], AiDotNet",
+      "X": {
+        "Rows": 0,
+        "Columns": 0,
+        "Data": "AAAAAAAAAAA="
+      },
+      "Y": {
+        "Length": 15,
+        "Data": "DwAAACth0CWW0GFAOkfQU/K0XkCM1nH7mnJgQByEZH/DD2BAZqiMeZ/CYUAtVzmQlmtZQG0t748hkl1Af+T7aqqNXUCTKN4R/1FhQIOjmlfpFFxACs1XpDpUYUC4yMDog4dZQN6iOysa6mFAPFoEArPxXECiUhUhvARbQA=="
+      },
+      "Predictions": {
+        "Length": 15,
+        "Data": "DwAAAHa+OOoW/15A9aN30lj7XUC36KJ3cqJfQJUWJtE8A2BAVnP2ux0tYEB4vjjqFv9eQJUWJtE8A2BAlRYm0TwDYECUFibRPANgQBbLUbDBH15AlBYm0TwDYEAXy1GwwR9eQPijd9JY+11Ajrnb36fSXUCVFibRPANgQA=="
+      },
+      "ErrorStats": {
+        "$type": "AiDotNet.Enums.ErrorStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "ErrorList": {
+          "$type": "System.Collections.Generic.List`1[[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "$values": [
+            18.532554961755068,
+            2.8999942174533118,
+            5.043182194947363,
+            0.3914405078214429,
+            12.672087472318253,
+            -22.304708957116574,
+            -9.817875471896471,
+            -9.887647465135771,
+            10.461212501060771,
+            -8.169454745160962,
+            10.530984494300071,
+            -18.37877072487889,
+            23.38839817012837,
+            -3.5149454692121083,
+            -20.027191451614385
+          ]
+        },
+        "MAE": 11.734696586986654,
+        "MSE": 187.66725197310788,
+        "RMSE": 13.699169754883245,
+        "MAPE": 9.688310330308052,
+        "MeanBiasError": -0.5453826510153675,
+        "MedianAbsoluteError": 10.461212501060771,
+        "MaxError": 23.38839817012837,
+        "TheilUStatistic": 0.05479386505780556,
+        "DurbinWatsonStatistic": 2.3049037066040134,
+        "SampleStandardError": 3.6612571218592187,
+        "PopulationStandardError": 13.699169754883245,
+        "AIC": 123.08821287107142,
+        "BIC": 81.22810707603344,
+        "AICAlt": 80.52005687493123,
+        "RSS": 2815.0087795966183,
+        "AUCPR": 0.0,
+        "AUCROC": 0.0,
+        "SMAPE": 9.506820481388884,
+        "MeanSquaredLogError": 0.012370725783618043
+      },
+      "PredictionStats": {
+        "$type": "AiDotNet.Statistics.PredictionStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "ModelType": 61,
+        "PredictionInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 93.22263450665093,
+          "Item2": 156.46605743437053
+        },
+        "ConfidenceInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 122.80228810001732,
+          "Item2": 126.88640384100414
+        },
+        "CredibleInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": -2.135030050772414,
+          "Item2": 2.135030050772414
+        },
+        "ToleranceInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 116.38942313084502,
+          "Item2": 133.29926881017644
+        },
+        "ForecastInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 0.0,
+          "Item2": 0.0
+        },
+        "BootstrapInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 124.7824067474106,
+          "Item2": 124.89181012418929
+        },
+        "SimultaneousPredictionInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 105.96134359406368,
+          "Item2": 143.72734834695777
+        },
+        "JackknifeInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 124.25959998209123,
+          "Item2": 125.42909195893031
+        },
+        "PercentileInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 119.29149624307158,
+          "Item2": 129.40987966666097
+        },
+        "QuantileIntervals": {
+          "$type": "System.Collections.Generic.List`1[[System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib]], System.Private.CoreLib",
+          "$values": [
+            {
+              "$type": "System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+              "Item1": 0.25,
+              "Item2": 120.49619682300212,
+              "Item3": 119.97276030401767
+            },
+            {
+              "$type": "System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+              "Item1": 0.5,
+              "Item2": 125.99120843528348,
+              "Item3": 127.08526462740508
+            },
+            {
+              "$type": "System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+              "Item1": 0.75,
+              "Item2": 128.1011739486609,
+              "Item3": 128.1011739486609
+            }
+          ]
+        },
+        "PredictionIntervalCoverage": 1.0,
+        "MeanPredictionError": 11.734696586986654,
+        "MedianPredictionError": 10.461212501060771,
+        "R2": 0.07629378869996506,
+        "AdjustedR2": 0.005239464753808543,
+        "ExplainedVarianceScore": 0.07775781206064125,
+        "LearningCurve": {
+          "$type": "System.Collections.Generic.List`1[[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "$values": [
+            "-Infinity",
+            -0.8149703389084935,
+            -0.9382217528301862,
+            -0.8359811061085103,
+            -0.8076557381521177,
+            0.09272136074736526,
+            0.07643666987109154,
+            0.04662621343662077,
+            0.06788961292899631,
+            0.13966738501416398
+          ]
+        },
+        "Accuracy": 0.0,
+        "Precision": 0.0,
+        "Recall": 0.0,
+        "F1Score": 0.0,
+        "PearsonCorrelation": 0.2795428711519789,
+        "SpearmanCorrelation": 0.10460388337620287,
+        "KendallTau": 0.0380952380952381,
+        "DynamicTimeWarping": 171.8726871200565,
+        "BestDistributionFit": {
+          "$type": "AiDotNet.Models.Results.DistributionFitResult`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+          "DistributionType": 2,
+          "GoodnessOfFit": 28.012967017624476,
+          "Parameters": {
+            "$type": "System.Collections.Generic.Dictionary`2[[System.String, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+            "DegreesOfFreedom": 14.0,
+            "Mean": 124.84434597051073,
+            "StandardDeviation": 3.7043301201083794
+          },
+          "PValue": 0.0
+        },
+        "PredictionType": 0,
+        "FeatureCount": 1
+      },
+      "ActualBasicStats": {
+        "$type": "AiDotNet.Statistics.BasicStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "Mean": 124.2989633194954,
+        "Variance": 203.16768435386268,
+        "StandardDeviation": 14.253690201272885,
+        "Skewness": -0.008883173881783108,
+        "Kurtosis": -1.029015168395786,
+        "Min": 101.68106465911542,
+        "Max": 143.31569444320388,
+        "N": 15,
+        "Median": 122.82729049052878,
+        "FirstQuartile": 114.05164642585032,
+        "ThirdQuartile": 138.59727244634126,
+        "InterquartileRange": 24.545626020490943,
+        "MAD": 12.580798477956757
+      },
+      "PredictedBasicStats": {
+        "$type": "AiDotNet.Statistics.BasicStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "Mean": 124.84434597051073,
+        "Variance": 13.722061638731583,
+        "StandardDeviation": 3.7043301201069516,
+        "Skewness": -0.02890066302208387,
+        "Kurtosis": -1.4618989228576909,
+        "Min": 119.29149624307158,
+        "Max": 129.40987966666097,
+        "N": 15,
+        "Median": 126.53823653134428,
+        "FirstQuartile": 120.49619682300212,
+        "ThirdQuartile": 128.1011739486609,
+        "InterquartileRange": 7.604977125658763,
+        "MAD": 3.327126246062363
+      }
+    },
+    "TestResult": {
+      "$type": "AiDotNet.Models.Results.OptimizationResult`3+DatasetResult[[System.Double, System.Private.CoreLib],[AiDotNet.LinearAlgebra.Matrix`1[[System.Double, System.Private.CoreLib]], AiDotNet],[AiDotNet.LinearAlgebra.Vector`1[[System.Double, System.Private.CoreLib]], AiDotNet]], AiDotNet",
+      "X": {
+        "Rows": 0,
+        "Columns": 0,
+        "Data": "AAAAAAAAAAA="
+      },
+      "Y": {
+        "Length": 15,
+        "Data": "DwAAALBV4JLYil5AOxv9rEdcXkBgrFWCeghhQIwspxral2BATP7cLnswXECAIwPAFaNZQHBAIz7izltAOJtlFXRqXkB6tc5zZ6NgQGe+jWTI4GFASlJy8PxlXkDnXj7uKJ1iQPLD3rJNuWFA8llIBqPlYUAaqsNKDRVjQA=="
+      },
+      "Predictions": {
+        "Length": 15,
+        "Data": "DwAAAHe+OOoW/15At+iid3KiX0CMudvfp9JdQBbLUbDBH15A9aN30lj7XUD0o3fSWPtdQLboondyol9AVXP2ux0tYED2o3fSWPtdQBjLUbDBH15AVnP2ux0tYECUFibRPANgQLfoondyol9A96N30lj7XUB3vjjqFv9eQA=="
+      },
+      "ErrorStats": {
+        "$type": "AiDotNet.Enums.ErrorStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "ErrorList": {
+          "$type": "System.Collections.Generic.List`1[[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "$values": [
+            -1.8163050044414462,
+            -5.096361791531251,
+            16.973458483463048,
+            12.249177214274852,
+            -7.169777775785988,
+            -17.379093755503902,
+            -15.305677771249151,
+            -7.746544487117518,
+            13.179082190410526,
+            22.528265187231995,
+            -7.816316480356846,
+            20.8100724672573,
+            15.252498174665291,
+            23.24885418364984,
+            28.672098948233682
+          ]
+        },
+        "MAE": 14.349572261011508,
+        "MSE": 259.04839186669136,
+        "RMSE": 16.0949803313546,
+        "MAPE": 10.842173650750448,
+        "MeanBiasError": 6.038895318880028,
+        "MedianAbsoluteError": 15.252498174665291,
+        "MaxError": 28.672098948233682,
+        "TheilUStatistic": 0.06332818868474945,
+        "DurbinWatsonStatistic": 0.8885631558879075,
+        "SampleStandardError": 4.3015644319138735,
+        "PopulationStandardError": 16.0949803313546,
+        "AIC": 127.92337927760568,
+        "BIC": 86.06327348256772,
+        "AICAlt": 85.35522328146551,
+        "RSS": 3885.725878000371,
+        "AUCPR": 0.0,
+        "AUCROC": 0.0,
+        "SMAPE": 11.19412501689744,
+        "MeanSquaredLogError": 0.015236979400895235
+      },
+      "PredictionStats": {
+        "$type": "AiDotNet.Statistics.PredictionStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "ModelType": 61,
+        "PredictionInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 86.4814043434439,
+          "Item2": 160.78529766853705
+        },
+        "ConfidenceInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 121.59176389676172,
+          "Item2": 125.67493811521923
+        },
+        "CredibleInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": -2.135030050772414,
+          "Item2": 2.135030050772414
+        },
+        "ToleranceInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 115.18037730313455,
+          "Item2": 132.0863247088464
+        },
+        "ForecastInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 0.0,
+          "Item2": 0.0
+        },
+        "BootstrapInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 123.52549037616383,
+          "Item2": 123.64593573867296
+        },
+        "SimultaneousPredictionInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 101.44795165085797,
+          "Item2": 145.81875036112297
+        },
+        "JackknifeInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 123.04873982068528,
+          "Item2": 124.21796219129567
+        },
+        "PercentileInterval": {
+          "$type": "System.ValueTuple`2[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "Item1": 119.29149624307155,
+          "Item2": 129.40987966666097
+        },
+        "QuantileIntervals": {
+          "$type": "System.Collections.Generic.List`1[[System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib]], System.Private.CoreLib",
+          "$values": [
+            {
+              "$type": "System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+              "Item1": 0.25,
+              "Item2": 119.92729627307548,
+              "Item3": 119.84196119058652
+            },
+            {
+              "$type": "System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+              "Item1": 0.5,
+              "Item2": 123.98577361623197,
+              "Item3": 123.985773616232
+            },
+            {
+              "$type": "System.ValueTuple`3[[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+              "Item1": 0.75,
+              "Item2": 126.53823653134427,
+              "Item3": 126.3037959187468
+            }
+          ]
+        },
+        "PredictionIntervalCoverage": 1.0,
+        "MeanPredictionError": 14.349572261011508,
+        "MedianPredictionError": 15.252498174665291,
+        "R2": -0.259164182727452,
+        "AdjustedR2": -0.35602296601417893,
+        "ExplainedVarianceScore": -0.08190184854543947,
+        "LearningCurve": {
+          "$type": "System.Collections.Generic.List`1[[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+          "$values": [
+            "-Infinity",
+            -109.58656267031131,
+            -1.2726881563490546,
+            -1.7866039311541577,
+            -0.45159796061442736,
+            -0.051936597348678726,
+            -0.21617978338239974,
+            -0.28123953446342975,
+            -0.2627364886568231,
+            -0.25112585416268285
+          ]
+        },
+        "Accuracy": 0.0,
+        "Precision": 0.0,
+        "Recall": 0.0,
+        "F1Score": 0.0,
+        "PearsonCorrelation": -0.02949888622169216,
+        "SpearmanCorrelation": 0.051878437214548594,
+        "KendallTau": 0.02857142857142857,
+        "DynamicTimeWarping": 171.5854619142017,
+        "BestDistributionFit": {
+          "$type": "AiDotNet.Models.Results.DistributionFitResult`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+          "DistributionType": 2,
+          "GoodnessOfFit": 27.997973724295814,
+          "Parameters": {
+            "$type": "System.Collections.Generic.Dictionary`2[[System.String, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+            "DegreesOfFreedom": 14.0,
+            "Mean": 123.63335100599048,
+            "StandardDeviation": 3.703476150611607
+          },
+          "PValue": 0.0
+        },
+        "PredictionType": 0,
+        "FeatureCount": 1
+      },
+      "ActualBasicStats": {
+        "$type": "AiDotNet.Statistics.BasicStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "Mean": 129.6722463248705,
+        "Variance": 205.73043247273083,
+        "StandardDeviation": 14.343306190440572,
+        "Skewness": -0.012739215929165625,
+        "Kurtosis": -0.49850159577263264,
+        "Min": 102.54820251757155,
+        "Max": 152.65787256446566,
+        "N": 15,
+        "Median": 132.74537403727697,
+        "FirstQuartile": 121.51771896305857,
+        "ThirdQuartile": 142.40759835812185,
+        "InterquartileRange": 20.889879395063275,
+        "MAD": 12.36835185673108
+      },
+      "PredictedBasicStats": {
+        "$type": "AiDotNet.Statistics.BasicStats`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+        "Mean": 123.63335100599048,
+        "Variance": 13.715735598147111,
+        "StandardDeviation": 3.7034761506113565,
+        "Skewness": 0.021753192770633516,
+        "Kurtosis": -1.3493051592243281,
+        "Min": 119.29149624307155,
+        "Max": 129.40987966666097,
+        "N": 15,
+        "Median": 123.98577361623198,
+        "FirstQuartile": 119.92729627307548,
+        "ThirdQuartile": 126.53823653134428,
+        "InterquartileRange": 6.610940258268798,
+        "MAD": 3.3685561007246565
+      }
+    },
+    "FitDetectionResult": {
+      "$type": "AiDotNet.Models.Results.FitDetectorResult`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+      "FitType": 0,
+      "ConfidenceLevel": 1.0,
+      "Recommendations": {
+        "$type": "System.Collections.Generic.List`1[[System.String, System.Private.CoreLib]], System.Private.CoreLib",
+        "$values": [
+          "The model appears to be well-calibrated. Consider the following:",
+          "1. Continue monitoring the model's performance on new data.",
+          "2. Periodically retrain the model to maintain its calibration.",
+          "3. Consider ensemble methods to potentially improve performance further."
+        ]
+      },
+      "AdditionalInfo": {
+        "$type": "System.Collections.Generic.Dictionary`2[[System.String, System.Private.CoreLib],[System.Object, System.Private.CoreLib]], System.Private.CoreLib"
+      }
+    },
+    "CoefficientLowerBounds": {
+      "Length": 0,
+      "Data": "AAAAAA=="
+    },
+    "CoefficientUpperBounds": {
+      "Length": 0,
+      "Data": "AAAAAA=="
+    }
+  },
+  "NormalizationInfo": {
+    "$type": "AiDotNet.Models.NormalizationInfo`3[[System.Double, System.Private.CoreLib],[AiDotNet.LinearAlgebra.Matrix`1[[System.Double, System.Private.CoreLib]], AiDotNet],[AiDotNet.LinearAlgebra.Vector`1[[System.Double, System.Private.CoreLib]], AiDotNet]], AiDotNet",
+    "Normalizer": {
+      "$type": "AiDotNet.Normalizers.NoNormalizer`3[[System.Double, System.Private.CoreLib],[AiDotNet.LinearAlgebra.Matrix`1[[System.Double, System.Private.CoreLib]], AiDotNet],[AiDotNet.LinearAlgebra.Vector`1[[System.Double, System.Private.CoreLib]], AiDotNet]], AiDotNet"
+    },
+    "XParams": {
+      "$type": "System.Collections.Generic.List`1[[AiDotNet.Models.NormalizationParameters`1[[System.Double, System.Private.CoreLib]], AiDotNet]], System.Private.CoreLib",
+      "$values": [
+        {
+          "$type": "AiDotNet.Models.NormalizationParameters`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+          "Method": 0,
+          "Min": 0.0,
+          "Max": 0.0,
+          "Mean": 0.0,
+          "StdDev": 0.0,
+          "Scale": 0.0,
+          "Shift": 0.0,
+          "Bins": {
+            "$type": "System.Collections.Generic.List`1[[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+            "$values": []
+          },
+          "Median": 0.0,
+          "IQR": 0.0,
+          "P": 0.0
+        }
+      ]
+    },
+    "YParams": {
+      "$type": "AiDotNet.Models.NormalizationParameters`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+      "Method": 0,
+      "Min": 0.0,
+      "Max": 0.0,
+      "Mean": 0.0,
+      "StdDev": 0.0,
+      "Scale": 0.0,
+      "Shift": 0.0,
+      "Bins": {
+        "$type": "System.Collections.Generic.List`1[[System.Double, System.Private.CoreLib]], System.Private.CoreLib",
+        "$values": []
+      },
+      "Median": 0.0,
+      "IQR": 0.0,
+      "P": 0.0
+    }
+  },
+  "ModelMetadata": {
+    "$type": "AiDotNet.Models.ModelMetaData`1[[System.Double, System.Private.CoreLib]], AiDotNet",
+    "ModelType": 61,
+    "FeatureCount": 0,
+    "Complexity": 0,
+    "Description": "",
+    "AdditionalInfo": {
+      "$type": "System.Collections.Generic.Dictionary`2[[System.String, System.Private.CoreLib],[System.Object, System.Private.CoreLib]], System.Private.CoreLib",
+      "ModelName": "Prophet Time Series Model",
+      "Version": "1.0",
+      "TrendValue": 123.96429330029247,
+      "SeasonalPeriodCount": 1,
+      "SeasonalPeriod_0": 7,
+      "FourierOrder": 3,
+      "SeasonalComponentsCount": 6,
+      "HolidayCount": 0,
+      "HolidayComponentsCount": 0,
+      "ChangepointValue": -3.816398141786806,
+      "ChangepointCount": 0,
+      "RegressorCount": 0,
+      "StateSize": 8
+    },
+    "ModelData": {
+      "$type": "System.Byte[], System.Private.CoreLib",
+      "$value": "AQAAAAEAAAAAAQAAAAABCAAAAIQgP/u2/V5A3JjNJfkOFUBQsW7Kc5zoP3cfwZO0ALa/Lh7RqloCz7/dYPpTelDvP+hv66LlK+C/gOq7v/uHDsAAAAAAhCA/+7b9XkAGAAAA3JjNJfkOFUBQsW7Kc5zoP3cfwZO0ALa/Lh7RqloCz7/dYPpTelDvP+hv66LlK+C/AAAAAIDqu7/7hw7AAAAAAAEAAAAHAAAAAAAAAAAAAAA="
+    },
+    "FeatureImportance": {
+      "$type": "System.Collections.Generic.Dictionary`2[[System.String, System.Private.CoreLib],[System.Double, System.Private.CoreLib]], System.Private.CoreLib"
+    }
+  }
+}

@@ -3,7 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.ReinforcementLearning.Agents;
-using AiDotNet.ReinforcementLearning.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Models.Options;
 using AiDotNet.Helpers;
 using System;

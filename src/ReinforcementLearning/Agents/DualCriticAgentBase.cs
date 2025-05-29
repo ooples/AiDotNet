@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
 using AiDotNet.ReinforcementLearning.Interfaces;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.ReinforcementLearning.Exploration;
@@ -255,6 +256,152 @@ namespace AiDotNet.ReinforcementLearning.Agents
             else
             {
                 return NumOps.Divide(NumOps.Add(q1, q2), NumOps.FromDouble(2.0));
+            }
+        }
+        
+        /// <summary>
+        /// Gets the parameters of the agent (actor and critics).
+        /// </summary>
+        /// <returns>A vector containing all parameters.</returns>
+        public virtual Vector<T> GetParameters()
+        {
+            var allParameters = new List<T>();
+            
+            // Get actor parameters if it supports IParameterizable or IStochasticPolicy
+            if (Actor is IParameterizable<T, TState, TAction> parameterizableActor)
+            {
+                var actorParams = parameterizableActor.GetParameters();
+                for (int i = 0; i < actorParams.Length; i++)
+                {
+                    allParameters.Add(actorParams[i]);
+                }
+            }
+            else if (Actor is IStochasticPolicy<TState, TAction, T> stochasticActor)
+            {
+                var actorParams = stochasticActor.GetParameters();
+                for (int i = 0; i < actorParams.Length; i++)
+                {
+                    allParameters.Add(actorParams[i]);
+                }
+            }
+            
+            // Get critic1 parameters
+            if (Critic1 != null)
+            {
+                var critic1Params = Critic1.GetParameters();
+                for (int i = 0; i < critic1Params.Length; i++)
+                {
+                    allParameters.Add(critic1Params[i]);
+                }
+            }
+            
+            // Get critic2 parameters
+            if (Critic2 != null)
+            {
+                var critic2Params = Critic2.GetParameters();
+                for (int i = 0; i < critic2Params.Length; i++)
+                {
+                    allParameters.Add(critic2Params[i]);
+                }
+            }
+            
+            // Get target network parameters if they exist
+            if (Critic1Target != null)
+            {
+                var critic1TargetParams = Critic1Target.GetParameters();
+                for (int i = 0; i < critic1TargetParams.Length; i++)
+                {
+                    allParameters.Add(critic1TargetParams[i]);
+                }
+            }
+            
+            if (Critic2Target != null)
+            {
+                var critic2TargetParams = Critic2Target.GetParameters();
+                for (int i = 0; i < critic2TargetParams.Length; i++)
+                {
+                    allParameters.Add(critic2TargetParams[i]);
+                }
+            }
+            
+            return new Vector<T>([.. allParameters]);
+        }
+        
+        /// <summary>
+        /// Sets the parameters of the agent (actor and critics).
+        /// </summary>
+        /// <param name="parameters">A vector containing all parameters.</param>
+        public virtual void SetParameters(Vector<T> parameters)
+        {
+            int index = 0;
+            
+            // Set actor parameters if it supports IParameterizable or IStochasticPolicy
+            if (Actor is IParameterizable<T, TState, TAction> parameterizableActor)
+            {
+                var actorParams = parameterizableActor.GetParameters();
+                var newActorParams = new Vector<T>(actorParams.Length);
+                for (int i = 0; i < actorParams.Length; i++)
+                {
+                    newActorParams[i] = parameters[index++];
+                }
+                parameterizableActor.SetParameters(newActorParams);
+            }
+            else if (Actor is IStochasticPolicy<TState, TAction, T> stochasticActor)
+            {
+                var actorParams = stochasticActor.GetParameters();
+                var newActorParams = new Vector<T>(actorParams.Length);
+                for (int i = 0; i < actorParams.Length; i++)
+                {
+                    newActorParams[i] = parameters[index++];
+                }
+                stochasticActor.SetParameters(newActorParams);
+            }
+            
+            // Set critic1 parameters
+            if (Critic1 != null)
+            {
+                var critic1Params = Critic1.GetParameters();
+                var newCritic1Params = new Vector<T>(critic1Params.Length);
+                for (int i = 0; i < critic1Params.Length; i++)
+                {
+                    newCritic1Params[i] = parameters[index++];
+                }
+                Critic1.SetParameters(newCritic1Params);
+            }
+            
+            // Set critic2 parameters
+            if (Critic2 != null)
+            {
+                var critic2Params = Critic2.GetParameters();
+                var newCritic2Params = new Vector<T>(critic2Params.Length);
+                for (int i = 0; i < critic2Params.Length; i++)
+                {
+                    newCritic2Params[i] = parameters[index++];
+                }
+                Critic2.SetParameters(newCritic2Params);
+            }
+            
+            // Set target network parameters if they exist
+            if (Critic1Target != null)
+            {
+                var critic1TargetParams = Critic1Target.GetParameters();
+                var newCritic1TargetParams = new Vector<T>(critic1TargetParams.Length);
+                for (int i = 0; i < critic1TargetParams.Length; i++)
+                {
+                    newCritic1TargetParams[i] = parameters[index++];
+                }
+                Critic1Target.SetParameters(newCritic1TargetParams);
+            }
+            
+            if (Critic2Target != null)
+            {
+                var critic2TargetParams = Critic2Target.GetParameters();
+                var newCritic2TargetParams = new Vector<T>(critic2TargetParams.Length);
+                for (int i = 0; i < critic2TargetParams.Length; i++)
+                {
+                    newCritic2TargetParams[i] = parameters[index++];
+                }
+                Critic2Target.SetParameters(newCritic2TargetParams);
             }
         }
     }

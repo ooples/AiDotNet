@@ -1,6 +1,6 @@
 using AiDotNet.LinearAlgebra;
-using AiDotNet.ReinforcementLearning.Interfaces;
 using AiDotNet.Interfaces;
+using AiDotNet.ReinforcementLearning.Interfaces;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.ReinforcementLearning.Exploration
