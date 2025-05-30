@@ -46,9 +46,10 @@ class Program
             Console.WriteLine("5. Enhanced Neural Network Example (Customer Churn Prediction)");
             Console.WriteLine("6. Enhanced Time Series Example (Energy Demand Forecasting)");
             Console.WriteLine("7. Transformer Positional Encoding Techniques Demo");
+            Console.WriteLine("8. Reasoning Model Examples (Chain-of-Thought, Self-Consistency)");
             Console.WriteLine("0. Exit");
             Console.WriteLine();
-            Console.Write("Select an example to run (0-7): ");
+            Console.Write("Select an example to run (0-8): ");
 
             if (int.TryParse(Console.ReadLine(), out int choice))
             {
@@ -62,7 +63,7 @@ class Program
 
                 RunSpecificExample(choice);
 
-                if (choice != 7)
+                if (choice != 7 && choice != 8)
                 {
                     Console.WriteLine("\nPress any key to return to the main menu...");
                     Console.ReadKey();
@@ -110,8 +111,11 @@ class Program
                 case 7:
                     RunPositionalEncodingDemo();
                     break;
+                case 8:
+                    ReasoningModelExample.RunAllExamples();
+                    break;
                 default:
-                    Console.WriteLine($"Invalid choice: {exampleNumber}. Please select a number between 0 and 7.");
+                    Console.WriteLine($"Invalid choice: {exampleNumber}. Please select a number between 0 and 8.");
                     break;
             }
         }
@@ -128,7 +132,7 @@ class Program
         Console.WriteLine(new string('=', 50));
         Console.WriteLine();
 
-        for (int i = 1; i <= 7; i++)
+        for (int i = 1; i <= 8; i++)
         {
             Console.WriteLine($"\n--- Example {i} ---");
             try

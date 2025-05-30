@@ -2028,5 +2028,88 @@ public enum ModelType
     [ModelInfo(ModelCategory.NeuralNetwork,
               new[] { MetricGroups.General },
               "Rainbow DQN combining multiple DQN improvements")]
-    RainbowDQNModel
+    RainbowDQNModel,
+
+    //
+    // Reasoning Models
+    //
+
+    /// <summary>
+    /// A chain-of-thought reasoning model for multi-step logical problem solving.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Chain-of-Thought (CoT) reasoning models are designed to solve complex problems
+    /// by breaking them down into a series of intermediate reasoning steps, similar to how humans approach
+    /// difficult tasks. Instead of jumping directly to an answer, these models "think out loud" by generating
+    /// explicit reasoning chains. For example, when solving a math word problem, the model might first identify
+    /// what's being asked, then extract relevant information, set up equations, solve step by step, and finally
+    /// check the answer. This approach dramatically improves performance on tasks requiring logical reasoning,
+    /// arithmetic, commonsense reasoning, and symbolic manipulation. The transparency of the reasoning process
+    /// also makes these models more interpretable and debuggable.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Chain-of-thought reasoning for complex problem solving")]
+    ChainOfThoughtModel,
+
+    /// <summary>
+    /// A self-consistency reasoning model that explores multiple reasoning paths.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Self-Consistency reasoning improves upon chain-of-thought by generating multiple
+    /// independent reasoning paths for the same problem and then selecting the most consistent answer. Think
+    /// of it like asking several experts to solve a problem independently and then taking the answer that
+    /// most of them agree on. This approach is particularly powerful for problems where there might be multiple
+    /// valid reasoning approaches. By exploring different paths, the model becomes more robust to errors in
+    /// any single reasoning chain and can identify when it's uncertain about an answer (when the paths disagree).
+    /// This makes self-consistency ideal for high-stakes applications where reliability is crucial.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Self-consistency reasoning with multiple paths")]
+    SelfConsistencyModel,
+
+    /// <summary>
+    /// A tree-of-thought reasoning model for systematic exploration of reasoning paths.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Tree-of-Thought (ToT) reasoning extends chain-of-thought by maintaining a tree
+    /// of possible reasoning paths instead of a single chain. At each step, the model considers multiple
+    /// possible next steps, evaluates them, and may pursue several promising directions in parallel. This is
+    /// like solving a puzzle where you might try different approaches, backtrack when you hit dead ends, and
+    /// explore alternative solutions. The model can use various search strategies (breadth-first, depth-first,
+    /// beam search) to navigate the reasoning tree efficiently. This systematic exploration makes ToT particularly
+    /// effective for tasks like puzzle solving, planning, and creative problem solving where the solution space
+    /// is large and complex.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Tree-of-thought systematic reasoning exploration")]
+    TreeOfThoughtModel,
+
+    /// <summary>
+    /// A reasoning model with iterative refinement capabilities.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Iterative Refinement reasoning models improve their answers through multiple
+    /// rounds of self-reflection and correction. After generating an initial answer, the model critically
+    /// examines its own reasoning, identifies potential errors or gaps, and produces an improved version.
+    /// This process can repeat several times, with each iteration building on insights from previous ones.
+    /// It's similar to writing an essay where you create a first draft, then revise it multiple times to
+    /// improve clarity, fix errors, and strengthen arguments. This approach is particularly valuable for
+    /// complex tasks where perfection on the first attempt is unlikely, such as code generation, mathematical
+    /// proofs, or detailed analysis tasks.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Iterative refinement reasoning model")]
+    IterativeRefinementModel
 }
