@@ -9,7 +9,7 @@ namespace AiDotNet.FitnessCalculators;
 /// <b>For Beginners:</b> This calculator helps evaluate how well your model is performing on classification tasks,
 /// especially when you're trying to clearly separate two classes from each other.
 /// 
-/// Hinge Loss is commonly used with Support Vector Machines (SVMs), which are models that try to find
+/// Hinge Loss is commonly used with Support Vector<double> Machines (SVMs), which are models that try to find
 /// the best dividing line (or "hyperplane") between different classes of data.
 /// 
 /// How Hinge Loss works:

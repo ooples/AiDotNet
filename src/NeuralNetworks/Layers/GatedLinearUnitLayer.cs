@@ -361,9 +361,9 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// 
     /// This constructor is almost identical to the first one, but with one key difference:
     /// - Regular activation: processes each gate value separately
-    /// - Vector activation: processes the entire gate vector together
+    /// - Vector<double> activation: processes the entire gate vector together
     /// 
-    /// Vector activations might be useful for specialized gating where
+    /// Vector<double> activations might be useful for specialized gating where
     /// gate values should influence each other. For most common use cases,
     /// the standard constructor with sigmoid activation works well.
     /// 

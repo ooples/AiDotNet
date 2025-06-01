@@ -40,12 +40,12 @@ public enum HodrickPrescottAlgorithmType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The Matrix Method solves the HP filter problem directly using matrix algebra.
+    /// <b>For Beginners:</b> The Matrix<double> Method solves the HP filter problem directly using matrix algebra.
     /// 
     /// Think of this as solving a complex puzzle in one go by setting up all the pieces and relationships 
     /// at once. It creates a large system of equations and solves them simultaneously.
     /// 
-    /// The Matrix Method:
+    /// The Matrix<double> Method:
     /// 
     /// 1. Is very accurate and gives exact results
     /// 

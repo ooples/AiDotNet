@@ -6,8 +6,8 @@ namespace AiDotNet.Ensemble.Strategies;
 /// Combines predictions by computing a trimmed mean, which removes extreme values before averaging.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <typeparam name="TInput">The input data type (e.g., Matrix, Tensor, Vector).</typeparam>
-/// <typeparam name="TOutput">The output data type (e.g., Vector, Tensor).</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix<double>, Tensor<double>, Vector<double>).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector<double>, Tensor<double>).</typeparam>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> A trimmed mean is like an average, but we first remove some of the 
@@ -115,7 +115,7 @@ public class TrimmedMeanStrategy<T, TInput, TOutput> : CombinationStrategyBase<T
 }
 
 /// <summary>
-/// Specialized implementation of TrimmedMeanStrategy for Vector outputs.
+/// Specialized implementation of TrimmedMeanStrategy for Vector<double> outputs.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>

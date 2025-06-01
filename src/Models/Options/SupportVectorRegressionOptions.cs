@@ -1,12 +1,12 @@
 namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for Support Vector Regression (SVR), a powerful regression technique
+/// Configuration options for Support Vector<double> Regression (SVR), a powerful regression technique
 /// that uses support vector machines to predict continuous values.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Support Vector Regression (SVR) extends the principles of Support Vector Machines (SVM) to regression 
+/// Support Vector<double> Regression (SVR) extends the principles of Support Vector<double> Machines (SVM) to regression 
 /// problems. SVR works by finding a function that deviates from the observed target values by a value no 
 /// greater than a specified margin (epsilon) for each training point, while also remaining as flat as 
 /// possible. This approach creates an epsilon-insensitive tube around the function, ignoring errors within 
@@ -16,13 +16,13 @@ namespace AiDotNet.Models.Options;
 /// NonLinearRegressionOptions and adds parameters specific to SVR, such as the margin width (epsilon) and 
 /// the regularization parameter (C).
 /// </para>
-/// <para><b>For Beginners:</b> Support Vector Regression is a technique for predicting continuous values that works well with complex data.
+/// <para><b>For Beginners:</b> Support Vector<double> Regression is a technique for predicting continuous values that works well with complex data.
 /// 
 /// When performing regression (predicting continuous values):
 /// - Traditional methods like linear regression work well for simple relationships
 /// - But real-world data often contains complex, non-linear patterns
 /// 
-/// Support Vector Regression solves this by:
+/// Support Vector<double> Regression solves this by:
 /// - Creating a "tube" around the regression line/curve
 /// - Ignoring small errors that fall within this tube
 /// - Focusing on preventing large errors outside the tube

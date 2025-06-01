@@ -4,7 +4,7 @@
 /// Represents a matrix decomposition that can be used to solve linear systems and invert matrices.
 /// </summary>
 /// <remarks>
-/// Matrix decomposition is a technique that breaks down a complex matrix into simpler components,
+/// Matrix<double> decomposition is a technique that breaks down a complex matrix into simpler components,
 /// making it easier to solve mathematical problems like linear equations or matrix inversion.
 /// Common decompositions include LU, QR, Cholesky, and SVD (Singular Value Decomposition).
 /// 
@@ -15,7 +15,7 @@
 /// easier to work with mathematically.
 /// 
 /// Imagine you have a puzzle (the matrix) that's hard to solve directly:
-/// - Matrix decomposition splits this puzzle into smaller, more manageable pieces
+/// - Matrix<double> decomposition splits this puzzle into smaller, more manageable pieces
 /// - These pieces can then be used to solve problems more efficiently
 /// - Different types of decompositions (LU, QR, etc.) are like different ways of breaking down the puzzle
 /// 
@@ -56,9 +56,9 @@ public interface IMatrixDecomposition<T>
     /// - x is what you're trying to find (like the unknown variables)
     /// 
     /// Real-world example: Imagine you're trying to find the best mix of ingredients for a recipe:
-    /// - Matrix A represents how each ingredient affects taste, texture, and nutrition
-    /// - Vector b represents your desired taste, texture, and nutrition targets
-    /// - Vector x (the solution) tells you how much of each ingredient to use
+    /// - Matrix<double> A represents how each ingredient affects taste, texture, and nutrition
+    /// - Vector<double> b represents your desired taste, texture, and nutrition targets
+    /// - Vector<double> x (the solution) tells you how much of each ingredient to use
     /// 
     /// In machine learning, this is used for:
     /// - Finding the best coefficients in linear regression
@@ -78,7 +78,7 @@ public interface IMatrixDecomposition<T>
     /// <remarks>
     /// The inverse of a matrix A is another matrix A⁻¹ such that A × A⁻¹ = I, where I is the identity matrix.
     /// Not all matrices have inverses - only square matrices with non-zero determinants are invertible.
-    /// Matrix decompositions provide efficient ways to compute inverses when they exist.
+    /// Matrix<double> decompositions provide efficient ways to compute inverses when they exist.
     /// 
     /// <b>For Beginners:</b> The inverse of a matrix is similar to the reciprocal of a number.
     /// 

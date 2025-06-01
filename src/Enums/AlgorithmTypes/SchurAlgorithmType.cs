@@ -26,7 +26,7 @@
 /// 1. Eigenvalue Calculations: It helps find eigenvalues efficiently, which are crucial for techniques like 
 ///    Principal Component Analysis (PCA)
 /// 
-/// 2. Matrix Functions: Makes it easier to compute functions of matrices (like matrix exponentials) used in 
+/// 2. Matrix<double> Functions: Makes it easier to compute functions of matrices (like matrix exponentials) used in 
 ///    certain neural network architectures
 /// 
 /// 3. Stability Analysis: Helps analyze the stability of dynamical systems and recurrent neural networks

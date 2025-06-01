@@ -25,7 +25,7 @@
 /// - Sigmoid: Inspired by neural networks
 /// 
 /// Kernel functions are especially important in:
-/// - Support Vector Machines (SVMs)
+/// - Support Vector<double> Machines (SVMs)
 /// - Kernel regression
 /// - Clustering algorithms
 /// - Any algorithm that needs to measure similarity between complex data points

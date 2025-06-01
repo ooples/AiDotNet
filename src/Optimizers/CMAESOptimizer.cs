@@ -1,7 +1,7 @@
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Covariance Matrix Adaptation Evolution Strategy (CMA-ES) optimization algorithm.
+/// Implements the Covariance Matrix<double> Adaptation Evolution Strategy (CMA-ES) optimization algorithm.
 /// </summary>
 /// <remarks>
 /// <para>

@@ -158,12 +158,12 @@ public class LambdaLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Lambda Layer with the specified shapes, functions, and vector activation function.
-    /// Vector activation functions operate on entire vectors rather than individual elements, which can capture
+    /// Vector<double> activation functions operate on entire vectors rather than individual elements, which can capture
     /// dependencies between different elements of the vectors.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new custom layer with an advanced vector-based activation.
     /// 
-    /// Vector activation functions:
+    /// Vector<double> activation functions:
     /// - Process entire groups of numbers together, not just one at a time
     /// - Can capture relationships between different features
     /// - May be more powerful for complex patterns

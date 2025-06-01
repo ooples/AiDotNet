@@ -21,7 +21,7 @@
 /// 1. Solving Linear Systems: Many AI algorithms need to solve equations like Ax = b. LU decomposition makes 
 ///    this much faster.
 /// 
-/// 2. Matrix Inversion: Finding the inverse of a matrix becomes much easier with LU decomposition.
+/// 2. Matrix<double> Inversion: Finding the inverse of a matrix becomes much easier with LU decomposition.
 /// 
 /// 3. Determinant Calculation: The determinant (a special number associated with a matrix) can be easily 
 ///    calculated from the LU decomposition.

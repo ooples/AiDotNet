@@ -35,7 +35,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para>
     /// This activation function is applied to the output of graph convolutional layers and operates on entire vectors.
-    /// Vector activation functions transform multiple values at once, potentially capturing relationships between them.
+    /// Vector<double> activation functions transform multiple values at once, potentially capturing relationships between them.
     /// </para>
     /// <para><b>For Beginners:</b> This determines how signals are processed in the graph layers.
     /// 
@@ -175,7 +175,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para>
     /// This constructor creates a graph neural network with the specified architecture and vector activation functions.
-    /// Vector activation functions operate on entire vectors rather than individual elements.
+    /// Vector<double> activation functions operate on entire vectors rather than individual elements.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new graph neural network where the 
     /// activation functions work on groups of numbers together.
@@ -184,7 +184,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// - The overall structure (architecture)
     /// - Which activation functions to use at different stages
     /// 
-    /// Vector activation functions process multiple values as a group, which can help
+    /// Vector<double> activation functions process multiple values as a group, which can help
     /// capture relationships between different values.
     /// </para>
     /// </remarks>

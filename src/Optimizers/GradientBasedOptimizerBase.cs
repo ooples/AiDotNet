@@ -486,7 +486,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <remarks>
     /// <para><b>For Beginners:</b> This method adjusts the model's parameters stored in tensor format to improve its performance.
     /// It's like taking a step in the direction you've determined will lead you downhill, but for more complex
-    /// multi-dimensional data structures. Tensors are useful for representing parameters in deep neural networks
+    /// multi-dimensional data structures. Tensor<double>s are useful for representing parameters in deep neural networks
     /// where data has multiple dimensions (like images with width, height, and channels).
     /// </para>
     /// </remarks>

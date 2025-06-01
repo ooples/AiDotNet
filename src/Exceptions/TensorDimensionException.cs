@@ -31,7 +31,7 @@ public class TensorDimensionException : AiDotNetException
     public string Operation { get; }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="TensorDimensionException"/> class.
+    /// Initializes a new instance of the <see cref="Tensor<double>DimensionException"/> class.
     /// </summary>
     /// <param name="dimensionIndex">The index of the dimension that doesn't match.</param>
     /// <param name="expectedValue">The expected value of the dimension.</param>

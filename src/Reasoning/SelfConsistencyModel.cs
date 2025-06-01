@@ -262,7 +262,7 @@ namespace AiDotNet.Reasoning
         /// </summary>
         protected override double EstimateComplexity()
         {
-            // Count parameters from Vector instead of tensors
+            // Count parameters from Vector<double> instead of tensors
             var pathGenParams = _pathGenerator.GetParameters();
             var evaluatorParams = _pathEvaluator.GetParameters();
             var checkerParams = _consistencyChecker.GetParameters();

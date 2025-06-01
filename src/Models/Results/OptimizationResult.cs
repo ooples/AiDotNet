@@ -195,7 +195,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// <summary>
     /// Gets or sets the list of feature vectors selected for the model.
     /// </summary>
-    /// <value>A list of Vector&lt;T&gt; objects representing the selected features, initialized as an empty list.</value>
+    /// <value>A list of Vector<double>&lt;T&gt; objects representing the selected features, initialized as an empty list.</value>
     /// <remarks>
     /// <para>
     /// This property contains the list of feature vectors that were selected for use in the best model. Feature selection 

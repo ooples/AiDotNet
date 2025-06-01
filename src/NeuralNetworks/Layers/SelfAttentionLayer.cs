@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class SelfAttentionLayer<T> : LayerBase<T>
 {
     /// <summary>
-    /// Matrix of weights for transforming input embeddings into query vectors.
+    /// Matrix<double> of weights for transforming input embeddings into query vectors.
     /// </summary>
     /// <remarks>
     /// This matrix transforms input embeddings into query vectors, which are used to compute attention scores.
@@ -43,7 +43,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     private Matrix<T> _queryWeights;
     
     /// <summary>
-    /// Matrix of weights for transforming input embeddings into key vectors.
+    /// Matrix<double> of weights for transforming input embeddings into key vectors.
     /// </summary>
     /// <remarks>
     /// This matrix transforms input embeddings into key vectors, which are used to compute attention scores.
@@ -52,7 +52,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     private Matrix<T> _keyWeights;
     
     /// <summary>
-    /// Matrix of weights for transforming input embeddings into value vectors.
+    /// Matrix<double> of weights for transforming input embeddings into value vectors.
     /// </summary>
     /// <remarks>
     /// This matrix transforms input embeddings into value vectors, which contain the actual content
@@ -62,7 +62,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     private Matrix<T> _valueWeights;
     
     /// <summary>
-    /// Vector of biases added to the output of the attention mechanism.
+    /// Vector<double> of biases added to the output of the attention mechanism.
     /// </summary>
     /// <remarks>
     /// This vector contains bias terms that are added to the output of the attention mechanism
@@ -411,7 +411,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>
 
         var attentionOutputGradient = activationGradient;
 
-        // Sum over batch and sequence dimensions, then convert to Vector
+        // Sum over batch and sequence dimensions, then convert to Vector<double>
         _outputBiasGradient = attentionOutputGradient.Sum([0, 1]).ToVector();
 
         // Reshape attentionOutputGradient for multi-head attention

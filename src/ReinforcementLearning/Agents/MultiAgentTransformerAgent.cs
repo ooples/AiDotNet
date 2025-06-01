@@ -310,7 +310,7 @@ public class MultiAgentTransformerAgent<T> : AgentBase<Tensor<T>, Vector<T>, T>
         // Get action for each agent
         for (int agentIdx = 0; agentIdx < _numAgents; agentIdx++)
         {
-            // Convert Vector to Tensor for Predict
+            // Convert Vector<double> to Tensor<double> for Predict
             var agentFeaturesTensor = new Tensor<T>(new[] { 1, transformerOutput[agentIdx].Length });
             for (int i = 0; i < transformerOutput[agentIdx].Length; i++)
             {
@@ -416,7 +416,7 @@ public class MultiAgentTransformerAgent<T> : AgentBase<Tensor<T>, Vector<T>, T>
         
         for (int agentIdx = 0; agentIdx < _numAgents; agentIdx++)
         {
-            // Convert Vector to Tensor for Predict
+            // Convert Vector<double> to Tensor<double> for Predict
             var stateFeaturesTensor = new Tensor<T>(new[] { 1, stateEmbeddings[agentIdx].Length });
             for (int i = 0; i < stateEmbeddings[agentIdx].Length; i++)
             {

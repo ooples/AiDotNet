@@ -21,8 +21,8 @@ public static class PredictionStatsFactory
     /// Creates a PredictionStats instance for a specific model type.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    /// <param name="actual">Vector of actual values (ground truth).</param>
-    /// <param name="predicted">Vector of predicted values from your model.</param>
+    /// <param name="actual">Vector<double> of actual values (ground truth).</param>
+    /// <param name="predicted">Vector<double> of predicted values from your model.</param>
     /// <param name="modelType">The type of model being evaluated.</param>
     /// <param name="numberOfParameters">Number of features or parameters in your model.</param>
     /// <param name="confidenceLevel">The confidence level for statistical intervals (e.g., 0.95 for 95% confidence).</param>
@@ -67,8 +67,8 @@ public static class PredictionStatsFactory
     /// Creates a PredictionStats instance for a specific model type with progress reporting and cancellation support.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    /// <param name="actual">Vector of actual values (ground truth).</param>
-    /// <param name="predicted">Vector of predicted values from your model.</param>
+    /// <param name="actual">Vector<double> of actual values (ground truth).</param>
+    /// <param name="predicted">Vector<double> of predicted values from your model.</param>
     /// <param name="modelType">The type of model being evaluated.</param>
     /// <param name="numberOfParameters">Number of features or parameters in your model.</param>
     /// <param name="confidenceLevel">The confidence level for statistical intervals (e.g., 0.95 for 95% confidence).</param>
@@ -118,8 +118,8 @@ public static class PredictionStatsFactory
     /// Creates a PredictionStats instance specifically for time series forecasting models.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    /// <param name="actual">Vector of actual values (ground truth).</param>
-    /// <param name="predicted">Vector of predicted values from your model.</param>
+    /// <param name="actual">Vector<double> of actual values (ground truth).</param>
+    /// <param name="predicted">Vector<double> of predicted values from your model.</param>
     /// <param name="modelType">The specific time series model type being evaluated.</param>
     /// <param name="numberOfParameters">Number of features or parameters in your model.</param>
     /// <param name="confidenceLevel">The confidence level for statistical intervals (e.g., 0.95 for 95% confidence).</param>
@@ -169,8 +169,8 @@ public static class PredictionStatsFactory
     /// Creates a PredictionStats instance specifically for classification models.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    /// <param name="actual">Vector of actual class labels.</param>
-    /// <param name="predicted">Vector of predicted class probabilities or labels.</param>
+    /// <param name="actual">Vector<double> of actual class labels.</param>
+    /// <param name="predicted">Vector<double> of predicted class probabilities or labels.</param>
     /// <param name="modelType">The specific classification model type being evaluated.</param>
     /// <param name="numberOfParameters">Number of features or parameters in your model.</param>
     /// <param name="confidenceLevel">The confidence level for statistical intervals (e.g., 0.95 for 95% confidence).</param>

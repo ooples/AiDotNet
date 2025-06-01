@@ -60,7 +60,7 @@ public static class ActivationFunctionFactory<T>
     /// <exception cref="NotImplementedException">Thrown when the requested vector activation function type is not implemented.</exception>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Vector activation functions process multiple numbers together as a group. 
+    /// <b>For Beginners:</b> Vector<double> activation functions process multiple numbers together as a group. 
     /// They're typically used in the output layer of neural networks for classification tasks.
     /// </para>
     /// <para>
@@ -77,7 +77,7 @@ public static class ActivationFunctionFactory<T>
         return activationFunction switch
         {
             ActivationFunction.Softmax => new SoftmaxActivation<T>(),
-            _ => throw new NotImplementedException($"Vector activation function {activationFunction} not implemented.")
+            _ => throw new NotImplementedException($"Vector<double> activation function {activationFunction} not implemented.")
         };
     }
 }

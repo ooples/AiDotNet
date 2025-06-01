@@ -8,7 +8,7 @@ namespace AiDotNet.ReinforcementLearning.Interfaces;
 /// Interface for Q-value neural networks used in reinforcement learning.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <typeparam name="TOutput">The output type (Vector{T} for standard Q-networks, Tensor{T} for distributional).</typeparam>
+/// <typeparam name="TOutput">The output type (Vector<double>{T} for standard Q-networks, Tensor<double>{T} for distributional).</typeparam>
 public interface IQNetwork<T, TOutput> : IFullModel<T, Tensor<T>, TOutput>
 {
     /// <summary>

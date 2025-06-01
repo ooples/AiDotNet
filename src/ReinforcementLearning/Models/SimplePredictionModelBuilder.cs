@@ -5,7 +5,7 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.ReinforcementLearning.Models
 {
     /// <summary>
-    /// A simplified version of PredictionModelBuilder that uses Tensor&lt;T&gt; for both input and output types.
+    /// A simplified version of PredictionModelBuilder that uses Tensor<double>&lt;T&gt; for both input and output types.
     /// </summary>
     /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
     /// <remarks>
@@ -15,7 +15,7 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// and reinforcement learning models.
     /// </para>
     /// <para>
-    /// It automatically uses Tensor&lt;T&gt; for both input and output types, which is the common case
+    /// It automatically uses Tensor<double>&lt;T&gt; for both input and output types, which is the common case
     /// for most deep learning and reinforcement learning models.
     /// </para>
     /// <para>

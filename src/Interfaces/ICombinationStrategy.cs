@@ -4,8 +4,8 @@ namespace AiDotNet.Interfaces;
 /// Defines the contract for strategies that combine predictions from multiple models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <typeparam name="TInput">The input data type (e.g., Matrix, Tensor, Vector).</typeparam>
-/// <typeparam name="TOutput">The output data type (e.g., Vector, Tensor).</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix<double>, Tensor<double>, Vector<double>).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector<double>, Tensor<double>).</typeparam>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> A combination strategy is the method used to merge predictions 

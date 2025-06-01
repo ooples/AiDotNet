@@ -402,9 +402,9 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// 
     /// This constructor is almost identical to the first one, but with one key difference:
     /// - Regular activation: processes each output value separately
-    /// - Vector activation: processes groups of values together
+    /// - Vector<double> activation: processes groups of values together
     /// 
-    /// Vector activation functions can capture relationships between different output values,
+    /// Vector<double> activation functions can capture relationships between different output values,
     /// which might be useful for some advanced applications.
     /// 
     /// For most basic uses, the regular constructor is sufficient.

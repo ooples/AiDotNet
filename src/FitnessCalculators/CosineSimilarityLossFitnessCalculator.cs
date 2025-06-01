@@ -18,8 +18,8 @@ namespace AiDotNet.FitnessCalculators;
 /// - Natural language processing (comparing word meanings)
 /// 
 /// The loss ranges from:
-/// - 0 (best): Vectors point in exactly the same direction
-/// - 2 (worst): Vectors point in exactly opposite directions
+/// - 0 (best): Vector<double>s point in exactly the same direction
+/// - 2 (worst): Vector<double>s point in exactly opposite directions
 /// 
 /// For example, if your model is trying to learn word meanings, cosine similarity would help determine if
 /// two words are related in meaning (pointing in similar directions) regardless of how common or rare they are.

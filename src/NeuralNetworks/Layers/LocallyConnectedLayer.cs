@@ -343,11 +343,11 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Locally Connected layer with the specified dimensions, kernel parameters,
-    /// and vector activation function. Vector activation functions operate on entire vectors rather than individual elements.
+    /// and vector activation function. Vector<double> activation functions operate on entire vectors rather than individual elements.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new locally connected layer with an advanced vector-based activation.
     /// 
-    /// Vector activation functions:
+    /// Vector<double> activation functions:
     /// - Process entire groups of numbers together, not just one at a time
     /// - Can capture relationships between different features
     /// - May be more powerful for complex patterns

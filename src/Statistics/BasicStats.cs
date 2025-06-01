@@ -410,7 +410,7 @@ public class BasicStats<T> : StatisticsBase<T>
     /// 
     /// For example:
     /// <code>
-    /// var numbers = new Vector&lt;double&gt;([1.0, 2.0, 3.0, 4.0, 5.0]);
+    /// var numbers = new Vector<double>&lt;double&gt;([1.0, 2.0, 3.0, 4.0, 5.0]);
     /// var stats = BasicStatsImpl&lt;double&gt;.FromVector(numbers);
     /// Console.WriteLine($"Mean: {stats.Mean}");
     /// </code>

@@ -39,7 +39,7 @@
 /// <para>
 /// Note: Unlike many other kernels, the Sigmoid kernel is not always positive definite, which means
 /// it might not work well with all machine learning algorithms. It's most commonly used with
-/// Support Vector Machines.
+/// Support Vector<double> Machines.
 /// </para>
 /// </remarks>
 public class SigmoidKernel<T> : IKernelFunction<T>
@@ -153,7 +153,7 @@ public class SigmoidKernel<T> : IKernelFunction<T>
     /// </para>
     /// <para>
     /// Note: The Sigmoid kernel doesn't always satisfy the mathematical properties required for all
-    /// kernel-based algorithms. It works best with Support Vector Machines and similar methods.
+    /// kernel-based algorithms. It works best with Support Vector<double> Machines and similar methods.
     /// </para>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)

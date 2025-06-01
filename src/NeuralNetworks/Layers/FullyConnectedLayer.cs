@@ -261,9 +261,9 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// 
     /// This constructor is almost identical to the first one, but with one key difference:
     /// - Regular activation: processes each output value separately
-    /// - Vector activation: processes the entire output vector together
+    /// - Vector<double> activation: processes the entire output vector together
     /// 
-    /// Vector activation functions like Softmax are useful for:
+    /// Vector<double> activation functions like Softmax are useful for:
     /// - Classification problems (choosing between multiple categories)
     /// - Problems where outputs need to sum to 1 (like probabilities)
     /// - Cases where output values should influence each other

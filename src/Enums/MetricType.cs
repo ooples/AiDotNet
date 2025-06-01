@@ -193,11 +193,11 @@ public enum MetricType
     LeaveOneOutPredictiveDensities,
 
     /// <summary>
-    /// Correlation Matrix - Shows the relationships between features.
+    /// Correlation Matrix<double> - Shows the relationships between features.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The Correlation Matrix shows how closely related each pair of features is to each other.
+    /// <b>For Beginners:</b> The Correlation Matrix<double> shows how closely related each pair of features is to each other.
     /// Each cell in the matrix contains a correlation coefficient between two features, ranging from -1 to 1:
     /// - Values close to 1 indicate strong positive correlation (when one goes up, the other tends to go up)
     /// - Values close to -1 indicate strong negative correlation (when one goes up, the other tends to go down)
@@ -210,12 +210,12 @@ public enum MetricType
     CorrelationMatrix,
 
     /// <summary>
-    /// Covariance Matrix - Shows how features vary together.
+    /// Covariance Matrix<double> - Shows how features vary together.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The Covariance Matrix shows how features change together, but unlike
-    /// the Correlation Matrix, it isn't standardized to a -1 to 1 scale. 
+    /// <b>For Beginners:</b> The Covariance Matrix<double> shows how features change together, but unlike
+    /// the Correlation Matrix<double>, it isn't standardized to a -1 to 1 scale. 
     /// 
     /// Each cell in the matrix contains the covariance between two features:
     /// - Positive values indicate that the features tend to increase or decrease together
@@ -223,7 +223,7 @@ public enum MetricType
     /// - The magnitude depends on the scales of the features
     /// 
     /// The diagonal elements contain the variances of each feature (how much they vary on their own).
-    /// The Covariance Matrix is important for many statistical techniques and is used in calculations
+    /// The Covariance Matrix<double> is important for many statistical techniques and is used in calculations
     /// like Mahalanobis Distance and Principal Component Analysis.
     /// </para>
     /// </remarks>

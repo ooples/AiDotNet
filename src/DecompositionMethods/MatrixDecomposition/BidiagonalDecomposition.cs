@@ -212,7 +212,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     public Vector<T> Solve(Vector<T> b)
     {
         if (b.Length != A.Rows)
-            throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
+            throw new ArgumentException("Vector<double> b must have the same length as the number of rows in matrix A.");
 
         // Solve Ax = b using U*B*V^T * x = b
         Vector<T> y = U.Transpose().Multiply(b);

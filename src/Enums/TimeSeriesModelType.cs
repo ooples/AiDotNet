@@ -298,7 +298,7 @@ public enum TimeSeriesModelType
     GARCH,
 
     /// <summary>
-    /// Vector Autoregression model - extends autoregressive models to multiple related time series that influence each other.
+    /// Vector<double> Autoregression model - extends autoregressive models to multiple related time series that influence each other.
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> VAR models handle multiple related time series that affect each other.
@@ -317,13 +317,13 @@ public enum TimeSeriesModelType
     VAR,
 
     /// <summary>
-    /// Vector Autoregression Moving-Average model - combines VAR and moving average components for multiple related time series.
+    /// Vector<double> Autoregression Moving-Average model - combines VAR and moving average components for multiple related time series.
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> VARMA extends the VAR model by adding moving average components.
     /// 
     /// VARMA combines two approaches:
-    /// - Vector Autoregression (VAR): How past values of multiple related variables affect current values
+    /// - Vector<double> Autoregression (VAR): How past values of multiple related variables affect current values
     /// - Moving Average (MA): How past random shocks or surprises affect current values
     /// 
     /// This gives VARMA more flexibility to capture complex relationships between multiple time series.

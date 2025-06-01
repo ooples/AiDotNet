@@ -406,7 +406,7 @@ public class MemoryReadLayer<T> : LayerBase<T>
         var inputGradient = attentionWeightsGradient.Multiply(_keyWeights.Transpose());
         var memoryGradient = attentionWeightsGradient.Transpose([1, 0]).Multiply(_lastInput.Multiply(_keyWeights));
 
-        // Combine inputGradient and memoryGradient into a single Tensor
+        // Combine inputGradient and memoryGradient into a single Tensor<double>
         return CombineGradients(inputGradient, memoryGradient);
     }
 

@@ -186,13 +186,13 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// This constructor creates a new ReconstructionLayer with the specified dimensions and vector activation functions.
     /// It initializes three fully connected layers in sequence, with the output of each layer feeding into the input of the next.
     /// The hidden layers use the specified hidden vector activation function (or ReLU by default), and the output layer uses the
-    /// specified output vector activation function (or Sigmoid by default). Vector activation functions operate on entire vectors
+    /// specified output vector activation function (or Sigmoid by default). Vector<double> activation functions operate on entire vectors
     /// at once, allowing for interactions between different elements.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new reconstruction layer for your neural network using advanced activation functions.
     /// 
     /// When you create this layer, you specify the same dimensions as the scalar version, but with vector activation functions:
-    /// - Vector activations process all outputs together as a group, rather than individually
+    /// - Vector<double> activations process all outputs together as a group, rather than individually
     /// - This can capture relationships between different output elements
     /// - It's useful for outputs that need to maintain certain properties across all values
     /// 

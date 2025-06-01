@@ -1,12 +1,12 @@
 ﻿namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for Vector Autoregressive Moving Average (VARMA) models, which extend VAR models
+/// Configuration options for Vector<double> Autoregressive Moving Average (VARMA) models, which extend VAR models
 /// by incorporating moving average terms.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Vector Autoregressive Moving Average (VARMA) models extend Vector Autoregressive (VAR) models by incorporating 
+/// Vector<double> Autoregressive Moving Average (VARMA) models extend Vector<double> Autoregressive (VAR) models by incorporating 
 /// moving average (MA) terms. While VAR models express each variable as a linear function of past values of itself 
 /// and past values of other variables, VARMA models also include past error terms. This additional flexibility can 
 /// lead to more parsimonious models and better forecasting performance, especially when the true data generating 

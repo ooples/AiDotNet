@@ -9,7 +9,7 @@ namespace AiDotNet.Enums;
 /// inverse of 5 (because 5 × 1/5 = 1), a matrix inverse is a special matrix that, when multiplied 
 /// with the original matrix, gives the identity matrix (the matrix equivalent of the number 1).
 /// 
-/// Matrix inverses are important in AI and machine learning for:
+/// Matrix<double> inverses are important in AI and machine learning for:
 /// - Solving systems of equations
 /// - Finding optimal parameters in linear regression
 /// - Transforming data

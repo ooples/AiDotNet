@@ -4,7 +4,7 @@
 /// A feature selector that removes features with variance below a specified threshold.
 /// </summary>
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
-/// <typeparam name="TInput">The input data type (Matrix, Tensor, etc.).</typeparam>
+/// <typeparam name="TInput">The input data type (Matrix<double>, Tensor<double>, etc.).</typeparam>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> Variance is a measure of how spread out the values of a feature are. Features 

@@ -381,12 +381,12 @@ public class GRULayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This constructor creates a new GRU layer with the specified dimensions and vector activation functions.
-    /// Vector activation functions operate on entire vectors rather than individual elements, which can capture
+    /// Vector<double> activation functions operate on entire vectors rather than individual elements, which can capture
     /// dependencies between different elements of the vectors.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new GRU layer with more advanced vector-based activation functions.
     /// 
-    /// Vector activation functions:
+    /// Vector<double> activation functions:
     /// - Process entire groups of numbers together, not just one at a time
     /// - Can capture relationships between different features
     /// - May be more powerful for complex patterns

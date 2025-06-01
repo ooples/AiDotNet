@@ -39,7 +39,7 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private Vector<T>? _z;
 
     /// <summary>
-    /// Vector of accumulated squared gradients.
+    /// Vector<double> of accumulated squared gradients.
     /// </summary>
     private Vector<T>? _n;
 

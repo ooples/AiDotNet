@@ -264,7 +264,7 @@ public class NeuralNetworkRegressionOptions<T, TInput, TOutput> : NonLinearRegre
     /// <remarks>
     /// <para>
     /// This property allows you to specify a vector-based activation function for hidden layers, which can
-    /// operate directly on vectors or tensors rather than individual scalar values. Vector activation functions
+    /// operate directly on vectors or tensors rather than individual scalar values. Vector<double> activation functions
     /// can be more computationally efficient as they can leverage optimized vector operations. If both this
     /// property and HiddenActivationFunction are set, this vector implementation takes precedence.
     /// </para>
@@ -293,7 +293,7 @@ public class NeuralNetworkRegressionOptions<T, TInput, TOutput> : NonLinearRegre
     /// <remarks>
     /// <para>
     /// This property allows you to specify a vector-based activation function for the output layer, which can
-    /// operate directly on vectors or tensors rather than individual scalar values. Vector activation functions
+    /// operate directly on vectors or tensors rather than individual scalar values. Vector<double> activation functions
     /// can be more computationally efficient as they can leverage optimized vector operations. If both this
     /// property and OutputActivationFunction are set, this vector implementation takes precedence.
     /// </para>

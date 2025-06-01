@@ -23,17 +23,17 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     private CoordinateDescentOptimizerOptions<T, TInput, TOutput> _options;
 
     /// <summary>
-    /// Vector of learning rates for each coordinate (variable) in the optimization problem.
+    /// Vector<double> of learning rates for each coordinate (variable) in the optimization problem.
     /// </summary>
     private Vector<T> _learningRates;
 
     /// <summary>
-    /// Vector of momentum values for each coordinate (variable) in the optimization problem.
+    /// Vector<double> of momentum values for each coordinate (variable) in the optimization problem.
     /// </summary>
     private Vector<T> _momentums;
 
     /// <summary>
-    /// Vector of previous update values for each coordinate (variable) in the optimization problem.
+    /// Vector<double> of previous update values for each coordinate (variable) in the optimization problem.
     /// </summary>
     private Vector<T> _previousUpdate;
 

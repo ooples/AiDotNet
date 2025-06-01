@@ -19,7 +19,7 @@
 /// 
 /// UDU' decomposition is particularly useful for:
 /// - Solving systems of linear equations
-/// - Matrix inversion
+/// - Matrix<double> inversion
 /// - Numerical stability in computations
 /// - Certain statistical and engineering applications
 /// 

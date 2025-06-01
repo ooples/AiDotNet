@@ -21,7 +21,7 @@ public enum OnlineLearningAlgorithm
     PassiveAggressive,
     
     /// <summary>
-    /// Online Support Vector Machine.
+    /// Online Support Vector<double> Machine.
     /// </summary>
     OnlineSVM,
     

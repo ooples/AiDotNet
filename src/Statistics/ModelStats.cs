@@ -482,7 +482,7 @@ public class ModelStats<T, TInput, TOutput> : ModelStatisticsBase<T>
         // Define which metrics are considered model statistics
         return metricType switch
         {
-            // Matrix metrics
+            // Matrix<double> metrics
             MetricType.CorrelationMatrix => true,
             MetricType.CovarianceMatrix => true,
             MetricType.VIF => true,

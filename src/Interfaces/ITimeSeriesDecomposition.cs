@@ -62,7 +62,7 @@ public interface ITimeSeriesDecomposition<T>
     /// increase during holidays), you would use this method to get just that piece.
     /// 
     /// The component is returned as an "object" type, which means you'll need to convert it
-    /// to the appropriate type (usually a Vector&lt;T&gt;) before using it.
+    /// to the appropriate type (usually a Vector<double>&lt;T&gt;) before using it.
     /// </remarks>
     /// <param name="componentType">The type of component to retrieve (e.g., Trend, Seasonal, Residual).</param>
     /// <returns>The requested component data, or null if the component doesn't exist.</returns>

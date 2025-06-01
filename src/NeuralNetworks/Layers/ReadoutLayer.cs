@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class ReadoutLayer<T> : LayerBase<T>
 {
     /// <summary>
-    /// Matrix storing the weight parameters for connections between inputs and outputs.
+    /// Matrix<double> storing the weight parameters for connections between inputs and outputs.
     /// </summary>
     /// <remarks>
     /// This matrix has dimensions [outputSize, inputSize], where each row represents the weights
@@ -41,7 +41,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     private Matrix<T> _weights;
     
     /// <summary>
-    /// Vector storing the bias parameters for each output neuron.
+    /// Vector<double> storing the bias parameters for each output neuron.
     /// </summary>
     /// <remarks>
     /// This vector has length outputSize, where each element is a constant value added to the
@@ -51,7 +51,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     private Vector<T> _bias;
     
     /// <summary>
-    /// Matrix storing the gradients of the loss with respect to the weight parameters.
+    /// Matrix<double> storing the gradients of the loss with respect to the weight parameters.
     /// </summary>
     /// <remarks>
     /// This matrix has the same dimensions as the _weights matrix and stores the accumulated
@@ -61,7 +61,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     private Matrix<T> _weightGradients;
     
     /// <summary>
-    /// Vector storing the gradients of the loss with respect to the bias parameters.
+    /// Vector<double> storing the gradients of the loss with respect to the bias parameters.
     /// </summary>
     /// <remarks>
     /// This vector has the same length as the _bias vector and stores the accumulated

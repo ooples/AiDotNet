@@ -9,8 +9,8 @@ public static class ErrorStatsFactory
     /// Creates an ErrorStats instance for a specific model type.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    /// <param name="actual">Vector of actual values (ground truth).</param>
-    /// <param name="predicted">Vector of predicted values from your model.</param>
+    /// <param name="actual">Vector<double> of actual values (ground truth).</param>
+    /// <param name="predicted">Vector<double> of predicted values from your model.</param>
     /// <param name="modelType">The type of model being evaluated.</param>
     /// <param name="taskType">Optional task type for neural networks.</param>
     /// <param name="progress">Optional progress reporting.</param>
@@ -40,8 +40,8 @@ public static class ErrorStatsFactory
     /// Creates an ErrorStats instance for a specific model type with progress reporting and cancellation support.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    /// <param name="actual">Vector of actual values (ground truth).</param>
-    /// <param name="predicted">Vector of predicted values from your model.</param>
+    /// <param name="actual">Vector<double> of actual values (ground truth).</param>
+    /// <param name="predicted">Vector<double> of predicted values from your model.</param>
     /// <param name="modelType">The type of model being evaluated.</param>
     /// <param name="featureCount">Number of features or parameters in your model.</param>
     /// <param name="progress">Optional progress reporting.</param>

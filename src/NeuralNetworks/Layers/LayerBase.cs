@@ -56,7 +56,7 @@ public abstract class LayerBase<T> : ILayer<T>
     /// </para>
     /// <para><b>For Beginners:</b> This is a more advanced function that processes groups of values together.
     /// 
-    /// Vector activation functions:
+    /// Vector<double> activation functions:
     /// - Process entire groups of numbers together, not just one at a time
     /// - Can capture relationships between different features
     /// - Are used for special purposes like classification (Softmax)
@@ -343,7 +343,7 @@ public abstract class LayerBase<T> : ILayer<T>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Layer with the specified input and output shapes and vector activation function.
-    /// Vector activation functions operate on entire vectors rather than individual elements.
+    /// Vector<double> activation functions operate on entire vectors rather than individual elements.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new layer with an advanced vector-based activation.
     /// 
@@ -352,7 +352,7 @@ public abstract class LayerBase<T> : ILayer<T>
     /// - Configures a vector activation that processes groups of values together
     /// - Marks the layer as using vector activation
     /// 
-    /// Vector activations like Softmax are important for specific tasks like
+    /// Vector<double> activations like Softmax are important for specific tasks like
     /// classification, where outputs need to be interpreted as probabilities.
     /// </para>
     /// </remarks>
@@ -780,7 +780,7 @@ public abstract class LayerBase<T> : ILayer<T>
         {
             if (inputs[i].Rank != inputs[0].Rank)
             {
-                throw new ArgumentException($"All input tensors must have the same rank. Tensor at index {i} has a different rank.");
+                throw new ArgumentException($"All input tensors must have the same rank. Tensor<double> at index {i} has a different rank.");
             }
 
             for (int dim = 0; dim < inputs[i].Rank; dim++)
@@ -981,12 +981,12 @@ public abstract class LayerBase<T> : ILayer<T>
     /// <remarks>
     /// <para>
     /// This helper method applies a vector activation function to a tensor. If the activation function is null,
-    /// it returns the input tensor unchanged. Vector activation functions operate on entire tensors at once,
+    /// it returns the input tensor unchanged. Vector<double> activation functions operate on entire tensors at once,
     /// which can be more efficient than element-wise operations.
     /// </para>
     /// <para><b>For Beginners:</b> This method applies an activation function to an entire tensor at once.
     /// 
-    /// Vector activation functions:
+    /// Vector<double> activation functions:
     /// - Process entire groups of values simultaneously
     /// - Can be more efficient than processing one value at a time
     /// - Provide the same mathematical result but often faster

@@ -268,8 +268,8 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
     /// <summary>
     /// Calculates the calibration error between expected and observed calibration values.
     /// </summary>
-    /// <param name="expected">Vector of expected calibration values.</param>
-    /// <param name="observed">Vector of observed calibration values.</param>
+    /// <param name="expected">Vector<double> of expected calibration values.</param>
+    /// <param name="observed">Vector<double> of observed calibration values.</param>
     /// <returns>The root mean squared error between expected and observed calibration values.</returns>
     /// <remarks>
     /// <para>

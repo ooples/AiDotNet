@@ -403,7 +403,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This constructor is similar to the previous one, but uses vector activations.
     /// 
-    /// Vector activations:
+    /// Vector<double> activations:
     /// - Process entire groups of numbers at once, rather than one at a time
     /// - Can capture relationships between different elements
     /// - Allow for more complex transformations

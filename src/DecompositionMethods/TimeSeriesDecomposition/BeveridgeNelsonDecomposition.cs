@@ -121,7 +121,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// this method can find connections between them and provide a more accurate
     /// decomposition by considering how they influence each other.
     /// 
-    /// It uses a Vector AutoRegression (VAR) model, which is like ARIMA but for
+    /// It uses a Vector<double> AutoRegression (VAR) model, which is like ARIMA but for
     /// multiple time series at once.
     /// </remarks>
     private void DecomposeMultivariate()
@@ -168,7 +168,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <summary>
     /// Calculates the long-run impact matrix for multivariate decomposition.
     /// </summary>
-    /// <param name="varModel">The trained Vector AutoRegression model</param>
+    /// <param name="varModel">The trained Vector<double> AutoRegression model</param>
     /// <param name="varOptions">Options used for the VAR model</param>
     /// <returns>The long-run impact matrix</returns>
     /// <remarks>

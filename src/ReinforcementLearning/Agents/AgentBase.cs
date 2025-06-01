@@ -9,8 +9,8 @@ namespace AiDotNet.ReinforcementLearning.Agents
     /// <summary>
     /// Base class for reinforcement learning agents that provides common functionality.
     /// </summary>
-    /// <typeparam name="TState">The type used to represent the environment state, typically Tensor&lt;T&gt;.</typeparam>
-    /// <typeparam name="TAction">The type used to represent actions, typically int for discrete actions or Vector&lt;T&gt; for continuous.</typeparam>
+    /// <typeparam name="TState">The type used to represent the environment state, typically Tensor<double>&lt;T&gt;.</typeparam>
+    /// <typeparam name="TAction">The type used to represent actions, typically int for discrete actions or Vector<double>&lt;T&gt; for continuous.</typeparam>
     /// <typeparam name="T">The numeric type used for calculations (float, double, etc.).</typeparam>
     public abstract class AgentBase<TState, TAction, T> : IAgent<TState, TAction, T>
         where TState : Tensor<T>

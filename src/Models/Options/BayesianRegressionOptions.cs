@@ -132,7 +132,7 @@ public class BayesianRegressionOptions<T> : RegressionOptions<T>
     /// <value>The decomposition type, defaulting to Lu.</value>
     /// <remarks>
     /// <para>
-    /// Matrix decomposition is a numerical method used to solve the linear algebra problems that arise
+    /// Matrix<double> decomposition is a numerical method used to solve the linear algebra problems that arise
     /// during Bayesian regression. Different decomposition methods offer trade-offs between
     /// numerical stability, computational efficiency, and applicability to different types of matrices.
     /// </para>

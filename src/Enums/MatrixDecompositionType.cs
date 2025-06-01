@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> Matrix decomposition is like breaking a complex puzzle into simpler pieces 
+/// <b>For Beginners:</b> Matrix<double> decomposition is like breaking a complex puzzle into simpler pieces 
 /// that are easier to work with. In mathematics, we often need to break down complex matrices 
 /// (grids of numbers) into simpler components to solve problems more efficiently.
 /// 
@@ -14,7 +14,7 @@
 /// - Disassembling a complicated machine into its basic parts
 /// - Converting a difficult problem into several easier ones
 /// 
-/// Matrix decompositions are important in AI and machine learning for:
+/// Matrix<double> decompositions are important in AI and machine learning for:
 /// - Solving systems of equations efficiently
 /// - Reducing the dimensionality of data
 /// - Finding patterns in data
@@ -128,7 +128,7 @@ public enum MatrixDecompositionType
     /// Best used for:
     /// - Solving linear systems efficiently
     /// - Computing determinants
-    /// - Matrix inversion
+    /// - Matrix<double> inversion
     /// - When you need to solve multiple systems with the same coefficient matrix
     /// </para>
     /// </remarks>

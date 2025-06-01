@@ -4,8 +4,8 @@ namespace AiDotNet.Models.Inputs;
 /// Represents the input data for optimization processes, including training, validation, and test datasets.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-/// <typeparam name="TInput">The type of the input data, typically Matrix&lt;T&gt; or Tensor&lt;T&gt;.</typeparam>
-/// <typeparam name="TOutput">The type of the output data, typically Vector&lt;T&gt; or Tensor&lt;T&gt;.</typeparam>
+/// <typeparam name="TInput">The type of the input data, typically Matrix<double>&lt;T&gt; or Tensor<double>&lt;T&gt;.</typeparam>
+/// <typeparam name="TOutput">The type of the output data, typically Vector<double>&lt;T&gt; or Tensor<double>&lt;T&gt;.</typeparam>
 public class OptimizationInputData<T, TInput, TOutput>
 {
     /// <summary>

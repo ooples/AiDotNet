@@ -57,6 +57,39 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     // Online learning specific fields
     private OnlineModelOptions<T>? _onlineOptions;
     private AdaptiveOnlineModelOptions<T>? _adaptiveOnlineOptions;
+    
+    // Modern AI fields
+    private IMultimodalModel<T>? _multimodalModel;
+    private readonly Dictionary<ModalityType, IPipelineStep<T, object, object>> _modalityPreprocessors = new();
+    private ModalityFusionStrategy _modalityFusionStrategy = ModalityFusionStrategy.LateFusion;
+    private IFoundationModel<T>? _foundationModel;
+    private FineTuningOptions? _fineTuningOptions;
+    private List<(TInput input, TOutput output)>? _fewShotExamples;
+    private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
+    private HyperparameterSearchSpace? _searchSpace;
+    private TimeSpan? _autoMLTimeLimit;
+    private int? _autoMLTrialLimit;
+    private NeuralArchitectureSearchStrategy? _nasStrategy;
+    private IInterpretableModel<T, TInput, TOutput>? _interpretableModel;
+    private List<InterpretationMethod> _interpretationMethods = new();
+    private int[]? _sensitiveFeatures;
+    private List<FairnessMetric> _fairnessMetrics = new();
+    private IProductionMonitor<T, TInput, TOutput>? _productionMonitor;
+    private T? _dataDriftThreshold;
+    private T? _conceptDriftThreshold;
+    private T? _performanceDropThreshold;
+    private TimeSpan? _retrainingInterval;
+    private readonly Dictionary<PipelinePosition, List<IPipelineStep<T, TInput, TOutput>>> _pipelineSteps = new();
+    private readonly Dictionary<string, PredictionModelBuilder<T, TInput, TOutput>> _branches = new();
+    private CloudPlatform? _cloudPlatform;
+    private OptimizationLevel _optimizationLevel = OptimizationLevel.Balanced;
+    private EdgeDevice? _edgeDevice;
+    private int? _memoryLimit;
+    private int? _latencyTarget;
+    private FederatedAggregationStrategy? _federatedStrategy;
+    private T? _privacyBudget;
+    private MetaLearningAlgorithm? _metaLearningAlgorithm;
+    private int _innerLoopSteps = 5;
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelBuilder class with a required model.
@@ -352,7 +385,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <remarks>
     /// <b>For Beginners:</b> Use this to specify which models should be part of your ensemble.
     /// You can mix different types of models (neural networks, regression, etc.) as long as
-    /// they all work with Tensor inputs/outputs.
+    /// they all work with Tensor<double> inputs/outputs.
     /// 
     /// Example:
     /// .WithModels(
@@ -647,6 +680,285 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     
     #endregion
     
+    #region Modern AI Methods Implementation
+    
+    /// <summary>
+    /// Configures the builder to use a multimodal model that can process multiple data types.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> UseMultimodalModel(IMultimodalModel<T> multimodalModel)
+    {
+        _multimodalModel = multimodalModel;
+        _logger.Information("Configured multimodal model: {ModelType}", multimodalModel.GetType().Name);
+        return this;
+    }
+    
+    /// <summary>
+    /// Adds a data modality (type) to the multimodal model.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> AddModality(
+        ModalityType modalityType,
+        IPipelineStep<T, object, object>? preprocessor = null)
+    {
+        if (preprocessor != null)
+        {
+            _modalityPreprocessors[modalityType] = preprocessor;
+        }
+        _logger.Debug("Added modality: {ModalityType}", modalityType);
+        return this;
+    }
+    
+    /// <summary>
+    /// Configures how different modalities are combined.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModalityFusion(ModalityFusionStrategy fusionStrategy)
+    {
+        _modalityFusionStrategy = fusionStrategy;
+        _logger.Debug("Configured modality fusion strategy: {Strategy}", fusionStrategy);
+        return this;
+    }
+    
+    /// <summary>
+    /// Uses a foundation model (like GPT, BERT, etc.) as the base model.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> UseFoundationModel(IFoundationModel<T> foundationModel)
+    {
+        _foundationModel = foundationModel;
+        _logger.Information("Configured foundation model: {ModelType}", foundationModel.GetType().Name);
+        return this;
+    }
+    
+    /// <summary>
+    /// Configures fine-tuning for a foundation model.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFineTuning(FineTuningOptions fineTuningOptions)
+    {
+        _fineTuningOptions = fineTuningOptions;
+        _logger.Debug("Configured fine-tuning options");
+        return this;
+    }
+    
+    /// <summary>
+    /// Enables few-shot learning with example prompts.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> WithFewShotExamples(params (TInput input, TOutput output)[] examples)
+    {
+        _fewShotExamples ??= new List<(TInput input, TOutput output)>();
+        _fewShotExamples.AddRange(examples);
+        _logger.Debug("Added {Count} few-shot examples", examples.Length);
+        return this;
+    }
+    
+    /// <summary>
+    /// Enables AutoML to automatically find the best model and hyperparameters.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> EnableAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel)
+    {
+        _autoMLModel = autoMLModel;
+        _logger.Information("Enabled AutoML with model: {ModelType}", autoMLModel.GetType().Name);
+        return this;
+    }
+    
+    /// <summary>
+    /// Configures AutoML search space and constraints.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoMLSearch(
+        HyperparameterSearchSpace searchSpace,
+        TimeSpan? timeLimit = null,
+        int? trialLimit = null)
+    {
+        _searchSpace = searchSpace;
+        _autoMLTimeLimit = timeLimit;
+        _autoMLTrialLimit = trialLimit;
+        _logger.Debug("Configured AutoML search with time limit: {TimeLimit}, trial limit: {TrialLimit}",
+            timeLimit?.TotalMinutes, trialLimit);
+        return this;
+    }
+    
+    /// <summary>
+    /// Enables neural architecture search (NAS).
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> EnableNeuralArchitectureSearch(
+        NeuralArchitectureSearchStrategy searchStrategy)
+    {
+        _nasStrategy = searchStrategy;
+        _logger.Information("Enabled neural architecture search with strategy: {Strategy}", searchStrategy);
+        return this;
+    }
+    
+    /// <summary>
+    /// Adds interpretability features to the model.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> WithInterpretability(
+        IInterpretableModel<T, TInput, TOutput> interpretableModel)
+    {
+        _interpretableModel = interpretableModel;
+        _logger.Information("Added interpretability with model: {ModelType}", interpretableModel.GetType().Name);
+        return this;
+    }
+    
+    /// <summary>
+    /// Enables specific interpretation methods.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> EnableInterpretationMethods(params InterpretationMethod[] methods)
+    {
+        _interpretationMethods.AddRange(methods);
+        _logger.Debug("Enabled interpretation methods: {Methods}", string.Join(", ", methods));
+        return this;
+    }
+    
+    /// <summary>
+    /// Configures fairness constraints and monitoring.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairness(
+        int[] sensitiveFeatures,
+        params FairnessMetric[] fairnessMetrics)
+    {
+        _sensitiveFeatures = sensitiveFeatures;
+        _fairnessMetrics.AddRange(fairnessMetrics);
+        _logger.Debug("Configured fairness monitoring for {Count} sensitive features", sensitiveFeatures.Length);
+        return this;
+    }
+    
+    /// <summary>
+    /// Adds production monitoring capabilities to the model.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> WithProductionMonitoring(
+        IProductionMonitor<T, TInput, TOutput> monitor)
+    {
+        _productionMonitor = monitor;
+        _logger.Information("Added production monitoring: {MonitorType}", monitor.GetType().Name);
+        return this;
+    }
+    
+    /// <summary>
+    /// Configures drift detection for production monitoring.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDriftDetection(
+        T dataDriftThreshold,
+        T conceptDriftThreshold)
+    {
+        _dataDriftThreshold = dataDriftThreshold;
+        _conceptDriftThreshold = conceptDriftThreshold;
+        _logger.Debug("Configured drift detection thresholds");
+        return this;
+    }
+    
+    /// <summary>
+    /// Sets up automatic retraining triggers.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoRetraining(
+        T performanceDropThreshold,
+        TimeSpan? timeBasedRetraining = null)
+    {
+        _performanceDropThreshold = performanceDropThreshold;
+        _retrainingInterval = timeBasedRetraining;
+        _logger.Debug("Configured auto-retraining with performance threshold and interval: {Interval}",
+            timeBasedRetraining?.TotalDays);
+        return this;
+    }
+    
+    /// <summary>
+    /// Adds a custom pipeline step to the model building process.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> AddPipelineStep(
+        IPipelineStep<T, TInput, TOutput> step,
+        PipelinePosition position = PipelinePosition.BeforeNormalization)
+    {
+        if (!_pipelineSteps.ContainsKey(position))
+        {
+            _pipelineSteps[position] = new List<IPipelineStep<T, TInput, TOutput>>();
+        }
+        _pipelineSteps[position].Add(step);
+        _logger.Debug("Added pipeline step at position: {Position}", position);
+        return this;
+    }
+    
+    /// <summary>
+    /// Creates a branching pipeline for A/B testing or ensemble approaches.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> CreateBranch(
+        string branchName,
+        Action<IPredictionModelBuilder<T, TInput, TOutput>> branchBuilder)
+    {
+        var branch = new PredictionModelBuilder<T, TInput, TOutput>();
+        branchBuilder(branch);
+        _branches[branchName] = branch;
+        _logger.Debug("Created pipeline branch: {BranchName}", branchName);
+        return this;
+    }
+    
+    /// <summary>
+    /// Merges multiple pipeline branches.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> MergeBranches(
+        BranchMergeStrategy mergeStrategy,
+        params string[] branchNames)
+    {
+        _logger.Debug("Merging branches {Branches} with strategy: {Strategy}",
+            string.Join(", ", branchNames), mergeStrategy);
+        // Implementation would merge the specified branches according to the strategy
+        return this;
+    }
+    
+    /// <summary>
+    /// Optimizes the model for cloud deployment.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> OptimizeForCloud(
+        CloudPlatform cloudPlatform,
+        OptimizationLevel optimizationLevel = OptimizationLevel.Balanced)
+    {
+        _cloudPlatform = cloudPlatform;
+        _optimizationLevel = optimizationLevel;
+        _logger.Information("Optimizing for cloud platform: {Platform} with level: {Level}",
+            cloudPlatform, optimizationLevel);
+        return this;
+    }
+    
+    /// <summary>
+    /// Optimizes the model for edge deployment.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> OptimizeForEdge(
+        EdgeDevice edgeDevice,
+        int? memoryLimit = null,
+        int? latencyTarget = null)
+    {
+        _edgeDevice = edgeDevice;
+        _memoryLimit = memoryLimit;
+        _latencyTarget = latencyTarget;
+        _logger.Information("Optimizing for edge device: {Device} with memory limit: {Memory}MB, latency target: {Latency}ms",
+            edgeDevice, memoryLimit, latencyTarget);
+        return this;
+    }
+    
+    /// <summary>
+    /// Enables federated learning capabilities.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> EnableFederatedLearning(
+        FederatedAggregationStrategy aggregationStrategy,
+        T? privacyBudget = null)
+    {
+        _federatedStrategy = aggregationStrategy;
+        _privacyBudget = privacyBudget;
+        _logger.Information("Enabled federated learning with strategy: {Strategy}", aggregationStrategy);
+        return this;
+    }
+    
+    /// <summary>
+    /// Configures meta-learning for quick adaptation to new tasks.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(
+        MetaLearningAlgorithm metaLearningAlgorithm,
+        int innerLoopSteps = 5)
+    {
+        _metaLearningAlgorithm = metaLearningAlgorithm;
+        _innerLoopSteps = innerLoopSteps;
+        _logger.Information("Configured meta-learning with algorithm: {Algorithm} and {Steps} inner loop steps",
+            metaLearningAlgorithm, innerLoopSteps);
+        return this;
+    }
+    
+    #endregion
+    
     /// <summary>
     /// Builds a predictive model using the provided input features and output values.
     /// </summary>
@@ -740,6 +1052,65 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 model = _ensembleModel;
                 _logger.Information("Using ensemble model with {Count} base models", _ensembleModel.BaseModels.Count);
             }
+            else if (_multimodalModel != null)
+            {
+                // User configured a multimodal model
+                if (_modalityPreprocessors.Count > 0)
+                {
+                    foreach (var kvp in _modalityPreprocessors)
+                    {
+                        _multimodalModel.AddModality(kvp.Key, kvp.Value);
+                    }
+                }
+                _multimodalModel.SetFusionStrategy(_modalityFusionStrategy);
+                
+                // Multimodal models need to be wrapped in a model adapter
+                // TODO: Implement MultimodalModelAdapter when multimodal models are implemented
+                _logger.Information("Using multimodal model with {Count} modalities", _modalityPreprocessors.Count);
+                throw new NotImplementedException("Multimodal model integration is pending implementation");
+            }
+            else if (_foundationModel != null)
+            {
+                // User configured a foundation model
+                if (_fineTuningOptions != null)
+                {
+                    _foundationModel.ConfigureFineTuning(_fineTuningOptions);
+                }
+                if (_fewShotExamples != null && _fewShotExamples.Count > 0)
+                {
+                    // TODO: Implement few-shot learning support
+                    _logger.Debug("Configured {Count} few-shot examples", _fewShotExamples.Count);
+                }
+                
+                // Foundation models need to be wrapped in a model adapter
+                // TODO: Implement FoundationModelAdapter when foundation models are implemented
+                _logger.Information("Using foundation model: {ModelType}", _foundationModel.GetType().Name);
+                throw new NotImplementedException("Foundation model integration is pending implementation");
+            }
+            else if (_autoMLModel != null)
+            {
+                // User enabled AutoML
+                if (_searchSpace != null)
+                {
+                    _autoMLModel.ConfigureSearchSpace(_searchSpace);
+                }
+                if (_autoMLTimeLimit.HasValue)
+                {
+                    _autoMLModel.SetTimeLimit(_autoMLTimeLimit.Value);
+                }
+                if (_autoMLTrialLimit.HasValue)
+                {
+                    _autoMLModel.SetTrialLimit(_autoMLTrialLimit.Value);
+                }
+                if (_nasStrategy.HasValue)
+                {
+                    _autoMLModel.EnableNAS(_nasStrategy.Value);
+                }
+                
+                // AutoML will select and optimize the model
+                model = _autoMLModel.SearchBestModel(x, y);
+                _logger.Information("AutoML selected model: {ModelType}", model.GetType().Name);
+            }
             else if (_model != null)
             {
                 // User explicitly configured a model, use it
@@ -759,6 +1130,40 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 model = new DefaultModelSelector<T, TInput, TOutput>().SelectModel(x, y);
                 _logger.Information("Auto-selected model: {ModelType}", model.GetType().Name);
             }
+            
+            // Apply interpretability wrapper if configured
+            if (_interpretableModel != null)
+            {
+                _interpretableModel.SetBaseModel(model);
+                if (_interpretationMethods.Count > 0)
+                {
+                    foreach (var method in _interpretationMethods)
+                    {
+                        _interpretableModel.EnableMethod(method);
+                    }
+                }
+                if (_sensitiveFeatures != null && _fairnessMetrics.Count > 0)
+                {
+                    _interpretableModel.ConfigureFairness(_sensitiveFeatures, _fairnessMetrics.ToArray());
+                }
+                model = _interpretableModel;
+                _logger.Information("Wrapped model with interpretability features");
+            }
+            
+            // Apply production monitoring if configured
+            if (_productionMonitor != null)
+            {
+                if (_dataDriftThreshold != null && _conceptDriftThreshold != null)
+                {
+                    _productionMonitor.ConfigureDriftDetection(_dataDriftThreshold, _conceptDriftThreshold);
+                }
+                if (_performanceDropThreshold != null)
+                {
+                    _productionMonitor.ConfigureRetraining(_performanceDropThreshold, _retrainingInterval);
+                }
+                // Production monitoring is typically applied after training
+                _logger.Debug("Configured production monitoring");
+            }
 
             _logger.Debug("Initializing model components");
             var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
@@ -775,6 +1180,34 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
             var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
             _logger.Debug("Using data preprocessor: {PreprocessorType}", dataPreprocessor.GetType().Name);
+            
+            // Apply custom pipeline steps if configured
+            TInput processedX = x;
+            TOutput processedY = y;
+            
+            // Apply pipeline steps in order
+            var orderedPositions = new[] 
+            {
+                PipelinePosition.BeforeFeatureSelection,
+                PipelinePosition.AfterFeatureSelection,
+                PipelinePosition.BeforeNormalization,
+                PipelinePosition.AfterNormalization,
+                PipelinePosition.BeforeOutlierRemoval,
+                PipelinePosition.AfterOutlierRemoval,
+                PipelinePosition.BeforeTraining
+            };
+            
+            foreach (var position in orderedPositions)
+            {
+                if (_pipelineSteps.ContainsKey(position))
+                {
+                    foreach (var step in _pipelineSteps[position])
+                    {
+                        _logger.Debug("Applying pipeline step at position {Position}", position);
+                        (processedX, processedY) = step.FitTransform(processedX, processedY);
+                    }
+                }
+            }
 
             // Preprocess the data
             _logger.Information("Starting data preprocessing");

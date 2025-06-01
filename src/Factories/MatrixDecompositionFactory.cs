@@ -5,8 +5,8 @@ namespace AiDotNet.Factories;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> Matrix decomposition is a way of breaking down a complex matrix into simpler 
-/// components that are easier to work with mathematically. It's like factoring a number (e.g., 12 = 3 × 4), 
+/// <b>For Beginners:</b> Matrix<double> decomposition is a way of breaking down a complex matrix into simpler 
+/// components that are easier to work with mathematically. It's like factoring a number (e.g., 12 = 3 ï¿½ 4), 
 /// but for matrices.
 /// </para>
 /// <para>

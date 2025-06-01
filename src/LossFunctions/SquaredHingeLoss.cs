@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> Squared Hinge Loss is a variation of the Hinge Loss used in Support Vector Machines (SVMs)
+/// <b>For Beginners:</b> Squared Hinge Loss is a variation of the Hinge Loss used in Support Vector<double> Machines (SVMs)
 /// that applies a squared penalty to incorrectly classified examples.
 /// 
 /// The formula is: max(0, 1 - y*f(x))²
@@ -22,7 +22,7 @@
 /// 
 /// Squared Hinge Loss is particularly useful for:
 /// - Binary classification problems
-/// - Support Vector Machines
+/// - Support Vector<double> Machines
 /// - Any situation where smoother gradients are beneficial for optimization
 /// 
 /// Compared to regular Hinge Loss, it penalizes violations more severely due to the squaring operation.

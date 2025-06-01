@@ -13,7 +13,7 @@ namespace AiDotNet.ReinforcementLearning.Interfaces
         /// Converts a single state to tensor representation
         /// </summary>
         /// <param name="state">The state to convert</param>
-        /// <returns>Tensor representation of the state</returns>
+        /// <returns>Tensor<double> representation of the state</returns>
         Tensor<T> ConvertState(TState state);
         
         /// <summary>

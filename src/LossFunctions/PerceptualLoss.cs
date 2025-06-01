@@ -103,7 +103,7 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
     {
         if (v1.Length != v2.Length)
         {
-            throw new ArgumentException("Vectors must have the same length.");
+            throw new ArgumentException("Vector<double>s must have the same length.");
         }
         
         T sum = NumOps.Zero;

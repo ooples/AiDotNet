@@ -1294,7 +1294,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Combine all quality images into a single tensor
-        return Tensor<T>.Stack(qualityImages.ToArray());
+        return Tensor<T>.Stack([.. qualityImages]);
     }
 
     /// <summary>

@@ -1,11 +1,11 @@
 namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for the Confusion Matrix Fit Detector, which evaluates how well a classification model performs.
+/// Configuration options for the Confusion Matrix<double> Fit Detector, which evaluates how well a classification model performs.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The Confusion Matrix Fit Detector analyzes classification results to determine if a model is performing adequately.
+/// The Confusion Matrix<double> Fit Detector analyzes classification results to determine if a model is performing adequately.
 /// It uses various thresholds and metrics to categorize model performance as good, moderate, or poor,
 /// and can detect issues like class imbalance that might affect model reliability.
 /// </para>

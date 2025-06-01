@@ -481,7 +481,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This constructor is similar to the previous one, but uses vector activations.
     /// 
-    /// Vector activations:
+    /// Vector<double> activations:
     /// - Process entire groups of numbers at once, rather than one at a time
     /// - Can capture relationships between different elements
     /// - Allow for more complex transformations
@@ -518,7 +518,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Not supported for this layer. Use Forward(Tensor&lt;T&gt; input, Tensor&lt;T&gt; encoderOutput) instead.
+    /// Not supported for this layer. Use Forward(Tensor<double>&lt;T&gt; input, Tensor<double>&lt;T&gt; encoderOutput) instead.
     /// </summary>
     /// <param name="input">The input tensor.</param>
     /// <returns>Never returns as this method throws an exception.</returns>

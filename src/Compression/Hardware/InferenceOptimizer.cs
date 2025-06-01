@@ -84,7 +84,7 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
         })
     {
         _capabilities = DetectHardwareCapabilities();
-        _hasSIMD = System.Numerics.Vector.IsHardwareAccelerated;
+        _hasSIMD = System.Numerics.Vector<double>.IsHardwareAccelerated;
     }
     
     /// <summary>
@@ -356,7 +356,7 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
         var capabilities = new HardwareCapabilities();
         
         // CPU capabilities detection
-        capabilities.HasSIMD = System.Numerics.Vector.IsHardwareAccelerated;
+        capabilities.HasSIMD = System.Numerics.Vector<double>.IsHardwareAccelerated;
         
         // Check for AVX2 support
         capabilities.HasAvx2 = IsAvx2Supported();
@@ -804,7 +804,7 @@ public class HardwareCapabilities
     /// </summary>
     /// <remarks>
     /// <para>
-    /// AVX2 (Advanced Vector Extensions 2) is a SIMD instruction set that provides
+    /// AVX2 (Advanced Vector<double> Extensions 2) is a SIMD instruction set that provides
     /// 256-bit vector operations.
     /// </para>
     /// <para><b>For Beginners:</b> AVX2 is a specific set of instructions for faster math.

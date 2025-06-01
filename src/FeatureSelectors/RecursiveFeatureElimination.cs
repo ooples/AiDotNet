@@ -4,7 +4,7 @@
 /// A feature selector that uses Recursive Feature Elimination (RFE) to select the most important features.
 /// </summary>
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
-/// <typeparam name="TInput">The input data type (Matrix, Tensor, etc.).</typeparam>
+/// <typeparam name="TInput">The input data type (Matrix<double>, Tensor<double>, etc.).</typeparam>
 /// <typeparam name="TOutput">The output data type expected by the model.</typeparam>
 /// <remarks>
 /// <para>

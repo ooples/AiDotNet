@@ -3,8 +3,8 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// <summary>
 /// Base class for stochastic actor-critic reinforcement learning agents (SAC, etc.).
 /// </summary>
-/// <typeparam name="TState">The type used to represent the environment state, typically Tensor&lt;T&gt;.</typeparam>
-/// <typeparam name="TAction">The type used to represent actions, typically Vector&lt;T&gt; for continuous action spaces.</typeparam>
+/// <typeparam name="TState">The type used to represent the environment state, typically Tensor<double>&lt;T&gt;.</typeparam>
+/// <typeparam name="TAction">The type used to represent actions, typically Vector<double>&lt;T&gt; for continuous action spaces.</typeparam>
 /// <typeparam name="T">The numeric type used for calculations (float, double, etc.).</typeparam>
 /// <remarks>
 /// <para>

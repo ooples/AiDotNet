@@ -19,12 +19,12 @@
 public class PredictionStatsInputs<T>
 {
     /// <summary>
-    /// Vector of actual values (ground truth).
+    /// Vector<double> of actual values (ground truth).
     /// </summary>
     public Vector<T> Actual { get; set; } = Vector<T>.Empty();
 
     /// <summary>
-    /// Vector of predicted values from your model.
+    /// Vector<double> of predicted values from your model.
     /// </summary>
     public Vector<T> Predicted { get; set; } = Vector<T>.Empty();
 

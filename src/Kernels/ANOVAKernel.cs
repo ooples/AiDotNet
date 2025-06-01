@@ -99,7 +99,7 @@ public class ANOVAKernel<T> : IKernelFunction<T>
     /// </para>
     /// <para>
     /// Higher output values indicate greater similarity between the vectors. This is useful in
-    /// machine learning algorithms like Support Vector Machines (SVMs) that need to compare data points.
+    /// machine learning algorithms like Support Vector<double> Machines (SVMs) that need to compare data points.
     /// </para>
     /// <para>
     /// The ANOVA kernel is particularly good at identifying which dimensions (features) in your data

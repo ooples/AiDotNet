@@ -66,7 +66,7 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     /// </summary>
     /// <param name="componentType">The type of component (e.g., Trend, Seasonal).</param>
     /// <param name="component">The component data as either a vector or matrix.</param>
-    /// <exception cref="ArgumentException">Thrown when the component is not a Vector or Matrix.</exception>
+    /// <exception cref="ArgumentException">Thrown when the component is not a Vector<double> or Matrix<double>.</exception>
     protected void AddComponent(DecompositionComponentType componentType, object component)
     {
         if (component is Vector<T> vector)

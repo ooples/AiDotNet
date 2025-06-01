@@ -6,8 +6,8 @@ namespace AiDotNet.Caching;
 /// Provides a context-aware implementation of model caching for optimization step data.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-/// <typeparam name="TInput">The type of input data (e.g., Matrix).</typeparam>
-/// <typeparam name="TOutput">The type of output data (e.g., Vector).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix<double>).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector<double>).</typeparam>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> A model cache is like a storage box that keeps track of the progress made during 

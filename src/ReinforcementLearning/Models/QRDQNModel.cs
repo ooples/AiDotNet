@@ -601,7 +601,7 @@ public class QRDQNModel<T> : ReinforcementLearningModelBase<T>
     }
     
     /// <summary>
-    /// Adapter class that wraps agents with discrete actions to work with Vector actions.
+    /// Adapter class that wraps agents with discrete actions to work with Vector<double> actions.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     internal class DiscreteActionAdapter<TNumeric> : IAgent<Tensor<TNumeric>, Vector<TNumeric>, TNumeric>

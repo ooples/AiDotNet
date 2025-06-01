@@ -13,7 +13,7 @@
 public enum MatrixType
 {
     /// <summary>
-    /// Matrix type has not been determined or specified.
+    /// Matrix<double> type has not been determined or specified.
     /// </summary>
     Unknown = 0, 
     

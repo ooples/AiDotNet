@@ -15,7 +15,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// <summary>
 /// Implementation of the Decision Transformer agent for sequence modeling-based reinforcement learning.
 /// </summary>
-/// <typeparam name="TState">The type of state observation (typically Tensor).</typeparam>
+/// <typeparam name="TState">The type of state observation (typically Tensor<double>).</typeparam>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>

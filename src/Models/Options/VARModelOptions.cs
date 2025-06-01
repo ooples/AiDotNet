@@ -1,12 +1,12 @@
 ﻿namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for Vector Autoregressive (VAR) models, which model the linear interdependencies
+/// Configuration options for Vector<double> Autoregressive (VAR) models, which model the linear interdependencies
 /// among multiple time series.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Vector Autoregressive (VAR) models are a generalization of univariate autoregressive models to multivariate 
+/// Vector<double> Autoregressive (VAR) models are a generalization of univariate autoregressive models to multivariate 
 /// time series. In a VAR model, each variable is modeled as a linear function of past values of itself and past 
 /// values of all other variables in the system. This approach captures the dynamic relationships and feedback 
 /// effects among multiple interrelated time series. VAR models are widely used in economics, finance, and other 
@@ -127,7 +127,7 @@ public class VARModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// <remarks>
     /// <para>
     /// This property specifies the type of matrix decomposition used in the estimation algorithm for the VAR model. 
-    /// Matrix decomposition is used to solve the system of equations that arises when estimating the model parameters. 
+    /// Matrix<double> decomposition is used to solve the system of equations that arises when estimating the model parameters. 
     /// Different decomposition methods have different numerical properties and computational requirements. LU 
     /// decomposition (the default) is efficient for general matrices and is suitable for most VAR applications. 
     /// Other options might include Cholesky decomposition (for positive definite matrices), QR decomposition 

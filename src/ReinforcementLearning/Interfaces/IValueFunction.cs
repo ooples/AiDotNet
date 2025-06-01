@@ -5,7 +5,7 @@ namespace AiDotNet.ReinforcementLearning.Interfaces
     /// <summary>
     /// Defines the interface for a reinforcement learning value function.
     /// </summary>
-    /// <typeparam name="TState">The type used to represent the environment state, typically Tensor&lt;T&gt;.</typeparam>
+    /// <typeparam name="TState">The type used to represent the environment state, typically Tensor<double>&lt;T&gt;.</typeparam>
     /// <typeparam name="T">The numeric type used for calculations (float, double, etc.).</typeparam>
     /// <remarks>
     /// <para>

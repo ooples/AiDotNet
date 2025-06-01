@@ -119,7 +119,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
                     T diagonalValue = _numOps.Subtract(matrix[j, j], sum);
                     if (_numOps.LessThanOrEquals(diagonalValue, _numOps.Zero))
                     {
-                        throw new ArgumentException("Matrix is not positive definite.");
+                        throw new ArgumentException("Matrix<double> is not positive definite.");
                     }
                     L[j, j] = _numOps.Sqrt(diagonalValue);
                 }
@@ -170,7 +170,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
             T diagonalValue = _numOps.Subtract(matrix[j, j], sum);
             if (_numOps.LessThanOrEquals(diagonalValue, _numOps.Zero))
             {
-                throw new ArgumentException("Matrix is not positive definite.");
+                throw new ArgumentException("Matrix<double> is not positive definite.");
             }
 
             L[j, j] = _numOps.Sqrt(diagonalValue);
@@ -227,7 +227,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
                     T diagonalValue = _numOps.Subtract(matrix[i, i], sum);
                     if (_numOps.LessThanOrEquals(diagonalValue, _numOps.Zero))
                     {
-                        throw new ArgumentException("Matrix is not positive definite.");
+                        throw new ArgumentException("Matrix<double> is not positive definite.");
                     }
                     L[i, j] = _numOps.Sqrt(diagonalValue);
                 }

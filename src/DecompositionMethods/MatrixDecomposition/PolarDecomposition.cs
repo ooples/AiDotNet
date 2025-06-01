@@ -155,7 +155,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             // Check for numerical stability
             if (!MatrixHelper<T>.IsInvertible(XtX) || !MatrixHelper<T>.IsInvertible(YtY))
             {
-                throw new InvalidOperationException("Matrix became singular during Newton-Schulz iteration.");
+                throw new InvalidOperationException("Matrix<double> became singular during Newton-Schulz iteration.");
             }
 
             Matrix<T> nextX = X.Multiply(_numOps.FromDouble(0.5)).Add(Y.Transpose().Multiply(_numOps.FromDouble(0.5)));
@@ -211,7 +211,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
         {
             if (!MatrixHelper<T>.IsInvertible(X))
             {
-                throw new InvalidOperationException("Matrix became singular during Halley iteration.");
+                throw new InvalidOperationException("Matrix<double> became singular during Halley iteration.");
             }
 
             Matrix<T> Y = X.Inverse();
@@ -328,7 +328,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
         {
             if (!MatrixHelper<T>.IsInvertible(Y))
             {
-                throw new InvalidOperationException("Matrix became singular during Scaling and Squaring iteration.");
+                throw new InvalidOperationException("Matrix<double> became singular during Scaling and Squaring iteration.");
             }
 
             Matrix<T> Z = X.Subtract(Y.Inverse());

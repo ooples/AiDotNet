@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class RBFLayer<T> : LayerBase<T>
 {
     /// <summary>
-    /// Matrix storing the center positions of each RBF neuron in the input space.
+    /// Matrix<double> storing the center positions of each RBF neuron in the input space.
     /// </summary>
     /// <remarks>
     /// This matrix has dimensions [outputSize, inputSize], where each row represents the coordinates
@@ -41,7 +41,7 @@ public class RBFLayer<T> : LayerBase<T>
     private Matrix<T> _centers;
 
     /// <summary>
-    /// Vector storing the width parameters for each RBF neuron.
+    /// Vector<double> storing the width parameters for each RBF neuron.
     /// </summary>
     /// <remarks>
     /// This vector has length outputSize, where each element controls how quickly the response of

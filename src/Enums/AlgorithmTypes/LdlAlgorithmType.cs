@@ -22,7 +22,7 @@
 /// 1. Solving Linear Systems: Many AI algorithms need to solve equations like Ax = b. LDL decomposition makes 
 ///    this much faster and more stable.
 /// 
-/// 2. Matrix Inversion: Finding the inverse of a matrix (like dividing by a matrix) becomes much easier.
+/// 2. Matrix<double> Inversion: Finding the inverse of a matrix (like dividing by a matrix) becomes much easier.
 /// 
 /// 3. Numerical Stability: LDL decomposition is more numerically stable than directly inverting matrices, 
 ///    meaning it's less prone to calculation errors.

@@ -101,7 +101,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// <para><b>For Beginners:</b> This selects which specific algorithm the model uses to analyze your time series data.
     /// The default is ARIMA, which is a popular and versatile method that works well for many types of time data.
     /// Other options might include methods like exponential smoothing (good for data with clear trends and seasonality)
-    /// or VAR (Vector AutoRegression, good for analyzing relationships between multiple time series).
+    /// or VAR (Vector<double> AutoRegression, good for analyzing relationships between multiple time series).
     /// Unless you're familiar with the different methods, starting with ARIMA is usually a good choice.</para>
     /// </remarks>
     public TimeSeriesModelType ModelType { get; set; } = TimeSeriesModelType.ARIMA;

@@ -70,7 +70,7 @@ public interface IAsyncTreeBasedModel<T> : ITreeBasedRegression<T>
     /// - The returned vector would contain the predicted prices for those houses
     /// 
     /// The "Async" suffix and Task return type mean this method can run in the background.
-    /// When the Task completes, you'll get back a Vector containing all the predictions.
+    /// When the Task completes, you'll get back a Vector<double> containing all the predictions.
     /// </remarks>
     Task<Vector<T>> PredictAsync(Matrix<T> input);
 }

@@ -293,7 +293,7 @@ public class TBATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// <remarks>
     /// <para>
     /// This property specifies the type of matrix decomposition used in the optimization algorithm for estimating 
-    /// the TBATS model parameters. Matrix decomposition is used to solve linear systems that arise during the 
+    /// the TBATS model parameters. Matrix<double> decomposition is used to solve linear systems that arise during the 
     /// optimization process. Different decomposition methods have different numerical properties and computational 
     /// requirements. Cholesky decomposition (the default) is efficient and numerically stable for positive definite 
     /// matrices, which are common in many statistical models. Other options might include QR decomposition, which is 

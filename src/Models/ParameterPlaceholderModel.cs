@@ -15,8 +15,8 @@
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</typeparam>
-/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix<double>&lt;T&gt;, Tensor<double>&lt;T&gt;).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector<double>&lt;T&gt;, Tensor<double>&lt;T&gt;).</typeparam>
 public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>
@@ -144,7 +144,7 @@ public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInpu
         // Try to determine the appropriate return type and shape based on input type
         if (typeof(TOutput) == typeof(Vector<T>))
         {
-            // For Vector outputs, return a zero vector with appropriate size
+            // For Vector<double> outputs, return a zero vector with appropriate size
             int outputSize = ParameterPlaceholderModel<T, TInput, TOutput>.DetermineOutputSize(input);
             var zeroVector = new Vector<T>(outputSize);
 
@@ -159,7 +159,7 @@ public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInpu
         }
         else if (typeof(TOutput) == typeof(Tensor<T>))
         {
-            // For Tensor outputs, create a tensor with appropriate dimensions
+            // For Tensor<double> outputs, create a tensor with appropriate dimensions
             int[] dimensions = ParameterPlaceholderModel<T, TInput, TOutput>.DetermineTensorDimensions(input);
             var zeroTensor = new Tensor<T>(dimensions);
 
@@ -183,13 +183,13 @@ public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInpu
     /// <returns>The expected output size.</returns>
     private static int DetermineOutputSize(TInput input)
     {
-        // For Matrix inputs, typically the output size is the number of rows
+        // For Matrix<double> inputs, typically the output size is the number of rows
         if (input is Matrix<T> matrix)
         {
             return matrix.Rows;
         }
 
-        // For Tensor inputs, the first dimension is typically the batch size
+        // For Tensor<double> inputs, the first dimension is typically the batch size
         if (input is Tensor<T> tensor && tensor.Shape.Length > 0)
         {
             return tensor.Shape[0];
@@ -206,13 +206,13 @@ public class ParameterPlaceholderModel<T, TInput, TOutput> : IFullModel<T, TInpu
     /// <returns>The expected tensor dimensions.</returns>
     private static int[] DetermineTensorDimensions(TInput input)
     {
-        // For Matrix inputs, typically output is a 2D tensor [rows, 1]
+        // For Matrix<double> inputs, typically output is a 2D tensor [rows, 1]
         if (input is Matrix<T> matrix)
         {
             return [matrix.Rows, 1];
         }
 
-        // For Tensor inputs, keep batch dimension but simplify other dimensions
+        // For Tensor<double> inputs, keep batch dimension but simplify other dimensions
         if (input is Tensor<T> tensor && tensor.Shape.Length > 0)
         {
             return [tensor.Shape[0], 1];

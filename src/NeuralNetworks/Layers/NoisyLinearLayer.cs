@@ -300,7 +300,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Noisy Linear Layer with a vector activation function.
-    /// Vector activation functions operate on entire vectors rather than individual elements.
+    /// Vector<double> activation functions operate on entire vectors rather than individual elements.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a layer with a vector-based activation function.
     /// 

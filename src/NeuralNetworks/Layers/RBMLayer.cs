@@ -268,7 +268,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// ```csharp
     /// // Create an RBM with 784 visible units, 200 hidden units,
     /// // and a vectorized sigmoid activation function
-    /// var rbmLayer = new RBMLayer<float>(784, 200, new VectorizedSigmoidActivation<float>());
+    /// var rbmLayer = new RBMLayer<float>(784, 200, new Vector<double>izedSigmoidActivation<float>());
     /// ```
     /// 
     /// This approach is functionally equivalent to using scalar activation, but can be more
@@ -466,8 +466,8 @@ public class RBMLayer<T> : LayerBase<T>
     /// <summary>
     /// Samples binary states (0 or 1) from probability values.
     /// </summary>
-    /// <param name="probabilities">Vector of probability values between 0 and 1.</param>
-    /// <returns>Vector of binary samples (0 or 1) based on the probabilities.</returns>
+    /// <param name="probabilities">Vector<double> of probability values between 0 and 1.</param>
+    /// <returns>Vector<double> of binary samples (0 or 1) based on the probabilities.</returns>
     /// <remarks>
     /// <para>
     /// This method converts probability values to binary states by comparing each probability

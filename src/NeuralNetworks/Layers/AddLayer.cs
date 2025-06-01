@@ -125,7 +125,7 @@ public class AddLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This constructor creates an addition layer that applies a vector activation function after addition.
     /// 
     /// This constructor is similar to the other one, but it accepts a vector activation function
-    /// instead of a scalar one. Vector activation functions (like Softmax) need to consider
+    /// instead of a scalar one. Vector<double> activation functions (like Softmax) need to consider
     /// multiple values together, while scalar functions (like ReLU) process each value independently.
     /// 
     /// For example:
@@ -183,7 +183,7 @@ public class AddLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This method overrides the base class method but is not supported for AddLayer, which requires multiple inputs.
-    /// Instead, use the Forward(params Tensor&lt;T&gt;[] inputs) method, which accepts multiple input tensors.
+    /// Instead, use the Forward(params Tensor<double>&lt;T&gt;[] inputs) method, which accepts multiple input tensors.
     /// </para>
     /// <para><b>For Beginners:</b> This method is not supported because addition requires multiple inputs.
     /// 

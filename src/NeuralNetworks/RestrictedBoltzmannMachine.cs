@@ -502,8 +502,8 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Samples binary states from activation probabilities.
     /// </summary>
-    /// <param name="activations">Tensor of activation probabilities.</param>
-    /// <returns>Tensor of binary states (0 or 1).</returns>
+    /// <param name="activations">Tensor<double> of activation probabilities.</param>
+    /// <returns>Tensor<double> of binary states (0 or 1).</returns>
     /// <remarks>
     /// <para>
     /// This method converts activation probabilities to binary states using stochastic sampling.
@@ -737,7 +737,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="visible">The visible layer tensor.</param>
     /// <param name="hidden">The hidden layer tensor.</param>
-    /// <returns>Matrix of associations between visible and hidden units.</returns>
+    /// <returns>Matrix<double> of associations between visible and hidden units.</returns>
     private Matrix<T> ComputeAssociations(Tensor<T> visible, Tensor<T> hidden)
     {
         var associations = new Matrix<T>(HiddenSize, VisibleSize);
@@ -758,7 +758,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="numSamples">The number of samples to generate.</param>
     /// <param name="numSteps">The number of Gibbs sampling steps to perform.</param>
-    /// <returns>Tensor containing the generated samples.</returns>
+    /// <returns>Tensor<double> containing the generated samples.</returns>
     /// <remarks>
     /// <para>
     /// This method generates new data samples that follow the distribution learned by the RBM.

@@ -11,7 +11,7 @@ using AiDotNet.Helpers;
 namespace AiDotNet.OnlineLearning.Algorithms;
 
 /// <summary>
-/// Online Support Vector Machine using stochastic gradient descent with hinge loss.
+/// Online Support Vector<double> Machine using stochastic gradient descent with hinge loss.
 /// Supports both linear and kernelized versions.
 /// </summary>
 public class OnlineSVM<T> : OnlineModelBase<T, Vector<T>, T>

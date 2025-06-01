@@ -84,7 +84,7 @@ public class DenseLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputSize">Number of input features.</param>
     /// <param name="outputSize">Number of output features.</param>
-    /// <param name="vectorActivation">Vector activation function to apply to outputs.</param>
+    /// <param name="vectorActivation">Vector<double> activation function to apply to outputs.</param>
     public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivation = null)
         : base([inputSize], [outputSize], vectorActivation ?? new ReLUActivation<T>())
     {

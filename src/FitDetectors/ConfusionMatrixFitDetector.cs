@@ -217,8 +217,8 @@ public class ConfusionMatrixFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// <summary>
     /// Calculates a confusion matrix from actual and predicted values.
     /// </summary>
-    /// <param name="actual">Vector of actual values.</param>
-    /// <param name="predicted">Vector of predicted probabilities.</param>
+    /// <param name="actual">Vector<double> of actual values.</param>
+    /// <param name="predicted">Vector<double> of predicted probabilities.</param>
     /// <returns>A confusion matrix containing counts of true positives, false positives, true negatives, and false negatives.</returns>
     /// <remarks>
     /// <para>

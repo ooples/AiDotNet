@@ -1,7 +1,7 @@
 namespace AiDotNet.Enums;
 
 /// <summary>
-/// Specifies different kernel functions used in machine learning algorithms like Support Vector Machines (SVMs).
+/// Specifies different kernel functions used in machine learning algorithms like Support Vector<double> Machines (SVMs).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -13,7 +13,7 @@ namespace AiDotNet.Enums;
 /// 2D drawing into 3D space where you can see separations more clearly.
 /// 
 /// Kernels are commonly used in:
-/// - Support Vector Machines (SVMs)
+/// - Support Vector<double> Machines (SVMs)
 /// - Kernel regression
 /// - Principal Component Analysis (PCA)
 /// - Clustering algorithms

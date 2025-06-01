@@ -1,7 +1,7 @@
 namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for the CMA-ES (Covariance Matrix Adaptation Evolution Strategy) optimization algorithm.
+/// Configuration options for the CMA-ES (Covariance Matrix<double> Adaptation Evolution Strategy) optimization algorithm.
 /// </summary>
 /// <typeparam name="T">The type of data being optimized.</typeparam>
 /// <remarks>

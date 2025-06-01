@@ -754,7 +754,7 @@ public class PolicyNetwork<T> : NeuralNetworkBase<T>
         // Forward pass
         var output = Predict(input);
         
-        // Calculate loss - need to convert to Vector for loss function
+        // Calculate loss - need to convert to Vector<double> for loss function
         Vector<T> outputVector = new Vector<T>(output.Length);
         Vector<T> expectedVector = new Vector<T>(expectedOutput.Length);
         for (int i = 0; i < output.Length; i++)
@@ -765,7 +765,7 @@ public class PolicyNetwork<T> : NeuralNetworkBase<T>
         
         var loss = LossFunction.CalculateLoss(outputVector, expectedVector);
         
-        // Convert loss to Tensor for backpropagation
+        // Convert loss to Tensor<double> for backpropagation
         var lossTensor = new Tensor<T>(output.Shape);
         for (int i = 0; i < lossTensor.Length; i++)
         {

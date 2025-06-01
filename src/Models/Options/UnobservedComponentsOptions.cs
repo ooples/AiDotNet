@@ -370,7 +370,7 @@ public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegress
     /// <remarks>
     /// <para>
     /// This property specifies the matrix decomposition method used in the estimation algorithm for the Unobserved 
-    /// Components Model. Matrix decomposition is used to solve linear systems that arise during the Kalman filter 
+    /// Components Model. Matrix<double> decomposition is used to solve linear systems that arise during the Kalman filter 
     /// and smoother steps of the estimation process. Different decomposition methods have different numerical 
     /// properties and computational requirements. The default value of null indicates that a default decomposition 
     /// method appropriate for the specific model implementation should be used. Common decomposition methods include 

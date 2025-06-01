@@ -41,7 +41,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// <exception cref="NotSupportedException">Always thrown when this method is called.</exception>
     /// <remarks>
     /// The Squash activation function is designed to work with vectors, not individual scalar values.
-    /// Use the <see cref="Activate(Vector{T})"/> method instead.
+    /// Use the <see cref="Activate(Vector<double>{T})"/> method instead.
     /// </remarks>
     public override T Activate(T input)
     {
@@ -56,7 +56,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// <exception cref="NotSupportedException">Always thrown when this method is called.</exception>
     /// <remarks>
     /// The derivative of the Squash activation function is only defined for vector inputs.
-    /// Use the <see cref="Derivative(Vector{T})"/> method instead.
+    /// Use the <see cref="Derivative(Vector<double>{T})"/> method instead.
     /// </remarks>
     public override T Derivative(T input)
     {

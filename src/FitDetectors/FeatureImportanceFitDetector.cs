@@ -314,8 +314,8 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// <summary>
     /// Calculates the error between actual and predicted values.
     /// </summary>
-    /// <param name="actual">Vector of actual values.</param>
-    /// <param name="predicted">Vector of predicted values.</param>
+    /// <param name="actual">Vector<double> of actual values.</param>
+    /// <param name="predicted">Vector<double> of predicted values.</param>
     /// <returns>The mean squared error between actual and predicted values.</returns>
     /// <remarks>
     /// <para>
@@ -380,7 +380,7 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// <summary>
     /// Calculates the correlation matrix for all features.
     /// </summary>
-    /// <param name="features">Matrix of feature values.</param>
+    /// <param name="features">Matrix<double> of feature values.</param>
     /// <returns>A matrix of correlation coefficients between all pairs of features.</returns>
     /// <remarks>
     /// <para>
@@ -420,7 +420,7 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// <summary>
     /// Determines if most features are uncorrelated with each other.
     /// </summary>
-    /// <param name="correlations">Matrix of correlation coefficients between all pairs of features.</param>
+    /// <param name="correlations">Matrix<double> of correlation coefficients between all pairs of features.</param>
     /// <returns>True if most feature pairs have correlation below the threshold, false otherwise.</returns>
     /// <remarks>
     /// <para>
@@ -459,7 +459,7 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// <summary>
     /// Calculates the average absolute correlation across all feature pairs.
     /// </summary>
-    /// <param name="correlations">Matrix of correlation coefficients between all pairs of features.</param>
+    /// <param name="correlations">Matrix<double> of correlation coefficients between all pairs of features.</param>
     /// <returns>The average of the absolute values of all correlation coefficients.</returns>
     /// <remarks>
     /// <para>

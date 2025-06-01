@@ -163,7 +163,7 @@ namespace AiDotNet.ReinforcementLearning.Models
         /// Updates the DQN agent based on experience with the environment.
         /// </summary>
         /// <param name="state">The current state observation.</param>
-        /// <param name="action">The action taken (as a Vector containing a single value).</param>
+        /// <param name="action">The action taken (as a Vector<double> containing a single value).</param>
         /// <param name="reward">The reward received.</param>
         /// <param name="nextState">The next state observation.</param>
         /// <param name="done">Whether the episode is done.</param>

@@ -477,13 +477,13 @@ public class LSTMLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This field stores a flag indicating whether to use vector-based activation functions or scalar (element-wise)
-    /// activation functions. Vector functions operate on entire tensors at once, which can be more efficient for
+    /// activation functions. Vector<double> functions operate on entire tensors at once, which can be more efficient for
     /// certain operations.
     /// </para>
     /// <para><b>For Beginners:</b> This flag chooses between two ways of applying activation functions.
     /// 
     /// When set to true:
-    /// - Vector activation functions are used
+    /// - Vector<double> activation functions are used
     /// - Processing is done on entire tensors at once
     /// - Can be faster for large models
     /// 
@@ -617,7 +617,7 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new LSTM layer using advanced vector-based activation functions.
     /// 
-    /// Vector activation functions:
+    /// Vector<double> activation functions:
     /// - Process entire groups of numbers at once, rather than one at a time
     /// - Can be more efficient on certain hardware
     /// - May capture more complex relationships between different values
@@ -1088,17 +1088,17 @@ public class LSTMLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This helper method applies either a vector activation function or a scalar activation function to a tensor,
-    /// depending on the layer's configuration. Vector activation functions operate on entire tensors at once, while
+    /// depending on the layer's configuration. Vector<double> activation functions operate on entire tensors at once, while
     /// scalar activation functions operate element by element.
     /// </para>
     /// <para><b>For Beginners:</b> This method applies the right type of activation function to a tensor.
     /// 
     /// The LSTM can use two types of activation functions:
     /// - Scalar functions that process one number at a time
-    /// - Vector functions that process entire groups at once
+    /// - Vector<double> functions that process entire groups at once
     /// 
     /// This method checks which type you're using and applies the appropriate function.
-    /// Vector functions can be faster for large datasets but work the same way in principle.
+    /// Vector<double> functions can be faster for large datasets but work the same way in principle.
     /// </para>
     /// </remarks>
     private Tensor<T> ActivateTensorConditional(IVectorActivationFunction<T>? vectorActivation, IActivationFunction<T>? scalarActivation, Tensor<T> input)

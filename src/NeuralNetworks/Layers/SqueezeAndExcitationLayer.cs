@@ -325,7 +325,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This is like the scalar activation, but works on entire groups of values at once.
     /// 
-    /// Vector activations:
+    /// Vector<double> activations:
     /// - Process entire rows of numbers together
     /// - Can capture relationships between different elements
     /// - Might normalize or transform values based on the entire group
@@ -440,7 +440,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This constructor is similar to the previous one, but uses vector activations.
     /// 
-    /// Vector activations:
+    /// Vector<double> activations:
     /// - Process entire groups of numbers at once, rather than one at a time
     /// - Can capture relationships between different elements
     /// - Allow for more complex transformations
@@ -659,7 +659,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// - The second activation (typically Sigmoid) if processing the second layer
     /// 
     /// It also handles two types of activations:
-    /// - Vector activations that process entire rows at once
+    /// - Vector<double> activations that process entire rows at once
     /// - Scalar activations that process each value individually
     /// </para>
     /// </remarks>
@@ -700,12 +700,12 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// <returns>A new matrix with the activation function applied to each row.</returns>
     /// <remarks>
     /// <para>
-    /// This method applies a vector activation function to each row of the input matrix. Vector activation functions
+    /// This method applies a vector activation function to each row of the input matrix. Vector<double> activation functions
     /// operate on entire vectors rather than individual elements, allowing them to capture relationships between elements.
     /// </para>
     /// <para><b>For Beginners:</b> This method transforms entire rows of values at once.
     /// 
-    /// Vector activation functions:
+    /// Vector<double> activation functions:
     /// - Process an entire row of numbers together
     /// - Can consider relationships between different elements
     /// - Are more sophisticated than processing each number separately

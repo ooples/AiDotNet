@@ -550,7 +550,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Sorts singular values in descending order and rearranges the corresponding columns/rows in U and VT.
     /// </summary>
-    /// <param name="S">Vector of singular values to sort</param>
+    /// <param name="S">Vector<double> of singular values to sort</param>
     /// <param name="U">Left singular vectors matrix to rearrange</param>
     /// <param name="VT">Right singular vectors matrix (transposed) to rearrange</param>
     private void SortSingularValues(Vector<T> S, Matrix<T> U, Matrix<T> VT)

@@ -44,7 +44,7 @@ public enum ModelCategory
     /// <b>For Beginners:</b> Classification models predict which category or class something belongs to. For example,
     /// determining if an email is spam or not, identifying the species of a flower, or diagnosing a medical condition.
     /// These models learn the boundaries between different classes from training data. Common examples include Logistic Regression
-    /// (despite its name, it's used for classification), Decision Trees, and Support Vector Machines.
+    /// (despite its name, it's used for classification), Decision Trees, and Support Vector<double> Machines.
     /// </para>
     /// </remarks>
     Classification,
@@ -162,4 +162,20 @@ public enum ModelCategory
     /// </para>
     /// </remarks>
     Ranking,
+
+    /// <summary>
+    /// Models that automatically search for optimal configurations and hyperparameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) models automatically find the best
+    /// machine learning model and settings for your data. They handle the complex process of trying
+    /// different algorithms, tuning their parameters, and evaluating performance. It's like having
+    /// an experienced data scientist who systematically tests various approaches to find what works
+    /// best. AutoML can save significant time and often finds better solutions than manual tuning.
+    /// These models typically combine techniques like grid search, random search, or Bayesian optimization
+    /// to efficiently explore the space of possible models and configurations.
+    /// </para>
+    /// </remarks>
+    AutoML,
 }

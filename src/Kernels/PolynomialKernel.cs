@@ -7,7 +7,7 @@ namespace AiDotNet.Kernels;
 /// <remarks>
 /// <para>
 /// The Polynomial kernel is a popular kernel function used in machine learning algorithms
-/// like Support Vector Machines (SVMs) to find patterns in higher-dimensional spaces.
+/// like Support Vector<double> Machines (SVMs) to find patterns in higher-dimensional spaces.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.

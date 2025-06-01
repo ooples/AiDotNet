@@ -3,7 +3,7 @@ namespace AiDotNet.ReinforcementLearning.Interfaces
     /// <summary>
     /// Defines the interface for a reinforcement learning exploration strategy.
     /// </summary>
-    /// <typeparam name="TAction">The type used to represent actions, typically int for discrete actions or Vector&lt;T&gt; for continuous.</typeparam>
+    /// <typeparam name="TAction">The type used to represent actions, typically int for discrete actions or Vector<double>&lt;T&gt; for continuous.</typeparam>
     /// <typeparam name="T">The numeric type used for calculations (float, double, etc.).</typeparam>
     /// <remarks>
     /// <para>

@@ -132,7 +132,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This constructor creates an activation layer that applies a vector activation function to the entire input tensor at once.
-    /// Vector activation functions need to consider multiple values together, unlike scalar functions that process each value
+    /// Vector<double> activation functions need to consider multiple values together, unlike scalar functions that process each value
     /// independently. The input shape and output shape are the same, as activation functions don't change the dimensions of the data.
     /// The vector activation function is passed to the base class constructor and stored for use during forward and backward passes.
     /// </para>
@@ -270,7 +270,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <returns>A new tensor with the activation function applied to each element</returns>
     /// <remarks>
     /// This private helper method applies the scalar activation function to each element of the input tensor
-    /// independently. It uses the Transform method of the Tensor class to apply the function element-wise.
+    /// independently. It uses the Transform method of the Tensor<double> class to apply the function element-wise.
     /// </remarks>
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
     {
@@ -284,7 +284,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <returns>A new tensor resulting from applying the vector activation function</returns>
     /// <remarks>
     /// This private helper method applies the vector activation function to the entire input tensor at once.
-    /// Vector activation functions need to consider multiple values together, unlike scalar functions that
+    /// Vector<double> activation functions need to consider multiple values together, unlike scalar functions that
     /// process each value independently.
     /// </remarks>
     private Tensor<T> ApplyVectorActivation(Tensor<T> input)
@@ -323,7 +323,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the error gradient flows backward through a vector activation.
     /// 
-    /// Vector activations (like Softmax) need special handling during backpropagation because
+    /// Vector<double> activations (like Softmax) need special handling during backpropagation because
     /// each output value depends on multiple input values. This method:
     /// 
     /// 1. Calculates the derivative of the activation function at the saved input

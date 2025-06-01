@@ -353,7 +353,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// A concatenate layer must have at least two inputs to join together, so this method
     /// that only takes one input will always throw an error.
     /// 
-    /// Instead, you should use the other Forward method that accepts multiple inputs (params Tensor&lt;T&gt;[] inputs).
+    /// Instead, you should use the other Forward method that accepts multiple inputs (params Tensor<double>&lt;T&gt;[] inputs).
     /// </para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)

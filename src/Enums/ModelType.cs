@@ -150,7 +150,7 @@ public enum ModelType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Support Vector Regression finds patterns by transforming your data into a different
+    /// <b>For Beginners:</b> Support Vector<double> Regression finds patterns by transforming your data into a different
     /// space where the pattern becomes simpler. Imagine trying to separate mixed red and blue marbles on a table.
     /// It might be hard in 2D, but if you could lift some marbles up (adding a 3rd dimension), the separation
     /// might become easier. SVR uses a similar concept mathematically, making it powerful for complex patterns,
@@ -167,7 +167,7 @@ public enum ModelType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Kernel Ridge Regression is like Support Vector Regression but with a different
+    /// <b>For Beginners:</b> Kernel Ridge Regression is like Support Vector<double> Regression but with a different
     /// mathematical approach. It uses "kernels" (special mathematical functions) to transform your data
     /// into a space where complex relationships become simpler. This allows it to capture non-linear patterns
     /// while still maintaining some of the simplicity and efficiency of linear models.
@@ -675,23 +675,6 @@ public enum ModelType
               new[] { MetricGroups.Regression, MetricGroups.General },
               "Tree-structured representation of mathematical expressions")]
     ExpressionTree,
-
-    /// <summary>
-    /// A mathematical representation of data as points in multi-dimensional space.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Vector models represent your data as points in space with multiple dimensions. 
-    /// Each feature becomes a dimension - so if you have height and weight, each data point is plotted 
-    /// in 2D space. With more features, you get more dimensions (though these become hard to visualize). 
-    /// This representation allows mathematical operations that can reveal patterns and relationships 
-    /// in your data.
-    /// </para>
-    /// </remarks>
-    [ModelInfo(ModelCategory.Regression,
-              new[] { MetricGroups.Regression, MetricGroups.General },
-              "Mathematical representation of data as points in multi-dimensional space")]
-    Vector,
 
     /// <summary>
     /// A model that uses principles inspired by natural evolution to find optimal solutions.
@@ -1660,7 +1643,7 @@ public enum ModelType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Vector Autoregression Models analyze multiple time series that influence each 
+    /// <b>For Beginners:</b> Vector<double> Autoregression Models analyze multiple time series that influence each 
     /// other. For example, how prices, advertising, and competitor actions all affect sales. Unlike 
     /// simpler models that look at each series separately, VAR models capture how each series affects 
     /// the others. It's like modeling an ecosystem where changes in one species affect others. This 
@@ -2308,11 +2291,11 @@ public enum ModelType
     AdaptiveOnline,
     
     /// <summary>
-    /// Online Support Vector Machine for streaming data.
+    /// Online Support Vector<double> Machine for streaming data.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Online SVM adapts the powerful Support Vector Machine algorithm for streaming
+    /// <b>For Beginners:</b> Online SVM adapts the powerful Support Vector<double> Machine algorithm for streaming
     /// data. It learns a decision boundary by finding support vectors - the most important examples that
     /// define the separation between classes. Like a security system that remembers only the most suspicious
     /// and most trustworthy cases to make future decisions. Can use kernel functions for non-linear boundaries.
@@ -2436,5 +2419,50 @@ public enum ModelType
     [ModelInfo(ModelCategory.Classification,
               new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification, MetricGroups.General },
               "Probabilistic classifier with feature independence assumption")]
-    OnlineNaiveBayes
+    OnlineNaiveBayes,
+
+    //
+    // Multimodal Models
+    //
+
+    /// <summary>
+    /// A model that can process and integrate multiple types of input data (text, image, audio, etc.).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Multimodal models are like humans who can process information from multiple senses
+    /// at once - seeing, hearing, and reading simultaneously. These models can handle different types of data
+    /// (modalities) such as text, images, audio, or video, and combine them to make better predictions or
+    /// understand content more deeply. For example, a multimodal model could analyze both the images and captions
+    /// in a social media post to better understand its meaning, or combine audio and visual information from a
+    /// video to generate accurate subtitles. These models use various fusion strategies (early, late, or
+    /// cross-attention) to effectively combine information from different modalities.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General, MetricGroups.Regression, MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
+              "Model that processes and fuses multiple input modalities")]
+    MultimodalModel,
+
+    //
+    // AutoML Models
+    //
+
+    /// <summary>
+    /// Automated Machine Learning (AutoML) that automatically searches for the best model and hyperparameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML is like having an expert data scientist who automatically tries different
+    /// models and settings to find the best solution for your problem. Instead of manually testing various
+    /// algorithms and tuning their parameters, AutoML does this work for you. It explores different model
+    /// types (like decision trees, neural networks, etc.) and their configurations to find what works best
+    /// for your specific data. This is particularly useful when you're not sure which model to use or
+    /// don't have time to manually optimize everything.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.AutoML,
+              new[] { MetricGroups.General, MetricGroups.Regression, MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
+              "Automated model selection and hyperparameter optimization")]
+    AutoML
 }

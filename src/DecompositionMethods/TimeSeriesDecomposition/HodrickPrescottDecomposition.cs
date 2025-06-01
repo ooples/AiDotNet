@@ -41,7 +41,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="timeSeries">The time series data to decompose.</param>
     /// <param name="lambda">The smoothing parameter (default: 1600, suitable for quarterly data).</param>
     /// <param name="decomposition">Optional matrix decomposition method for solving linear systems.</param>
-    /// <param name="algorithm">The algorithm type to use for decomposition (default: MatrixMethod).</param>
+    /// <param name="algorithm">The algorithm type to use for decomposition (default: Matrix<double>Method).</param>
     /// <exception cref="ArgumentException">Thrown when lambda is not positive.</exception>
     public HodrickPrescottDecomposition(Vector<T> timeSeries, double lambda = 1600, IMatrixDecomposition<T>? decomposition = null, 
         HodrickPrescottAlgorithmType algorithm = HodrickPrescottAlgorithmType.MatrixMethod) 
@@ -65,7 +65,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         switch (_algorithm)
         {
-            case HodrickPrescottAlgorithmType.MatrixMethod:
+            case HodrickPrescottAlgorithmType.Matrix<double>Method:
                 DecomposeMatrixMethod();
                 break;
             case HodrickPrescottAlgorithmType.IterativeMethod:

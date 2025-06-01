@@ -1227,8 +1227,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         }
             
         // Prepare matrices for ridge regression
-        // X: Matrix of reservoir states
-        // Y: Matrix of target outputs
+        // X: Matrix<double> of reservoir states
+        // Y: Matrix<double> of target outputs
         int numSamples = _collectedStates.Count;
             
         Matrix<T> X = new Matrix<T>(numSamples, _reservoirSize);
@@ -1324,7 +1324,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         int n = matrix.Rows;
         if (n != matrix.Columns)
         {
-            throw new ArgumentException("Matrix must be square.");
+            throw new ArgumentException("Matrix<double> must be square.");
         }
             
         // Create augmented matrix [A|I]

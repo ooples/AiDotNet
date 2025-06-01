@@ -1058,7 +1058,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// <summary>
     /// Sets all trainable parameters of the ConvLSTM layer from a flattened vector.
     /// </summary>
-    /// <param name="parameters">Vector containing all weights and biases to set</param>
+    /// <param name="parameters">Vector<double> containing all weights and biases to set</param>
     /// <remarks>
     /// <para>
     /// This method updates all trainable parameters from a single vector in the following order:

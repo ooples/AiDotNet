@@ -8,8 +8,8 @@ namespace AiDotNet.Ensemble.Strategies;
 /// Base class for combination strategies providing common functionality.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <typeparam name="TInput">The input data type (e.g., Matrix, Tensor, Vector).</typeparam>
-/// <typeparam name="TOutput">The output data type (e.g., Vector, Tensor).</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix<double>, Tensor<double>, Vector<double>).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector<double>, Tensor<double>).</typeparam>
 public abstract class CombinationStrategyBase<T, TInput, TOutput> : ICombinationStrategy<T, TInput, TOutput>
 {
     protected readonly INumericOperations<T> NumOps;

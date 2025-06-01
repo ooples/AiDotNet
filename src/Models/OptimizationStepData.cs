@@ -46,7 +46,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// <summary>
     /// Gets or sets the list of selected feature vectors for this optimization step.
     /// </summary>
-    /// <value>A list of Vector&lt;T&gt; objects representing the selected features.</value>
+    /// <value>A list of Vector<double>&lt;T&gt; objects representing the selected features.</value>
     /// <remarks>
     /// <para>
     /// This property contains a list of feature vectors that were selected for use in this optimization step. Feature 
@@ -257,7 +257,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// <remarks>
     /// <para>
     /// This constructor creates a new OptimizationStepData instance with default values. It initializes the FitnessScore to 
-    /// zero and creates an appropriate model based on the generic type parameters. For Vector models, it uses an empty vector.
+    /// zero and creates an appropriate model based on the generic type parameters. For Vector<double> models, it uses an empty vector.
     /// For Neural Network models, it creates a minimal network architecture. This constructor is useful when creating a new 
     /// optimization step data object before the actual optimization step is performed.
     /// </para>

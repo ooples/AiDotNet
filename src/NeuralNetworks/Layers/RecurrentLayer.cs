@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class RecurrentLayer<T> : LayerBase<T>
 {
     /// <summary>
-    /// Matrix storing the weight parameters for connections between inputs and hidden neurons.
+    /// Matrix<double> storing the weight parameters for connections between inputs and hidden neurons.
     /// </summary>
     /// <remarks>
     /// This matrix has dimensions [hiddenSize, inputSize], where each row represents the weights
@@ -45,7 +45,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     private Matrix<T> _inputWeights;
     
     /// <summary>
-    /// Matrix storing the weight parameters for connections between previous hidden state and current hidden state.
+    /// Matrix<double> storing the weight parameters for connections between previous hidden state and current hidden state.
     /// </summary>
     /// <remarks>
     /// This matrix has dimensions [hiddenSize, hiddenSize], where each row represents the weights
@@ -55,7 +55,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     private Matrix<T> _hiddenWeights;
     
     /// <summary>
-    /// Vector storing the bias parameters for each hidden neuron.
+    /// Vector<double> storing the bias parameters for each hidden neuron.
     /// </summary>
     /// <remarks>
     /// This vector has length hiddenSize, where each element is a constant value added to the

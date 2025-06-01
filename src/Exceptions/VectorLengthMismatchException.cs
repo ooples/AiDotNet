@@ -43,6 +43,6 @@ public class VectorLengthMismatchException : AiDotNetException
 
     private static string FormatMessage(int expectedLength, int actualLength, string component, string operation)
     {
-        return $"Vector length mismatch in {component} during {operation}: Expected length {expectedLength}, but got {actualLength}.";
+        return $"Vector<double> length mismatch in {component} during {operation}: Expected length {expectedLength}, but got {actualLength}.";
     }
 }
