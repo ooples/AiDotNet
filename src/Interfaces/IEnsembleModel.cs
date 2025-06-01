@@ -4,6 +4,8 @@ namespace AiDotNet.Interfaces;
 /// Defines the contract for ensemble models that combine predictions from multiple base models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix, Tensor, Vector).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector, Tensor).</typeparam>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> An ensemble model is like a team of experts working together. Instead of 
@@ -17,7 +19,7 @@ namespace AiDotNet.Interfaces;
 /// include averaging, voting, stacking, and dynamic selection based on the input data.
 /// </para>
 /// </remarks>
-public interface IEnsembleModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+public interface IEnsembleModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets the collection of base models in the ensemble.
@@ -27,7 +29,7 @@ public interface IEnsembleModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// <b>For Beginners:</b> These are the individual "expert" models whose predictions 
     /// will be combined. Each model can be of a different type and trained differently.
     /// </remarks>
-    IReadOnlyList<IFullModel<T, Tensor<T>, Tensor<T>>> BaseModels { get; }
+    IReadOnlyList<IFullModel<T, TInput, TOutput>> BaseModels { get; }
     
     /// <summary>
     /// Gets the combination strategy used to merge predictions.
@@ -38,7 +40,7 @@ public interface IEnsembleModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// models. For example, it might average them, pick the most common answer (voting), 
     /// or use a more sophisticated approach.
     /// </remarks>
-    ICombinationStrategy<T> CombinationStrategy { get; }
+    ICombinationStrategy<T, TInput, TOutput> CombinationStrategy { get; }
     
     /// <summary>
     /// Gets the weights assigned to each base model.
@@ -60,7 +62,7 @@ public interface IEnsembleModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// <b>For Beginners:</b> Use this to add another "expert" to your team. The weight 
     /// determines how much this model's opinion matters compared to others.
     /// </remarks>
-    void AddModel(IFullModel<T, Tensor<T>, Tensor<T>> model, T weight);
+    void AddModel(IFullModel<T, TInput, TOutput> model, T weight);
     
     /// <summary>
     /// Removes a model from the ensemble.
@@ -71,7 +73,7 @@ public interface IEnsembleModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// <b>For Beginners:</b> Sometimes you might want to remove a model that's not 
     /// performing well or is no longer needed.
     /// </remarks>
-    bool RemoveModel(IFullModel<T, Tensor<T>, Tensor<T>> model);
+    bool RemoveModel(IFullModel<T, TInput, TOutput> model);
     
     /// <summary>
     /// Updates the weights of the base models.
@@ -92,5 +94,5 @@ public interface IEnsembleModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// <b>For Beginners:</b> This lets you see what each individual model predicts before 
     /// they're combined. Useful for understanding how the ensemble makes its decision.
     /// </remarks>
-    List<Tensor<T>> GetIndividualPredictions(Tensor<T> input);
+    List<TOutput> GetIndividualPredictions(TInput input);
 }

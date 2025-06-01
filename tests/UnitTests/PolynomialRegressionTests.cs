@@ -1,7 +1,9 @@
 ﻿using AiDotNet.Regression;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace AiDotNetTests.UnitTests;
 
+[TestClass]
 public class PolynomialRegressionTests
 {
     private readonly double[] _inputs = new double[] { 171, 183, 12, 261, 77, 272, 36, 6, 213, 4, 74, 79, 158, 60, 24, 99, 292, 30, 176, 276, 285, 38, 64, 21, 37, 258, 141, 46, 48, 128, 165, 74, 102, 6, 53, 23, 56, 236, 104, 96, 228, 216, 116, 160, 38, 106, };

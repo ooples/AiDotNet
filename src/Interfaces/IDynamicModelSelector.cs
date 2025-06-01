@@ -11,7 +11,7 @@ namespace AiDotNet.Interfaces;
 /// choosing different experts for different types of questions.
 /// </para>
 /// </remarks>
-public interface IModelSelector<T>
+public interface IDynamicModelSelector<T>
 {
     /// <summary>
     /// Selects the best models for a specific input.
@@ -23,7 +23,9 @@ public interface IModelSelector<T>
     /// <b>For Beginners:</b> This looks at the input and decides which models are likely 
     /// to make the best predictions for this specific case.
     /// </remarks>
-    List<int> SelectModelsForInput(Tensor<T> input, IReadOnlyList<IFullModel<T, Tensor<T>, Tensor<T>>> models);
+    List<int> SelectModelsForInput<TInput, TOutput>(TInput input, IReadOnlyList<IFullModel<T, TInput, TOutput>> models)
+        where TInput : notnull
+        where TOutput : notnull;
     
     /// <summary>
     /// Updates the selector's internal state based on prediction performance.
@@ -36,7 +38,9 @@ public interface IModelSelector<T>
     /// <b>For Beginners:</b> This helps the selector learn which models work best for 
     /// different types of inputs by tracking their performance over time.
     /// </remarks>
-    void UpdatePerformance(Tensor<T> input, List<Tensor<T>> predictions, Tensor<T> actual, List<int> modelIndices);
+    void UpdatePerformance<TInput, TOutput>(TInput input, List<TOutput> predictions, TOutput actual, List<int> modelIndices)
+        where TInput : notnull
+        where TOutput : notnull;
     
     /// <summary>
     /// Gets the selection method name.

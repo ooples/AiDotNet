@@ -4,6 +4,8 @@ namespace AiDotNet.Interfaces;
 /// Defines the contract for strategies that combine predictions from multiple models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix, Tensor, Vector).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector, Tensor).</typeparam>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> A combination strategy is the method used to merge predictions 
@@ -18,7 +20,7 @@ namespace AiDotNet.Interfaces;
 /// - Stacking can learn complex combinations
 /// </para>
 /// </remarks>
-public interface ICombinationStrategy<T>
+public interface ICombinationStrategy<T, TInput, TOutput>
 {
     /// <summary>
     /// Combines multiple predictions into a single prediction.
@@ -31,7 +33,7 @@ public interface ICombinationStrategy<T>
     /// them according to the strategy's rules. The weights determine how much each 
     /// prediction contributes to the final result.
     /// </remarks>
-    Tensor<T> Combine(List<Tensor<T>> predictions, Vector<T> weights);
+    TOutput Combine(List<TOutput> predictions, Vector<T> weights);
     
     /// <summary>
     /// Validates if the predictions can be combined using this strategy.
@@ -43,7 +45,7 @@ public interface ICombinationStrategy<T>
     /// types that can be combined. For example, you can't average predictions if they 
     /// have different dimensions.
     /// </remarks>
-    bool CanCombine(List<Tensor<T>> predictions);
+    bool CanCombine(List<TOutput> predictions);
     
     /// <summary>
     /// Gets the name of the combination strategy.

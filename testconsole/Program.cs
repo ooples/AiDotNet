@@ -2,6 +2,7 @@
 using AiDotNetTestConsole.Examples;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
+using TestConsoleApp.Examples;
 
 namespace AiDotNetTestConsole;
 
@@ -47,9 +48,12 @@ class Program
             Console.WriteLine("6. Enhanced Time Series Example (Energy Demand Forecasting)");
             Console.WriteLine("7. Transformer Positional Encoding Techniques Demo");
             Console.WriteLine("8. Reasoning Model Examples (Chain-of-Thought, Self-Consistency)");
+            Console.WriteLine("9. Ensemble Model Example");
+            Console.WriteLine("10. Online Learning Example");
+            Console.WriteLine("11. Transfer Learning Example");
             Console.WriteLine("0. Exit");
             Console.WriteLine();
-            Console.Write("Select an example to run (0-8): ");
+            Console.Write("Select an example to run (0-11): ");
 
             if (int.TryParse(Console.ReadLine(), out int choice))
             {
@@ -112,10 +116,19 @@ class Program
                     RunPositionalEncodingDemo();
                     break;
                 case 8:
-                    ReasoningModelExample.RunAllExamples();
+                    AiDotNet.Examples.ReasoningModelExample.RunAllExamples();
+                    break;
+                case 9:
+                    EnsembleExample.Run();
+                    break;
+                case 10:
+                    OnlineLearningExample.Run();
+                    break;
+                case 11:
+                    AiDotNet.Examples.TransferLearningExample.Main(new string[] { });
                     break;
                 default:
-                    Console.WriteLine($"Invalid choice: {exampleNumber}. Please select a number between 0 and 8.");
+                    Console.WriteLine($"Invalid choice: {exampleNumber}. Please select a number between 0 and 11.");
                     break;
             }
         }
@@ -132,7 +145,7 @@ class Program
         Console.WriteLine(new string('=', 50));
         Console.WriteLine();
 
-        for (int i = 1; i <= 8; i++)
+        for (int i = 1; i <= 11; i++)
         {
             Console.WriteLine($"\n--- Example {i} ---");
             try

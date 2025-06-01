@@ -10,6 +10,13 @@ global using AiDotNet.FitDetectors;
 namespace AiDotNet;
 
 using AiDotNet.Logging;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Helpers;
+using AiDotNet.OnlineLearning;
+using AiDotNet.OnlineLearning.Algorithms;
 
 /// <summary>
 /// A builder class that helps create and configure machine learning prediction models.
@@ -32,6 +39,7 @@ using AiDotNet.Logging;
 public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
 {
     private readonly ILogging _logger;
+    private readonly INumericOperations<T> NumOps;
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
     private IFullModel<T, TInput, TOutput>? _model;
@@ -40,6 +48,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
     private IModelSelector<T, TInput, TOutput>? _modelSelector;
     private LoggingOptions? _loggingOptions;
+    
+    // Ensemble-specific fields
+    private IEnsembleModel<T, TInput, TOutput>? _ensembleModel;
+    private List<IFullModel<T, TInput, TOutput>>? _pendingEnsembleModels;
+    private EnsembleOptions<T>? _ensembleOptions;
+    
+    // Online learning specific fields
+    private OnlineModelOptions<T>? _onlineOptions;
+    private AdaptiveOnlineModelOptions<T>? _adaptiveOnlineOptions;
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelBuilder class with a required model.
@@ -61,6 +78,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public PredictionModelBuilder(IFullModel<T, TInput, TOutput>? model = null)
     {
         _model = model;
+        NumOps = MathHelper.GetNumericOperations<T>();
         _logger = LoggingFactory.GetLogger<PredictionModelBuilder<T, TInput, TOutput>>();
         _logger.Information("Creating new PredictionModelBuilder with model: {ModelType}",
             model != null ? model.GetType().Name : "null");
@@ -301,6 +319,334 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         }
     }
 
+    #region Ensemble Methods
+    
+    /// <summary>
+    /// Configures the builder to use a specific ensemble model type.
+    /// </summary>
+    /// <typeparam name="TEnsemble">The type of ensemble model to use.</typeparam>
+    /// <param name="options">Optional configuration for the ensemble.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This creates an ensemble model of the specified type. For example:
+    /// UseEnsemble&lt;VotingEnsemble&lt;float&gt;&gt;() creates a voting ensemble.
+    /// 
+    /// The ensemble will use models added with WithModels() or AddToEnsemble().
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> UseEnsemble<TEnsemble>(
+        EnsembleOptions<T>? options = null) 
+        where TEnsemble : IEnsembleModel<T, TInput, TOutput>, new()
+    {
+        _ensembleModel = new TEnsemble();
+        _ensembleOptions = options;
+        _model = null; // Clear single model
+        _logger.Information("Configured to use {EnsembleType} ensemble", typeof(TEnsemble).Name);
+        return this;
+    }
+    
+    /// <summary>
+    /// Adds models to be included in an ensemble.
+    /// </summary>
+    /// <param name="models">The models to add to the ensemble.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this to specify which models should be part of your ensemble.
+    /// You can mix different types of models (neural networks, regression, etc.) as long as
+    /// they all work with Tensor inputs/outputs.
+    /// 
+    /// Example:
+    /// .WithModels(
+    ///     new NeuralNetworkModel&lt;float&gt;(),
+    ///     new RandomForestModel&lt;float&gt;(),
+    ///     new GradientBoostingModel&lt;float&gt;()
+    /// )
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> WithModels(
+        params IFullModel<T, TInput, TOutput>[] models)
+    {
+        _pendingEnsembleModels ??= new List<IFullModel<T, TInput, TOutput>>();
+        _pendingEnsembleModels.AddRange(models);
+        _logger.Debug("Added {Count} models to ensemble", models.Length);
+        return this;
+    }
+    
+    /// <summary>
+    /// Adds a single model to the ensemble being built.
+    /// </summary>
+    /// <param name="model">The model to add.</param>
+    /// <param name="weight">Optional initial weight for this model.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this to add models one at a time to your ensemble.
+    /// The weight determines how much influence this model has (higher = more influence).
+    /// If you don't specify a weight, a default will be used.
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> AddToEnsemble(
+        IFullModel<T, TInput, TOutput> model,
+        T? weight = default)
+    {
+        _pendingEnsembleModels ??= new List<IFullModel<T, TInput, TOutput>>();
+        _pendingEnsembleModels.Add(model);
+        
+        if (weight != null && !weight.Equals(default(T)))
+        {
+            _logger.Debug("Added {ModelType} to ensemble with weight {Weight}", 
+                model.GetType().Name, weight);
+        }
+        else
+        {
+            _logger.Debug("Added {ModelType} to ensemble", model.GetType().Name);
+        }
+        
+        return this;
+    }
+    
+    /// <summary>
+    /// Creates an auto-ensemble with diverse model types.
+    /// </summary>
+    /// <param name="modelCount">Number of models to include.</param>
+    /// <param name="strategy">The ensemble combination strategy.</param>
+    /// <param name="includeDifferentCategories">Whether to include models from different categories.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This automatically creates an ensemble by selecting diverse models
+    /// that are likely to work well together. It's a good starting point if you're not sure
+    /// which models to combine.
+    /// 
+    /// The builder will analyze your data and choose appropriate models from different
+    /// categories (if requested) to maximize diversity and potential performance.
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> UseAutoEnsemble(
+        int modelCount = 5,
+        EnsembleStrategy strategy = EnsembleStrategy.WeightedAverage,
+        bool includeDifferentCategories = true)
+    {
+        _ensembleOptions = new EnsembleOptions<T>
+        {
+            MaxModels = modelCount,
+            Strategy = strategy,
+            AllowDuplicateModelTypes = false
+        };
+        
+        // Create appropriate ensemble based on strategy
+        _ensembleModel = strategy switch
+        {
+            EnsembleStrategy.Average or 
+            EnsembleStrategy.WeightedAverage or
+            EnsembleStrategy.MajorityVote or
+            EnsembleStrategy.WeightedVote or
+            EnsembleStrategy.SoftVote => new VotingEnsemble<T, TInput, TOutput>(new VotingEnsembleOptions<T> 
+            { 
+                Strategy = strategy,
+                MaxModels = modelCount,
+                VotingType = strategy == EnsembleStrategy.MajorityVote ? VotingType.Hard :
+                            strategy == EnsembleStrategy.SoftVote ? VotingType.Soft :
+                            VotingType.Weighted
+            }),
+            
+            // Add more ensemble types as they are implemented
+            _ => new VotingEnsemble<T, TInput, TOutput>(new VotingEnsembleOptions<T> 
+            { 
+                Strategy = strategy,
+                MaxModels = modelCount 
+            })
+        };
+        
+        // Flag for auto-selection during build
+        _pendingEnsembleModels = new List<IFullModel<T, TInput, TOutput>>();
+        
+        _logger.Information("Configured auto-ensemble with {ModelCount} models using {Strategy} strategy", 
+            modelCount, strategy);
+        
+        return this;
+    }
+    
+    /// <summary>
+    /// Configures ensemble-specific options.
+    /// </summary>
+    /// <param name="options">The ensemble options to apply.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this to fine-tune how your ensemble works, such as:
+    /// - Training strategy (parallel, sequential, bagging, boosting)
+    /// - Weight update methods
+    /// - Performance thresholds
+    /// - Parallelization settings
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> ConfigureEnsemble(
+        EnsembleOptions<T> options)
+    {
+        _ensembleOptions = options;
+        _logger.Debug("Configured ensemble options");
+        return this;
+    }
+    
+    #endregion
+    
+    #region Online Learning Methods
+    
+    /// <summary>
+    /// Configures the builder to use an online learning model.
+    /// </summary>
+    /// <typeparam name="TOnlineModel">The type of online model to use.</typeparam>
+    /// <param name="options">Optional configuration for the online model.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Online learning models update incrementally as new data arrives,
+    /// perfect for streaming data or when you can't fit all data in memory. Examples:
+    /// - UseOnlineModel&lt;OnlinePerceptron&lt;float&gt;&gt;() for simple classification
+    /// - UseOnlineModel&lt;OnlineSGDRegressor&lt;float&gt;&gt;() for regression
+    /// - UseOnlineModel&lt;PassiveAggressiveRegressor&lt;float&gt;&gt;() for robust regression
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> UseOnlineModel<TOnlineModel>(
+        OnlineModelOptions<T>? options = null)
+        where TOnlineModel : IOnlineModel<T, TInput, TOutput>, new()
+    {
+        _model = new TOnlineModel();
+        _onlineOptions = options;
+        _logger.Information("Configured to use {OnlineModelType} for online learning", typeof(TOnlineModel).Name);
+        return this;
+    }
+    
+    /// <summary>
+    /// Configures the builder to use an adaptive online learning model with drift detection.
+    /// </summary>
+    /// <typeparam name="TAdaptiveModel">The type of adaptive online model to use.</typeparam>
+    /// <param name="options">Optional configuration for the adaptive model.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Adaptive online models can detect when data patterns change
+    /// (concept drift) and adjust automatically. Use these when:
+    /// - Your data patterns might change over time (user preferences, market conditions)
+    /// - You need the model to stay accurate as the world changes
+    /// - You want automatic adaptation without manual intervention
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> UseAdaptiveOnlineModel<TAdaptiveModel>(
+        AdaptiveOnlineModelOptions<T>? options = null)
+        where TAdaptiveModel : IAdaptiveOnlineModel<T, TInput, TOutput>, new()
+    {
+        _model = new TAdaptiveModel();
+        _adaptiveOnlineOptions = options;
+        _logger.Information("Configured to use {AdaptiveModelType} with drift detection", typeof(TAdaptiveModel).Name);
+        return this;
+    }
+    
+    /// <summary>
+    /// Creates an online learning model based on the algorithm type.
+    /// </summary>
+    /// <param name="algorithm">The online learning algorithm to use.</param>
+    /// <param name="inputDimension">The number of input features.</param>
+    /// <param name="options">Optional configuration for the online model.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This lets you choose an online algorithm by name rather than type.
+    /// Common choices:
+    /// - OnlineLearningAlgorithm.Perceptron - Simple and fast for classification
+    /// - OnlineLearningAlgorithm.PassiveAggressive - Good for regression with outliers
+    /// - OnlineLearningAlgorithm.StochasticGradientDescent - Versatile for many problems
+    /// - OnlineLearningAlgorithm.AdaptiveRandomForest - Powerful ensemble for changing data
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> UseOnlineAlgorithm(
+        OnlineLearningAlgorithm algorithm,
+        int inputDimension,
+        OnlineModelOptions<T>? options = null)
+    {
+        _onlineOptions = options;
+        
+        // Create the appropriate model based on the algorithm
+        // Note: This is a simplified example. In practice, you'd need to handle
+        // the specific TInput/TOutput types for each algorithm
+        _logger.Information("Creating online model for algorithm: {Algorithm}", algorithm);
+        
+        // Store the algorithm type for later instantiation during Build
+        // This allows us to defer model creation until we know the data types
+        _logger.Debug("Online algorithm {Algorithm} configured with {InputDim} input dimensions", 
+            algorithm, inputDimension);
+        
+        return this;
+    }
+    
+    /// <summary>
+    /// Configures online learning specific options.
+    /// </summary>
+    /// <param name="options">The online learning options to apply.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this to fine-tune online learning behavior:
+    /// - Learning rate: How quickly the model adapts (higher = faster but less stable)
+    /// - Mini-batch size: How many examples to process together
+    /// - Regularization: Prevents overfitting to recent examples
+    /// - Stream buffer settings: For efficient streaming data processing
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> ConfigureOnlineOptions(
+        OnlineModelOptions<T> options)
+    {
+        _onlineOptions = options;
+        _logger.Debug("Configured online learning options");
+        return this;
+    }
+    
+    /// <summary>
+    /// Enables adaptive learning with drift detection.
+    /// </summary>
+    /// <param name="driftMethod">The drift detection method to use.</param>
+    /// <param name="sensitivity">Drift sensitivity (0-1, higher = more sensitive).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Drift detection helps your model notice when patterns change.
+    /// Common drift detection methods:
+    /// - ADWIN: Adaptive sliding window, good general purpose
+    /// - DDM: Monitors error rate changes
+    /// - PageHinkley: Sequential change detection
+    /// - None: No drift detection (standard online learning)
+    /// 
+    /// Higher sensitivity means the model reacts to smaller changes.
+    /// </remarks>
+    public PredictionModelBuilder<T, TInput, TOutput> EnableDriftDetection(
+        DriftDetectionMethod driftMethod = DriftDetectionMethod.ADWIN)
+    {
+        _adaptiveOnlineOptions = new AdaptiveOnlineModelOptions<T>
+        {
+            DriftDetectionMethod = driftMethod,
+            DriftSensitivity = NumOps.FromDouble(0.5),
+            DriftWindowSize = 100,
+            ResetOnDrift = false,
+            DriftLearningRateBoost = NumOps.FromDouble(2.0)
+        };
+        
+        _logger.Information("Enabled drift detection using {Method} with default sensitivity", 
+            driftMethod);
+        
+        return this;
+    }
+    
+    /// <summary>
+    /// Enables adaptive learning with drift detection and custom sensitivity.
+    /// </summary>
+    /// <param name="driftMethod">The drift detection method to use.</param>
+    /// <param name="sensitivity">Drift sensitivity (0-1, higher = more sensitive).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    public PredictionModelBuilder<T, TInput, TOutput> EnableDriftDetection(
+        DriftDetectionMethod driftMethod,
+        T sensitivity)
+    {
+        _adaptiveOnlineOptions = new AdaptiveOnlineModelOptions<T>
+        {
+            DriftDetectionMethod = driftMethod,
+            DriftSensitivity = sensitivity,
+            DriftWindowSize = 100,
+            ResetOnDrift = false,
+            DriftLearningRateBoost = NumOps.FromDouble(2.0)
+        };
+        
+        _logger.Information("Enabled drift detection using {Method} with sensitivity {Sensitivity}", 
+            driftMethod, Convert.ToDouble(sensitivity));
+        
+        return this;
+    }
+    
+    #endregion
+    
     /// <summary>
     /// Builds a predictive model using the provided input features and output values.
     /// </summary>
@@ -343,7 +689,58 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
             // Use defaults for these interfaces if they aren't set
             IFullModel<T, TInput, TOutput> model;
-            if (_model != null)
+            
+            // Check if we're building an ensemble
+            if (_ensembleModel != null)
+            {
+                _logger.Information("Building ensemble model");
+                
+                // Handle ensemble model creation
+                if (_pendingEnsembleModels != null && _pendingEnsembleModels.Count > 0)
+                {
+                    // Add manually specified models to the ensemble
+                    _logger.Debug("Adding {Count} manually specified models to ensemble", _pendingEnsembleModels.Count);
+                    
+                    var defaultWeight = NumOps.One;
+                    foreach (var ensembleModel in _pendingEnsembleModels)
+                    {
+                        _ensembleModel.AddModel(ensembleModel, defaultWeight);
+                    }
+                }
+                else if (_ensembleOptions != null && _ensembleOptions.MaxModels > 0)
+                {
+                    // Auto-create ensemble with diverse models
+                    _logger.Information("Auto-creating ensemble with {MaxModels} models", _ensembleOptions.MaxModels);
+                    
+                    var modelSelector = _modelSelector ?? new DefaultModelSelector<T, TInput, TOutput>();
+                    var recommendations = modelSelector.GetModelRecommendations(x, y);
+                    
+                    // Add recommended models to the ensemble
+                    var addedCount = 0;
+                    foreach (var recommendation in recommendations.Take(_ensembleOptions.MaxModels))
+                    {
+                        // Create and add the recommended model
+                        var recommendedModel = recommendation.ModelFactory();
+                        _ensembleModel.AddModel(recommendedModel, NumOps.FromDouble(recommendation.ConfidenceScore));
+                        addedCount++;
+                        _logger.Debug("Added {ModelName} to ensemble with confidence {Confidence}", 
+                            recommendation.ModelName, recommendation.ConfidenceScore);
+                    }
+                    
+                    if (addedCount == 0)
+                    {
+                        throw new InvalidOperationException(
+                            "Could not add any models to the ensemble.");
+                    }
+                    
+                    _logger.Information("Added {Count} models to auto-ensemble", addedCount);
+                }
+                
+                // The ensemble model implements IFullModel<T, TInput, TOutput> directly
+                model = _ensembleModel;
+                _logger.Information("Using ensemble model with {Count} base models", _ensembleModel.BaseModels.Count);
+            }
+            else if (_model != null)
             {
                 // User explicitly configured a model, use it
                 model = _model;

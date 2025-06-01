@@ -2111,5 +2111,330 @@ public enum ModelType
     [ModelInfo(ModelCategory.NeuralNetwork,
               new[] { MetricGroups.General },
               "Iterative refinement reasoning model")]
-    IterativeRefinementModel
+    IterativeRefinementModel,
+
+    // Ensemble Model Types
+    
+    /// <summary>
+    /// A custom ensemble model with flexible configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A custom ensemble allows you to combine any types of models (neural networks,
+    /// regression models, time series models, etc.) using various strategies. You have full control over
+    /// which models to include, how to train them, and how to combine their predictions. This flexibility
+    /// lets you create ensembles tailored to your specific problem, potentially achieving better results
+    /// than any single model or pre-defined ensemble type.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Ensemble,
+              new[] { MetricGroups.General },
+              "Custom ensemble with flexible model combination")]
+    CustomEnsemble,
+    
+    /// <summary>
+    /// An ensemble that combines predictions through voting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A voting ensemble is like asking multiple experts for their opinion and going
+    /// with the majority vote (hard voting) or averaging their confidence levels (soft voting). Each model
+    /// in the ensemble makes its prediction independently, and these predictions are combined through voting.
+    /// This simple but effective approach often outperforms individual models because different models may
+    /// capture different patterns in the data, and their errors tend to cancel out when combined.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Ensemble,
+              new[] { MetricGroups.General },
+              "Voting-based ensemble combination")]
+    VotingEnsemble,
+    
+    /// <summary>
+    /// An ensemble using stacking (stacked generalization).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Stacking uses a two-level approach: first, multiple "base" models make predictions,
+    /// then a "meta-learner" model learns how to best combine these predictions. It's like having a team of
+    /// specialists and a manager who knows each specialist's strengths and weaknesses. The meta-learner can
+    /// discover complex relationships between base model predictions, often achieving better performance than
+    /// simple averaging or voting. This is particularly effective when base models have complementary strengths.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Ensemble,
+              new[] { MetricGroups.General },
+              "Stacking ensemble with meta-learner")]
+    StackingEnsemble,
+    
+    /// <summary>
+    /// An ensemble using blending for prediction combination.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Blending is similar to stacking but simpler. Instead of using cross-validation
+    /// to generate base model predictions for training the meta-learner, blending uses a fixed holdout
+    /// validation set. Base models are trained on the training data, make predictions on the validation set,
+    /// and these predictions are used to train a blender model that learns optimal weights. While potentially
+    /// less robust than stacking, blending is faster and easier to implement.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Ensemble,
+              new[] { MetricGroups.General },
+              "Blending ensemble with learned weights")]
+    BlendingEnsemble,
+    
+    /// <summary>
+    /// An ensemble using dynamic model selection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Dynamic selection ensembles choose different models for different inputs based
+    /// on their expected performance. Instead of always using all models or fixed weights, this approach
+    /// analyzes each input and selects the model(s) most likely to perform well for that specific case.
+    /// It's like having different experts for different types of problems and choosing the right expert
+    /// based on the question. This can be more efficient and accurate than using all models for every prediction.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Ensemble,
+              new[] { MetricGroups.General },
+              "Dynamic model selection ensemble")]
+    DynamicSelectionEnsemble,
+    
+    /// <summary>
+    /// A Bayesian model averaging ensemble.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Bayesian Model Averaging (BMA) combines models by considering the probability
+    /// that each model is the "true" model given the data. Instead of picking one best model or using
+    /// fixed weights, BMA accounts for model uncertainty by weighting predictions based on how likely
+    /// each model is to be correct. This provides not just predictions but also measures of uncertainty,
+    /// making it valuable when you need to know how confident to be in the predictions.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Ensemble,
+              new[] { MetricGroups.General },
+              "Bayesian model averaging ensemble")]
+    BayesianAverageEnsemble,
+    
+    /// <summary>
+    /// A mixture of experts ensemble model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixture of Experts divides the problem space into regions and trains different
+    /// "expert" models to specialize in different regions. A gating network learns to route each input to
+    /// the most appropriate expert(s). It's like having specialists for different areas - a heart doctor,
+    /// a brain doctor, etc. - and a triage nurse who decides which specialist to consult based on the
+    /// symptoms. This allows the ensemble to handle complex problems with different characteristics in
+    /// different parts of the input space.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Ensemble,
+              new[] { MetricGroups.General },
+              "Mixture of experts with gating network")]
+    MixtureOfExpertsEnsemble,
+    
+    //
+    // Online Learning Models
+    //
+    
+    /// <summary>
+    /// Online Perceptron for incremental binary classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Online Perceptron is one of the simplest machine learning algorithms that
+    /// learns from one example at a time. It's like a student who updates their understanding after
+    /// each question rather than studying all questions at once. It works well for data that arrives
+    /// in a stream and when you can't store all data in memory. Perfect for simple classification
+    /// tasks where data patterns don't change much over time.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Classification,
+              new[] { MetricGroups.BinaryClassification, MetricGroups.General },
+              "Simple online linear classifier")]
+    OnlinePerceptron,
+    
+    /// <summary>
+    /// Passive-Aggressive algorithm for online learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Passive-Aggressive algorithms are "passive" when they make correct predictions
+    /// (no update needed) but "aggressive" when wrong (large updates to fix the error). It's like a
+    /// student who doesn't change their approach when getting answers right, but makes significant
+    /// adjustments when wrong. This makes it effective for online learning where you want to adapt
+    /// quickly to mistakes while being stable when performing well.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Regression,
+              new[] { MetricGroups.Regression, MetricGroups.BinaryClassification, MetricGroups.General },
+              "Online learning with aggressive updates on errors")]
+    PassiveAggressive,
+    
+    /// <summary>
+    /// Online Stochastic Gradient Descent for various loss functions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Online SGD updates the model after each example using gradient descent.
+    /// Think of it like walking downhill in the fog - you can only see one step at a time, but by
+    /// always stepping in the downward direction, you eventually reach the bottom. It's versatile,
+    /// works with many loss functions, and can adapt to changing data patterns. Great for large-scale
+    /// learning where data arrives continuously.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Regression,
+              new[] { MetricGroups.Regression, MetricGroups.General },
+              "Versatile online optimization algorithm")]
+    OnlineSGD,
+    
+    /// <summary>
+    /// Adaptive online learning model with drift detection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Adaptive Online models can detect when data patterns change (concept drift)
+    /// and adjust accordingly. Imagine learning about weather patterns, but climate change slowly alters
+    /// them - these models notice the change and adapt. They're essential for real-world applications
+    /// where the relationships in data evolve over time, like user preferences, market conditions, or
+    /// sensor readings that degrade.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Regression,
+              new[] { MetricGroups.Regression, MetricGroups.General },
+              "Online learning with automatic drift adaptation")]
+    AdaptiveOnline,
+    
+    /// <summary>
+    /// Online Support Vector Machine for streaming data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Online SVM adapts the powerful Support Vector Machine algorithm for streaming
+    /// data. It learns a decision boundary by finding support vectors - the most important examples that
+    /// define the separation between classes. Like a security system that remembers only the most suspicious
+    /// and most trustworthy cases to make future decisions. Can use kernel functions for non-linear boundaries.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Classification,
+              new[] { MetricGroups.BinaryClassification, MetricGroups.General },
+              "Online maximum margin classifier")]
+    OnlineSVM,
+    
+    /// <summary>
+    /// Adaptive Regularization of Weights (AROW) for online learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AROW maintains confidence in each feature weight - it's more cautious about
+    /// updating weights it's uncertain about and more aggressive with weights it's confident in. Like a
+    /// student who studies harder on topics they're unsure about while maintaining what they know well.
+    /// Particularly effective when features have different scales or importance.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Classification,
+              new[] { MetricGroups.BinaryClassification, MetricGroups.General },
+              "Confidence-aware online classifier")]
+    AROW,
+    
+    /// <summary>
+    /// Confidence-Weighted learning for online classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Confidence-Weighted learning maintains a probability distribution over possible
+    /// model parameters, updating more aggressively when predictions are uncertain. It's like a weather
+    /// forecaster who adjusts predictions more when they're less sure about the forecast. This leads to
+    /// faster learning on easy examples while being cautious on difficult ones.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Classification,
+              new[] { MetricGroups.BinaryClassification, MetricGroups.General },
+              "Probabilistic online classifier with confidence bounds")]
+    ConfidenceWeighted,
+    
+    /// <summary>
+    /// Online Random Forest for streaming data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Online Random Forest adapts the powerful Random Forest algorithm for streaming
+    /// data. It maintains a forest of decision trees that can grow and adapt as new data arrives. Some
+    /// trees might be replaced when they become outdated. It's like having a council of advisors where
+    /// you can replace members who give outdated advice with new ones who understand current trends.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Ensemble,
+              new[] { MetricGroups.Regression, MetricGroups.BinaryClassification, MetricGroups.General },
+              "Ensemble of online decision trees")]
+    OnlineRandomForest,
+    
+    /// <summary>
+    /// Hoeffding Tree (Very Fast Decision Tree) for streaming data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hoeffding Trees build decision trees incrementally using statistical bounds
+    /// to decide when enough data has been seen to make a split. It's like building a flowchart one
+    /// decision at a time, but only adding a new decision when you're statistically confident it's the
+    /// right choice. This ensures the tree built from streaming data is very similar to one built from
+    /// all data at once.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Classification,
+              new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification, MetricGroups.General },
+              "Incremental decision tree with statistical guarantees")]
+    HoeffdingTree,
+    
+    /// <summary>
+    /// Online Bagging (Bootstrap Aggregating) for streaming data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Online Bagging creates multiple copies of a learning algorithm and trains
+    /// each one on slightly different versions of the data stream. It's like having multiple students
+    /// learn from the same teacher, but each student randomly decides when to pay attention. When making
+    /// predictions, all students vote, making the final answer more reliable than any single student.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Ensemble,
+              new[] { MetricGroups.Regression, MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification, MetricGroups.General },
+              "Online bootstrap aggregating ensemble")]
+    OnlineBagging,
+    
+    /// <summary>
+    /// Follow-The-Regularized-Leader (FTRL) for online learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FTRL is like a smart investor who learns from past mistakes while being
+    /// careful not to overreact to any single piece of information. It's particularly good at handling
+    /// sparse data (lots of zeros) and is widely used in online advertising to predict click-through rates.
+    /// FTRL automatically identifies which features are important and ignores the rest, making it efficient
+    /// for high-dimensional problems.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Classification,
+              new[] { MetricGroups.BinaryClassification, MetricGroups.General },
+              "Sparse online learning with per-coordinate learning rates")]
+    FTRL,
+    
+    /// <summary>
+    /// Online Naive Bayes classifier for streaming data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Online Naive Bayes is like a detective who assumes all clues are independent.
+    /// Despite this "naive" assumption, it works surprisingly well. It learns incrementally, updating its
+    /// beliefs about each feature as new examples arrive. It can handle both continuous data (like temperatures)
+    /// using Gaussian distributions, or discrete data (like word counts) using multinomial distributions.
+    /// It's especially good for text classification and spam filtering.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Classification,
+              new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification, MetricGroups.General },
+              "Probabilistic classifier with feature independence assumption")]
+    OnlineNaiveBayes
 }
