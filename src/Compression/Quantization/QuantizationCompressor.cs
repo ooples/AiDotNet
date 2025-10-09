@@ -27,14 +27,16 @@ using System.Linq;
 /// This is one of the most widely used compression techniques due to its simplicity and effectiveness.
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
 /// <typeparam name="TModel">The type of model to compress.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public class QuantizationCompressor<TModel, TInput, TOutput> : 
-    ModelCompressorBase<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public class QuantizationCompressor<T, TModel, TInput, TOutput> :
+    ModelCompressorBase<T, TModel, TInput, TOutput>
+    where T : unmanaged
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
-    private readonly QuantizationMethod _method;
+    private readonly QuantizationMethod _method = default!;
     private readonly bool _useCalibration;
     private readonly double _calibrationPercentile;
 
@@ -171,7 +173,7 @@ public class QuantizationCompressor<TModel, TInput, TOutput> :
         }
 
         // Check if model is quantized
-        if (!(model is IQuantizedModel<double, TInput, TOutput> quantizedModel))
+        if (!(model is IQuantizedModel<T, TInput, TOutput> quantizedModel))
         {
             throw new ArgumentException(
                 $"Model of type {model.GetType().Name} is not a quantized model. " +
@@ -335,7 +337,7 @@ public class QuantizationCompressor<TModel, TInput, TOutput> :
     protected override IModelCompressor<TModel, TInput, TOutput> CreateCompressorWithOptions(ModelCompressionOptions options)
     {
         // Create a new quantization compressor with the same configuration but new options
-        return new QuantizationCompressor<TModel, TInput, TOutput>(
+        return new QuantizationCompressor<T, TModel, TInput, TOutput>(
             _method,
             _useCalibration,
             _calibrationPercentile);
@@ -368,18 +370,19 @@ public class QuantizationCompressor<TModel, TInput, TOutput> :
         base.PopulateAdditionalMetrics(metrics, originalModel, compressedModel);
 
         // Add quantization-specific metrics
-        if (compressedModel is IQuantizedModel<double, TInput, TOutput> quantizedModel)
+        if (compressedModel is IQuantizedModel<T, TInput, TOutput> quantizedModel)
         {
             metrics["QuantizationBitWidth"] = quantizedModel.QuantizationBitWidth;
             metrics["QuantizationMethod"] = _method.ToString();
             metrics["UseMixedPrecision"] = quantizedModel.UseMixedPrecision;
 
             // Add weight distribution statistics if available
-            if (quantizedModel.WeightDistributionStatistics != null)
+            var weightStats = quantizedModel.WeightDistributionStatistics;
+            if (weightStats != null)
             {
-                metrics["OriginalWeightRange"] = quantizedModel.WeightDistributionStatistics.OriginalRange;
-                metrics["QuantizedWeightRange"] = quantizedModel.WeightDistributionStatistics.QuantizedRange;
-                metrics["ClippedOutliersPercentage"] = quantizedModel.WeightDistributionStatistics.ClippedOutliersPercentage;
+                metrics["OriginalWeightRange"] = weightStats.OriginalRange;
+                metrics["QuantizedWeightRange"] = weightStats.QuantizedRange;
+                metrics["ClippedOutliersPercentage"] = weightStats.ClippedOutliersPercentage;
             }
         }
     }
@@ -796,14 +799,14 @@ public class QuantizationCompressor<TModel, TInput, TOutput> :
         // of the model. In reality, this would require specific implementations for each
         // supported model type.
         
-        if (originalModel is IQuantizableModel<TModel, TInput, TOutput> quantizableModel)
+        if (originalModel is IQuantizableModel<T, TModel, TInput, TOutput> quantizableModel)
         {
             return quantizableModel.CreateQuantizedVersion(quantizedParameters);
         }
-        
+
         throw new NotSupportedException(
             $"Quantized model creation not supported for model type {originalModel.GetType().Name}. " +
-            "Implement IQuantizableModel<TModel, TInput, TOutput> for this model type.");
+            "Implement IQuantizableModel<T, TModel, TInput, TOutput> for this model type.");
     }
 
     /// <summary>
@@ -837,14 +840,14 @@ public class QuantizationCompressor<TModel, TInput, TOutput> :
         // This implementation depends on the specific model type.
         // For demonstration, we'll assume there's a factory method or constructor
         // that can create a model from the serialized data.
-        
+
         // In a real implementation, this would use model-specific deserialization.
-        var factory = QuantizedModelFactoryRegistry.GetFactory<TModel, TInput, TOutput>();
+        var factory = QuantizedModelFactoryRegistry.GetFactory<T, TModel, TInput, TOutput>();
         if (factory != null)
         {
             return factory.DeserializeQuantizedModel(reader, method, bitWidth, useMixedPrecision);
         }
-        
+
         throw new NotSupportedException(
             $"Quantized model deserialization not supported for model type TModel. " +
             "Register a factory for this model type with QuantizedModelFactoryRegistry.");
@@ -892,11 +895,13 @@ public class QuantizationCompressor<TModel, TInput, TOutput> :
 /// - Create a new version of themselves that uses quantized parameters
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <typeparam name="TModel">The type of the model.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public interface IQuantizableModel<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public interface IQuantizableModel<T, TModel, TInput, TOutput>
+    where T : unmanaged
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Creates a quantized version of this model.
@@ -1301,6 +1306,7 @@ public static class QuantizedModelFactoryRegistry
     /// <summary>
     /// Registers a factory for a specific model type.
     /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
     /// <typeparam name="TModel">The type of model.</typeparam>
     /// <typeparam name="TInput">The input type for the model.</typeparam>
     /// <typeparam name="TOutput">The output type for the model.</typeparam>
@@ -1310,16 +1316,17 @@ public static class QuantizedModelFactoryRegistry
     /// This method registers a factory that can create quantized models of the specified type.
     /// </para>
     /// <para><b>For Beginners:</b> This adds a new model type to the registry.
-    /// 
+    ///
     /// When adding support for a new model type:
     /// 1. Create a factory that knows how to deserialize that model type
     /// 2. Register it using this method
     /// 3. The quantization system can now work with that model type
     /// </para>
     /// </remarks>
-    public static void RegisterFactory<TModel, TInput, TOutput>(
-        IQuantizedModelFactory<TModel, TInput, TOutput> factory)
-        where TModel : class, IFullModel<double, TInput, TOutput>
+    public static void RegisterFactory<T, TModel, TInput, TOutput>(
+        IQuantizedModelFactory<T, TModel, TInput, TOutput> factory)
+        where T : unmanaged
+        where TModel : class, IFullModel<T, TInput, TOutput>
     {
         _factories[typeof(TModel)] = factory;
     }
@@ -1327,6 +1334,7 @@ public static class QuantizedModelFactoryRegistry
     /// <summary>
     /// Gets a factory for a specific model type.
     /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
     /// <typeparam name="TModel">The type of model.</typeparam>
     /// <typeparam name="TInput">The input type for the model.</typeparam>
     /// <typeparam name="TOutput">The output type for the model.</typeparam>
@@ -1336,19 +1344,20 @@ public static class QuantizedModelFactoryRegistry
     /// This method retrieves a factory that can create quantized models of the specified type.
     /// </para>
     /// <para><b>For Beginners:</b> This finds the right factory for a model type.
-    /// 
+    ///
     /// When deserializing a model:
     /// 1. We need to know how to create that specific model type
     /// 2. This method finds the factory that knows how to do that
     /// 3. The factory then handles the model-specific deserialization
     /// </para>
     /// </remarks>
-    public static IQuantizedModelFactory<TModel, TInput, TOutput>? GetFactory<TModel, TInput, TOutput>()
-        where TModel : class, IFullModel<double, TInput, TOutput>
+    public static IQuantizedModelFactory<T, TModel, TInput, TOutput>? GetFactory<T, TModel, TInput, TOutput>()
+        where T : unmanaged
+        where TModel : class, IFullModel<T, TInput, TOutput>
     {
         if (_factories.TryGetValue(typeof(TModel), out var factory))
         {
-            return (IQuantizedModelFactory<TModel, TInput, TOutput>)factory;
+            return (IQuantizedModelFactory<T, TModel, TInput, TOutput>)factory;
         }
         
         return null;
@@ -1370,11 +1379,13 @@ public static class QuantizedModelFactoryRegistry
 /// - How to set up any model-specific structures or parameters
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <typeparam name="TModel">The type of model.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public interface IQuantizedModelFactory<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public interface IQuantizedModelFactory<T, TModel, TInput, TOutput>
+    where T : unmanaged
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Deserializes a quantized model from a binary reader.

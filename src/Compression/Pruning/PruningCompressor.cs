@@ -27,17 +27,19 @@ using System.Linq;
 /// Pruning is especially effective for overparameterized models (models with more parameters than needed).
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
 /// <typeparam name="TModel">The type of model to compress.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public class PruningCompressor<TModel, TInput, TOutput> : 
-    ModelCompressorBase<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public class PruningCompressor<T, TModel, TInput, TOutput> :
+    ModelCompressorBase<T, TModel, TInput, TOutput>
+    where T : unmanaged
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// The pruning method to use for compression.
     /// </summary>
-    private readonly PruningMethod _pruningMethod;
+    private readonly PruningMethod _pruningMethod = default!;
     
     /// <summary>
     /// Whether to apply structured or unstructured pruning.
@@ -47,7 +49,7 @@ public class PruningCompressor<TModel, TInput, TOutput> :
     /// <summary>
     /// The pruning schedule to use (how pruning is applied over iterations).
     /// </summary>
-    private readonly PruningSchedule _pruningSchedule;
+    private readonly PruningSchedule _pruningSchedule = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="PruningCompressor{TModel, TInput, TOutput}"/> class.
@@ -183,7 +185,7 @@ public class PruningCompressor<TModel, TInput, TOutput> :
         }
 
         // Check if model is pruned
-        if (!(model is IPrunedModel<double, TInput, TOutput> prunedModel))
+        if (!(model is IPrunedModel<T, TInput, TOutput> prunedModel))
         {
             throw new ArgumentException(
                 $"Model of type {model.GetType().Name} is not a pruned model. " +
@@ -354,8 +356,8 @@ public class PruningCompressor<TModel, TInput, TOutput> :
     protected override IModelCompressor<TModel, TInput, TOutput> CreateCompressorWithOptions(ModelCompressionOptions options)
     {
         // Create a new pruning compressor with the same configuration but new options
-        return new PruningCompressor<TModel, TInput, TOutput>(
-            _pruningMethod, 
+        return new PruningCompressor<T, TModel, TInput, TOutput>(
+            _pruningMethod,
             _structuredPruning,
             _pruningSchedule);
     }
@@ -387,7 +389,7 @@ public class PruningCompressor<TModel, TInput, TOutput> :
         base.PopulateAdditionalMetrics(metrics, originalModel, compressedModel);
 
         // Add pruning-specific metrics
-        if (compressedModel is IPrunedModel<double, TInput, TOutput> prunedModel)
+        if (compressedModel is IPrunedModel<T, TInput, TOutput> prunedModel)
         {
             metrics["SparsityLevel"] = prunedModel.SparsityLevel;
             metrics["PruningMethod"] = _pruningMethod.ToString();
@@ -395,10 +397,11 @@ public class PruningCompressor<TModel, TInput, TOutput> :
             metrics["PruningSchedule"] = _pruningSchedule.ToString();
 
             // Add layer-wise sparsity information if available
-            if (prunedModel.LayerSparsityLevels != null)
+            var layerSparsityLevels = prunedModel.LayerSparsityLevels;
+            if (layerSparsityLevels != null)
             {
                 var layerSparsity = new Dictionary<string, double>();
-                foreach (var layer in prunedModel.LayerSparsityLevels)
+                foreach (var layer in layerSparsityLevels)
                 {
                     layerSparsity[layer.Key] = layer.Value;
                 }
@@ -652,16 +655,16 @@ public class PruningCompressor<TModel, TInput, TOutput> :
         // This implementation depends on the specific model type.
         // In reality, this would require specific implementations for each
         // supported model type.
-        
+
         // For demonstration, we'll assume there's a way to create a pruned model
-        if (originalModel is IPrunableModel<TModel, TInput, TOutput> prunableModel)
+        if (originalModel is IPrunableModel<T, TModel, TInput, TOutput> prunableModel)
         {
             return prunableModel.CreatePrunedVersion(prunedParameters);
         }
-        
+
         throw new NotSupportedException(
             $"Pruned model creation not supported for model type {originalModel.GetType().Name}. " +
-            "Implement IPrunableModel<TModel, TInput, TOutput> for this model type.");
+            "Implement IPrunableModel<T, TModel, TInput, TOutput> for this model type.");
     }
 
     /// <summary>
@@ -699,7 +702,7 @@ public class PruningCompressor<TModel, TInput, TOutput> :
         // create a model from the serialized data.
         
         // In a real implementation, this would use model-specific deserialization.
-        var factory = PrunedModelFactoryRegistry.GetFactory<TModel, TInput, TOutput>();
+        var factory = PrunedModelFactoryRegistry.GetFactory<T, TModel, TInput, TOutput>();
         if (factory != null)
         {
             return factory.DeserializePrunedModel(reader, method, structuredPruning, schedule, sparsityLevel);
@@ -752,11 +755,13 @@ public class PruningCompressor<TModel, TInput, TOutput> :
 /// - Create a new version of themselves that uses sparse parameters
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <typeparam name="TModel">The type of the model.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public interface IPrunableModel<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public interface IPrunableModel<T, TModel, TInput, TOutput>
+    where T : unmanaged
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Creates a pruned version of this model.
@@ -1137,9 +1142,10 @@ public static class PrunedModelFactoryRegistry
     /// 3. The pruning system can now work with that model type
     /// </para>
     /// </remarks>
-    public static void RegisterFactory<TModel, TInput, TOutput>(
-        IPrunedModelFactory<TModel, TInput, TOutput> factory)
-        where TModel : class, IFullModel<double, TInput, TOutput>
+    public static void RegisterFactory<T, TModel, TInput, TOutput>(
+        IPrunedModelFactory<T, TModel, TInput, TOutput> factory)
+        where T : unmanaged
+        where TModel : class, IFullModel<T, TInput, TOutput>
     {
         _factories[typeof(TModel)] = factory;
     }
@@ -1163,14 +1169,15 @@ public static class PrunedModelFactoryRegistry
     /// 3. The factory then handles the model-specific deserialization
     /// </para>
     /// </remarks>
-    public static IPrunedModelFactory<TModel, TInput, TOutput>? GetFactory<TModel, TInput, TOutput>()
-        where TModel : class, IFullModel<double, TInput, TOutput>
+    public static IPrunedModelFactory<T, TModel, TInput, TOutput>? GetFactory<T, TModel, TInput, TOutput>()
+        where T : unmanaged
+        where TModel : class, IFullModel<T, TInput, TOutput>
     {
         if (_factories.TryGetValue(typeof(TModel), out var factory))
         {
-            return (IPrunedModelFactory<TModel, TInput, TOutput>)factory;
+            return (IPrunedModelFactory<T, TModel, TInput, TOutput>)factory;
         }
-        
+
         return null;
     }
 }
@@ -1190,11 +1197,13 @@ public static class PrunedModelFactoryRegistry
 /// - How to set up the sparse matrices and structures
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <typeparam name="TModel">The type of model.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public interface IPrunedModelFactory<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public interface IPrunedModelFactory<T, TModel, TInput, TOutput>
+    where T : unmanaged
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Deserializes a pruned model from a binary reader.
