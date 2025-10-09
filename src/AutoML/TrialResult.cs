@@ -20,6 +20,15 @@ namespace AiDotNet.AutoML
         public Dictionary<string, object> Parameters { get; set; } = new();
 
         /// <summary>
+        /// Gets or sets the hyperparameters used in this trial (alias for Parameters for backward compatibility)
+        /// </summary>
+        public Dictionary<string, object> Hyperparameters
+        {
+            get => Parameters;
+            set => Parameters = value;
+        }
+
+        /// <summary>
         /// Gets or sets the score achieved in this trial
         /// </summary>
         public double Score { get; set; }

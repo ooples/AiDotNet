@@ -21,22 +21,45 @@
 public enum LayerType
 {
     /// <summary>
+    /// Input layer that receives the initial data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Input layer is the entry point for data into a neural network.
+    /// It defines the shape and format of the data that the network will process.
+    /// </para>
+    /// </remarks>
+    Input,
+
+    /// <summary>
+    /// Output layer that produces the final predictions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Output layer is the final layer that produces the network's predictions.
+    /// It uses an appropriate activation function based on the task (e.g., softmax for classification,
+    /// linear for regression).
+    /// </para>
+    /// </remarks>
+    Output,
+
+    /// <summary>
     /// A layer that reduces the spatial dimensions of data by combining nearby values.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Pooling layers work like summarizers - they take a group of nearby values 
+    /// <b>For Beginners:</b> Pooling layers work like summarizers - they take a group of nearby values
     /// and combine them into a single value, making the data smaller and more manageable.
-    /// 
+    ///
     /// Think of it as:
     /// - Looking at a detailed image through a window that only shows the brightest pixel in each area
     /// - Zooming out on a photo to see the general shapes rather than every detail
     /// - Summarizing a paragraph of text with a single sentence
-    /// 
+    ///
     /// Common pooling operations include:
     /// - Max pooling: keeping only the maximum value in each region
     /// - Average pooling: taking the average of all values in each region
-    /// 
+    ///
     /// Benefits of pooling:
     /// - Reduces computation by making data smaller
     /// - Makes the network less sensitive to exact positions of features
@@ -77,19 +100,19 @@ public enum LayerType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Fully Connected layers (also called Dense layers) connect every input to every output, 
+    /// <b>For Beginners:</b> Fully Connected layers (also called Dense layers) connect every input to every output,
     /// allowing the network to combine all available information to make decisions.
-    /// 
+    ///
     /// Think of it as:
     /// - A voting system where every piece of evidence gets to influence the final decision
     /// - A committee where everyone listens to all information before making a judgment
     /// - The "thinking" part of the network that combines all the features detected by earlier layers
-    /// 
+    ///
     /// How it works:
     /// - Each neuron receives input from all neurons in the previous layer
     /// - Each connection has a weight that strengthens or weakens that particular influence
     /// - The network learns which connections are important by adjusting these weights
-    /// 
+    ///
     /// Fully Connected layers are typically used:
     /// - Near the end of a neural network
     /// - To combine features extracted by earlier layers
@@ -97,5 +120,93 @@ public enum LayerType
     /// - When all input features might be relevant to all outputs
     /// </para>
     /// </remarks>
-    FullyConnected
+    FullyConnected,
+
+    /// <summary>
+    /// A densely connected layer where each neuron connects to all neurons in the previous layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Dense layers (also known as Fully Connected layers) are the basic building blocks
+    /// of neural networks where every input connects to every output neuron.
+    /// </para>
+    /// </remarks>
+    Dense,
+
+    /// <summary>
+    /// Long Short-Term Memory layer for processing sequential data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> LSTM layers are specialized for learning patterns in sequential data like
+    /// text or time series, with memory cells that can remember important information over long sequences.
+    /// </para>
+    /// </remarks>
+    LSTM,
+
+    /// <summary>
+    /// Gated Recurrent Unit layer for processing sequential data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GRU layers are similar to LSTM but simpler, used for sequential data
+    /// processing with fewer parameters while maintaining good performance.
+    /// </para>
+    /// </remarks>
+    GRU,
+
+    /// <summary>
+    /// Dropout layer that randomly drops neurons during training to prevent overfitting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Dropout layers randomly ignore some neurons during training, which helps
+    /// prevent the model from memorizing the training data and improves generalization.
+    /// </para>
+    /// </remarks>
+    Dropout,
+
+    /// <summary>
+    /// Batch Normalization layer that normalizes inputs to improve training stability.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Batch Normalization layers normalize the inputs to each layer, which
+    /// speeds up training and makes the network more stable and less sensitive to initialization.
+    /// </para>
+    /// </remarks>
+    BatchNormalization,
+
+    /// <summary>
+    /// Max Pooling layer that takes the maximum value from each region.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Max Pooling layers reduce data size by keeping only the maximum value
+    /// from each region, preserving the strongest features while reducing computation.
+    /// </para>
+    /// </remarks>
+    MaxPooling,
+
+    /// <summary>
+    /// Average Pooling layer that takes the average value from each region.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Average Pooling layers reduce data size by computing the average of each region,
+    /// providing a smoother down-sampling compared to max pooling.
+    /// </para>
+    /// </remarks>
+    AveragePooling,
+
+    /// <summary>
+    /// Custom layer type for user-defined or specialized layer implementations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Custom layers allow you to implement specialized functionality
+    /// that isn't covered by the standard layer types.
+    /// </para>
+    /// </remarks>
+    Custom
 }

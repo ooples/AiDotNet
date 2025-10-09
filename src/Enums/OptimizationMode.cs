@@ -22,5 +22,15 @@ public enum OptimizationMode
     /// <summary>
     /// Optimize both feature selection and model parameters.
     /// </summary>
-    Both
+    Both,
+
+    /// <summary>
+    /// Optimize for maximum accuracy of predictions.
+    /// </summary>
+    Accuracy,
+
+    /// <summary>
+    /// Optimize for a balance between multiple objectives (e.g., accuracy, speed, size).
+    /// </summary>
+    Balanced
 }
