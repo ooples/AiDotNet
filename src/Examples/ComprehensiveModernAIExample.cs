@@ -1,13 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using AiDotNet.Pipeline;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.DiffusionModels;
 using AiDotNet.AutoML;
+using AiDotNet.Deployment;
 using AiDotNet.Deployment.Techniques;
+using AiDotNet.Deployment.EdgeOptimizers;
 
 namespace AiDotNet.Examples
 {
@@ -50,7 +56,7 @@ namespace AiDotNet.Examples
         /// <summary>
         /// Example 1: Fluent Pipeline API for end-to-end ML workflow
         /// </summary>
-        private static async Task RunFluentPipelineExample()
+        private static Task RunFluentPipelineExample()
         {
             Console.WriteLine("\n--- Example 1: Fluent Pipeline API ---");
 
@@ -96,22 +102,33 @@ namespace AiDotNet.Examples
                 .Build();
 
             // Run the pipeline
-            var result = await pipeline.RunAsync();
-            
-            Console.WriteLine($"Pipeline completed: {result.Success}");
-            Console.WriteLine($"Model accuracy: {result.Metrics["Accuracy"]:F4}");
-            Console.WriteLine($"Deployment endpoint: {result.DeploymentInfo?.Endpoint}");
+            Console.WriteLine("Pipeline would be executed here (commented out to prevent file I/O)");
+            Console.WriteLine("Pipeline configured successfully");
+            // var result = await pipeline.RunAsync();
+            // Console.WriteLine($"Pipeline completed: {result.Success}");
+            // Console.WriteLine($"Model accuracy: {result.Metrics["Accuracy"]:F4}");
+            // Console.WriteLine($"Deployment endpoint: {result.DeploymentInfo?.Endpoint}");
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
         /// Example 2: Vision Transformer for image classification
         /// </summary>
-        private static async Task RunVisionTransformerExample()
+        private static Task RunVisionTransformerExample()
         {
             Console.WriteLine("\n--- Example 2: Vision Transformer ---");
 
+            // Create architecture for Vision Transformer
+            var vitArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 3, 224, 224 },
+                outputShape: new[] { 1000 },
+                taskType: NeuralNetworkTaskType.ImageClassification
+            );
+
             // Create Vision Transformer
             var vit = new VisionTransformer(
+                architecture: vitArchitecture,
                 imageSize: 224,
                 patchSize: 16,
                 embedDim: 768,
@@ -133,6 +150,8 @@ namespace AiDotNet.Examples
             // Extract features from intermediate layer
             var features = vit.ExtractFeatures(images, layerIndex: 6);
             Console.WriteLine($"Features from layer 6 shape: [{string.Join(", ", features.Shape)}]");
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -144,7 +163,13 @@ namespace AiDotNet.Examples
 
             // 1. Standard DDPM (Denoising Diffusion Probabilistic Model)
             Console.WriteLine("\n3.1 Standard DDPM:");
+            var ddpmArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 3, 64, 64 },
+                outputShape: new[] { 3, 64, 64 },
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
             var ddpm = new DiffusionModel(
+                architecture: ddpmArchitecture,
                 timesteps: 1000,
                 betaStart: 0.0001,
                 betaEnd: 0.02
@@ -209,7 +234,13 @@ namespace AiDotNet.Examples
             // 4. Score-based SDE
             Console.WriteLine("\n3.4 Score-based SDE:");
             var scoreNetwork = CreateScoreNetwork();
+            var scoreSdeArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 3, 64, 64 },
+                outputShape: new[] { 3, 64, 64 },
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
             var scoreSDE = new ScoreSDE(
+                architecture: scoreSdeArchitecture,
                 scoreNetwork: scoreNetwork,
                 sdeType: ScoreSDE.SDEType.VP,  // Variance Preserving
                 beta0: 0.1,
@@ -233,7 +264,13 @@ namespace AiDotNet.Examples
             // 5. Consistency Model (Single-step generation)
             Console.WriteLine("\n3.5 Consistency Model:");
             var consistencyFunction = CreateConsistencyFunction();
+            var consistencyArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 3, 64, 64 },
+                outputShape: new[] { 3, 64, 64 },
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
             var consistency = new ConsistencyModel(
+                architecture: consistencyArchitecture,
                 consistencyFunction: consistencyFunction,
                 sigmaMin: 0.002,
                 sigmaMax: 80.0,
@@ -259,7 +296,13 @@ namespace AiDotNet.Examples
             // 6. Flow Matching / Rectified Flow
             Console.WriteLine("\n3.6 Flow Matching Model:");
             var velocityNetwork = CreateVelocityNetwork();
+            var flowMatchingArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 3, 64, 64 },
+                outputShape: new[] { 3, 64, 64 },
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
             var flowMatching = new FlowMatchingModel(
+                architecture: flowMatchingArchitecture,
                 velocityNetwork: velocityNetwork,
                 flowType: FlowMatchingModel.FlowType.Rectified,
                 sigma: 0.01
@@ -278,7 +321,7 @@ namespace AiDotNet.Examples
             var trainingData = new Tensor<double>(new[] { 100, 3, 64, 64 });
             FillWithRandomData(trainingData);
 
-            var optimizer = new AdamOptimizer(learningRate: 0.0001);
+            var optimizer = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(learningRate: 0.0001);
             for (int epoch = 0; epoch < 3; epoch++)
             {
                 var loss = await Task.Run(() => ddpm.TrainStep(trainingData, optimizer));
@@ -293,7 +336,7 @@ namespace AiDotNet.Examples
         {
             Console.WriteLine("\n--- Example 4: Neural Architecture Search ---");
 
-            var nas = new NeuralArchitectureSearch(
+            var nas = new NeuralArchitectureSearch<double>(
                 strategy: NeuralArchitectureSearchStrategy.EvolutionarySearch,
                 maxLayers: 8,
                 populationSize: 20,
@@ -370,14 +413,19 @@ namespace AiDotNet.Examples
             Console.WriteLine("\n--- Example 6: Model Deployment with Quantization ---");
 
             // Create a sample neural network
-            var model = new NeuralNetwork();
+            var deploymentArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 784 },
+                outputShape: new[] { 10 },
+                taskType: NeuralNetworkTaskType.Classification
+            );
+            var model = new NeuralNetwork<double>(deploymentArchitecture);
             model.AddLayer(LayerType.Dense, 784, ActivationFunction.ReLU);
             model.AddLayer(LayerType.Dense, 256, ActivationFunction.ReLU);
             model.AddLayer(LayerType.Dense, 128, ActivationFunction.ReLU);
             model.AddLayer(LayerType.Dense, 10, ActivationFunction.Softmax);
 
             // Quantize the model
-            var quantizer = new ModelQuantizer(new QuantizationConfig
+            var quantizer = new ModelQuantizer<double, Tensor<double>, Tensor<double>>(new QuantizationConfig
             {
                 DefaultStrategy = "int8",
                 ValidateAccuracy = true,
@@ -400,8 +448,8 @@ namespace AiDotNet.Examples
             Console.WriteLine("Model quantized successfully!");
 
             // Deploy to edge device
-            var edgeOptimizer = new MobileOptimizer();
-            var optimizedModel = await edgeOptimizer.OptimizeAsync(quantizedModel);
+            var edgeOptimizer = new MobileOptimizer<Tensor<double>, Tensor<double>, ModelMetaData<double>>();
+            var optimizedModel = await edgeOptimizer.OptimizeAsync(quantizedModel, new OptimizationOptions());
             Console.WriteLine("Model optimized for mobile deployment!");
         }
 
@@ -430,27 +478,34 @@ namespace AiDotNet.Examples
         /// <summary>
         /// Example 8: Multimodal AI (text + image)
         /// </summary>
-        private static async Task RunMultimodalExample()
+        private static Task RunMultimodalExample()
         {
             Console.WriteLine("\n--- Example 8: Multimodal AI ---");
 
             Console.WriteLine("Creating multimodal model for image captioning...");
-            
+
             // Simulate multimodal processing
             var imageShape = new[] { 1, 3, 224, 224 };
             var textShape = new[] { 1, 20 }; // 20 tokens
-            
+
             Console.WriteLine($"Image encoder input: [{string.Join(", ", imageShape)}]");
             Console.WriteLine($"Text encoder input: [{string.Join(", ", textShape)}]");
             Console.WriteLine("Using cross-attention fusion strategy");
             Console.WriteLine("Generated caption: 'A cat sitting on a windowsill looking outside'");
+
+            return Task.CompletedTask;
         }
 
         // Helper methods
         private static INeuralNetworkModel<double> CreateUNetForDiffusion()
         {
             // Create a simple U-Net architecture for diffusion
-            var unet = new NeuralNetwork();
+            var unetArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 3, 64, 64 },
+                outputShape: new[] { 3, 64, 64 },
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
+            var unet = new NeuralNetwork<double>(unetArchitecture);
             unet.AddLayer(LayerType.Convolutional, 64, ActivationFunction.ReLU);
             unet.AddLayer(LayerType.Convolutional, 128, ActivationFunction.ReLU);
             unet.AddLayer(LayerType.Convolutional, 64, ActivationFunction.ReLU);
@@ -478,7 +533,12 @@ namespace AiDotNet.Examples
         private static INeuralNetworkModel<double> CreateLatentUNet()
         {
             // Create U-Net for latent space
-            var unet = new NeuralNetwork();
+            var latentUnetArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 4, 64, 64 },
+                outputShape: new[] { 4, 64, 64 },
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
+            var unet = new NeuralNetwork<double>(latentUnetArchitecture);
             unet.AddLayer(LayerType.Convolutional, 320, ActivationFunction.ReLU);
             unet.AddLayer(LayerType.Convolutional, 640, ActivationFunction.ReLU);
             unet.AddLayer(LayerType.Convolutional, 320, ActivationFunction.ReLU);
@@ -488,7 +548,12 @@ namespace AiDotNet.Examples
         private static INeuralNetworkModel<double> CreateScoreNetwork()
         {
             // Create score network for SDE
-            var scoreNet = new NeuralNetwork();
+            var scoreNetArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 3, 64, 64 },
+                outputShape: new[] { 3, 64, 64 },
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
+            var scoreNet = new NeuralNetwork<double>(scoreNetArchitecture);
             scoreNet.AddLayer(LayerType.Dense, 256, ActivationFunction.ReLU);
             scoreNet.AddLayer(LayerType.Dense, 256, ActivationFunction.ReLU);
             scoreNet.AddLayer(LayerType.Dense, 64, ActivationFunction.None);
@@ -498,7 +563,12 @@ namespace AiDotNet.Examples
         private static INeuralNetworkModel<double> CreateConsistencyFunction()
         {
             // Create consistency function network
-            var consistencyNet = new NeuralNetwork();
+            var consistencyNetArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 3, 64, 64 },
+                outputShape: new[] { 3, 64, 64 },
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
+            var consistencyNet = new NeuralNetwork<double>(consistencyNetArchitecture);
             consistencyNet.AddLayer(LayerType.Dense, 256, ActivationFunction.ReLU);
             consistencyNet.AddLayer(LayerType.Dense, 256, ActivationFunction.ReLU);
             consistencyNet.AddLayer(LayerType.Dense, 64, ActivationFunction.None);
@@ -508,7 +578,12 @@ namespace AiDotNet.Examples
         private static INeuralNetworkModel<double> CreateVelocityNetwork()
         {
             // Create velocity network for flow matching
-            var velocityNet = new NeuralNetwork();
+            var velocityNetArchitecture = new NeuralNetworkArchitecture<double>(
+                inputShape: new[] { 3, 64, 64 },
+                outputShape: new[] { 3, 64, 64 },
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
+            var velocityNet = new NeuralNetwork<double>(velocityNetArchitecture);
             velocityNet.AddLayer(LayerType.Dense, 256, ActivationFunction.ReLU);
             velocityNet.AddLayer(LayerType.Dense, 256, ActivationFunction.ReLU);
             velocityNet.AddLayer(LayerType.Dense, 64, ActivationFunction.None);
@@ -555,28 +630,98 @@ namespace AiDotNet.Examples
 
     public class ConditionalUNet : NeuralNetworkBase<double>, INeuralNetworkModel<double>, AiDotNet.NeuralNetworks.DiffusionModels.IConditionalModel
     {
+        public ConditionalUNet(
+            NeuralNetworkArchitecture<double> architecture,
+            ILossFunction<double>? lossFunction = null,
+            double maxGradNorm = 1.0)
+            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<double>(), maxGradNorm)
+        {
+        }
+
         public Tensor<double> PredictConditional(Tensor<double> input, Tensor<double> timestep, Tensor<double> conditioning)
         {
             // Simplified conditional prediction
             return input; // In practice, would process with conditioning
         }
 
-        public override Tensor<double> Forward(Tensor<double> input)
+        public Tensor<double> Forward(Tensor<double> input)
         {
             return input;
         }
 
-        public override void Backward(Tensor<double> gradOutput)
+        public void Backward(Tensor<double> gradOutput)
         {
             // Simplified backward
         }
 
-        protected override void SaveModelSpecificData(IDictionary<string, object> data)
+        protected override void InitializeLayers()
+        {
+            // Conditional UNet layers would be initialized here
+            // In this simplified example, no layers are needed
+        }
+
+        public override void UpdateParameters(Vector<double> parameters)
+        {
+            // Update model parameters
+            // Simplified implementation
+        }
+
+        protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateNewInstance()
+        {
+            return new ConditionalUNet(
+                Architecture,
+                LossFunction,
+                Convert.ToDouble(MaxGradNorm));
+        }
+
+        public override Tensor<double> Predict(Tensor<double> input)
+        {
+            return input;
+        }
+
+        public override void Train(Tensor<double> input, Tensor<double> expectedOutput)
+        {
+            // Simplified training
+            var output = Predict(input);
+            var loss = ComputeLoss(output, expectedOutput);
+            LastLoss = NumOps.FromDouble(loss);
+        }
+
+        private double ComputeLoss(Tensor<double> predicted, Tensor<double> expected)
+        {
+            var diff = predicted.Subtract(expected);
+            var squared = diff.Multiply(diff);
+            return squared.Data.Length > 0 ? squared.Data[0] : 0.0;
+        }
+
+        public override ModelMetaData<double> GetModelMetaData()
+        {
+            return new ModelMetaData<double>
+            {
+                ModelType = ModelType.ConditionalUNet,
+                AdditionalInfo = new Dictionary<string, object>(),
+                ModelData = this.Serialize()
+            };
+        }
+
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+        {
+            // Serialize UNet-specific data
+            writer.Write(0); // Placeholder
+        }
+
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+        {
+            // Deserialize UNet-specific data
+            reader.ReadInt32(); // Placeholder
+        }
+
+        protected void SaveModelSpecificData(IDictionary<string, object> data)
         {
             // Save data
         }
 
-        protected override void LoadModelSpecificData(IDictionary<string, object> data)
+        protected void LoadModelSpecificData(IDictionary<string, object> data)
         {
             // Load data
         }
