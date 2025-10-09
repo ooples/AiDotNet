@@ -10,11 +10,11 @@ namespace AiDotNet.MultimodalAI
     /// <summary>
     /// Base class for multimodal AI models
     /// </summary>
-    public abstract class MultimodalModelBase : IMultimodalModel
+    public abstract class MultimodalModelBase : IMultimodalModel<double, Dictionary<string, object>, Vector<double>>
     {
         protected readonly Dictionary<string, IModalityEncoder> _modalityEncoders;
         protected readonly string _fusionStrategy;
-        protected Matrix<double> _crossModalityAttention;
+        protected Matrix<double> _crossModalityAttention = default!;
         protected bool _isTrained;
         protected int _fusedDimension;
 
@@ -131,12 +131,19 @@ namespace AiDotNet.MultimodalAI
         public virtual ModelStats<double, Matrix<double>, Vector<double>> Evaluate(Matrix<double> testInputs, Vector<double> testTargets)
         {
             var predictions = Predict(testInputs);
-            return new ModelStats<double, Matrix<double>, Vector<double>>
+
+            // Create ModelStatsInputs with the required data
+            var inputs = new ModelStatsInputs<double, Matrix<double>, Vector<double>>
             {
-                Name = Name,
-                Type = "MultimodalModel",
-                Timestamp = DateTime.Now
+                Actual = testTargets,
+                Predicted = predictions,
+                XMatrix = testInputs,
+                FeatureCount = testInputs.Columns,
+                Coefficients = Vector<double>.Empty(),
+                Model = null
             };
+
+            return new ModelStats<double, Matrix<double>, Vector<double>>(inputs, ModelType.None);
         }
 
         /// <summary>
@@ -194,7 +201,7 @@ namespace AiDotNet.MultimodalAI
         /// </summary>
         /// <param name="modalityData">Input modality data</param>
         /// <param name="requiredModalities">List of required modalities</param>
-        protected void ValidateModalityData(Dictionary<string, object> modalityData, IEnumerable<string> requiredModalities = null)
+        protected void ValidateModalityData(Dictionary<string, object> modalityData, IEnumerable<string> requiredModalities = null!)
         {
             if (modalityData == null || modalityData.Count == 0)
                 throw new ArgumentException("Modality data cannot be null or empty");
