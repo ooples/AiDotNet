@@ -16,10 +16,10 @@ namespace AiDotNet.AutoML
     /// <typeparam name="TOutput">The output data type</typeparam>
     public class BayesianOptimizationAutoML<T, TInput, TOutput> : AutoMLModelBase<T, TInput, TOutput>
     {
-        private readonly HyperparameterSpace _hyperparameterSpace;
+        private readonly HyperparameterSpace _hyperparameterSpace = default!;
         private readonly int _numInitialPoints;
         private readonly double _explorationWeight;
-        private readonly Random _random;
+        private readonly Random _random = default!;
         
         // Gaussian Process components for Bayesian optimization
         private readonly List<double[]> _observedPoints = new();
@@ -126,7 +126,7 @@ namespace AiDotNet.AutoML
         /// </summary>
         public override async Task<Dictionary<string, object>> SuggestNextTrialAsync()
         {
-            return await Task.Run(() =>
+            return await Task.Run((Func<Dictionary<string, object>>)(() =>
             {
                 // If we don't have enough observations, sample randomly
                 if (_observedPoints.Count < _numInitialPoints)
@@ -157,7 +157,7 @@ namespace AiDotNet.AutoML
                 }
 
                 return bestConfig ?? SampleRandomConfiguration();
-            });
+            }));
         }
 
         /// <summary>
@@ -177,10 +177,10 @@ namespace AiDotNet.AutoML
         }
 
         private async Task PerformTrialAsync(
-            double[][] inputs,
-            double[] targets,
-            double[][] validationInputs,
-            double[] validationTargets,
+            TInput inputs,
+            TOutput targets,
+            TInput validationInputs,
+            TOutput validationTargets,
             bool isRandom,
             CancellationToken cancellationToken)
         {
@@ -579,12 +579,12 @@ namespace AiDotNet.AutoML
         /// </summary>
         protected override async Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(ModelType modelType, Dictionary<string, object> parameters)
         {
-            return await Task.Run(() =>
+            return await Task.Run((Func<IFullModel<T, TInput, TOutput>>)(() =>
             {
                 // This would use PredictionModelBuilder or a factory to create models
                 // For now, returning a placeholder
                 throw new NotImplementedException("Model creation should be implemented using PredictionModelBuilder");
-            });
+            }));
         }
 
         /// <summary>
@@ -595,10 +595,10 @@ namespace AiDotNet.AutoML
             TInput validationInputs,
             TOutput validationTargets)
         {
-            return await Task.Run(() =>
+            return await Task.Run((Func<double>)(() =>
             {
                 var predictions = model.Predict(validationInputs);
-                
+
                 // Calculate metric based on optimization metric
                 return _optimizationMetric switch
                 {
@@ -609,7 +609,7 @@ namespace AiDotNet.AutoML
                     MetricType.RSquared => CalculateRSquared(predictions, validationTargets),
                     _ => throw new NotSupportedException($"Metric {_optimizationMetric} not supported")
                 };
-            });
+            }));
         }
 
         /// <summary>
@@ -701,66 +701,90 @@ namespace AiDotNet.AutoML
             });
         }
 
-        private double CalculateAccuracy(double[] predictions, double[] targets)
+        private double CalculateAccuracy(TOutput predictions, TOutput targets)
         {
-            if (predictions.Length != targets.Length)
-                throw new ArgumentException("Predictions and targets must have same length");
-
-            int correct = 0;
-            for (int i = 0; i < predictions.Length; i++)
+            // Handle the case where TOutput is double[]
+            if (predictions is double[] predArray && targets is double[] targArray)
             {
-                if (Math.Abs(predictions[i] - targets[i]) < 0.5)
-                    correct++;
+                if (predArray.Length != targArray.Length)
+                    throw new ArgumentException("Predictions and targets must have same length");
+
+                int correct = 0;
+                for (int i = 0; i < predArray.Length; i++)
+                {
+                    if (Math.Abs(predArray[i] - targArray[i]) < 0.5)
+                        correct++;
+                }
+
+                return (double)correct / predArray.Length;
             }
 
-            return (double)correct / predictions.Length;
+            throw new NotSupportedException($"Accuracy calculation not supported for type {typeof(TOutput)}");
         }
 
-        private double CalculateMSE(double[] predictions, double[] targets)
+        private double CalculateMSE(TOutput predictions, TOutput targets)
         {
-            if (predictions.Length != targets.Length)
-                throw new ArgumentException("Predictions and targets must have same length");
-
-            double sum = 0;
-            for (int i = 0; i < predictions.Length; i++)
+            // Handle the case where TOutput is double[]
+            if (predictions is double[] predArray && targets is double[] targArray)
             {
-                double diff = predictions[i] - targets[i];
-                sum += diff * diff;
+                if (predArray.Length != targArray.Length)
+                    throw new ArgumentException("Predictions and targets must have same length");
+
+                double sum = 0;
+                for (int i = 0; i < predArray.Length; i++)
+                {
+                    double diff = predArray[i] - targArray[i];
+                    sum += diff * diff;
+                }
+
+                return sum / predArray.Length;
             }
 
-            return sum / predictions.Length;
+            throw new NotSupportedException($"MSE calculation not supported for type {typeof(TOutput)}");
         }
 
-        private double CalculateMAE(double[] predictions, double[] targets)
+        private double CalculateMAE(TOutput predictions, TOutput targets)
         {
-            if (predictions.Length != targets.Length)
-                throw new ArgumentException("Predictions and targets must have same length");
-
-            double sum = 0;
-            for (int i = 0; i < predictions.Length; i++)
+            // Handle the case where TOutput is double[]
+            if (predictions is double[] predArray && targets is double[] targArray)
             {
-                sum += Math.Abs(predictions[i] - targets[i]);
+                if (predArray.Length != targArray.Length)
+                    throw new ArgumentException("Predictions and targets must have same length");
+
+                double sum = 0;
+                for (int i = 0; i < predArray.Length; i++)
+                {
+                    sum += Math.Abs(predArray[i] - targArray[i]);
+                }
+
+                return sum / predArray.Length;
             }
 
-            return sum / predictions.Length;
+            throw new NotSupportedException($"MAE calculation not supported for type {typeof(TOutput)}");
         }
 
-        private double CalculateRSquared(double[] predictions, double[] targets)
+        private double CalculateRSquared(TOutput predictions, TOutput targets)
         {
-            if (predictions.Length != targets.Length)
-                throw new ArgumentException("Predictions and targets must have same length");
-
-            double mean = targets.Average();
-            double ssTotal = 0;
-            double ssResidual = 0;
-
-            for (int i = 0; i < targets.Length; i++)
+            // Handle the case where TOutput is double[]
+            if (predictions is double[] predArray && targets is double[] targArray)
             {
-                ssTotal += Math.Pow(targets[i] - mean, 2);
-                ssResidual += Math.Pow(targets[i] - predictions[i], 2);
+                if (predArray.Length != targArray.Length)
+                    throw new ArgumentException("Predictions and targets must have same length");
+
+                double mean = targArray.Average();
+                double ssTotal = 0;
+                double ssResidual = 0;
+
+                for (int i = 0; i < targArray.Length; i++)
+                {
+                    ssTotal += Math.Pow(targArray[i] - mean, 2);
+                    ssResidual += Math.Pow(targArray[i] - predArray[i], 2);
+                }
+
+                return 1 - (ssResidual / ssTotal);
             }
 
-            return 1 - (ssResidual / ssTotal);
+            throw new NotSupportedException($"R-Squared calculation not supported for type {typeof(TOutput)}");
         }
     }
 }

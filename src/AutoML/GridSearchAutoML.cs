@@ -16,8 +16,8 @@ namespace AiDotNet.AutoML
     /// <typeparam name="TOutput">The output data type</typeparam>
     public class GridSearchAutoML<T, TInput, TOutput> : AutoMLModelBase<T, TInput, TOutput>
     {
-        private readonly HyperparameterSpace _hyperparameterSpace;
-        private List<Dictionary<string, object>>? _gridPoints;
+        private readonly HyperparameterSpace _hyperparameterSpace = default!;
+        private List<Dictionary<string, object>>? _gridPoints = default!;
         private int _currentGridIndex = 0;
         private readonly int _stepsPerDimension;
 
@@ -164,7 +164,7 @@ namespace AiDotNet.AutoML
         /// </summary>
         public override async Task<Dictionary<string, object>> SuggestNextTrialAsync()
         {
-            return await Task.Run(() =>
+            return await Task.Run((Func<Dictionary<string, object>>)(() =>
             {
                 if (_gridPoints == null || _currentGridIndex >= _gridPoints.Count)
                 {
@@ -173,9 +173,9 @@ namespace AiDotNet.AutoML
 
                 var parameters = _gridPoints[_currentGridIndex];
                 _currentGridIndex++;
-                
+
                 return new Dictionary<string, object>(parameters);
-            });
+            }));
         }
 
         /// <summary>
@@ -222,12 +222,12 @@ namespace AiDotNet.AutoML
         /// </summary>
         protected override async Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(ModelType modelType, Dictionary<string, object> parameters)
         {
-            return await Task.Run(() =>
+            return await Task.Run((Func<IFullModel<T, TInput, TOutput>>)(() =>
             {
                 // This would use PredictionModelBuilder or a factory to create models
                 // For now, returning a placeholder
                 throw new NotImplementedException("Model creation should be implemented using PredictionModelBuilder");
-            });
+            }));
         }
 
         /// <summary>

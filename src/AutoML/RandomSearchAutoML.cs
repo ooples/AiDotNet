@@ -16,9 +16,9 @@ namespace AiDotNet.AutoML
     /// <typeparam name="TOutput">The output data type</typeparam>
     public class RandomSearchAutoML<T, TInput, TOutput> : AutoMLModelBase<T, TInput, TOutput>
     {
-        private readonly HyperparameterSpace _hyperparameterSpace;
+        private readonly HyperparameterSpace _hyperparameterSpace = default!;
         private readonly int _maxTrials;
-        private readonly Random _random;
+        private readonly Random _random = default!;
 
         /// <summary>
         /// Initializes a new instance of the RandomSearchAutoML class
@@ -159,14 +159,14 @@ namespace AiDotNet.AutoML
         /// </summary>
         public override async Task<Dictionary<string, object>> SuggestNextTrialAsync()
         {
-            return await Task.Run(() =>
+            return await Task.Run((Func<Dictionary<string, object>>)(() =>
             {
                 // Get a random model type
                 var modelType = _candidateModels[_random.Next(_candidateModels.Count)];
-                
+
                 // Get model-specific search space
                 var modelSearchSpace = GetDefaultSearchSpace(modelType);
-                
+
                 // Merge with user-defined search space
                 foreach (var (name, range) in _searchSpace)
                 {
@@ -186,19 +186,19 @@ namespace AiDotNet.AutoML
                                 Convert.ToDouble(range.MaxValue),
                                 range.LogScale);
                             break;
-                        
+
                         case ParameterType.Integer:
                             space.AddInteger(
                                 name,
                                 Convert.ToInt32(range.MinValue),
                                 Convert.ToInt32(range.MaxValue));
                             break;
-                        
+
                         case ParameterType.Categorical:
                             if (range.CategoricalValues != null)
                                 space.AddCategorical(name, range.CategoricalValues);
                             break;
-                        
+
                         case ParameterType.Boolean:
                             space.AddBoolean(name);
                             break;
@@ -208,9 +208,9 @@ namespace AiDotNet.AutoML
                 // Sample parameters
                 var parameters = space.Sample();
                 parameters["__modelType__"] = modelType;
-                
+
                 return parameters;
-            });
+            }));
         }
 
         /// <summary>
@@ -257,12 +257,12 @@ namespace AiDotNet.AutoML
         /// </summary>
         protected override async Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(ModelType modelType, Dictionary<string, object> parameters)
         {
-            return await Task.Run(() =>
+            return await Task.Run((Func<IFullModel<T, TInput, TOutput>>)(() =>
             {
                 // This would use PredictionModelBuilder or a factory to create models
                 // For now, returning a placeholder
                 throw new NotImplementedException("Model creation should be implemented using PredictionModelBuilder");
-            });
+            }));
         }
 
 

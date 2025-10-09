@@ -54,6 +54,16 @@ namespace AiDotNet.AutoML
         public double BestScore { get; protected set; } = double.NegativeInfinity;
 
         /// <summary>
+        /// Gets or sets the time limit for the AutoML search
+        /// </summary>
+        public TimeSpan TimeLimit { get; set; } = TimeSpan.FromMinutes(30);
+
+        /// <summary>
+        /// Gets or sets the maximum number of trials to run
+        /// </summary>
+        public int TrialLimit { get; set; } = 100;
+
+        /// <summary>
         /// Searches for the best model configuration
         /// </summary>
         public abstract Task<IFullModel<T, TInput, TOutput>> SearchAsync(
@@ -123,12 +133,12 @@ namespace AiDotNet.AutoML
                 throw new InvalidOperationException("No best model available. Run search first.");
 
             // Default implementation returns uniform importance
-            return await Task.Run(() =>
+            return await Task.Run((Func<Dictionary<int, double>>)(() =>
             {
                 var importance = new Dictionary<int, double>();
                 // This would be overridden by specific implementations
                 return importance;
-            });
+            }));
         }
 
         /// <summary>
@@ -141,7 +151,7 @@ namespace AiDotNet.AutoML
         /// </summary>
         public virtual async Task ReportTrialResultAsync(Dictionary<string, object> parameters, double score, TimeSpan duration)
         {
-            await Task.Run(() =>
+            await Task.Run((Action)(() =>
             {
                 lock (_lock)
                 {
@@ -158,7 +168,7 @@ namespace AiDotNet.AutoML
 
                     // Update best score and model
                     bool isBetter = _maximize ? score > BestScore : score < BestScore;
-                    
+
                     if (isBetter)
                     {
                         BestScore = score;
@@ -169,7 +179,7 @@ namespace AiDotNet.AutoML
                         _trialsSinceImprovement++;
                     }
                 }
-            });
+            }));
         }
 
         /// <summary>
@@ -272,7 +282,7 @@ namespace AiDotNet.AutoML
             TInput validationInputs,
             TOutput validationTargets)
         {
-            return await Task.Run(() =>
+            return await Task.Run((Func<double>)(() =>
             {
                 // Use the model evaluator if available
                 if (_modelEvaluator != null)
@@ -286,9 +296,9 @@ namespace AiDotNet.AutoML
                             YValidation = validationTargets
                         }
                     };
-                    
+
                     var evaluationResult = _modelEvaluator.EvaluateModel(evaluationInput);
-                    
+
                     // Extract the appropriate metric based on optimization metric
                     return ExtractMetricFromEvaluation(evaluationResult);
                 }
@@ -300,7 +310,7 @@ namespace AiDotNet.AutoML
                     // In a real implementation, this would calculate the metric based on the data types
                     return 0.0;
                 }
-            });
+            }));
         }
 
         /// <summary>
@@ -408,11 +418,11 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Creates a new instance with the given parameters
         /// </summary>
-        public virtual IParameterizable<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+        public virtual IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
         {
             if (BestModel == null)
                 throw new InvalidOperationException("No best model found.");
-            
+
             throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
         }
 
@@ -428,22 +438,22 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Gets the feature importance scores
         /// </summary>
-        public virtual double[] GetFeatureImportance()
+        public virtual Dictionary<string, T> GetFeatureImportance()
         {
             if (BestModel == null)
                 throw new InvalidOperationException("No best model found.");
-            
+
             return BestModel.GetFeatureImportance();
         }
 
         /// <summary>
         /// Gets the indices of active features
         /// </summary>
-        public virtual int[] GetActiveFeatureIndices()
+        public virtual IEnumerable<int> GetActiveFeatureIndices()
         {
             if (BestModel == null)
                 throw new InvalidOperationException("No best model found.");
-            
+
             return BestModel.GetActiveFeatureIndices();
         }
 
@@ -505,20 +515,145 @@ namespace AiDotNet.AutoML
         protected virtual double ExtractMetricFromEvaluation(ModelEvaluationData<T, TInput, TOutput> evaluationData)
         {
             var validationStats = evaluationData.ValidationSet;
-            
+
             return _optimizationMetric switch
             {
-                MetricType.Accuracy => validationStats.ErrorStats?.Accuracy ?? 0.0,
-                MetricType.MeanSquaredError => validationStats.ErrorStats?.MeanSquaredError ?? double.MaxValue,
-                MetricType.RootMeanSquaredError => validationStats.ErrorStats?.RootMeanSquaredError ?? double.MaxValue,
-                MetricType.MeanAbsoluteError => validationStats.ErrorStats?.MeanAbsoluteError ?? double.MaxValue,
-                MetricType.RSquared => validationStats.PredictionStats?.RSquared ?? 0.0,
-                MetricType.F1Score => validationStats.ErrorStats?.F1Score ?? 0.0,
-                MetricType.Precision => validationStats.ErrorStats?.Precision ?? 0.0,
-                MetricType.Recall => validationStats.ErrorStats?.Recall ?? 0.0,
-                MetricType.AUC => validationStats.ErrorStats?.AUC ?? 0.0,
+                MetricType.Accuracy => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.Accuracy) : 0.0,
+                MetricType.MeanSquaredError => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.MeanSquaredError) : double.MaxValue,
+                MetricType.RootMeanSquaredError => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.RootMeanSquaredError) : double.MaxValue,
+                MetricType.MeanAbsoluteError => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.MeanAbsoluteError) : double.MaxValue,
+                MetricType.RSquared => validationStats.PredictionStats != null ? Convert.ToDouble(validationStats.PredictionStats.RSquared) : 0.0,
+                MetricType.F1Score => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.F1Score) : 0.0,
+                MetricType.Precision => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.Precision) : 0.0,
+                MetricType.Recall => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.Recall) : 0.0,
+                MetricType.AUC => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.AUC) : 0.0,
                 _ => 0.0
             };
         }
+
+        #region IAutoMLModel Additional Interface Members
+
+        /// <summary>
+        /// Configures the search space for hyperparameter optimization
+        /// </summary>
+        /// <param name="searchSpace">Dictionary defining parameter ranges to search</param>
+        public virtual void ConfigureSearchSpace(Dictionary<string, ParameterRange> searchSpace)
+        {
+            SetSearchSpace(searchSpace);
+        }
+
+        /// <summary>
+        /// Sets the time limit for the AutoML search process
+        /// </summary>
+        /// <param name="timeLimit">Maximum time to spend searching for optimal models</param>
+        public virtual void SetTimeLimit(TimeSpan timeLimit)
+        {
+            TimeLimit = timeLimit;
+        }
+
+        /// <summary>
+        /// Sets the maximum number of trials to execute during search
+        /// </summary>
+        /// <param name="maxTrials">Maximum number of model configurations to try</param>
+        public virtual void SetTrialLimit(int maxTrials)
+        {
+            TrialLimit = maxTrials;
+        }
+
+        /// <summary>
+        /// Enables Neural Architecture Search (NAS) for automatic network design
+        /// </summary>
+        /// <param name="enabled">Whether to enable NAS</param>
+        public virtual void EnableNAS(bool enabled = true)
+        {
+            // Store NAS flag - derived classes can use this during model creation
+            lock (_lock)
+            {
+                if (!_searchSpace.ContainsKey("EnableNAS"))
+                {
+                    _searchSpace["EnableNAS"] = new ParameterRange
+                    {
+                        Type = ParameterType.Boolean,
+                        MinValue = enabled,
+                        MaxValue = enabled
+                    };
+                }
+            }
+        }
+
+        /// <summary>
+        /// Searches for the best model configuration (synchronous version)
+        /// </summary>
+        /// <param name="inputs">Training inputs</param>
+        /// <param name="targets">Training targets</param>
+        /// <param name="validationInputs">Validation inputs</param>
+        /// <param name="validationTargets">Validation targets</param>
+        /// <returns>Best model found</returns>
+        public virtual IFullModel<T, TInput, TOutput> SearchBestModel(
+            TInput inputs,
+            TOutput targets,
+            TInput validationInputs,
+            TOutput validationTargets)
+        {
+            // Synchronous wrapper around SearchAsync
+            return SearchAsync(inputs, targets, validationInputs, validationTargets, TimeLimit, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+
+        /// <summary>
+        /// Performs the AutoML search process (synchronous version)
+        /// </summary>
+        /// <param name="inputs">Training inputs</param>
+        /// <param name="targets">Training targets</param>
+        /// <param name="validationInputs">Validation inputs</param>
+        /// <param name="validationTargets">Validation targets</param>
+        public virtual void Search(
+            TInput inputs,
+            TOutput targets,
+            TInput validationInputs,
+            TOutput validationTargets)
+        {
+            // Synchronous search that updates BestModel
+            SearchAsync(inputs, targets, validationInputs, validationTargets, TimeLimit, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+
+        /// <summary>
+        /// Gets the results of all trials performed during search
+        /// </summary>
+        /// <returns>List of trial results with scores and parameters</returns>
+        public virtual List<TrialResult> GetResults()
+        {
+            return GetTrialHistory();
+        }
+
+        /// <summary>
+        /// Runs the AutoML optimization process (alternative name for Search)
+        /// </summary>
+        /// <param name="inputs">Training inputs</param>
+        /// <param name="targets">Training targets</param>
+        /// <param name="validationInputs">Validation inputs</param>
+        /// <param name="validationTargets">Validation targets</param>
+        public virtual void Run(
+            TInput inputs,
+            TOutput targets,
+            TInput validationInputs,
+            TOutput validationTargets)
+        {
+            Search(inputs, targets, validationInputs, validationTargets);
+        }
+
+        /// <summary>
+        /// Sets which model types should be considered during the search
+        /// </summary>
+        /// <param name="modelTypes">List of model types to evaluate</param>
+        public virtual void SetModelsToTry(List<ModelType> modelTypes)
+        {
+            SetCandidateModels(modelTypes);
+        }
+
+        #endregion
     }
 }
