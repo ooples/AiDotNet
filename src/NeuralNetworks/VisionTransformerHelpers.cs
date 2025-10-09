@@ -15,10 +15,10 @@ namespace AiDotNet.NeuralNetworks
     /// </summary>
     public class LayerNorm : ILayer
     {
-        private readonly int features;
-        private readonly double eps;
-        private Tensor<double> gamma;
-        private Tensor<double> beta;
+        private readonly int features = default!;
+        private readonly double eps = default!;
+        private Tensor<double> gamma = default!;
+        private Tensor<double> beta = default!;
         
         public LayerNorm(int features, double eps = 1e-5)
         {
@@ -88,6 +88,23 @@ namespace AiDotNet.NeuralNetworks
         public int OutputSize => features;
         public List<Tensor<double>> Parameters => new List<Tensor<double>> { gamma, beta };
         public List<Tensor<double>> Gradients => new List<Tensor<double>>();
+
+        public Vector<double> GetParameters()
+        {
+            // Flatten gamma and beta into a single vector
+            var paramCount = gamma.Data.Length + beta.Data.Length;
+            var parameters = new Vector<double>(paramCount);
+            Array.Copy(gamma.Data, 0, parameters.Data, 0, gamma.Data.Length);
+            Array.Copy(beta.Data, 0, parameters.Data, gamma.Data.Length, beta.Data.Length);
+            return parameters;
+        }
+
+        public void SetParameters(Vector<double> parameters)
+        {
+            // Unflatten parameters back to gamma and beta
+            Array.Copy(parameters.Data, 0, gamma.Data, 0, gamma.Data.Length);
+            Array.Copy(parameters.Data, gamma.Data.Length, beta.Data, 0, beta.Data.Length);
+        }
     }
     
     /// <summary>
@@ -95,10 +112,10 @@ namespace AiDotNet.NeuralNetworks
     /// </summary>
     public class Dense : ILayer
     {
-        private readonly int inputSize;
-        private readonly int outputSize;
-        private Tensor<double> weight;
-        private Tensor<double> bias;
+        private readonly int inputSize = default!;
+        private readonly int outputSize = default!;
+        private Tensor<double> weight = default!;
+        private Tensor<double> bias = default!;
         
         public Dense(int inputSize, int outputSize)
         {
@@ -176,6 +193,23 @@ namespace AiDotNet.NeuralNetworks
         public int OutputSize => outputSize;
         public List<Tensor<double>> Parameters => new List<Tensor<double>> { weight, bias };
         public List<Tensor<double>> Gradients => new List<Tensor<double>>();
+
+        public Vector<double> GetParameters()
+        {
+            // Flatten weight and bias into a single vector
+            var paramCount = weight.Data.Length + bias.Data.Length;
+            var parameters = new Vector<double>(paramCount);
+            Array.Copy(weight.Data, 0, parameters.Data, 0, weight.Data.Length);
+            Array.Copy(bias.Data, 0, parameters.Data, weight.Data.Length, bias.Data.Length);
+            return parameters;
+        }
+
+        public void SetParameters(Vector<double> parameters)
+        {
+            // Unflatten parameters back to weight and bias
+            Array.Copy(parameters.Data, 0, weight.Data, 0, weight.Data.Length);
+            Array.Copy(parameters.Data, weight.Data.Length, bias.Data, 0, bias.Data.Length);
+        }
     }
     
     /// <summary>
@@ -183,9 +217,9 @@ namespace AiDotNet.NeuralNetworks
     /// </summary>
     public class MLP : ILayer
     {
-        private readonly Dense fc1;
-        private readonly Dense fc2;
-        private readonly double dropoutRate;
+        private readonly Dense fc1 = default!;
+        private readonly Dense fc2 = default!;
+        private readonly double dropoutRate = default!;
         
         public MLP(int embedDim, int mlpDim, double dropoutRate)
         {
@@ -239,5 +273,41 @@ namespace AiDotNet.NeuralNetworks
         public int OutputSize => fc2.OutputSize;
         public List<Tensor<double>> Parameters => new List<Tensor<double>>();
         public List<Tensor<double>> Gradients => new List<Tensor<double>>();
+
+        public Vector<double> GetParameters()
+        {
+            // Combine parameters from both Dense layers
+            var fc1Params = fc1.GetParameters();
+            var fc2Params = fc2.GetParameters();
+
+            var totalSize = fc1Params.Length + fc2Params.Length;
+            var parameters = new Vector<double>(totalSize);
+
+            Array.Copy(fc1Params.Data, 0, parameters.Data, 0, fc1Params.Length);
+            Array.Copy(fc2Params.Data, 0, parameters.Data, fc1Params.Length, fc2Params.Length);
+
+            return parameters;
+        }
+
+        public void SetParameters(Vector<double> parameters)
+        {
+            // Distribute parameters to both Dense layers
+            var fc1Params = fc1.GetParameters();
+            var fc2Params = fc2.GetParameters();
+
+            if (fc1Params.Length > 0)
+            {
+                var fc1Vec = new Vector<double>(fc1Params.Length);
+                Array.Copy(parameters.Data, 0, fc1Vec.Data, 0, fc1Params.Length);
+                fc1.SetParameters(fc1Vec);
+            }
+
+            if (fc2Params.Length > 0)
+            {
+                var fc2Vec = new Vector<double>(fc2Params.Length);
+                Array.Copy(parameters.Data, fc1Params.Length, fc2Vec.Data, 0, fc2Params.Length);
+                fc2.SetParameters(fc2Vec);
+            }
+        }
     }
 }
