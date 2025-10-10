@@ -22,10 +22,19 @@ public enum EdgeDevice
     None,
 
     /// <summary>
+    /// Mobile device deployment (phones, tablets, etc.).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Running AI models on mobile devices - like smartphones and tablets.
+    /// This includes face recognition, voice assistants, and other apps that work offline.
+    /// </remarks>
+    Mobile,
+
+    /// <summary>
     /// Mobile phone deployment.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Running AI models directly on smartphones - like face recognition 
+    /// <b>For Beginners:</b> Running AI models directly on smartphones - like face recognition
     /// or voice assistants that work offline.
     /// </remarks>
     MobilePhone,

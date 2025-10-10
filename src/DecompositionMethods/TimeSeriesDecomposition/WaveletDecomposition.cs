@@ -21,12 +21,12 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <summary>
     /// The wavelet function used for decomposition.
     /// </summary>
-    private readonly IWaveletFunction<T> _wavelet;
+    private readonly IWaveletFunction<T> _wavelet = default!;
     
     /// <summary>
     /// The type of wavelet algorithm to use.
     /// </summary>
-    private readonly WaveletAlgorithmType _algorithm;
+    private readonly WaveletAlgorithmType _algorithm = default!;
     
     /// <summary>
     /// The minimum length of data required to continue decomposition.

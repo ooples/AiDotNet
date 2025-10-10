@@ -28,14 +28,16 @@ using System.Linq;
 /// student models that are 5-10x smaller while retaining most of the accuracy.
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
 /// <typeparam name="TModel">The type of model to compress.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public class DistillationCompressor<TModel, TInput, TOutput> : 
-    ModelCompressorBase<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public class DistillationCompressor<T, TModel, TInput, TOutput> :
+    ModelCompressorBase<T, TModel, TInput, TOutput>
+    where T : unmanaged
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
-    private readonly DistillationMethod _distillationMethod;
+    private readonly DistillationMethod _distillationMethod = default!;
     private readonly bool _useSoftTargets;
     private readonly int _trainingEpochs;
     private readonly double _alpha; // Weight between soft and hard targets
@@ -135,7 +137,7 @@ public class DistillationCompressor<TModel, TInput, TOutput> :
         }
 
         // Check if the model supports distillation
-        if (!(model is IDistillableModel<TModel, TInput, TOutput> distillableModel))
+        if (!(model is IDistillableModel<T, TModel, TInput, TOutput> distillableModel))
         {
             throw new InvalidOperationException(
                 $"Model of type {model.GetType().Name} does not implement IDistillableModel. " +
@@ -207,7 +209,7 @@ public class DistillationCompressor<TModel, TInput, TOutput> :
         }
 
         // Check if model is a distilled model
-        if (!(model is IDistilledModel<double, TInput, TOutput> distilledModel))
+        if (!(model is IDistilledModel<T, TInput, TOutput> distilledModel))
         {
             throw new ArgumentException(
                 $"Model of type {model.GetType().Name} is not a distilled model. " +
@@ -291,7 +293,7 @@ public class DistillationCompressor<TModel, TInput, TOutput> :
         TModel compressedModel)
     {
         // Add distillation-specific metrics
-        if (compressedModel is IDistilledModel<double, TInput, TOutput> distilledModel)
+        if (compressedModel is IDistilledModel<T, TInput, TOutput> distilledModel)
         {
             metrics["DistillationMethod"] = _distillationMethod.ToString();
             metrics["DistillationTemperature"] = distilledModel.DistillationTemperature;
@@ -299,11 +301,12 @@ public class DistillationCompressor<TModel, TInput, TOutput> :
             metrics["TeacherModelParamCount"] = GetParameterCount(originalModel);
             metrics["StudentModelParamCount"] = GetParameterCount(compressedModel);
             metrics["ParameterReductionRatio"] = distilledModel.CompressionRatio;
-            
+
             // Add structural complexity metrics if available
-            if (distilledModel.StructuralMetrics != null)
+            var structuralMetrics = distilledModel.StructuralMetrics;
+            if (structuralMetrics != null)
             {
-                foreach (var metric in distilledModel.StructuralMetrics)
+                foreach (var metric in structuralMetrics)
                 {
                     metrics[metric.Key] = metric.Value ?? "N/A";
                 }
@@ -390,15 +393,15 @@ public class DistillationCompressor<TModel, TInput, TOutput> :
     {
         // This should be implemented by derived classes to create an appropriate student architecture
         // The implementation depends on the specific model type
-        
-        if (teacherModel is IDistillableModel<TModel, TInput, TOutput> distillableModel)
+
+        if (teacherModel is IDistillableModel<T, TModel, TInput, TOutput> distillableModel)
         {
             return distillableModel.CreateStudentArchitecture(studentSizeRatio);
         }
-        
+
         throw new NotSupportedException(
             $"Student architecture creation not supported for model type {teacherModel.GetType().Name}. " +
-            "The teacher model must implement IDistillableModel<TModel, TInput, TOutput>.");
+            "The teacher model must implement IDistillableModel<T, TModel, TInput, TOutput>.");
     }
 
     /// <summary>
@@ -441,9 +444,9 @@ public class DistillationCompressor<TModel, TInput, TOutput> :
     {
         // This should be implemented by derived classes for model-specific training
         // The implementation depends on the specific model type and training framework
-        
-        if (teacherModel is IDistillableModel<TModel, TInput, TOutput> distillableTeacher &&
-            studentModel is IDistillableStudent<TInput, TOutput> distillableStudent)
+
+        if (teacherModel is IDistillableModel<T, TModel, TInput, TOutput> distillableTeacher &&
+            studentModel is IDistillableStudent<T, TInput, TOutput> distillableStudent)
         {
             // Set up distillation parameters
             var distillationParams = new DistillationParameters
@@ -454,21 +457,21 @@ public class DistillationCompressor<TModel, TInput, TOutput> :
                 TrainingEpochs = epochs,
                 Method = _distillationMethod
             };
-            
+
             // Train the student using distillation
             distillableTeacher.DistillKnowledgeToStudent(
-                distillableStudent, 
-                unlabeledData, 
-                labeledData, 
+                distillableStudent,
+                unlabeledData,
+                labeledData,
                 distillationParams);
-            
+
             return studentModel;
         }
-        
+
         throw new NotSupportedException(
             "Knowledge distillation training not supported for these model types. " +
-            "The teacher model must implement IDistillableModel<TModel, TInput, TOutput> " +
-            "and the student model must implement IDistillableStudent<TInput, TOutput>.");
+            "The teacher model must implement IDistillableModel<T, TModel, TInput, TOutput> " +
+            "and the student model must implement IDistillableStudent<T, TInput, TOutput>.");
     }
 
     /// <summary>
@@ -503,15 +506,15 @@ public class DistillationCompressor<TModel, TInput, TOutput> :
         // This implementation depends on the specific model type.
         // For demonstration, we'll assume there's a factory method that can
         // create a model from the serialized data.
-        
+
         // In a real implementation, this would use model-specific deserialization.
-        var factory = DistilledModelFactoryRegistry.GetFactory<TModel, TInput, TOutput>();
+        var factory = DistilledModelFactoryRegistry.GetFactory<T, TModel, TInput, TOutput>();
         if (factory != null)
         {
             return factory.DeserializeDistilledModel(
                 reader, method, useSoftTargets, temperature, compressionRatio);
         }
-        
+
         throw new NotSupportedException(
             $"Distilled model deserialization not supported for model type TModel. " +
             "Register a factory for this model type with DistilledModelFactoryRegistry.");
@@ -569,9 +572,9 @@ public class DistillationCompressor<TModel, TInput, TOutput> :
     protected override IModelCompressor<TModel, TInput, TOutput> CreateCompressorWithOptions(ModelCompressionOptions options)
     {
         // Create a new distillation compressor with the same configuration but new options
-        return new DistillationCompressor<TModel, TInput, TOutput>(
-            options, 
-            _distillationMethod, 
+        return new DistillationCompressor<T, TModel, TInput, TOutput>(
+            options,
+            _distillationMethod,
             _useSoftTargets,
             _trainingEpochs,
             _alpha);

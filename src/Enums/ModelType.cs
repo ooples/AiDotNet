@@ -233,6 +233,23 @@ public enum ModelType
     MultinomialLogisticRegression,
 
     /// <summary>
+    /// A classification model that finds the optimal hyperplane to separate different classes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Support Vector Machine (SVM) is a powerful classification algorithm that finds the best
+    /// boundary to separate different categories in your data. Imagine drawing a line (or in higher dimensions, a plane)
+    /// between two groups of points - SVM finds the line that maximizes the distance to the nearest points from both
+    /// groups. It can handle complex, non-linear boundaries using "kernel tricks" and works well even with
+    /// high-dimensional data.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.Classification,
+              new[] { MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification, MetricGroups.General },
+              "Classification using support vectors to find optimal decision boundaries")]
+    SupportVectorMachine,
+
+    /// <summary>
     /// A tree model that uses linear regression at its leaf nodes.
     /// </summary>
     /// <remarks>
@@ -463,6 +480,23 @@ public enum ModelType
               new[] { MetricGroups.TimeSeries, MetricGroups.Regression, MetricGroups.General },
               "Hybrid model combining neural networks with traditional ARIMA for time series forecasting")]
     NeuralNetworkARIMA,
+
+    /// <summary>
+    /// A neural network model optimized through quantization to reduce model size and improve inference speed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Quantized Neural Networks are neural networks that have been optimized to use less memory
+    /// and run faster by reducing the precision of their calculations. Instead of using high-precision numbers,
+    /// they use lower-precision representations (like using whole numbers instead of decimals). This makes them
+    /// ideal for deployment on mobile devices or edge computing where resources are limited, with minimal impact
+    /// on accuracy.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.Regression, MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification, MetricGroups.General },
+              "Neural network optimized through quantization for efficient deployment")]
+    QuantizedNeuralNetwork,
 
     /// <summary>
     /// A boosting algorithm specifically designed for regression problems.
@@ -2464,5 +2498,99 @@ public enum ModelType
     [ModelInfo(ModelCategory.AutoML,
               new[] { MetricGroups.General, MetricGroups.Regression, MetricGroups.BinaryClassification, MetricGroups.MulticlassClassification },
               "Automated model selection and hyperparameter optimization")]
-    AutoML
+    AutoML,
+
+    //
+    // Vision and Generative Models
+    //
+
+    /// <summary>
+    /// Vision Transformer model for image processing using attention mechanisms.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Vision Transformers (ViT) apply transformer architecture (originally designed for text)
+    /// to images by splitting them into patches and processing them like words in a sentence. This approach has
+    /// achieved state-of-the-art results in image classification and recognition tasks.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.MulticlassClassification, MetricGroups.General },
+              "Vision transformer model for image processing")]
+    VisionTransformer,
+
+    /// <summary>
+    /// Diffusion Model for generating high-quality images through iterative denoising.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Diffusion Models learn to generate images by reversing a process that gradually
+    /// adds noise to images. They're behind many modern image generation systems and can create highly
+    /// realistic and detailed images from text descriptions.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Diffusion model for image generation")]
+    DiffusionModel,
+
+    /// <summary>
+    /// Score-Based Stochastic Differential Equation (SDE) model for generative modeling.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Score-Based SDE models use mathematical concepts from physics to generate
+    /// high-quality data. They learn to model the "score" (gradient) of the data distribution and use
+    /// this to generate new samples through a continuous-time process.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Score-based SDE model for generative tasks")]
+    ScoreBasedSDE,
+
+    /// <summary>
+    /// Flow Matching Model for efficient generative modeling with continuous normalizing flows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Flow Matching Models learn to transform simple distributions (like random noise)
+    /// into complex data distributions through continuous transformations. They provide fast and efficient
+    /// generation while maintaining high quality.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Flow matching model for efficient generation")]
+    FlowMatchingModel,
+
+    /// <summary>
+    /// Consistency Model for fast, high-quality image generation with fewer steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Consistency Models are designed to generate high-quality outputs much faster than
+    /// traditional diffusion models by learning to map noise directly to data in fewer steps. They maintain
+    /// quality while dramatically improving generation speed.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Consistency model for fast generation")]
+    ConsistencyModel,
+
+    /// <summary>
+    /// Conditional UNet model for image-to-image translation and generation tasks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Conditional UNet is a neural network architecture that can generate or modify
+    /// images based on input conditions. It's commonly used in medical image segmentation, style transfer,
+    /// and conditional image generation where the output depends on specific input features or requirements.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Conditional UNet for image generation and translation")]
+    ConditionalUNet
 }

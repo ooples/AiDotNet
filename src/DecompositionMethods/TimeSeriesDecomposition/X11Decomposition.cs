@@ -38,7 +38,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// <summary>
     /// The type of X-11 algorithm to use for decomposition.
     /// </summary>
-    private readonly X11AlgorithmType _algorithmType;
+    private readonly X11AlgorithmType _algorithmType = default!;
 
     /// <summary>
     /// Creates a new instance of the X11Decomposition class and performs the decomposition.

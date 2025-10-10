@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 
@@ -14,10 +17,10 @@ namespace AiDotNet.Deployment.Techniques
     /// </summary>
     public class ModelQuantizer<T, TInput, TOutput>
     {
-        private readonly QuantizationConfig _config;
-        private readonly Dictionary<string, IQuantizationStrategy<T, TInput, TOutput>> _strategies;
+        private readonly QuantizationConfig _config = default!;
+        private readonly Dictionary<string, IQuantizationStrategy<T, TInput, TOutput>> _strategies = default!;
 
-        public ModelQuantizer(QuantizationConfig config = null)
+        public ModelQuantizer(QuantizationConfig? config = null)
         {
             _config = config ?? new QuantizationConfig();
             _strategies = InitializeStrategies();
@@ -103,19 +106,19 @@ namespace AiDotNet.Deployment.Techniques
         /// </summary>
         public async Task<IFullModel<T, TInput, TOutput>> LayerWiseQuantizeAsync(IFullModel<T, TInput, TOutput> model, Dictionary<string, string> layerStrategies)
         {
-            if (!(model is INeuralNetworkModel<double> nnModel))
+            if (!(model is INeuralNetworkModel<T> nnModel))
             {
                 throw new ArgumentException("Layer-wise quantization requires a neural network model");
             }
 
             var architecture = nnModel.GetArchitecture();
-            var quantizedLayers = new List<ILayer>();
+            var quantizedLayers = new List<ILayer<T>>();
 
             foreach (var layer in architecture.Layers)
             {
                 var layerName = layer.Name;
-                var strategy = layerStrategies.ContainsKey(layerName) 
-                    ? layerStrategies[layerName] 
+                var strategy = layerStrategies.ContainsKey(layerName)
+                    ? layerStrategies[layerName]
                     : _config.DefaultStrategy;
 
                 var quantizer = _strategies[strategy];
@@ -124,7 +127,7 @@ namespace AiDotNet.Deployment.Techniques
             }
 
             // Create new model with quantized layers
-            var quantizedArchitecture = new NeuralNetworkArchitecture<double>
+            var quantizedArchitecture = new NeuralNetworkArchitecture<T>
             {
                 Layers = quantizedLayers,
                 LossFunction = architecture.LossFunction,
@@ -132,7 +135,7 @@ namespace AiDotNet.Deployment.Techniques
             };
 
             // Return quantized model
-            return CreateQuantizedModel<T, TInput, TOutput>(model, quantizedArchitecture);
+            return CreateQuantizedModel(model, quantizedArchitecture);
         }
 
         /// <summary>
@@ -174,7 +177,7 @@ namespace AiDotNet.Deployment.Techniques
                 SampleCount = 0
             };
 
-            if (!(model is INeuralNetworkModel<double> nnModel))
+            if (!(model is INeuralNetworkModel<T> nnModel))
                 return calibrationData;
 
             // Generate calibration data
@@ -198,12 +201,13 @@ namespace AiDotNet.Deployment.Techniques
                 await Task.Run(() =>
                 {
                     var activations = nnModel.GetLayerActivations(calibrationInput);
-                    
-                    foreach (var (layerName, activation) in activations)
+
+                    foreach (var (layerIndex, activation) in activations)
                     {
+                        var layerName = layerIndex.ToString();
                         var min = (float)activation.Data.Min();
                         var max = (float)activation.Data.Max();
-                        
+
                         if (!calibrationData.MinValues.ContainsKey(layerName))
                         {
                             calibrationData.MinValues[layerName] = min;
@@ -214,7 +218,7 @@ namespace AiDotNet.Deployment.Techniques
                             calibrationData.MinValues[layerName] = Math.Min(calibrationData.MinValues[layerName], min);
                             calibrationData.MaxValues[layerName] = Math.Max(calibrationData.MaxValues[layerName], max);
                         }
-                        
+
                         // Collect histogram data
                         if (!calibrationData.Histograms.ContainsKey(layerName))
                         {
@@ -274,7 +278,7 @@ namespace AiDotNet.Deployment.Techniques
 
         private double CalculateModelSize(IFullModel<T, TInput, TOutput> model)
         {
-            if (model is INeuralNetworkModel<double> nnModel)
+            if (model is INeuralNetworkModel<T> nnModel)
             {
                 var architecture = nnModel.GetArchitecture();
                 var totalParams = architecture.Layers.Sum(l => l.InputSize * l.OutputSize + l.OutputSize);
@@ -284,7 +288,7 @@ namespace AiDotNet.Deployment.Techniques
             return 10.0; // Default 10 MB
         }
 
-        private IFullModel<T, TInput, TOutput> CreateQuantizedModel<T, TInput, TOutput>(IFullModel<T, TInput, TOutput> original, NeuralNetworkArchitecture<double> quantizedArchitecture)
+        private IFullModel<T, TInput, TOutput> CreateQuantizedModel(IFullModel<T, TInput, TOutput> original, NeuralNetworkArchitecture<T> quantizedArchitecture)
         {
             // Create a new model instance with quantized architecture
             // This is a simplified implementation
@@ -348,8 +352,8 @@ namespace AiDotNet.Deployment.Techniques
     public class QuantizationAnalysis
     {
         public double OriginalSize { get; set; }
-        public string RecommendedStrategy { get; set; }
-        public List<StrategyRecommendation> SupportedStrategies { get; set; }
+        public string RecommendedStrategy { get; set; } = default!;
+        public List<StrategyRecommendation> SupportedStrategies { get; set; } = default!;
         public Dictionary<string, double> ExpectedMetrics { get; set; } = new Dictionary<string, double>();
     }
 
@@ -358,7 +362,7 @@ namespace AiDotNet.Deployment.Techniques
     /// </summary>
     public class StrategyRecommendation
     {
-        public string StrategyName { get; set; }
+        public string StrategyName { get; set; } = default!;
         public double ExpectedCompressionRatio { get; set; }
         public double ExpectedAccuracyDrop { get; set; }
         public double ExpectedSpeedup { get; set; }
@@ -371,9 +375,9 @@ namespace AiDotNet.Deployment.Techniques
     /// </summary>
     public class CalibrationData
     {
-        public Dictionary<string, float> MinValues { get; set; }
-        public Dictionary<string, float> MaxValues { get; set; }
-        public Dictionary<string, float[]> Histograms { get; set; }
+        public Dictionary<string, float> MinValues { get; set; } = default!;
+        public Dictionary<string, float> MaxValues { get; set; } = default!;
+        public Dictionary<string, float[]> Histograms { get; set; } = default!;
         public int SampleCount { get; set; }
     }
 
@@ -384,7 +388,7 @@ namespace AiDotNet.Deployment.Techniques
     {
         public string Strategy { get; set; } = "int8";
         public bool EnableFineTuning { get; set; } = true;
-        public string TargetHardware { get; set; }
+        public string TargetHardware { get; set; } = default!;
         public bool EnableGraphOptimization { get; set; } = true;
         public Dictionary<string, object> CustomOptions { get; set; } = new Dictionary<string, object>();
     }
@@ -396,7 +400,7 @@ namespace AiDotNet.Deployment.Techniques
     {
         bool RequiresCalibration { get; }
         Task<IFullModel<T, TInput, TOutput>> QuantizeAsync(IFullModel<T, TInput, TOutput> model, QuantizationConfig config, CalibrationData calibrationData);
-        Task<ILayer> QuantizeLayerAsync(ILayer layer, QuantizationConfig config);
+        Task<ILayer<T>> QuantizeLayerAsync(ILayer<T> layer, QuantizationConfig config);
         StrategyRecommendation AnalyzeModel(IFullModel<T, TInput, TOutput> model, QuantizationConfig config);
     }
 
@@ -409,13 +413,13 @@ namespace AiDotNet.Deployment.Techniques
 
         public async Task<IFullModel<T, TInput, TOutput>> QuantizeAsync(IFullModel<T, TInput, TOutput> model, QuantizationConfig config, CalibrationData calibrationData)
         {
-            if (!(model is INeuralNetworkModel<double> nnModel))
+            if (!(model is INeuralNetworkModel<T> nnModel))
             {
                 throw new ArgumentException("INT8 quantization requires a neural network model");
             }
 
             var architecture = nnModel.GetArchitecture();
-            var quantizedLayers = new List<ILayer>();
+            var quantizedLayers = new List<ILayer<T>>();
 
             foreach (var layer in architecture.Layers)
             {
@@ -424,7 +428,7 @@ namespace AiDotNet.Deployment.Techniques
             }
 
             // Create quantized model
-            var quantizedArchitecture = new NeuralNetworkArchitecture<double>
+            var quantizedArchitecture = new NeuralNetworkArchitecture<T>
             {
                 Layers = quantizedLayers,
                 LossFunction = architecture.LossFunction,
@@ -434,7 +438,7 @@ namespace AiDotNet.Deployment.Techniques
             return CreateQuantizedNeuralNetwork(quantizedArchitecture, "INT8");
         }
 
-        public async Task<ILayer> QuantizeLayerAsync(ILayer layer, QuantizationConfig config)
+        public async Task<ILayer<T>> QuantizeLayerAsync(ILayer<T> layer, QuantizationConfig config)
         {
             // This method is required by interface but delegates to overloaded version
             var dummyCalibration = new CalibrationData
@@ -445,24 +449,24 @@ namespace AiDotNet.Deployment.Techniques
             return await QuantizeLayerAsync(layer, config, dummyCalibration);
         }
 
-        private async Task<ILayer> QuantizeLayerAsync(ILayer layer, QuantizationConfig config, CalibrationData calibrationData)
+        private async Task<ILayer<T>> QuantizeLayerAsync(ILayer<T> layer, QuantizationConfig config, CalibrationData calibrationData)
         {
-            if (layer.Parameters == null || layer.Parameters.Count == 0)
+            var parameters = layer.GetParameters();
+            if (parameters == null || parameters.Length == 0)
                 return layer; // No parameters to quantize
 
-            var quantizedParams = new List<Tensor<double>>();
-            
-            foreach (var param in layer.Parameters)
-            {
-                var quantizedParam = await QuantizeTensorToInt8Async(param, config, calibrationData, layer.Name);
-                quantizedParams.Add(quantizedParam);
-            }
+            var quantizedParams = new List<Tensor<T>>();
+
+            // Convert Vector<T> to single Tensor for quantization
+            var paramTensor = new Tensor<T>(new[] { parameters.Length }, parameters.Data);
+            var quantizedParam = await QuantizeTensorToInt8Async(paramTensor, config, calibrationData, layer.Name);
+            quantizedParams.Add(quantizedParam);
 
             // Create quantized layer with same structure but quantized parameters
             return CreateQuantizedLayer(layer, quantizedParams);
         }
 
-        private async Task<Tensor<double>> QuantizeTensorToInt8Async(Tensor<double> tensor, QuantizationConfig config, CalibrationData calibrationData, string layerName)
+        private async Task<Tensor<T>> QuantizeTensorToInt8Async(Tensor<T> tensor, QuantizationConfig config, CalibrationData calibrationData, string layerName)
         {
             var quantizedTensor = tensor.Clone();
             
@@ -518,18 +522,18 @@ namespace AiDotNet.Deployment.Techniques
             return quantizedTensor;
         }
 
-        private ILayer CreateQuantizedLayer(ILayer originalLayer, List<Tensor<double>> quantizedParams)
+        private ILayer<T> CreateQuantizedLayer(ILayer<T> originalLayer, List<Tensor<T>> quantizedParams)
         {
             // Create a new layer instance with quantized parameters
             // This is a simplified version - in practice would create specific layer types
-            var quantizedLayer = new QuantizedLayer(originalLayer, quantizedParams);
+            var quantizedLayer = new QuantizedLayer<T>(originalLayer, quantizedParams);
             return quantizedLayer;
         }
 
-        private INeuralNetworkModel<double> CreateQuantizedNeuralNetwork(NeuralNetworkArchitecture<double> architecture, string quantizationType)
+        private INeuralNetworkModel<T> CreateQuantizedNeuralNetwork(NeuralNetworkArchitecture<T> architecture, string quantizationType)
         {
             // Create a quantized neural network model
-            var quantizedModel = new QuantizedNeuralNetwork(architecture, quantizationType);
+            var quantizedModel = new QuantizedNeuralNetwork<T>(architecture, quantizationType);
             return quantizedModel;
         }
 
@@ -562,7 +566,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> QuantizeLayerAsync(ILayer layer, QuantizationConfig config)
+        public async Task<ILayer<T>> QuantizeLayerAsync(ILayer<T> layer, QuantizationConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -597,7 +601,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> QuantizeLayerAsync(ILayer layer, QuantizationConfig config)
+        public async Task<ILayer<T>> QuantizeLayerAsync(ILayer<T> layer, QuantizationConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -632,7 +636,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> QuantizeLayerAsync(ILayer layer, QuantizationConfig config)
+        public async Task<ILayer<T>> QuantizeLayerAsync(ILayer<T> layer, QuantizationConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -668,7 +672,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> QuantizeLayerAsync(ILayer layer, QuantizationConfig config)
+        public async Task<ILayer<T>> QuantizeLayerAsync(ILayer<T> layer, QuantizationConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -703,7 +707,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> QuantizeLayerAsync(ILayer layer, QuantizationConfig config)
+        public async Task<ILayer<T>> QuantizeLayerAsync(ILayer<T> layer, QuantizationConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -739,7 +743,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> QuantizeLayerAsync(ILayer layer, QuantizationConfig config)
+        public async Task<ILayer<T>> QuantizeLayerAsync(ILayer<T> layer, QuantizationConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -765,28 +769,51 @@ namespace AiDotNet.Deployment.Techniques
     /// <summary>
     /// Quantized layer wrapper that holds quantized parameters
     /// </summary>
-    public class QuantizedLayer : ILayer
+    public class QuantizedLayer<T> : ILayer<T>
     {
-        private readonly ILayer originalLayer;
-        private readonly List<Tensor<double>> quantizedParameters;
+        private readonly ILayer<T> originalLayer = default!;
+        private readonly List<Tensor<T>> quantizedParameters = default!;
 
-        public QuantizedLayer(ILayer originalLayer, List<Tensor<double>> quantizedParameters)
+        public QuantizedLayer(ILayer<T> originalLayer, List<Tensor<T>> quantizedParameters)
         {
             this.originalLayer = originalLayer;
             this.quantizedParameters = quantizedParameters;
         }
 
         public string Name => originalLayer.Name + "_quantized";
-        public LayerType LayerType => originalLayer.LayerType;
         public int InputSize => originalLayer.InputSize;
         public int OutputSize => originalLayer.OutputSize;
-        public List<Tensor<double>> Parameters => quantizedParameters;
-        public List<Tensor<double>> Gradients => originalLayer.Gradients;
+        public int ParameterCount => originalLayer.ParameterCount;
+        public bool SupportsTraining => originalLayer.SupportsTraining;
 
-        public Tensor<double> Forward(Tensor<double> input)
+        public int[] GetInputShape() => originalLayer.GetInputShape();
+        public int[] GetOutputShape() => originalLayer.GetOutputShape();
+        public IEnumerable<ActivationFunction> GetActivationTypes() => originalLayer.GetActivationTypes();
+        public void SetTrainingMode(bool isTraining) => originalLayer.SetTrainingMode(isTraining);
+        public Vector<T> GetParameterGradients() => originalLayer.GetParameterGradients();
+        public void ClearGradients() => originalLayer.ClearGradients();
+        public void ResetState() => originalLayer.ResetState();
+        public int GetParameterCount() => originalLayer.GetParameterCount();
+
+        public void UpdateParameters(T learningRate) => originalLayer.UpdateParameters(learningRate);
+        public void UpdateParameters(Vector<T> parameters) => originalLayer.UpdateParameters(parameters);
+
+        public Vector<T> GetParameters() => originalLayer.GetParameters();
+        public void SetParameters(Vector<T> parameters) => originalLayer.SetParameters(parameters);
+        public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+        {
+            var newLayer = new QuantizedLayer<T>(originalLayer, quantizedParameters);
+            newLayer.SetParameters(parameters);
+            return (IFullModel<T, Tensor<T>, Tensor<T>>)(object)newLayer;
+        }
+
+        public byte[] Serialize() => originalLayer.Serialize();
+        public void Deserialize(byte[] data) => originalLayer.Deserialize(data);
+
+        public Tensor<T> Forward(Tensor<T> input)
         {
             // Dequantize parameters for computation
-            var dequantizedParams = new List<Tensor<double>>();
+            var dequantizedParams = new List<Tensor<T>>();
             foreach (var param in quantizedParameters)
             {
                 dequantizedParams.Add(DequantizeTensor(param));
@@ -797,12 +824,12 @@ namespace AiDotNet.Deployment.Techniques
             return originalLayer.Forward(input);
         }
 
-        public Tensor<double> Backward(Tensor<double> gradOutput)
+        public Tensor<T> Backward(Tensor<T> gradOutput)
         {
             return originalLayer.Backward(gradOutput);
         }
 
-        private Tensor<double> DequantizeTensor(Tensor<double> quantizedTensor)
+        private Tensor<T> DequantizeTensor(Tensor<T> quantizedTensor)
         {
             if (!quantizedTensor.Metadata.ContainsKey("quantized_data"))
                 return quantizedTensor;
@@ -811,12 +838,12 @@ namespace AiDotNet.Deployment.Techniques
             var scale = (float)quantizedTensor.Metadata["scale"];
             var zeroPoint = (float)quantizedTensor.Metadata["zero_point"];
 
-            var dequantized = new Tensor<double>(quantizedTensor.Shape);
+            var dequantized = new Tensor<T>(quantizedTensor.Shape);
             var data = dequantized.Data;
 
             for (int i = 0; i < quantizedData.Length; i++)
             {
-                data[i] = (quantizedData[i] - zeroPoint) * scale;
+                data[i] = (T)(object)((quantizedData[i] - zeroPoint) * scale);
             }
 
             return dequantized;
@@ -826,78 +853,176 @@ namespace AiDotNet.Deployment.Techniques
     /// <summary>
     /// Quantized neural network model
     /// </summary>
-    public class QuantizedNeuralNetwork : NeuralNetworkBase<double>, INeuralNetworkModel<double>
+    public class QuantizedNeuralNetwork<T> : NeuralNetworkBase<T>, INeuralNetworkModel<T>
     {
-        private readonly NeuralNetworkArchitecture<double> architecture;
-        private readonly string quantizationType;
+        private readonly NeuralNetworkArchitecture<T> networkArchitecture = default!;
+        private readonly string quantizationType = default!;
 
-        public QuantizedNeuralNetwork(NeuralNetworkArchitecture<double> architecture, string quantizationType) 
-            : base($"Quantized_{quantizationType}_Network")
+        public QuantizedNeuralNetwork(
+            NeuralNetworkArchitecture<T> architecture,
+            string quantizationType,
+            ILossFunction<T>? lossFunction = null,
+            T? maxGradNorm = default)
+            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm ?? (T)(object)1.0)
         {
-            this.architecture = architecture;
+            this.networkArchitecture = architecture;
             this.quantizationType = quantizationType;
         }
 
-        public NeuralNetworkArchitecture<double> GetArchitecture()
+        public override NeuralNetworkArchitecture<T> GetArchitecture()
         {
-            return architecture;
+            return networkArchitecture;
         }
 
-        public int[] GetInputShape()
+        public override int[] GetInputShape()
         {
             // Return input shape based on first layer
-            if (architecture.Layers.Count > 0)
+            if (networkArchitecture.Layers.Count > 0)
             {
-                return new[] { architecture.Layers[0].InputSize };
+                return new[] { networkArchitecture.Layers[0].InputSize };
             }
             return new[] { 1 };
         }
 
-        public Dictionary<string, Tensor<double>> GetLayerActivations(Tensor<double> input)
+        public override Dictionary<int, Tensor<T>> GetLayerActivations(Tensor<T> input)
         {
-            var activations = new Dictionary<string, Tensor<double>>();
+            var activations = new Dictionary<int, Tensor<T>>();
             var currentInput = input;
 
-            foreach (var layer in architecture.Layers)
+            for (int i = 0; i < networkArchitecture.Layers.Count; i++)
             {
+                var layer = networkArchitecture.Layers[i];
                 var output = layer.Forward(currentInput);
-                activations[layer.Name] = output;
+                activations[i] = output;
                 currentInput = output;
             }
 
             return activations;
         }
 
-        public override Tensor<double> Forward(Tensor<double> input)
+        public Tensor<T> Forward(Tensor<T> input)
         {
             var currentInput = input;
-            
-            foreach (var layer in architecture.Layers)
+
+            foreach (var layer in networkArchitecture.Layers)
             {
                 currentInput = layer.Forward(currentInput);
             }
-            
+
             return currentInput;
         }
 
-        public override void Backward(Tensor<double> gradOutput)
+        public void Backward(Tensor<T> gradOutput)
         {
             var currentGrad = gradOutput;
-            
+
             // Backward through layers in reverse order
-            for (int i = architecture.Layers.Count - 1; i >= 0; i--)
+            for (int i = networkArchitecture.Layers.Count - 1; i >= 0; i--)
             {
-                currentGrad = architecture.Layers[i].Backward(currentGrad);
+                currentGrad = networkArchitecture.Layers[i].Backward(currentGrad);
             }
         }
 
-        protected override void SaveModelSpecificData(IDictionary<string, object> data)
+        protected override void InitializeLayers()
         {
-            data["quantizationType"] = quantizationType;
-            data["numLayers"] = architecture.Layers.Count;
+            // Quantized networks use pre-initialized layers from the architecture
         }
 
-        protected override void LoadModelSpecificData(IDictionary<string, object> data)
+        public override void UpdateParameters(Vector<T> parameters)
+        {
+            // Update quantized parameters
+            // Simplified implementation
+            var offset = 0;
+            foreach (var layer in networkArchitecture.Layers)
+            {
+                var layerParamCount = layer.GetParameterCount();
+                if (offset + layerParamCount <= parameters.Data.Length)
+                {
+                    var layerParams = new Vector<T>(new T[layerParamCount]);
+                    Array.Copy(parameters.Data, offset, layerParams.Data, 0, layerParamCount);
+                    layer.UpdateParameters(layerParams);
+                    offset += layerParamCount;
+                }
+            }
+        }
+
+        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        {
+            return new QuantizedNeuralNetwork<T>(
+                networkArchitecture,
+                quantizationType,
+                LossFunction,
+                MaxGradNorm);
+        }
+
+        public override Tensor<T> Predict(Tensor<T> input)
+        {
+            return Forward(input);
+        }
+
+        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        {
+            // Forward pass
+            var output = Forward(input);
+
+            // Compute loss
+            var loss = ComputeLoss(output, expectedOutput);
+            LastLoss = loss;
+
+            // Backward pass
+            var lossGrad = output.Subtract(expectedOutput);
+            Backward(lossGrad);
+        }
+
+        private T ComputeLoss(Tensor<T> predicted, Tensor<T> expected)
+        {
+            var diff = predicted.Subtract(expected);
+            var squared = diff.Multiply(diff);
+            if (squared.Data.Length > 0)
+            {
+                dynamic sum = default(T);
+                foreach (var val in squared.Data)
+                {
+                    sum += (dynamic)val;
+                }
+                return (T)((dynamic)sum / squared.Data.Length);
+            }
+            return default(T);
+        }
+
+        public override ModelMetaData<T> GetModelMetaData()
+        {
+            return new ModelMetaData<T>
+            {
+                ModelType = ModelType.QuantizedNeuralNetwork,
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    { "QuantizationType", quantizationType },
+                    { "NumLayers", networkArchitecture.Layers.Count }
+                },
+                ModelData = this.Serialize()
+            };
+        }
+
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+        {
+            writer.Write(quantizationType);
+            writer.Write(networkArchitecture.Layers.Count);
+        }
+
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+        {
+            string savedQuantizationType = reader.ReadString();
+            int savedNumLayers = reader.ReadInt32();
+        }
+
+        protected void SaveModelSpecificData(IDictionary<string, object> data)
+        {
+            data["quantizationType"] = quantizationType;
+            data["numLayers"] = networkArchitecture.Layers.Count;
+        }
+
+        protected void LoadModelSpecificData(IDictionary<string, object> data)
         {
             // Load quantized model data
         }

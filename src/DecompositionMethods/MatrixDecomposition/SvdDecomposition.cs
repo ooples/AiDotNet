@@ -52,7 +52,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     public Matrix<T> A { get; private set; }
 
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the SVD decomposition for the specified matrix.

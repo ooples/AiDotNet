@@ -18,7 +18,7 @@ namespace AiDotNet.FederatedLearning.Communication
         /// <summary>
         /// HTTP client for network communication
         /// </summary>
-        private readonly HttpClient _httpClient;
+        private readonly HttpClient _httpClient = default!;
 
         /// <summary>
         /// Communication settings
@@ -28,12 +28,12 @@ namespace AiDotNet.FederatedLearning.Communication
         /// <summary>
         /// Message compression handler
         /// </summary>
-        private readonly IMessageCompression _messageCompression;
+        private readonly IMessageCompression _messageCompression = default!;
 
         /// <summary>
         /// Message encryption handler
         /// </summary>
-        private readonly IMessageEncryption _messageEncryption;
+        private readonly IMessageEncryption _messageEncryption = default!;
 
         /// <summary>
         /// Communication statistics
@@ -44,7 +44,7 @@ namespace AiDotNet.FederatedLearning.Communication
         /// Initialize communication manager
         /// </summary>
         /// <param name="settings">Communication settings</param>
-        public CommunicationManager(CommunicationSettings settings = null)
+        public CommunicationManager(CommunicationSettings settings = null!)
         {
             Settings = settings ?? new CommunicationSettings();
             _httpClient = new HttpClient()
@@ -92,9 +92,9 @@ namespace AiDotNet.FederatedLearning.Communication
                 }
 
                 // Serialize message
-                var serializedMessage = JsonSerializer.Serialize(message, new JsonSerializerOptions
+                var serializedMessage = Newtonsoft.Json.JsonConvert.SerializeObject(message, new Newtonsoft.Json.JsonSerializerSettings
                 {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
                 });
 
                 // Send via HTTP
@@ -133,9 +133,9 @@ namespace AiDotNet.FederatedLearning.Communication
                     return null;
 
                 // Deserialize message
-                var message = JsonSerializer.Deserialize<FederatedMessage>(serializedMessage, new JsonSerializerOptions
+                var message = Newtonsoft.Json.JsonConvert.DeserializeObject<FederatedMessage>(serializedMessage, new Newtonsoft.Json.JsonSerializerSettings
                 {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
                 });
 
                 // Decrypt message if enabled
@@ -203,9 +203,9 @@ namespace AiDotNet.FederatedLearning.Communication
                 }
 
                 // Serialize message
-                var serializedMessage = JsonSerializer.Serialize(message, new JsonSerializerOptions
+                var serializedMessage = Newtonsoft.Json.JsonConvert.SerializeObject(message, new Newtonsoft.Json.JsonSerializerSettings
                 {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
                 });
 
                 // Send via HTTP
@@ -243,9 +243,9 @@ namespace AiDotNet.FederatedLearning.Communication
                     return null;
 
                 // Deserialize message
-                var message = JsonSerializer.Deserialize<FederatedMessage>(serializedMessage, new JsonSerializerOptions
+                var message = Newtonsoft.Json.JsonConvert.DeserializeObject<FederatedMessage>(serializedMessage, new Newtonsoft.Json.JsonSerializerSettings
                 {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
                 });
 
                 // Decrypt message if enabled
@@ -298,9 +298,9 @@ namespace AiDotNet.FederatedLearning.Communication
                     Metadata = status
                 };
 
-                var serializedMessage = JsonSerializer.Serialize(message, new JsonSerializerOptions
+                var serializedMessage = Newtonsoft.Json.JsonConvert.SerializeObject(message, new Newtonsoft.Json.JsonSerializerSettings
                 {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
                 });
 
                 return await SendHttpMessageAsync(receiverId, serializedMessage);
@@ -365,7 +365,7 @@ namespace AiDotNet.FederatedLearning.Communication
                     Timestamp = DateTime.UtcNow
                 };
 
-                var serializedMessage = JsonSerializer.Serialize(pingMessage);
+                var serializedMessage = Newtonsoft.Json.JsonConvert.SerializeObject(pingMessage);
                 return await SendHttpMessageAsync(peerId, serializedMessage);
             }
             catch
@@ -524,17 +524,17 @@ namespace AiDotNet.FederatedLearning.Communication
     public class FederatedMessage
     {
         public MessageType MessageType { get; set; }
-        public string SenderId { get; set; }
-        public string ReceiverId { get; set; }
+        public string SenderId { get; set; } = default!;
+        public string ReceiverId { get; set; } = default!;
         public DateTime Timestamp { get; set; }
-        public Dictionary<string, Vector<double>> Parameters { get; set; }
-        public Dictionary<string, object> Metadata { get; set; }
+        public Dictionary<string, Vector<double>> Parameters { get; set; } = default!;
+        public Dictionary<string, object> Metadata { get; set; } = default!;
         public bool IsCompressed { get; set; }
         public bool IsEncrypted { get; set; }
-        public string CompressionType { get; set; }
-        public string EncryptionType { get; set; }
-        public byte[] CompressedData { get; set; }
-        public byte[] EncryptedData { get; set; }
+        public string CompressionType { get; set; } = default!;
+        public string EncryptionType { get; set; } = default!;
+        public byte[] CompressedData { get; set; } = default!;
+        public byte[] EncryptedData { get; set; } = default!;
     }
 
     /// <summary>
@@ -565,7 +565,7 @@ namespace AiDotNet.FederatedLearning.Communication
         public TimeSpan AverageLatency { get; private set; }
         public Dictionary<MessageType, int> MessageCounts { get; private set; }
         
-        private List<TimeSpan> _latencies;
+        private List<TimeSpan> _latencies = default!;
 
         public CommunicationStatistics()
         {

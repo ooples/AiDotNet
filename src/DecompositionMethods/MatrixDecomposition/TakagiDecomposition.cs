@@ -13,7 +13,7 @@
 /// </remarks>
 public class TakagiDecomposition<T> : IMatrixDecomposition<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Gets the diagonal matrix containing the singular values.

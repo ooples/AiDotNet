@@ -29,7 +29,7 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// The alpha parameter that controls the shape of the ISRU function.
     /// </summary>
-    private readonly T _alpha;
+    private readonly T _alpha = default!;
 
     /// <summary>
     /// Initializes a new instance of the ISRU activation function with the specified alpha parameter.

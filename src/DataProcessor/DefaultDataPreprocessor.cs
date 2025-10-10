@@ -22,22 +22,22 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
     /// <summary>
     /// Component responsible for scaling data to a standard range.
     /// </summary>
-    private readonly INormalizer<T, TInput, TOutput> _normalizer;
+    private readonly INormalizer<T, TInput, TOutput> _normalizer = default!;
     
     /// <summary>
     /// Component responsible for selecting the most relevant features from the dataset.
     /// </summary>
-    private readonly IFeatureSelector<T, TInput> _featureSelector;
+    private readonly IFeatureSelector<T, TInput> _featureSelector = default!;
     
     /// <summary>
     /// Component responsible for identifying and removing outliers from the dataset.
     /// </summary>
-    private readonly IOutlierRemoval<T, TInput, TOutput> _outlierRemoval;
+    private readonly IOutlierRemoval<T, TInput, TOutput> _outlierRemoval = default!;
     
     /// <summary>
     /// Configuration options for the data preprocessing operations.
     /// </summary>
-    private readonly DataProcessorOptions _options;
+    private readonly DataProcessorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the DefaultDataPreprocessor class with specified components.

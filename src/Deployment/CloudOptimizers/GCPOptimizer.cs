@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -16,7 +17,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
         public override string Name => "GCP Optimizer";
         public override DeploymentTarget Target => DeploymentTarget.Cloud;
 
-        private readonly Dictionary<string, GCPServiceConfig> _serviceConfigs;
+        private Dictionary<string, GCPServiceConfig> ServiceConfigs { get; set; } = default!;
 
         public GCPOptimizer()
         {
@@ -26,7 +27,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
 
         private void InitializeServiceConfigs()
         {
-            _serviceConfigs = new Dictionary<string, GCPServiceConfig>
+            ServiceConfigs = new Dictionary<string, GCPServiceConfig>
             {
                 ["VertexAI"] = new GCPServiceConfig
                 {
@@ -70,11 +71,11 @@ namespace AiDotNet.Deployment.CloudOptimizers
             Configuration.PlatformSpecificSettings["EnableEdgeTPU"] = false;
         }
 
-        public override async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> OptimizeAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, OptimizationOptions options)
+        public override async Task<IModel<TInput, TOutput, TMetadata>> OptimizeAsync(IModel<TInput, TOutput, TMetadata> model, OptimizationOptions options)
         {
             // Determine the best GCP service for the model
             var targetService = DetermineTargetService(model, options);
-            
+
             // Apply GCP-specific optimizations
             var optimizedModel = model;
 
@@ -105,7 +106,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
             return optimizedModel;
         }
 
-        private string DetermineTargetService(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, OptimizationOptions options)
+        private string DetermineTargetService(IModel<TInput, TOutput, TMetadata> model, OptimizationOptions options)
         {
             var modelSize = EstimateModelSize(model);
             var requiresGPU = options.CustomOptions.ContainsKey("RequiresGPU") 
@@ -134,7 +135,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
             return "VertexAI";
         }
 
-        private async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> OptimizeForCloudFunctionsAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        private async Task<IModel<TInput, TOutput, TMetadata>> OptimizeForCloudFunctionsAsync(IModel<TInput, TOutput, TMetadata> model)
         {
             // Simulate Cloud Functions optimization
             await Task.Delay(100); // Simulate processing
@@ -146,7 +147,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
             return model;
         }
 
-        private async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> OptimizeForVertexAIAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, OptimizationOptions options)
+        private async Task<IModel<TInput, TOutput, TMetadata>> OptimizeForVertexAIAsync(IModel<TInput, TOutput, TMetadata> model, OptimizationOptions options)
         {
             // Simulate Vertex AI optimization
             await Task.Delay(100); // Simulate processing
@@ -158,7 +159,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
             return model;
         }
 
-        private async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> OptimizeForTPUAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        private async Task<IModel<TInput, TOutput, TMetadata>> OptimizeForTPUAsync(IModel<TInput, TOutput, TMetadata> model)
         {
             // Simulate TPU optimization
             await Task.Delay(100); // Simulate processing
@@ -170,7 +171,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
             return model;
         }
 
-        private async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> OptimizeWithTensorRTAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        private async Task<IModel<TInput, TOutput, TMetadata>> OptimizeWithTensorRTAsync(IModel<TInput, TOutput, TMetadata> model)
         {
             // Simulate Tensor<double>RT optimization
             await Task.Delay(100); // Simulate processing
@@ -182,7 +183,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
             return model;
         }
 
-        public override async Task<DeploymentPackage> CreateDeploymentPackageAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, string targetPath)
+        public override async Task<DeploymentPackage> CreateDeploymentPackageAsync(IModel<TInput, TOutput, TMetadata> model, string targetPath)
         {
             var package = new DeploymentPackage
             {
@@ -213,32 +214,32 @@ namespace AiDotNet.Deployment.CloudOptimizers
             // Create Terraform configuration
             var terraformConfig = GenerateTerraformConfig(model);
             var tfPath = Path.Combine(configDir, "main.tf");
-            await File.WriteAllTextAsync(tfPath, terraformConfig);
+            await FileAsyncHelper.WriteAllTextAsync(tfPath, terraformConfig);
             package.Artifacts["Terraform"] = tfPath;
 
             // Create Cloud Build configuration
             var cloudBuildConfig = GenerateCloudBuildConfig();
             var buildPath = Path.Combine(configDir, "cloudbuild.yaml");
-            await File.WriteAllTextAsync(buildPath, cloudBuildConfig);
+            await FileAsyncHelper.WriteAllTextAsync(buildPath, cloudBuildConfig);
             package.Artifacts["CloudBuild"] = buildPath;
 
             // Create prediction service
             var predictionService = GeneratePredictionService();
             var servicePath = Path.Combine(scriptsDir, "prediction_service.py");
-            await File.WriteAllTextAsync(servicePath, predictionService);
+            await FileAsyncHelper.WriteAllTextAsync(servicePath, predictionService);
             package.Artifacts["PredictionService"] = servicePath;
 
             // Create deployment configuration
             var deployConfig = GenerateDeploymentConfig(model);
             package.ConfigPath = Path.Combine(configDir, "deploy_config.json");
-            await File.WriteAllTextAsync(package.ConfigPath, deployConfig);
+            await FileAsyncHelper.WriteAllTextAsync(package.ConfigPath, deployConfig);
 
             // Create Dockerfile for Cloud Run
             if (DetermineTargetService(model, new OptimizationOptions()) == "CloudRun")
             {
                 var dockerfile = GenerateDockerfile();
                 var dockerPath = Path.Combine(targetPath, "Dockerfile");
-                await File.WriteAllTextAsync(dockerPath, dockerfile);
+                await FileAsyncHelper.WriteAllTextAsync(dockerPath, dockerfile);
                 package.Artifacts["Dockerfile"] = dockerPath;
             }
 
@@ -249,7 +250,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
             return package;
         }
 
-        private string GenerateTerraformConfig(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        private string GenerateTerraformConfig(IModel<TInput, TOutput, TMetadata> model)
         {
             return @"
 terraform {
@@ -492,7 +493,7 @@ CMD [""python"", ""prediction_service.py""]
 ";
         }
 
-        private string GenerateDeploymentConfig(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        private string GenerateDeploymentConfig(IModel<TInput, TOutput, TMetadata> model)
         {
             var config = new
             {
@@ -524,7 +525,7 @@ CMD [""python"", ""prediction_service.py""]
                     enable_profiler = true,
                     alert_policies = new[]
                     {
-                        new { metric = "prediction_latency", threshold = 1000 },
+                        new { metric = "prediction_latency", threshold = 1000.0 },
                         new { metric = "error_rate", threshold = 0.01 }
                     }
                 }
@@ -536,7 +537,7 @@ CMD [""python"", ""prediction_service.py""]
             });
         }
 
-        protected override double EstimateLatency(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        protected override double EstimateLatency(IModel<TInput, TOutput, TMetadata> model)
         {
             var baseLatency = base.EstimateLatency(model);
             
@@ -558,13 +559,13 @@ CMD [""python"", ""prediction_service.py""]
 
         private class GCPServiceConfig
         {
-            public string ServiceName { get; set; }
+            public string ServiceName { get; set; } = default!;
             public double MaxModelSize { get; set; }
             public double MaxMemory { get; set; }
             public double MaxTimeout { get; set; }
-            public string[] SupportedFormats { get; set; }
-            public string[] MachineTypes { get; set; }
-            public string[] Accelerators { get; set; }
+            public string[] SupportedFormats { get; set; } = default!;
+            public string[] MachineTypes { get; set; } = default!;
+            public string[] Accelerators { get; set; } = default!;
         }
     }
 }

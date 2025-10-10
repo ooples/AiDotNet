@@ -27,13 +27,26 @@ public enum NeuralNetworkTaskType
     BinaryClassification,
     
     /// <summary>
+    /// General classification task (any classification type)
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> General classification covers any task where items are sorted into
+    /// categories. This is a broader category that encompasses binary, multi-class, and multi-label
+    /// classification tasks. Use this when you want to specify classification without being specific
+    /// about the exact type.
+    /// </para>
+    /// </remarks>
+    Classification,
+
+    /// <summary>
     /// Multi-class classification task (more than two classes)
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Multi-class classification sorts items into one of several categories. 
-    /// Unlike binary classification which has only two options, this can have many possible 
-    /// categories. For example, classifying a photo as containing a dog, cat, bird, or horse 
+    /// <b>For Beginners:</b> Multi-class classification sorts items into one of several categories.
+    /// Unlike binary classification which has only two options, this can have many possible
+    /// categories. For example, classifying a photo as containing a dog, cat, bird, or horse
     /// (where each image belongs to exactly one category).
     /// </para>
     /// </remarks>
@@ -235,14 +248,28 @@ public enum NeuralNetworkTaskType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Generative tasks create new data that resembles existing data. The neural network learns 
-    /// the patterns and structure of the training data, then generates new examples that look like they could 
-    /// have been part of the original dataset. Examples include creating realistic images of faces that don't 
+    /// <b>For Beginners:</b> Generative tasks create new data that resembles existing data. The neural network learns
+    /// the patterns and structure of the training data, then generates new examples that look like they could
+    /// have been part of the original dataset. Examples include creating realistic images of faces that don't
     /// exist, generating music, or synthesizing speech.
     /// </para>
     /// </remarks>
     Generative,
-    
+
+    /// <summary>
+    /// Image generation task (creating new images)
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Image generation creates new images from scratch or based on input prompts.
+    /// The neural network learns patterns from existing images and can then generate entirely new, realistic images.
+    /// Examples include text-to-image generation (like DALL-E or Stable Diffusion), style transfer, or creating
+    /// photorealistic faces of people who don't exist. This is a specialized form of generative modeling focused
+    /// specifically on visual content.
+    /// </para>
+    /// </remarks>
+    ImageGeneration,
+
     /// <summary>
     /// Speech recognition task
     /// </summary>

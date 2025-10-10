@@ -14,12 +14,12 @@ public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
     /// <summary>
     /// The underlying real-valued matrix decomposition.
     /// </summary>
-    private readonly IMatrixDecomposition<T> _baseDecomposition;
+    private readonly IMatrixDecomposition<T> _baseDecomposition = default!;
     
     /// <summary>
     /// Operations for the numeric type T (like addition, multiplication, etc.).
     /// </summary>
-    private readonly INumericOperations<T> _ops;
+    private readonly INumericOperations<T> _ops = default!;
 
     /// <summary>
     /// Creates a new complex matrix decomposition by wrapping a real-valued decomposition.

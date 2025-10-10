@@ -12,7 +12,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
-    private readonly MultiplicativeAlgorithmType _algorithm;
+    private readonly MultiplicativeAlgorithmType _algorithm = default!;
     private readonly int _seasonalPeriod;
 
     /// <summary>

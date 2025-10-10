@@ -820,11 +820,11 @@ namespace AiDotNet.Pipeline
         {
             switch (target)
             {
-                case DeploymentTarget.CloudDeployment:
+                case AiDotNet.Enums.DeploymentTarget.CloudDeployment:
                     return CreateCloudOptimizer();
-                case DeploymentTarget.EdgeDeployment:
-                    return new MobileOptimizer<Matrix<double>, Vector<double>, ModelMetaData<double>>();
-                case DeploymentTarget.MobileDeployment:
+                case AiDotNet.Enums.DeploymentTarget.Edge:
+                    return new IoTOptimizer<Matrix<double>, Vector<double>, ModelMetaData<double>>();
+                case AiDotNet.Enums.DeploymentTarget.Mobile:
                     return new MobileOptimizer<Matrix<double>, Vector<double>, ModelMetaData<double>>();
                 default:
                     return new ModelOptimizer<Matrix<double>, Vector<double>, ModelMetaData<double>>();

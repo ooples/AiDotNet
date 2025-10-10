@@ -43,7 +43,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new QR decomposition of the specified matrix.

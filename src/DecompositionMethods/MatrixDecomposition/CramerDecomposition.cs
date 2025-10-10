@@ -15,7 +15,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Gets the original matrix that was decomposed.

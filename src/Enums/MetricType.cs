@@ -10,26 +10,83 @@ public enum MetricType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> R² (R-squared) tells you how well your model fits the data, on a scale from 0 to 1.
+    /// <b>For Beginners:</b> Rï¿½ (R-squared) tells you how well your model fits the data, on a scale from 0 to 1.
     /// A value of 1 means your model perfectly predicts the data, while 0 means it's no better than
-    /// just guessing the average value. For example, an R² of 0.75 means your model explains 75% of
+    /// just guessing the average value. For example, an Rï¿½ of 0.75 means your model explains 75% of
     /// the variation in the data.
     /// </para>
     /// </remarks>
     R2,
     
     /// <summary>
-    /// A modified version of R² that accounts for the number of predictors in the model.
+    /// A modified version of Rï¿½ that accounts for the number of predictors in the model.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Adjusted R² is similar to R², but it penalizes you for adding too many input variables
+    /// <b>For Beginners:</b> Adjusted Rï¿½ is similar to Rï¿½, but it penalizes you for adding too many input variables
     /// that don't help much. This prevents "overfitting" - when your model becomes too complex and starts
-    /// memorizing the training data rather than learning general patterns. Use this instead of regular R²
+    /// memorizing the training data rather than learning general patterns. Use this instead of regular Rï¿½
     /// when comparing models with different numbers of input variables.
     /// </para>
     /// </remarks>
     AdjustedR2,
+
+    /// <summary>
+    /// Mean Squared Error - measures the average squared difference between predicted and actual values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mean Squared Error (MSE) tells you how far off your predictions are from the actual values.
+    /// It squares the differences, which means larger errors are penalized more heavily. Lower MSE values indicate better model performance.
+    /// </para>
+    /// </remarks>
+    MeanSquaredError,
+
+    /// <summary>
+    /// Root Mean Squared Error - the square root of the mean squared error, in the same units as the target variable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Root Mean Squared Error (RMSE) is like MSE but takes the square root at the end,
+    /// which puts it back in the same units as your original data. This makes it easier to interpret.
+    /// For example, if predicting house prices in dollars, RMSE will also be in dollars.
+    /// </para>
+    /// </remarks>
+    RootMeanSquaredError,
+
+    /// <summary>
+    /// Mean Absolute Error - measures the average absolute difference between predicted and actual values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mean Absolute Error (MAE) tells you the average difference between your predictions
+    /// and actual values, ignoring whether the errors are positive or negative. It's easier to understand than MSE
+    /// because it doesn't square the errors - a MAE of 5 means your predictions are off by 5 units on average.
+    /// </para>
+    /// </remarks>
+    MeanAbsoluteError,
+
+    /// <summary>
+    /// R-Squared - coefficient of determination measuring the proportion of variance explained by the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> RSquared is another way to refer to Rï¿½ (R-squared), which measures how well
+    /// your model explains the variation in the data on a scale from 0 to 1.
+    /// </para>
+    /// </remarks>
+    RSquared,
+
+    /// <summary>
+    /// Area Under the Curve - measures the area under the ROC curve for classification performance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AUC (Area Under the Curve) measures how well your model can distinguish between classes.
+    /// A value of 1.0 means perfect classification, 0.5 means random guessing, and values above 0.7 are generally considered good.
+    /// </para>
+    /// </remarks>
+    AUC,
 
     /// <summary>
     /// The smallest value in the dataset.
@@ -409,7 +466,7 @@ public enum MetricType
     /// <remarks>
     /// <para>
     /// QuartileSkewness is a robust alternative to the traditional moment-based skewness. It's calculated as
-    /// (Q3 + Q1 - 2×Median) / (Q3 - Q1), where Q1 and Q3 are the first and third quartiles. This measure is less
+    /// (Q3 + Q1 - 2ï¿½Median) / (Q3 - Q1), where Q1 and Q3 are the first and third quartiles. This measure is less
     /// sensitive to outliers than traditional skewness.
     /// </para>
     /// <para>
@@ -618,8 +675,8 @@ public enum MetricType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Explained Variance Score measures how much of the variation in your data is captured
-    /// by your model. Like R², it ranges from 0 to 1, with higher values being better. The main difference
-    /// is that this metric focuses purely on variance explained, while R² also considers how far predictions
+    /// by your model. Like Rï¿½, it ranges from 0 to 1, with higher values being better. The main difference
+    /// is that this metric focuses purely on variance explained, while Rï¿½ also considers how far predictions
     /// are from the actual values.
     /// </para>
     /// </remarks>
@@ -719,9 +776,9 @@ public enum MetricType
     /// <para>
     /// <b>For Beginners:</b> Pearson Correlation measures how well the relationship between your predictions and
     /// actual values can be described with a straight line. It ranges from -1 to 1, where:
-    /// • 1 means perfect positive correlation (when actual values increase, predictions increase)
-    /// • 0 means no correlation
-    /// • -1 means perfect negative correlation (when actual values increase, predictions decrease)
+    /// ï¿½ 1 means perfect positive correlation (when actual values increase, predictions increase)
+    /// ï¿½ 0 means no correlation
+    /// ï¿½ -1 means perfect negative correlation (when actual values increase, predictions decrease)
     /// A high positive value indicates your model is capturing the right patterns, even if the exact values differ.
     /// </para>
     /// </remarks>

@@ -40,7 +40,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// The weights for each node in the binary tree.
     /// </summary>
-    private readonly Matrix<T> _nodeWeights;
+    private readonly Matrix<T> _nodeWeights = default!;
 
     /// <summary>
     /// Initializes a new instance of the Hierarchical Softmax activation function.

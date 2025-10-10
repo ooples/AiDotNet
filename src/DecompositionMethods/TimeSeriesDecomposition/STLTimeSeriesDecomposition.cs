@@ -18,8 +18,8 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
-    private readonly STLDecompositionOptions<T> _options;
-    private readonly STLAlgorithmType _algorithmType;
+    private readonly STLDecompositionOptions<T> _options = default!;
+    private readonly STLAlgorithmType _algorithmType = default!;
 
     /// <summary>
     /// Initializes a new instance of the STL time series decomposition algorithm.

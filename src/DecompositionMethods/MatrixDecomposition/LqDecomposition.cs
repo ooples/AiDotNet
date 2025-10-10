@@ -17,7 +17,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Provides operations for the numeric type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Gets the lower triangular matrix L from the decomposition.

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -16,7 +17,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
         public override string Name => "Azure Optimizer";
         public override DeploymentTarget Target => DeploymentTarget.Cloud;
 
-        private readonly Dictionary<string, AzureServiceConfig> _serviceConfigs;
+        private Dictionary<string, AzureServiceConfig> ServiceConfigs { get; set; } = default!;
 
         public AzureOptimizer()
         {
@@ -26,7 +27,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
 
         private void InitializeServiceConfigs()
         {
-            _serviceConfigs = new Dictionary<string, AzureServiceConfig>
+            ServiceConfigs = new Dictionary<string, AzureServiceConfig>
             {
                 ["MachineLearning"] = new AzureServiceConfig
                 {
@@ -210,19 +211,19 @@ namespace AiDotNet.Deployment.CloudOptimizers
             // Create ARM template
             var armTemplate = GenerateARMTemplate(model);
             var armPath = Path.Combine(configDir, "azuredeploy.json");
-            await File.WriteAllTextAsync(armPath, armTemplate);
+            await FileAsyncHelper.WriteAllTextAsync(armPath, armTemplate);
             package.Artifacts["ARMTemplate"] = armPath;
 
             // Create Azure ML scoring script
             var scoringScript = GenerateAzureMLScoringScript();
             var scriptPath = Path.Combine(scriptsDir, "score.py");
-            await File.WriteAllTextAsync(scriptPath, scoringScript);
+            await FileAsyncHelper.WriteAllTextAsync(scriptPath, scoringScript);
             package.Artifacts["ScoringScript"] = scriptPath;
 
             // Create deployment configuration
             var deployConfig = GenerateDeploymentConfig(model);
             package.ConfigPath = Path.Combine(configDir, "deploy_config.json");
-            await File.WriteAllTextAsync(package.ConfigPath, deployConfig);
+            await FileAsyncHelper.WriteAllTextAsync(package.ConfigPath, deployConfig);
 
             // Create Azure Functions project if applicable
             if (DetermineTargetService(model, new OptimizationOptions()) == "Functions")
@@ -376,7 +377,7 @@ def run(raw_data):
         }
     }
 }";
-            await File.WriteAllTextAsync(Path.Combine(functionsPath, "host.json"), hostJson);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(functionsPath, "host.json"), hostJson);
 
             // Create function.json
             var functionJson = @"{
@@ -397,13 +398,13 @@ def run(raw_data):
 }";
             var predictDir = Path.Combine(functionsPath, "Predict");
             Directory.CreateDirectory(predictDir);
-            await File.WriteAllTextAsync(Path.Combine(predictDir, "function.json"), functionJson);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(predictDir, "function.json"), functionJson);
 
             // Create requirements.txt
             var requirements = @"azure-functions
 onnxruntime
 numpy";
-            await File.WriteAllTextAsync(Path.Combine(functionsPath, "requirements.txt"), requirements);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(functionsPath, "requirements.txt"), requirements);
         }
 
         protected override double EstimateLatency(IModel<TInput, TOutput, TMetadata> model)
@@ -429,13 +430,13 @@ numpy";
 
         private class AzureServiceConfig
         {
-            public string ServiceName { get; set; }
+            public string ServiceName { get; set; } = default!;
             public double MaxModelSize { get; set; }
             public double MaxMemory { get; set; }
             public double MaxTimeout { get; set; }
-            public string[] SupportedFormats { get; set; }
-            public string[] ComputeTargets { get; set; }
-            public string[] Capabilities { get; set; }
+            public string[] SupportedFormats { get; set; } = default!;
+            public string[] ComputeTargets { get; set; } = default!;
+            public string[] Capabilities { get; set; } = default!;
         }
     }
 }

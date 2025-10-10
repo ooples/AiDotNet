@@ -16,7 +16,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly int _maxImf;
     private readonly double _threshold;
-    private readonly EMDAlgorithmType _algorithm;
+    private readonly EMDAlgorithmType _algorithm = default!;
     private readonly IInterpolation<T>? _interpolation;
     private readonly double _residualEnergyThreshold = 1e-6;
 

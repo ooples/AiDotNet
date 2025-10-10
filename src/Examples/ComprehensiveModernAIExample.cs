@@ -86,7 +86,7 @@ namespace AiDotNet.Examples
                 .Evaluate(MetricType.Accuracy, MetricType.Precision, MetricType.Recall, MetricType.F1Score, MetricType.AUC)
                 .AddInterpretability(InterpretationMethod.SHAP, InterpretationMethod.LIME)
                 .CompressModel(CompressionTechnique.Quantization)
-                .Deploy(DeploymentTarget.CloudDeployment, config =>
+                .Deploy(AiDotNet.Enums.DeploymentTarget.CloudDeployment, config =>
                 {
                     config.CloudPlatform = CloudPlatform.AWS;
                     config.EnableAutoScaling = true;
@@ -449,7 +449,7 @@ namespace AiDotNet.Examples
 
             // Deploy to edge device
             var edgeOptimizer = new MobileOptimizer<Tensor<double>, Tensor<double>, ModelMetaData<double>>();
-            var optimizedModel = await edgeOptimizer.OptimizeAsync(quantizedModel, new OptimizationOptions());
+            var optimizedModel = await edgeOptimizer.OptimizeAsync(quantizedModel, new AiDotNet.Deployment.Techniques.OptimizationOptions());
             Console.WriteLine("Model optimized for mobile deployment!");
         }
 

@@ -8,7 +8,7 @@ public sealed class MetricValidationCache
     private static readonly Lazy<MetricValidationCache> _instance =
         new(() => new MetricValidationCache());
 
-    private readonly ConcurrentDictionary<ModelType, HashSet<MetricType>> _validMetricsCache;
+    private readonly ConcurrentDictionary<ModelType, HashSet<MetricType>> _validMetricsCache = default!;
 
     /// <summary>
     /// Gets the singleton instance of the MetricValidationCache.

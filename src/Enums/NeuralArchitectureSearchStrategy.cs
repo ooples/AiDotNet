@@ -148,10 +148,20 @@ public enum NeuralArchitectureSearchStrategy
     TransferLearning,
 
     /// <summary>
+    /// Evolutionary-based architecture search using genetic algorithms.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Evolutionary Search uses principles of natural selection to evolve
+    /// better network architectures. It starts with a population of random architectures, evaluates
+    /// their performance, and then creates new architectures by combining and mutating the best ones.
+    /// </remarks>
+    EvolutionarySearch,
+
+    /// <summary>
     /// Custom search strategy.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Allows you to implement your own architecture search method for 
+    /// <b>For Beginners:</b> Allows you to implement your own architecture search method for
     /// special requirements.
     /// </remarks>
     Custom

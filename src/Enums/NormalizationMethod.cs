@@ -156,5 +156,31 @@ public enum NormalizationMethod
     /// Formula: (x - median) / (Q3 - Q1) where Q1 is the 25th percentile and Q3 is the 75th percentile
     /// </para>
     /// </remarks>
-    RobustScaling
+    RobustScaling,
+
+    /// <summary>
+    /// Standard scaling that transforms data to have mean=0 and standard deviation=1.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Standard Scaling (also known as standardization or z-score normalization)
+    /// centers your data around 0 and scales it so the standard deviation is 1. This is the most common
+    /// normalization method and works well for most machine learning algorithms.
+    /// Formula: (x - mean) / standard_deviation
+    /// </para>
+    /// </remarks>
+    StandardScaling,
+
+    /// <summary>
+    /// Min-Max scaling that transforms data to a specific range, typically [0, 1].
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MinMax Scaling squeezes all values to fit between 0 and 1 (or any other
+    /// specified range). The smallest value becomes 0, the largest becomes 1, and everything else
+    /// falls proportionally in between. This is useful when you need bounded outputs.
+    /// Formula: (x - min) / (max - min)
+    /// </para>
+    /// </remarks>
+    MinMaxScaling
 }

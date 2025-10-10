@@ -40,12 +40,12 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// the model's decisions more definitive.
     /// </para>
     /// </remarks>
-    private readonly T _temperature;
+    private readonly T _temperature = default!;
     
     /// <summary>
     /// Random number generator used for sampling Gumbel noise.
     /// </summary>
-    private readonly Random _random;
+    private readonly Random _random = default!;
 
     /// <summary>
     /// Initializes a new instance of the GumbelSoftmaxActivation class.

@@ -74,7 +74,7 @@ namespace AiDotNet.Examples
             double[][] validFeatures,
             double[] validTargets)
         {
-            var gridSearch = new GridSearchAutoML(stepsPerDimension: 5, seed: 42);
+            var gridSearch = new GridSearchAutoML<double, Matrix<double>, Vector<double>>(stepsPerDimension: 5, seed: 42);
 
             // Configure candidate models
             gridSearch.SetCandidateModels(new List<ModelType>
@@ -106,10 +106,10 @@ namespace AiDotNet.Examples
             {
                 // Run search
                 var bestModel = await gridSearch.SearchAsync(
-                    trainFeatures,
-                    trainTargets,
-                    validFeatures,
-                    validTargets,
+                    new Matrix<double>(trainFeatures),
+                    new Vector<double>(trainTargets),
+                    new Matrix<double>(validFeatures),
+                    new Vector<double>(validTargets),
                     TimeSpan.FromMinutes(5));
 
                 Console.WriteLine($"Best model found: {gridSearch.BestModel?.GetType().Name ?? "Unknown"}");
@@ -128,7 +128,7 @@ namespace AiDotNet.Examples
             double[][] validFeatures,
             double[] validTargets)
         {
-            var randomSearch = new RandomSearchAutoML(maxTrials: 50, seed: 42);
+            var randomSearch = new RandomSearchAutoML<double, Matrix<double>, Vector<double>>(maxTrials: 50, seed: 42);
 
             // Configure models and metrics
             randomSearch.SetCandidateModels(new List<ModelType>
@@ -145,10 +145,10 @@ namespace AiDotNet.Examples
             {
                 // Run search
                 var bestModel = await randomSearch.SearchAsync(
-                    trainFeatures,
-                    trainTargets,
-                    validFeatures,
-                    validTargets,
+                    new Matrix<double>(trainFeatures),
+                    new Vector<double>(trainTargets),
+                    new Matrix<double>(validFeatures),
+                    new Vector<double>(validTargets),
                     TimeSpan.FromMinutes(3));
 
                 Console.WriteLine($"Best model found: {randomSearch.BestModel?.GetType().Name ?? "Unknown"}");
@@ -178,7 +178,7 @@ namespace AiDotNet.Examples
             double[][] validFeatures,
             double[] validTargets)
         {
-            var bayesianOpt = new BayesianOptimizationAutoML(
+            var bayesianOpt = new BayesianOptimizationAutoML<double, Matrix<double>, Vector<double>>(
                 numInitialPoints: 10, 
                 explorationWeight: 2.0, 
                 seed: 42);
@@ -210,10 +210,10 @@ namespace AiDotNet.Examples
             {
                 // Run search
                 var bestModel = await bayesianOpt.SearchAsync(
-                    trainFeatures,
-                    trainTargets,
-                    validFeatures,
-                    validTargets,
+                    new Matrix<double>(trainFeatures),
+                    new Vector<double>(trainTargets),
+                    new Matrix<double>(validFeatures),
+                    new Vector<double>(validTargets),
                     TimeSpan.FromMinutes(5));
 
                 Console.WriteLine($"Best model found: {bayesianOpt.BestModel?.GetType().Name ?? "Unknown"}");

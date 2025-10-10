@@ -18,7 +18,7 @@ namespace AiDotNet.Ensemble.Strategies
         where TOutput : notnull
     {
         private Vector<T>? _trainedWeights;
-        private readonly T _regularizationParameter;
+        private readonly T _regularizationParameter = default!;
         private bool _isTrained;
 
         /// <summary>

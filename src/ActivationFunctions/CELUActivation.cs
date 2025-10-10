@@ -25,7 +25,7 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// The alpha parameter that controls the negative saturation value of the function.
     /// </summary>
-    private readonly T _alpha;
+    private readonly T _alpha = default!;
 
     /// <summary>
     /// Initializes a new instance of the CELUActivation class with the specified alpha parameter.

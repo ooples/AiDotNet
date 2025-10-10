@@ -20,7 +20,7 @@ public sealed class NeuralNetworkMetricValidationCache
     private static readonly Lazy<NeuralNetworkMetricValidationCache> _instance =
         new(() => new NeuralNetworkMetricValidationCache());
 
-    private readonly ConcurrentDictionary<NeuralNetworkTaskType, HashSet<MetricType>> _validMetricsCache;
+    private readonly ConcurrentDictionary<NeuralNetworkTaskType, HashSet<MetricType>> _validMetricsCache = default!;
 
     /// <summary>
     /// Gets the singleton instance of the NeuralNetworkMetricValidationCache.

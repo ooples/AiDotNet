@@ -40,7 +40,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Provides operations for the numeric type being used.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the SchurDecomposition class.

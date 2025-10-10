@@ -14,10 +14,10 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// </remarks>
 public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
-    private readonly BeveridgeNelsonAlgorithmType _algorithm;
-    private readonly ARIMAOptions<T> _arimaOptions;
+    private readonly BeveridgeNelsonAlgorithmType _algorithm = default!;
+    private readonly ARIMAOptions<T> _arimaOptions = default!;
     private readonly int _forecastHorizon;
-    private readonly Matrix<T> _multivariateSeries;
+    private readonly Matrix<T> _multivariateSeries = default!;
 
     /// <summary>
     /// Initializes a new instance of the Beveridge-Nelson decomposition.

@@ -20,7 +20,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly int _windowSize;
     private readonly int _numberOfComponents;
-    private readonly SSAAlgorithmType _algorithmType;
+    private readonly SSAAlgorithmType _algorithmType = default!;
 
     /// <summary>
     /// Initializes a new instance of the SSA decomposition algorithm.

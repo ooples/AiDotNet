@@ -33,7 +33,7 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     /// <summary>
     /// Configuration options for the cache.
     /// </summary>
-    private readonly ModelCacheOptions _options;
+    private readonly ModelCacheOptions _options = default!;
 
     /// <summary>
     /// Tracks the last time the cache was cleaned up.
@@ -43,7 +43,7 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     /// <summary>
     /// Cancellation token source for background cleanup.
     /// </summary>
-    private readonly CancellationTokenSource _cleanupCts;
+    private readonly CancellationTokenSource _cleanupCts = default!;
 
     /// <summary>
     /// Lock object for cleanup synchronization.

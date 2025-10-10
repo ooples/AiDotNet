@@ -30,7 +30,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// The steepness parameter that controls how quickly the function transitions between -1 and 1.
     /// </summary>
-    private readonly T _beta;
+    private readonly T _beta = default!;
 
     /// <summary>
     /// Initializes a new instance of the ScaledTanhActivation class with the specified steepness parameter.

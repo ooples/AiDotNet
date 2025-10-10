@@ -31,11 +31,11 @@ namespace AiDotNet.Ensemble.Strategies
         where T : struct, IComparable<T>, IEquatable<T>
         where TOutput : notnull
     {
-        private readonly Dictionary<int, T> _modelPriors;
-        private readonly Dictionary<int, T> _modelLikelihoods;
+        private readonly Dictionary<int, T> _modelPriors = default!;
+        private readonly Dictionary<int, T> _modelLikelihoods = default!;
         private readonly double _priorStrength;
         private readonly bool _useUniformPrior;
-        private Vector<T> _posteriorWeights;
+        private Vector<T> _posteriorWeights = default!;
 
         /// <summary>
         /// Initializes a new instance of the BayesianAverageStrategy class.

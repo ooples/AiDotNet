@@ -21,7 +21,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <summary>
     /// The algorithm type used for decomposition
     /// </summary>
-    private readonly AdditiveDecompositionAlgorithmType _algorithm;
+    private readonly AdditiveDecompositionAlgorithmType _algorithm = default!;
 
     /// <summary>
     /// Creates a new instance of the AdditiveDecomposition class

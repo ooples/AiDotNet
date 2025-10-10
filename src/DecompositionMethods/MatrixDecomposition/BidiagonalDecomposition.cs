@@ -2,7 +2,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Gets the original matrix that was decomposed.

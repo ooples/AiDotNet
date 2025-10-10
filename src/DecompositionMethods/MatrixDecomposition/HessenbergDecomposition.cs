@@ -14,7 +14,7 @@
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Gets the resulting Hessenberg matrix after decomposition.

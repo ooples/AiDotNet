@@ -22,7 +22,7 @@ namespace AiDotNet.Ensemble.Strategies
         where TOutput : notnull
     {
         private readonly bool _useWeights;
-        private readonly Random _random;
+        private readonly Random _random = default!;
 
         /// <summary>
         /// Gets the name of the combination strategy.

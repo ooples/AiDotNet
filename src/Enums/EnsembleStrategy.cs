@@ -51,10 +51,19 @@ public enum EnsembleStrategy
     
     // Voting Methods
     /// <summary>
+    /// Simple voting where each model gets one vote.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Each model gets an equal vote on the final prediction, and the
+    /// answer with the most votes wins. Simple and democratic.
+    /// </remarks>
+    Voting,
+
+    /// <summary>
     /// Each model votes for a class (classification).
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Each model votes for what it thinks is the answer, and the 
+    /// <b>For Beginners:</b> Each model votes for what it thinks is the answer, and the
     /// most popular answer wins. Like a democratic election.
     /// </remarks>
     MajorityVote,

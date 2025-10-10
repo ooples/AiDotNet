@@ -46,13 +46,24 @@ public enum OptimizerType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Stochastic Gradient Descent (SGD) is like taking quick steps based on limited information. 
-    /// Instead of looking at all your training data before each step (which is slow), SGD looks at just one example 
-    /// or a small batch. This makes it much faster but a bit less precise - like quickly changing direction based on 
+    /// <b>For Beginners:</b> Stochastic Gradient Descent (SGD) is like taking quick steps based on limited information.
+    /// Instead of looking at all your training data before each step (which is slow), SGD looks at just one example
+    /// or a small batch. This makes it much faster but a bit less precise - like quickly changing direction based on
     /// whatever you see right in front of you. It's faster but can take a more zigzag path to the solution.
     /// </para>
     /// </remarks>
     StochasticGradientDescent,
+
+    /// <summary>
+    /// Stochastic Gradient Descent - Short form of StochasticGradientDescent.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SGD is the commonly used abbreviation for Stochastic Gradient Descent,
+    /// a fundamental optimization algorithm that updates model parameters using small batches of data.
+    /// </para>
+    /// </remarks>
+    SGD,
 
     /// <summary>
     /// Nature-inspired algorithm based on the foraging behavior of ant colonies.

@@ -11,7 +11,7 @@ namespace AiDotNet.AutoML
     public class HyperparameterSpace
     {
         private readonly Dictionary<string, ParameterRange> _parameters = new();
-        private readonly Random _random;
+        private readonly Random _random = default!;
 
         /// <summary>
         /// Initializes a new instance of the HyperparameterSpace class
@@ -85,6 +85,53 @@ namespace AiDotNet.AutoML
             {
                 Type = ParameterType.Boolean
             };
+        }
+
+        /// <summary>
+        /// Adds a discrete parameter to the search space (alias for AddCategorical)
+        /// </summary>
+        /// <param name="name">Parameter name</param>
+        /// <param name="values">Possible discrete values</param>
+        /// <remarks>
+        /// <para>
+        /// This method adds a discrete parameter, which can take on any value from a specific set of options.
+        /// It's an alias for AddCategorical, providing a more mathematically oriented name for the same concept.
+        /// </para>
+        /// <para>
+        /// <b>For Beginners:</b> A discrete parameter can only take specific values from a predefined list.
+        /// Think of it like:
+        /// - Number of layers: could be 1, 2, 3, 4, or 5 (but not 2.5)
+        /// - Activation function: could be "ReLU", "Sigmoid", or "Tanh" (but not "Something else")
+        /// - Batch size: could be 16, 32, 64, or 128 (but not 33)
+        ///
+        /// This is different from continuous parameters which can take any value in a range.
+        /// </para>
+        /// </remarks>
+        public void AddDiscreteParameter(string name, params object[] values)
+        {
+            AddCategorical(name, values);
+        }
+
+        /// <summary>
+        /// Adds a continuous parameter to the search space (alias with descriptive name)
+        /// </summary>
+        /// <param name="name">Parameter name</param>
+        /// <param name="minValue">Minimum value</param>
+        /// <param name="maxValue">Maximum value</param>
+        /// <param name="logScale">Whether to use log scale</param>
+        /// <remarks>
+        /// <para>
+        /// This is an alias for AddContinuous, providing a more explicit method name.
+        /// </para>
+        /// <para>
+        /// <b>For Beginners:</b> A continuous parameter can take any value within a specified range.
+        /// For example, a learning rate could be any value between 0.001 and 0.1, including
+        /// values like 0.00123456 or 0.05789.
+        /// </para>
+        /// </remarks>
+        public void AddContinuousParameter(string name, double minValue, double maxValue, bool logScale = false)
+        {
+            AddContinuous(name, minValue, maxValue, logScale);
         }
 
         /// <summary>

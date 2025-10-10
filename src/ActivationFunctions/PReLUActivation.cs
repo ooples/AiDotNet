@@ -26,7 +26,7 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// The scaling factor applied to negative inputs.
     /// </summary>
-    private T _alpha;
+    private T _alpha = default!;
 
     /// <summary>
     /// Initializes a new instance of the PReLU activation function with the specified alpha value.

@@ -42,10 +42,18 @@ public enum CloudPlatform
     /// Google Cloud Platform.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Google's cloud platform - known for strong AI/ML capabilities 
+    /// <b>For Beginners:</b> Google's cloud platform - known for strong AI/ML capabilities
     /// and services like Vertex AI.
     /// </remarks>
     GoogleCloud,
+
+    /// <summary>
+    /// Google Cloud Platform (GCP) - alias for GoogleCloud.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> GCP is the abbreviated name for Google Cloud Platform.
+    /// </remarks>
+    GCP,
 
     /// <summary>
     /// IBM Cloud.

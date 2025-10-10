@@ -16,8 +16,8 @@ namespace AiDotNet.Ensemble.Strategies
         where T : struct, IComparable<T>, IEquatable<T>
     {
         private readonly int _k;
-        private readonly List<ValidationSample> _validationSet;
-        private readonly Dictionary<int, List<T>> _modelCompetenceScores;
+        private readonly List<ValidationSample> _validationSet = default!;
+        private readonly Dictionary<int, List<T>> _modelCompetenceScores = default!;
         private bool _isTrained;
 
         /// <summary>

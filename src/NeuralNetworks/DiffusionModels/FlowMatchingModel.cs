@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 
 namespace AiDotNet.NeuralNetworks.DiffusionModels
 {
@@ -13,11 +15,11 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
     /// </summary>
     public class FlowMatchingModel : NeuralNetworkBase<double>
     {
-        private readonly INeuralNetworkModel<double> velocityNetwork;
-        private readonly FlowType flowType;
-        private readonly double sigma;
-        private readonly bool useOptimalTransport;
-        private readonly int rectificationSteps;
+        private readonly INeuralNetworkModel<double> velocityNetwork = default!;
+        private readonly FlowType flowType = default!;
+        private readonly double sigma = default!;
+        private readonly bool useOptimalTransport = default!;
+        private readonly int rectificationSteps = default!;
         
         public enum FlowType
         {
@@ -28,21 +30,21 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
         }
         
         public FlowMatchingModel(
+            NeuralNetworkArchitecture<double> architecture,
             INeuralNetworkModel<double> velocityNetwork,
             FlowType flowType = FlowType.Rectified,
             double sigma = 0.01,
             bool useOptimalTransport = false,
             int rectificationSteps = 1,
-            string modelName = "FlowMatchingModel")
-            : base(modelName)
+            ILossFunction<double>? lossFunction = null,
+            double maxGradNorm = 1.0)
+            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<double>(), maxGradNorm)
         {
             this.velocityNetwork = velocityNetwork ?? throw new ArgumentNullException(nameof(velocityNetwork));
             this.flowType = flowType;
             this.sigma = sigma;
             this.useOptimalTransport = useOptimalTransport;
             this.rectificationSteps = rectificationSteps;
-            
-            ModelCategory = ModelCategory.Generative;
         }
         
         /// <summary>
@@ -101,7 +103,7 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
                 if (velocityNetwork is NeuralNetworkBase<double> nn)
                 {
                     var grad = predictedVelocity.Subtract(targetVelocity);
-                    nn.Backward(grad);
+                    nn.Backpropagate(grad);
                     optimizer.Step(nn.GetParameters(), nn.GetGradients());
                 }
             }
@@ -327,11 +329,11 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
                 if (velocityNetwork is NeuralNetworkBase<double> nn)
                 {
                     var grad = predictedVelocity.Subtract(targetVelocity);
-                    nn.Backward(grad);
+                    nn.Backpropagate(grad);
                     optimizer.Step(nn.GetParameters(), nn.GetGradients());
                 }
             }
-            
+
             return totalLoss / pairedData.Count;
         }
         
@@ -374,26 +376,118 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
             // In practice, properly concatenate x, time embedding, and condition
             return x;
         }
-        
-        public override Tensor<double> Forward(Tensor<double> input)
+
+        public Tensor<double> Forward(Tensor<double> input)
         {
             return Generate(input.Shape);
         }
-        
-        public override void Backward(Tensor<double> gradOutput)
+
+        public void Backward(Tensor<double> gradOutput)
         {
             // Backward is handled in TrainStep
         }
-        
-        protected override void SaveModelSpecificData(IDictionary<string, object> data)
+
+        protected override void InitializeLayers()
+        {
+            // Flow matching models don't have traditional layers
+            // The velocity network is set in constructor
+        }
+
+        public override void UpdateParameters(Vector<double> parameters)
+        {
+            // Delegate to velocity network if it's a neural network
+            if (velocityNetwork is NeuralNetworkBase<double> nn)
+            {
+                nn.UpdateParameters(parameters);
+            }
+        }
+
+        protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateNewInstance()
+        {
+            return new FlowMatchingModel(
+                Architecture,
+                velocityNetwork,
+                flowType,
+                sigma,
+                useOptimalTransport,
+                rectificationSteps,
+                LossFunction,
+                Convert.ToDouble(MaxGradNorm));
+        }
+
+        public override Tensor<double> Predict(Tensor<double> input)
+        {
+            return Generate(input.Shape);
+        }
+
+        public override void Train(Tensor<double> input, Tensor<double> expectedOutput)
+        {
+            var random = new Random();
+
+            // Sample noise x0
+            var x0 = SampleNoise(input.Shape, random);
+
+            // Sample time uniformly
+            var t = random.NextDouble();
+
+            // Get interpolated point and target velocity
+            var (xt, targetVelocity) = GetTrainingPair(x0, input, t);
+
+            // Predict velocity
+            var predictedVelocity = velocityNetwork.Predict(ConcatenateTime(xt, t));
+
+            // Flow matching loss
+            LastLoss = NumOps.FromDouble(ComputeFlowMatchingLoss(predictedVelocity, targetVelocity));
+
+            // Backpropagate
+            if (velocityNetwork is NeuralNetworkBase<double> nn)
+            {
+                var grad = predictedVelocity.Subtract(targetVelocity);
+                nn.Backpropagate(grad);
+            }
+        }
+
+        public override ModelMetaData<double> GetModelMetaData()
+        {
+            return new ModelMetaData<double>
+            {
+                ModelType = ModelType.FlowMatchingModel,
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    { "FlowType", flowType.ToString() },
+                    { "Sigma", sigma },
+                    { "UseOptimalTransport", useOptimalTransport },
+                    { "RectificationSteps", rectificationSteps }
+                },
+                ModelData = this.Serialize()
+            };
+        }
+
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+        {
+            writer.Write((int)flowType);
+            writer.Write(sigma);
+            writer.Write(useOptimalTransport);
+            writer.Write(rectificationSteps);
+        }
+
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+        {
+            int savedFlowType = reader.ReadInt32();
+            double savedSigma = reader.ReadDouble();
+            bool savedUseOptimalTransport = reader.ReadBoolean();
+            int savedRectificationSteps = reader.ReadInt32();
+        }
+
+        protected void SaveModelSpecificData(IDictionary<string, object> data)
         {
             data["flowType"] = flowType.ToString();
             data["sigma"] = sigma;
             data["useOptimalTransport"] = useOptimalTransport;
             data["rectificationSteps"] = rectificationSteps;
         }
-        
-        protected override void LoadModelSpecificData(IDictionary<string, object> data)
+
+        protected void LoadModelSpecificData(IDictionary<string, object> data)
         {
             // Load model parameters
         }

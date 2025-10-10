@@ -30,28 +30,91 @@ public enum PipelinePosition
     Preprocessing,
 
     /// <summary>
+    /// Component runs before normalization in the pipeline.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Runs just before data normalization - like preparing ingredients
+    /// before measuring and standardizing them.
+    /// </remarks>
+    BeforeNormalization,
+
+    /// <summary>
+    /// Component runs after normalization in the pipeline.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Runs after data has been normalized - processes or validates
+    /// the normalized data.
+    /// </remarks>
+    AfterNormalization,
+
+    /// <summary>
     /// Component runs during feature engineering phase.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Where new features are created from existing data - like combining 
+    /// <b>For Beginners:</b> Where new features are created from existing data - like combining
     /// ingredients to make a sauce. Creates more informative inputs for the model.
     /// </remarks>
     FeatureEngineering,
 
     /// <summary>
+    /// Component runs before feature selection phase.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Runs just before selecting which features to keep - preparing data
+    /// for the selection process.
+    /// </remarks>
+    BeforeFeatureSelection,
+
+    /// <summary>
     /// Component runs during feature selection phase.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Where we choose which features to keep - like selecting the best 
+    /// <b>For Beginners:</b> Where we choose which features to keep - like selecting the best
     /// ingredients for a recipe. Removes irrelevant or redundant features.
     /// </remarks>
     FeatureSelection,
 
     /// <summary>
+    /// Component runs after feature selection phase.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Runs after features have been selected - processes or validates
+    /// the selected features.
+    /// </remarks>
+    AfterFeatureSelection,
+
+    /// <summary>
+    /// Component runs before outlier removal in the pipeline.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Runs just before removing outliers - prepares data for
+    /// outlier detection and removal.
+    /// </remarks>
+    BeforeOutlierRemoval,
+
+    /// <summary>
+    /// Component runs after outlier removal in the pipeline.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Runs after outliers have been removed - processes or validates
+    /// the cleaned data.
+    /// </remarks>
+    AfterOutlierRemoval,
+
+    /// <summary>
+    /// Component runs before model training phase.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Final preparation step before training begins - ensures
+    /// everything is ready for the model to learn.
+    /// </remarks>
+    BeforeTraining,
+
+    /// <summary>
     /// Component runs during model training phase.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> The main learning phase where the model discovers patterns in the data - 
+    /// <b>For Beginners:</b> The main learning phase where the model discovers patterns in the data -
     /// like a student studying for an exam.
     /// </remarks>
     Training,

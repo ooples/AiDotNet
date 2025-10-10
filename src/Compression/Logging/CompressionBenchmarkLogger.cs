@@ -22,7 +22,7 @@ namespace AiDotNet.Compression.Logging;
 /// </remarks>
 public class CompressionBenchmarkLogger
 {
-    private readonly ILogging _logger;
+    private readonly ILogging _logger = default!;
     private readonly string _benchmarkDirectory;
     private readonly List<CompressionBenchmarkResult> _benchmarkResults = new();
     

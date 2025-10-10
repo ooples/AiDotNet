@@ -32,7 +32,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// A larger value of beta results in a narrower bell curve, while a smaller value results in a wider bell curve.
     /// </remarks>
-    private readonly T _beta;
+    private readonly T _beta = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SQRBFActivation{T}"/> class with the specified beta parameter.

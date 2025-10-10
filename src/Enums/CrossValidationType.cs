@@ -16,6 +16,11 @@ public enum CrossValidationType
     StratifiedKFold,
 
     /// <summary>
+    /// Stratified cross-validation that maintains class distribution.
+    /// </summary>
+    Stratified,
+
+    /// <summary>
     /// Leave-One-Out uses a single sample for validation.
     /// </summary>
     LeaveOneOut,

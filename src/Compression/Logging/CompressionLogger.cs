@@ -19,9 +19,9 @@ namespace AiDotNet.Compression.Logging;
 /// </remarks>
 public class CompressionLogger
 {
-    private readonly ILogging _logger;
+    private readonly ILogging _logger = default!;
     private readonly Dictionary<string, object> _compressionMetrics = new();
-    private readonly LoggingOptions _options;
+    private readonly LoggingOptions _options = default!;
     private readonly string _modelName;
     private readonly string _compressionTechnique;
     

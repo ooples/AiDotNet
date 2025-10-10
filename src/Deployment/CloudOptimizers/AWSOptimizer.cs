@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -16,7 +17,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
         public override string Name => "AWS Optimizer";
         public override DeploymentTarget Target => DeploymentTarget.Cloud;
 
-        private readonly Dictionary<string, AWSServiceConfig> _serviceConfigs;
+        private Dictionary<string, AWSServiceConfig> ServiceConfigs { get; set; } = default!;
 
         public AWSOptimizer()
         {
@@ -26,7 +27,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
 
         private void InitializeServiceConfigs()
         {
-            _serviceConfigs = new Dictionary<string, AWSServiceConfig>
+            ServiceConfigs = new Dictionary<string, AWSServiceConfig>
             {
                 ["SageMaker"] = new AWSServiceConfig
                 {
@@ -190,19 +191,19 @@ namespace AiDotNet.Deployment.CloudOptimizers
             // Create CloudFormation template
             var cfTemplate = GenerateCloudFormationTemplate(model);
             var cfPath = Path.Combine(configDir, "cloudformation.yaml");
-            await File.WriteAllTextAsync(cfPath, cfTemplate);
+            await FileAsyncHelper.WriteAllTextAsync(cfPath, cfTemplate);
             package.Artifacts["CloudFormation"] = cfPath;
 
             // Create SageMaker inference script
             var inferenceScript = GenerateSageMakerInferenceScript();
             var scriptPath = Path.Combine(scriptsDir, "inference.py");
-            await File.WriteAllTextAsync(scriptPath, inferenceScript);
+            await FileAsyncHelper.WriteAllTextAsync(scriptPath, inferenceScript);
             package.Artifacts["InferenceScript"] = scriptPath;
 
             // Create deployment configuration
             var deployConfig = GenerateDeploymentConfig(model);
             package.ConfigPath = Path.Combine(configDir, "deploy_config.json");
-            await File.WriteAllTextAsync(package.ConfigPath, deployConfig);
+            await FileAsyncHelper.WriteAllTextAsync(package.ConfigPath, deployConfig);
 
             // Calculate package size
             var allFiles = Directory.GetFiles(targetPath, "*", SearchOption.AllDirectories);
@@ -348,13 +349,13 @@ def output_fn(prediction, content_type):
 
         private class AWSServiceConfig
         {
-            public string ServiceName { get; set; }
+            public string ServiceName { get; set; } = default!;
             public double MaxModelSize { get; set; }
             public double MaxMemory { get; set; }
             public double MaxTimeout { get; set; }
-            public string[] SupportedFormats { get; set; }
-            public string[] InstanceTypes { get; set; }
-            public string[] ComputeEnvironments { get; set; }
+            public string[] SupportedFormats { get; set; } = default!;
+            public string[] InstanceTypes { get; set; } = default!;
+            public string[] ComputeEnvironments { get; set; } = default!;
         }
     }
 }

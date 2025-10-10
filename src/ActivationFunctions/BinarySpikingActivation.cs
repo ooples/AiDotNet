@@ -29,17 +29,17 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// The firing threshold for neurons. Inputs equal to or greater than this value will cause the neuron to fire.
     /// </summary>
-    private readonly T _threshold;
+    private readonly T _threshold = default!;
     
     /// <summary>
     /// The slope of the approximated derivative curve used during training.
     /// </summary>
-    private readonly T _derivativeSlope;
+    private readonly T _derivativeSlope = default!;
     
     /// <summary>
     /// The width of the region around the threshold where the derivative is non-zero.
     /// </summary>
-    private readonly T _derivativeWidth;
+    private readonly T _derivativeWidth = default!;
 
     /// <summary>
     /// Initializes a new instance of the Binary Spiking activation function with default parameters.

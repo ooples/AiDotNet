@@ -43,7 +43,7 @@ public class NormalDecomposition<T> : IMatrixDecomposition<T>
     /// <b>For Beginners:</b> This is a special way of breaking down the transformed matrix into simpler parts
     /// that makes solving the equations much faster.
     /// </remarks>
-    private CholeskyDecomposition<T> _choleskyDecomposition;
+    private CholeskyDecomposition<T> _choleskyDecomposition = default!;
 
     /// <summary>
     /// Initializes a new instance of the NormalDecomposition class.

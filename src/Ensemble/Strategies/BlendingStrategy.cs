@@ -18,7 +18,7 @@ namespace AiDotNet.Ensemble.Strategies
         where T : struct, IComparable<T>, IEquatable<T>
     {
         private Vector<T>? _blendingWeights;
-        private T _blendingBias;
+        private T _blendingBias = default!;
         private readonly double _validationSplit;
         private readonly bool _includeIntercept;
         private bool _isTrained;

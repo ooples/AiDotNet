@@ -420,5 +420,16 @@ public enum ActivationFunction
     /// or when you want to debug a network by temporarily removing non-linearities.
     /// </para>
     /// </remarks>
-    Identity
+    Identity,
+
+    /// <summary>
+    /// No activation function - used for layers that should not apply any transformation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> None indicates that no activation function should be applied. This is useful
+    /// for certain layer types or when you want the raw output without any transformation.
+    /// </para>
+    /// </remarks>
+    None
 }

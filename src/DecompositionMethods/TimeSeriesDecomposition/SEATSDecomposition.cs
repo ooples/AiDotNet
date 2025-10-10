@@ -16,9 +16,9 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
-    private readonly SARIMAOptions<T> _sarimaOptions;
+    private readonly SARIMAOptions<T> _sarimaOptions = default!;
     private readonly int _forecastHorizon;
-    private readonly SEATSAlgorithmType _algorithm;
+    private readonly SEATSAlgorithmType _algorithm = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SEATSDecomposition{T}"/> class.

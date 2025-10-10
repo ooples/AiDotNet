@@ -24,6 +24,7 @@ namespace AiDotNet.Examples
         /// </summary>
         public static async Task RunFederatedLearningExampleAsync()
         {
+#if FALSE  // TODO: Re-enable when SimpleLinearModel is fully implemented
             Console.WriteLine("=== Federated Learning Example ===");
             Console.WriteLine();
 
@@ -100,8 +101,15 @@ namespace AiDotNet.Examples
             await DemonstrateMAMLFederated();
 
             Console.WriteLine("Federated learning example completed successfully!");
+#else
+            Console.WriteLine("=== Federated Learning Example ===");
+            Console.WriteLine("This example is currently disabled due to incomplete SimpleLinearModel implementation.");
+            Console.WriteLine("Please implement the missing IFullModel interface members to enable this example.");
+            await Task.CompletedTask;
+#endif
         }
 
+#if FALSE  // TODO: Re-enable when SimpleLinearModel is fully implemented
         /// <summary>
         /// Create simulated federated clients
         /// </summary>
@@ -115,17 +123,17 @@ namespace AiDotNet.Examples
             for (int i = 0; i < numClients; i++)
             {
                 var clientId = $"Client-{i + 1:D3}";
-                
+
                 // Create simulated local data (different distributions for heterogeneity)
                 var dataSize = random.Next(100, 500);
                 var featureSize = 10;
-                
+
                 var localData = GenerateSimulatedData(dataSize, featureSize, i, random);
                 var localLabels = GenerateSimulatedLabels(dataSize, i, random);
-                
+
                 // Create a simple model for each client
                 var localModel = new SimpleLinearModel(featureSize);
-                
+
                 var client = new FederatedClient(clientId, localModel, localData, localLabels)
                 {
                     LocalEpochs = 3,
@@ -137,6 +145,7 @@ namespace AiDotNet.Examples
 
             return clients;
         }
+#endif
 
         /// <summary>
         /// Generate simulated training data with client-specific distributions
@@ -221,9 +230,9 @@ namespace AiDotNet.Examples
             // Perform secure aggregation
             var clientWeights = clientIds.ToDictionary(id => id, _ => 1.0);
             var aggregated = secureAggregator.AggregateParameters(
-                clientUpdates, 
-                clientWeights, 
-                FederatedAggregationStrategy.SecureAggregation);
+                clientUpdates,
+                clientWeights,
+                AiDotNet.Enums.FederatedAggregationStrategy.SecureAggregation);
             
             Console.WriteLine($"Securely aggregated parameters from {clientUpdates.Count} clients");
             Console.WriteLine($"Aggregated weights shape: {aggregated["weights"].Length}");
@@ -232,6 +241,7 @@ namespace AiDotNet.Examples
             await Task.CompletedTask;
         }
 
+#if FALSE  // TODO: Re-enable when SimpleLinearModel is fully implemented
         /// <summary>
         /// Demonstrate MAML federated learning
         /// </summary>
@@ -239,10 +249,10 @@ namespace AiDotNet.Examples
         {
             Console.WriteLine();
             Console.WriteLine("=== MAML Federated Learning Demonstration ===");
-            
+
             // Create meta-model
             var metaModel = new SimpleLinearModel(10);
-            
+
             // Setup MAML parameters
             var mamlParams = new MAMLParameters
             {
@@ -252,13 +262,13 @@ namespace AiDotNet.Examples
                 SupportSize = 10,
                 QuerySize = 20
             };
-            
+
             var mamlFederated = new MAMLFederated(metaModel, mamlParams);
-            
+
             // Create federated tasks for clients
             var clientIds = new List<string> { "Task-Client-1", "Task-Client-2", "Task-Client-3" };
             var random = new Random(123);
-            
+
             foreach (var clientId in clientIds)
             {
                 var task = new FederatedTask
@@ -270,46 +280,48 @@ namespace AiDotNet.Examples
                     QuerySet = GenerateSimulatedData(mamlParams.QuerySize, 10, 0, random),
                     QueryLabels = GenerateSimulatedLabels(mamlParams.QuerySize, 0, random)
                 };
-                
+
                 mamlFederated.RegisterClientTask(clientId, task);
             }
-            
+
             // Perform meta-learning rounds
             for (int round = 0; round < 3; round++)
             {
                 Console.WriteLine($"Meta-learning round {round + 1}");
                 var result = await mamlFederated.PerformMetaLearningRoundAsync(clientIds);
-                
+
                 Console.WriteLine($"   Participating clients: {result.ParticipatingClients.Count}");
                 Console.WriteLine($"   Average task loss: {result.AverageTaskLoss:F6}");
                 Console.WriteLine($"   Meta-gradient norm: {result.MetaGradientNorm:F6}");
             }
-            
+
             Console.WriteLine("MAML federated learning demonstration completed");
         }
+#endif
     }
 
+#if FALSE  // TODO: Complete IFullModel interface implementation - missing Train(), GetModelMetaData(), Serialize/Deserialize, GetParameters/SetParameters/WithParameters, and IFeatureAware methods
     /// <summary>
     /// Simple linear model for demonstration
     /// </summary>
     public class SimpleLinearModel : IFullModel<double, Vector<double>, double>
     {
-        private Vector<double> _weights;
-        private Vector<double> _bias;
-        
+        private Vector<double> _weights = default!;
+        private Vector<double> _bias = default!;
+
         public SimpleLinearModel(int inputSize)
         {
             var random = new Random();
             _weights = new Vector<double>(Enumerable.Range(0, inputSize).Select(_ => random.NextGaussian(0, 0.1)).ToArray());
             _bias = new Vector<double>(new[] { random.NextGaussian(0, 0.1) });
         }
-        
+
         public double Predict(Vector<double> input)
         {
             var logit = _weights.DotProduct(input) + _bias[0];
             return 1.0 / (1.0 + Math.Exp(-logit)); // Sigmoid activation
         }
-        
+
         public Vector<double> Predict(Matrix<double> inputs)
         {
             var predictions = new double[inputs.Rows];
@@ -319,7 +331,7 @@ namespace AiDotNet.Examples
             }
             return new Vector<double>(predictions);
         }
-        
+
         public IFullModel<double, Vector<double>, double> DeepCopy()
         {
             var copy = new SimpleLinearModel(_weights.Length);
@@ -327,50 +339,11 @@ namespace AiDotNet.Examples
             copy._bias = new Vector<double>(_bias.ToArray());
             return copy;
         }
-        
+
         public IFullModel<double, Vector<double>, double> Clone()
         {
             return DeepCopy();
         }
     }
-}
-
-namespace System.Linq
-{
-    /// <summary>
-    /// Extension methods for LINQ compatibility
-    /// </summary>
-    public static class LinqExtensions
-    {
-        public static T LastOrDefault<T>(this IEnumerable<T> source)
-        {
-            if (source == null) return default(T);
-            
-            var list = source as IList<T>;
-            if (list != null)
-            {
-                return list.Count > 0 ? list[list.Count - 1] : default(T);
-            }
-            
-            T last = default(T);
-            foreach (var item in source)
-            {
-                last = item;
-            }
-            return last;
-        }
-        
-        public static Dictionary<TKey, TValue> ToDictionary<TSource, TKey, TValue>(
-            this IEnumerable<TSource> source,
-            Func<TSource, TKey> keySelector,
-            Func<TSource, TValue> valueSelector)
-        {
-            var dictionary = new Dictionary<TKey, TValue>();
-            foreach (var item in source)
-            {
-                dictionary[keySelector(item)] = valueSelector(item);
-            }
-            return dictionary;
-        }
-    }
+#endif
 }

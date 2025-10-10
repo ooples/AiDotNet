@@ -29,7 +29,7 @@ public class ThresholdedReLUActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// Inputs greater than this threshold will pass through unchanged; inputs less than or equal to this threshold will be set to zero.
     /// </remarks>
-    private T _theta;
+    private T _theta = default!;
 
     /// <summary>
     /// Initializes a new instance of the ThresholdedReLUActivation class with the specified threshold value.

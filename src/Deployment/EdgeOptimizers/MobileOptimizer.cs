@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -16,7 +17,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
         public override string Name => "Mobile Optimizer";
         public override DeploymentTarget Target => DeploymentTarget.Mobile;
 
-        private readonly Dictionary<string, MobilePlatformConfig> _platformConfigs;
+        private Dictionary<string, MobilePlatformConfig> PlatformConfigs { get; set; } = default!;
 
         public MobileOptimizer()
         {
@@ -26,7 +27,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
 
         private void InitializePlatformConfigs()
         {
-            _platformConfigs = new Dictionary<string, MobilePlatformConfig>
+            PlatformConfigs = new Dictionary<string, MobilePlatformConfig>
             {
                 ["iOS"] = new MobilePlatformConfig
                 {
@@ -66,10 +67,10 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             Configuration.PlatformSpecificSettings["EnableOnDeviceTraining"] = false;
         }
 
-        public override async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> OptimizeAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, OptimizationOptions options)
+        public override async Task<IModel<TInput, TOutput, TMetadata>> OptimizeAsync(IModel<TInput, TOutput, TMetadata> model, OptimizationOptions options)
         {
-            var targetPlatform = options.CustomOptions.ContainsKey("Platform") 
-                ? (string)options.CustomOptions["Platform"] 
+            var targetPlatform = options.CustomOptions.ContainsKey("Platform")
+                ? (string)options.CustomOptions["Platform"]
                 : "CrossPlatform";
 
             var optimizedModel = model;
@@ -108,7 +109,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             return optimizedModel;
         }
 
-        private async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> ApplyMobileQuantizationAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, string platform)
+        private async Task<IModel<TInput, TOutput, TMetadata>> ApplyMobileQuantizationAsync(IModel<TInput, TOutput, TMetadata> model, string platform)
         {
             // Simulate mobile quantization
             await Task.Delay(100);
@@ -121,7 +122,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             return model;
         }
 
-        private async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> ApplyMobilePruningAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        private async Task<IModel<TInput, TOutput, TMetadata>> ApplyMobilePruningAsync(IModel<TInput, TOutput, TMetadata> model)
         {
             // Simulate mobile pruning
             await Task.Delay(100);
@@ -134,7 +135,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             return model;
         }
 
-        private async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> OptimizeForIOSAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, OptimizationOptions options)
+        private async Task<IModel<TInput, TOutput, TMetadata>> OptimizeForIOSAsync(IModel<TInput, TOutput, TMetadata> model, OptimizationOptions options)
         {
             // Simulate iOS optimization
             await Task.Delay(100);
@@ -147,7 +148,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             return model;
         }
 
-        private async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> OptimizeForAndroidAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, OptimizationOptions options)
+        private async Task<IModel<TInput, TOutput, TMetadata>> OptimizeForAndroidAsync(IModel<TInput, TOutput, TMetadata> model, OptimizationOptions options)
         {
             // Simulate Android optimization
             await Task.Delay(100);
@@ -160,7 +161,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             return model;
         }
 
-        private async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> OptimizeForCrossPlatformAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, OptimizationOptions options)
+        private async Task<IModel<TInput, TOutput, TMetadata>> OptimizeForCrossPlatformAsync(IModel<TInput, TOutput, TMetadata> model, OptimizationOptions options)
         {
             // Simulate cross-platform optimization
             await Task.Delay(100);
@@ -173,7 +174,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             return model;
         }
 
-        private async Task<IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>> OptimizeForBatteryLifeAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        private async Task<IModel<TInput, TOutput, TMetadata>> OptimizeForBatteryLifeAsync(IModel<TInput, TOutput, TMetadata> model)
         {
             // Simulate battery optimization
             await Task.Delay(100);
@@ -186,7 +187,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             return model;
         }
 
-        public override async Task<DeploymentPackage> CreateDeploymentPackageAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, string targetPath)
+        public override async Task<DeploymentPackage> CreateDeploymentPackageAsync(IModel<TInput, TOutput, TMetadata> model, string targetPath)
         {
             var targetPlatform = Configuration.PlatformSpecificSettings["TargetPlatform"].ToString();
             var package = new DeploymentPackage
@@ -229,13 +230,13 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             // Create integration guide
             var integrationGuide = GenerateIntegrationGuide(targetPlatform);
             var guidePath = Path.Combine(docsDir, "integration_guide.md");
-            await File.WriteAllTextAsync(guidePath, integrationGuide);
+            await FileAsyncHelper.WriteAllTextAsync(guidePath, integrationGuide);
             package.Artifacts["IntegrationGuide"] = guidePath;
 
             // Create performance benchmarks
             var benchmarks = GenerateBenchmarks(model);
             var benchmarksPath = Path.Combine(docsDir, "benchmarks.json");
-            await File.WriteAllTextAsync(benchmarksPath, benchmarks);
+            await FileAsyncHelper.WriteAllTextAsync(benchmarksPath, benchmarks);
             package.Artifacts["Benchmarks"] = benchmarksPath;
 
             // Calculate package size
@@ -245,63 +246,58 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             return package;
         }
 
-        private async Task CreateIOSPackageAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, string iosDir, string modelsDir)
+        private async Task CreateIOSPackageAsync(IModel<TInput, TOutput, TMetadata> model, string iosDir, string modelsDir)
         {
             // Save Core ML model
             var coreMLPath = Path.Combine(modelsDir, "model.mlmodel");
-            package.ModelPath = coreMLPath;
             // await ConvertToCoreMLAsync(model, coreMLPath);
 
             // Create Swift wrapper
             var swiftWrapper = GenerateSwiftWrapper();
             var swiftPath = Path.Combine(iosDir, "ModelWrapper.swift");
-            await File.WriteAllTextAsync(swiftPath, swiftWrapper);
+            await FileAsyncHelper.WriteAllTextAsync(swiftPath, swiftWrapper);
 
             // Create Objective-C bridge
             var objcBridge = GenerateObjectiveCBridge();
             var objcPath = Path.Combine(iosDir, "ModelBridge.h");
-            await File.WriteAllTextAsync(objcPath, objcBridge);
+            await FileAsyncHelper.WriteAllTextAsync(objcPath, objcBridge);
 
             // Create podspec
             var podspec = GeneratePodspec();
             var podspecPath = Path.Combine(iosDir, "AIModel.podspec");
-            await File.WriteAllTextAsync(podspecPath, podspec);
+            await FileAsyncHelper.WriteAllTextAsync(podspecPath, podspec);
 
             // Create example app
             var exampleApp = GenerateIOSExample();
             var examplePath = Path.Combine(iosDir, "ExampleViewController.swift");
-            await File.WriteAllTextAsync(examplePath, exampleApp);
+            await FileAsyncHelper.WriteAllTextAsync(examplePath, exampleApp);
         }
 
-        private async Task CreateAndroidPackageAsync(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model, string androidDir, string modelsDir)
+        private async Task CreateAndroidPackageAsync(IModel<TInput, TOutput, TMetadata> model, string androidDir, string modelsDir)
         {
             // Save Tensor<double>Flow Lite model
             var tflitePath = Path.Combine(modelsDir, "model.tflite");
-            if (string.IsNullOrEmpty(package.ModelPath))
-            {
-                package.ModelPath = tflitePath;
-            }
             // await ConvertToTFLiteAsync(model, tflitePath);
 
             // Create Kotlin wrapper
             var kotlinWrapper = GenerateKotlinWrapper();
             var kotlinPath = Path.Combine(androidDir, "ModelWrapper.kt");
-            await File.WriteAllTextAsync(kotlinPath, kotlinWrapper);
+            await FileAsyncHelper.WriteAllTextAsync(kotlinPath, kotlinWrapper);
 
             // Create Java interface
             var javaInterface = GenerateJavaInterface();
             var javaPath = Path.Combine(androidDir, "ModelInterface.java");
-            await File.WriteAllTextAsync(javaPath, javaInterface);
+            await FileAsyncHelper.WriteAllTextAsync(javaPath, javaInterface);
 
             // Create build.gradle
             var buildGradle = GenerateBuildGradle();
             var gradlePath = Path.Combine(androidDir, "build.gradle");
-            await File.WriteAllTextAsync(gradlePath, buildGradle);
+            await FileAsyncHelper.WriteAllTextAsync(gradlePath, buildGradle);
 
             // Create example activity
             var exampleActivity = GenerateAndroidExample();
             var examplePath = Path.Combine(androidDir, "ExampleActivity.kt");
-            await File.WriteAllTextAsync(examplePath, exampleActivity);
+            await FileAsyncHelper.WriteAllTextAsync(examplePath, exampleActivity);
         }
 
         private string GenerateSwiftWrapper()
@@ -658,7 +654,7 @@ See the provided example files for complete implementation.
 ";
         }
 
-        private string GenerateBenchmarks(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        private string GenerateBenchmarks(IModel<TInput, TOutput, TMetadata> model)
         {
             var benchmarks = new
             {
@@ -690,13 +686,13 @@ See the provided example files for complete implementation.
             });
         }
 
-        protected override double EstimateLatency(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        protected override double EstimateLatency(IModel<TInput, TOutput, TMetadata> model)
         {
             var baseLatency = base.EstimateLatency(model);
-            
+
             // Adjust for mobile hardware
             var platform = Configuration.PlatformSpecificSettings["TargetPlatform"].ToString();
-            
+
             if (platform == "iOS")
             {
                 // iOS typically has better single-threaded performance
@@ -714,7 +710,7 @@ See the provided example files for complete implementation.
             return baseLatency;
         }
 
-        protected override double EstimateMemoryRequirements(IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> model)
+        protected override double EstimateMemoryRequirements(IModel<TInput, TOutput, TMetadata> model)
         {
             var baseMemory = base.EstimateMemoryRequirements(model);
             
@@ -729,11 +725,11 @@ See the provided example files for complete implementation.
 
         private class MobilePlatformConfig
         {
-            public string PlatformName { get; set; }
+            public string PlatformName { get; set; } = default!;
             public double MaxModelSize { get; set; }
-            public string[] SupportedFormats { get; set; }
-            public string MinOSVersion { get; set; }
-            public string[] HardwareAccelerators { get; set; }
+            public string[] SupportedFormats { get; set; } = default!;
+            public string MinOSVersion { get; set; } = default!;
+            public string[] HardwareAccelerators { get; set; } = default!;
         }
     }
 }

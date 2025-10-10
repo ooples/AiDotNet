@@ -23,7 +23,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// but potentially less accurate, while lower values make the trend follow the data more closely.
     /// Common values: 1600 for quarterly data, 100 for yearly data, 14400 for monthly data.
     /// </remarks>
-    private readonly T _lambda;
+    private readonly T _lambda = default!;
 
     /// <summary>
     /// Optional matrix decomposition method used for solving the linear system in the matrix method.
@@ -33,7 +33,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <summary>
     /// The algorithm type to use for the Hodrick-Prescott decomposition.
     /// </summary>
-    private readonly HodrickPrescottAlgorithmType _algorithm;
+    private readonly HodrickPrescottAlgorithmType _algorithm = default!;
 
     /// <summary>
     /// Initializes a new instance of the Hodrick-Prescott decomposition.
@@ -65,7 +65,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         switch (_algorithm)
         {
-            case HodrickPrescottAlgorithmType.Matrix<double>Method:
+            case HodrickPrescottAlgorithmType.MatrixMethod:
                 DecomposeMatrixMethod();
                 break;
             case HodrickPrescottAlgorithmType.IterativeMethod:

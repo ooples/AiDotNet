@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -16,7 +17,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
         public override string Name => "IoT Optimizer";
         public override DeploymentTarget Target => DeploymentTarget.IoT;
 
-        private readonly Dictionary<string, IoTDeviceProfile> _deviceProfiles;
+        private Dictionary<string, IoTDeviceProfile> DeviceProfiles { get; set; } = default!;
 
         public IoTOptimizer()
         {
@@ -26,7 +27,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
 
         private void InitializeDeviceProfiles()
         {
-            _deviceProfiles = new Dictionary<string, IoTDeviceProfile>
+            DeviceProfiles = new Dictionary<string, IoTDeviceProfile>
             {
                 ["RaspberryPi"] = new IoTDeviceProfile
                 {
@@ -94,11 +95,11 @@ namespace AiDotNet.Deployment.EdgeOptimizers
 
         public override async Task<IModel<TInput, TOutput, TMetadata>> OptimizeAsync(IModel<TInput, TOutput, TMetadata> model, OptimizationOptions options)
         {
-            var deviceProfile = options.CustomOptions.ContainsKey("DeviceProfile") 
-                ? (string)options.CustomOptions["DeviceProfile"] 
+            var deviceProfile = options.CustomOptions.ContainsKey("DeviceProfile")
+                ? (string)options.CustomOptions["DeviceProfile"]
                 : "RaspberryPi";
 
-            var profile = _deviceProfiles[deviceProfile];
+            var profile = DeviceProfiles[deviceProfile];
             var optimizedModel = model;
 
             // Apply extreme optimization for constrained devices
@@ -281,7 +282,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
         public override async Task<DeploymentPackage> CreateDeploymentPackageAsync(IModel<TInput, TOutput, TMetadata> model, string targetPath)
         {
             var deviceProfile = Configuration.PlatformSpecificSettings["DeviceProfile"].ToString();
-            var profile = _deviceProfiles[deviceProfile];
+            var profile = DeviceProfiles[deviceProfile];
             
             var package = new DeploymentPackage
             {
@@ -347,7 +348,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
                 // Save as C array for microcontrollers
                 modelPath = Path.Combine(modelsDir, "model_data.h");
                 var cArray = GenerateCArrayModel();
-                await File.WriteAllTextAsync(modelPath, cArray);
+                await FileAsyncHelper.WriteAllTextAsync(modelPath, cArray);
             }
             else if (profile.SupportedFormats.Contains("Tensor<double>RT"))
             {
@@ -369,19 +370,19 @@ namespace AiDotNet.Deployment.EdgeOptimizers
         {
             // Create installation script
             var installScript = GenerateInstallScript(profile);
-            await File.WriteAllTextAsync(Path.Combine(scriptsDir, "install.sh"), installScript);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(scriptsDir, "install.sh"), installScript);
 
             // Create deployment script
             var deployScript = GenerateDeploymentScript(profile);
-            await File.WriteAllTextAsync(Path.Combine(scriptsDir, "deploy.sh"), deployScript);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(scriptsDir, "deploy.sh"), deployScript);
 
             // Create monitoring script
             var monitorScript = GenerateMonitoringScript(profile);
-            await File.WriteAllTextAsync(Path.Combine(scriptsDir, "monitor.py"), monitorScript);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(scriptsDir, "monitor.py"), monitorScript);
 
             // Create update script
             var updateScript = GenerateUpdateScript(profile);
-            await File.WriteAllTextAsync(Path.Combine(scriptsDir, "update.sh"), updateScript);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(scriptsDir, "update.sh"), updateScript);
         }
 
         private async Task CreateFirmwareAsync(string firmwareDir, IoTDeviceProfile profile)
@@ -389,15 +390,15 @@ namespace AiDotNet.Deployment.EdgeOptimizers
             if (profile.DeviceName == "Arduino")
             {
                 var arduinoSketch = GenerateArduinoSketch();
-                await File.WriteAllTextAsync(Path.Combine(firmwareDir, "inference.ino"), arduinoSketch);
+                await FileAsyncHelper.WriteAllTextAsync(Path.Combine(firmwareDir, "inference.ino"), arduinoSketch);
             }
             else if (profile.DeviceName == "ESP32")
             {
                 var esp32Code = GenerateESP32Firmware();
-                await File.WriteAllTextAsync(Path.Combine(firmwareDir, "main.cpp"), esp32Code);
+                await FileAsyncHelper.WriteAllTextAsync(Path.Combine(firmwareDir, "main.cpp"), esp32Code);
                 
                 var platformioConfig = GeneratePlatformIOConfig();
-                await File.WriteAllTextAsync(Path.Combine(firmwareDir, "platformio.ini"), platformioConfig);
+                await FileAsyncHelper.WriteAllTextAsync(Path.Combine(firmwareDir, "platformio.ini"), platformioConfig);
             }
         }
 
@@ -405,38 +406,38 @@ namespace AiDotNet.Deployment.EdgeOptimizers
         {
             // Device configuration
             var deviceConfig = GenerateDeviceConfig(profile);
-            await File.WriteAllTextAsync(Path.Combine(configDir, "device_config.json"), deviceConfig);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(configDir, "device_config.json"), deviceConfig);
 
             // Network configuration
             var networkConfig = GenerateNetworkConfig();
-            await File.WriteAllTextAsync(Path.Combine(configDir, "network_config.json"), networkConfig);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(configDir, "network_config.json"), networkConfig);
 
             // Security configuration
             var securityConfig = GenerateSecurityConfig();
-            await File.WriteAllTextAsync(Path.Combine(configDir, "security_config.json"), securityConfig);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(configDir, "security_config.json"), securityConfig);
 
             // Power management configuration
             var powerConfig = GeneratePowerConfig();
-            await File.WriteAllTextAsync(Path.Combine(configDir, "power_config.json"), powerConfig);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(configDir, "power_config.json"), powerConfig);
         }
 
         private async Task CreateDocumentationAsync(string docsDir, IoTDeviceProfile profile)
         {
             // Deployment guide
             var deploymentGuide = GenerateDeploymentGuide(profile);
-            await File.WriteAllTextAsync(Path.Combine(docsDir, "deployment_guide.md"), deploymentGuide);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(docsDir, "deployment_guide.md"), deploymentGuide);
 
             // Hardware requirements
             var hardwareReqs = GenerateHardwareRequirements(profile);
-            await File.WriteAllTextAsync(Path.Combine(docsDir, "hardware_requirements.md"), hardwareReqs);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(docsDir, "hardware_requirements.md"), hardwareReqs);
 
             // API documentation
             var apiDocs = GenerateAPIDocs(profile);
-            await File.WriteAllTextAsync(Path.Combine(docsDir, "api_documentation.md"), apiDocs);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(docsDir, "api_documentation.md"), apiDocs);
 
             // Troubleshooting guide
             var troubleshooting = GenerateTroubleshootingGuide(profile);
-            await File.WriteAllTextAsync(Path.Combine(docsDir, "troubleshooting.md"), troubleshooting);
+            await FileAsyncHelper.WriteAllTextAsync(Path.Combine(docsDir, "troubleshooting.md"), troubleshooting);
         }
 
         private string GenerateCArrayModel()
@@ -1332,7 +1333,7 @@ sudo pip3 install --pre --extra-index-url https://developer.download.nvidia.com/
         protected override double EstimateLatency(IModel<TInput, TOutput, TMetadata> model)
         {
             var deviceProfile = Configuration.PlatformSpecificSettings["DeviceProfile"].ToString();
-            var profile = _deviceProfiles[deviceProfile];
+            var profile = DeviceProfiles[deviceProfile];
             
             var baseLatency = base.EstimateLatency(model);
             
@@ -1356,7 +1357,7 @@ sudo pip3 install --pre --extra-index-url https://developer.download.nvidia.com/
         protected override double EstimateMemoryRequirements(IModel<TInput, TOutput, TMetadata> model)
         {
             var deviceProfile = Configuration.PlatformSpecificSettings["DeviceProfile"].ToString();
-            var profile = _deviceProfiles[deviceProfile];
+            var profile = DeviceProfiles[deviceProfile];
             
             var baseMemory = base.EstimateMemoryRequirements(model);
             
@@ -1366,13 +1367,13 @@ sudo pip3 install --pre --extra-index-url https://developer.download.nvidia.com/
 
         private class IoTDeviceProfile
         {
-            public string DeviceName { get; set; }
-            public string CPU { get; set; }
+            public string DeviceName { get; set; } = default!;
+            public string CPU { get; set; } = default!;
             public double RAM { get; set; } // MB
             public double Storage { get; set; } // MB
             public double MaxModelSize { get; set; } // MB
-            public string[] SupportedFormats { get; set; }
-            public string[] Accelerators { get; set; }
+            public string[] SupportedFormats { get; set; } = default!;
+            public string[] Accelerators { get; set; } = default!;
         }
     }
 }

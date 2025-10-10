@@ -32,7 +32,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Provides numeric operations for the specified type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the LuDecomposition class and performs the decomposition.

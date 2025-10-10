@@ -24,7 +24,7 @@ namespace AiDotNet.Ensemble.Strategies
         private readonly int _cvFolds;
         private bool _isTrained;
         private List<T[]> _metaModelWeights;
-        private T _metaBias;
+        private T _metaBias = default!;
 
         /// <summary>
         /// Gets the name of the combination strategy.

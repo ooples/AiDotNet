@@ -28,6 +28,7 @@ public static class DistilledModelFactoryRegistry
     /// <summary>
     /// Registers a factory for a specific model type.
     /// </summary>
+    /// <typeparam name="T">The numeric type used by the model.</typeparam>
     /// <typeparam name="TModel">The type of model.</typeparam>
     /// <typeparam name="TInput">The input type for the model.</typeparam>
     /// <typeparam name="TOutput">The output type for the model.</typeparam>
@@ -37,16 +38,17 @@ public static class DistilledModelFactoryRegistry
     /// This method registers a factory that can create distilled models of the specified type.
     /// </para>
     /// <para><b>For Beginners:</b> This adds a new model type to the registry.
-    /// 
+    ///
     /// When adding support for a new model type:
     /// 1. Create a factory that knows how to deserialize that distilled model type
     /// 2. Register it using this method
     /// 3. The distillation system can now work with that model type
     /// </para>
     /// </remarks>
-    public static void RegisterFactory<TModel, TInput, TOutput>(
-        IDistilledModelFactory<TModel, TInput, TOutput> factory)
-        where TModel : class, IFullModel<double, TInput, TOutput>
+    public static void RegisterFactory<T, TModel, TInput, TOutput>(
+        IDistilledModelFactory<T, TModel, TInput, TOutput> factory)
+        where T : unmanaged
+        where TModel : class, IFullModel<T, TInput, TOutput>
     {
         _factories[typeof(TModel)] = factory;
     }
@@ -54,6 +56,7 @@ public static class DistilledModelFactoryRegistry
     /// <summary>
     /// Gets a factory for a specific model type.
     /// </summary>
+    /// <typeparam name="T">The numeric type used by the model.</typeparam>
     /// <typeparam name="TModel">The type of model.</typeparam>
     /// <typeparam name="TInput">The input type for the model.</typeparam>
     /// <typeparam name="TOutput">The output type for the model.</typeparam>
@@ -63,21 +66,22 @@ public static class DistilledModelFactoryRegistry
     /// This method retrieves a factory that can create distilled models of the specified type.
     /// </para>
     /// <para><b>For Beginners:</b> This finds the right factory for a model type.
-    /// 
+    ///
     /// When deserializing a model:
     /// 1. We need to know how to create that specific distilled model type
     /// 2. This method finds the factory that knows how to do that
     /// 3. The factory then handles the model-specific deserialization
     /// </para>
     /// </remarks>
-    public static IDistilledModelFactory<TModel, TInput, TOutput>? GetFactory<TModel, TInput, TOutput>()
-        where TModel : class, IFullModel<double, TInput, TOutput>
+    public static IDistilledModelFactory<T, TModel, TInput, TOutput>? GetFactory<T, TModel, TInput, TOutput>()
+        where T : unmanaged
+        where TModel : class, IFullModel<T, TInput, TOutput>
     {
         if (_factories.TryGetValue(typeof(TModel), out var factory))
         {
-            return (IDistilledModelFactory<TModel, TInput, TOutput>)factory;
+            return (IDistilledModelFactory<T, TModel, TInput, TOutput>)factory;
         }
-        
+
         return null;
     }
 }

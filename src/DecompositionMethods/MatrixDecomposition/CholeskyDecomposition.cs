@@ -14,7 +14,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Provides numeric operations for the specified type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Gets the lower triangular matrix L from the decomposition A = L * L^T.

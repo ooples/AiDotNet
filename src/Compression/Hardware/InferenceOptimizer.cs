@@ -27,17 +27,19 @@ namespace AiDotNet.Compression.Hardware;
 /// your compressed models run as efficiently as possible.
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type for model parameters.</typeparam>
 /// <typeparam name="TModel">The type of model to optimize.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public class InferenceOptimizer<TModel, TInput, TOutput> 
-    : ModelCompressorBase<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public class InferenceOptimizer<T, TModel, TInput, TOutput>
+    : ModelCompressorBase<T, TModel, TInput, TOutput>
+    where T : unmanaged
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// The detected hardware capabilities.
     /// </summary>
-    private readonly HardwareCapabilities _capabilities;
+    private readonly HardwareCapabilities _capabilities = default!;
     
     /// <summary>
     /// Whether SIMD optimizations are available.
@@ -58,11 +60,11 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
     {
         // Since this class doesn't actually create new compressors (it just optimizes existing ones),
         // simply return a new instance of the same class with the same options
-        return new InferenceOptimizer<TModel, TInput, TOutput>(DetectHardwareCapabilities(), options);
+        return new InferenceOptimizer<T, TModel, TInput, TOutput>(DetectHardwareCapabilities(), options);
     }
     
     /// <summary>
-    /// Initializes a new instance of the <see cref="InferenceOptimizer{TModel, TInput, TOutput}"/> class.
+    /// Initializes a new instance of the <see cref="InferenceOptimizer{T, TModel, TInput, TOutput}"/> class.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -84,11 +86,11 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
         })
     {
         _capabilities = DetectHardwareCapabilities();
-        _hasSIMD = System.Numerics.Vector<double>.IsHardwareAccelerated;
+        _hasSIMD = System.Numerics.Vector.IsHardwareAccelerated;
     }
     
     /// <summary>
-    /// Initializes a new instance of the <see cref="InferenceOptimizer{TModel, TInput, TOutput}"/> class with specified capabilities.
+    /// Initializes a new instance of the <see cref="InferenceOptimizer{T, TModel, TInput, TOutput}"/> class with specified capabilities.
     /// </summary>
     /// <param name="capabilities">The hardware capabilities to use.</param>
     /// <param name="options">The options for model compression.</param>
@@ -136,21 +138,21 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
     public TModel OptimizeForHardware(TModel model)
     {
         // Check what kind of compressed model we're dealing with
-        if (model is IQuantizedModel<double, TInput, TOutput> quantizedModel)
+        if (model is IQuantizedModel<T, TInput, TOutput> quantizedModel)
         {
             return OptimizeQuantizedModel(model, quantizedModel);
         }
-        else if (model is IPrunedModel<double, TInput, TOutput> prunedModel)
+        else if (model is IPrunedModel<T, TInput, TOutput> prunedModel)
         {
             return OptimizePrunedModel(model, prunedModel);
         }
-        else if (model is IDistilledModel<double, TInput, TOutput>)
+        else if (model is IDistilledModel<T, TInput, TOutput>)
         {
             // Distilled models typically don't need special hardware optimizations
             // beyond what's already applied to the model itself
             return model;
         }
-        
+
         // If it's not a recognized compressed model, return it unchanged
         return model;
     }
@@ -235,12 +237,12 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
     /// - Leverage tensor cores on compatible GPUs
     /// </para>
     /// </remarks>
-    private TModel OptimizeQuantizedModel(TModel model, IQuantizedModel<double, TInput, TOutput> quantizedModel)
+    private TModel OptimizeQuantizedModel(TModel model, IQuantizedModel<T, TInput, TOutput> quantizedModel)
     {
         _optimizationsApplied = true;
-        
+
         // Check if the model supports hardware-specific optimizations
-        if (model is IHardwareOptimizable<TModel, TInput, TOutput> optimizableModel)
+        if (model is IHardwareOptimizable<T, TModel, TInput, TOutput> optimizableModel)
         {
             // Let the model apply its own optimizations based on capabilities
             return optimizableModel.OptimizeForHardware(_capabilities);
@@ -300,12 +302,12 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
     /// - Use hardware-specific sparse acceleration if available
     /// </para>
     /// </remarks>
-    private TModel OptimizePrunedModel(TModel model, IPrunedModel<double, TInput, TOutput> prunedModel)
+    private TModel OptimizePrunedModel(TModel model, IPrunedModel<T, TInput, TOutput> prunedModel)
     {
         _optimizationsApplied = true;
-        
+
         // Check if the model supports hardware-specific optimizations
-        if (model is IHardwareOptimizable<TModel, TInput, TOutput> optimizableModel)
+        if (model is IHardwareOptimizable<T, TModel, TInput, TOutput> optimizableModel)
         {
             // Let the model apply its own optimizations based on capabilities
             return optimizableModel.OptimizeForHardware(_capabilities);
@@ -354,9 +356,9 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
     private HardwareCapabilities DetectHardwareCapabilities()
     {
         var capabilities = new HardwareCapabilities();
-        
+
         // CPU capabilities detection
-        capabilities.HasSIMD = System.Numerics.Vector<double>.IsHardwareAccelerated;
+        capabilities.HasSIMD = System.Numerics.Vector.IsHardwareAccelerated;
         
         // Check for AVX2 support
         capabilities.HasAvx2 = IsAvx2Supported();
@@ -636,7 +638,7 @@ public class InferenceOptimizer<TModel, TInput, TOutput>
     /// </summary>
     /// <param name="model">The model to optimize.</param>
     /// <param name="prunedModel">The model as an IPrunedModel.</param>
-    private void OptimizeSparseFormat(TModel model, IPrunedModel<double, TInput, TOutput> prunedModel)
+    private void OptimizeSparseFormat(TModel model, IPrunedModel<T, TInput, TOutput> prunedModel)
     {
         // In a real implementation, this would convert the sparse format
         // to the most efficient format for the hardware
@@ -926,11 +928,12 @@ public class HardwareCapabilities
 /// - Reconfigure themselves for optimal performance
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type for model parameters.</typeparam>
 /// <typeparam name="TModel">The type of the model.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public interface IHardwareOptimizable<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public interface IHardwareOptimizable<T, TModel, TInput, TOutput>
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Optimizes the model for the specified hardware capabilities.

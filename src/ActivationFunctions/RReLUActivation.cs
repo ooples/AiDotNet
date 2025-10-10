@@ -23,22 +23,22 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Random number generator used to create the alpha value during training.
     /// </summary>
-    private readonly Random _random;
+    private readonly Random _random = default!;
     
     /// <summary>
     /// The minimum value for the random alpha parameter.
     /// </summary>
-    private readonly T _lowerBound;
+    private readonly T _lowerBound = default!;
     
     /// <summary>
     /// The maximum value for the random alpha parameter.
     /// </summary>
-    private readonly T _upperBound;
+    private readonly T _upperBound = default!;
     
     /// <summary>
     /// The current alpha value used to scale negative inputs.
     /// </summary>
-    private T _alpha;
+    private T _alpha = default!;
     
     /// <summary>
     /// Indicates whether the activation function is in training mode (true) or inference mode (false).

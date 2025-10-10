@@ -26,7 +26,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// The slope coefficient for negative input values.
     /// </summary>
-    private readonly T _alpha;
+    private readonly T _alpha = default!;
 
     /// <summary>
     /// Initializes a new instance of the Leaky ReLU activation function with the specified alpha parameter.
