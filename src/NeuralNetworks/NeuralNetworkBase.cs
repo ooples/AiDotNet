@@ -417,6 +417,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     }
 
     /// <summary>
+    /// Gets the total number of parameters in the model.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This property provides the same information as GetParameterCount(),
+    /// showing how many adjustable values (weights and biases) your neural network has.
+    /// This is part of the IFullModel interface for consistency with other model types.
+    /// </remarks>
+    public virtual int ParameterCount => GetParameterCount();
+
+    /// <summary>
     /// Validates that the provided layers form a valid neural network architecture.
     /// </summary>
     /// <param name="layers">The layers to validate.</param>
@@ -812,6 +822,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     }
 
     /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model should be saved.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the entire neural network, including all layers and parameters,
+    /// and saves it to the specified file path.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This saves your trained neural network to a file on your computer.
+    ///
+    /// Think of it like saving a document - you can later load the model back from the file
+    /// and use it to make predictions without having to retrain it from scratch.
+    ///
+    /// This is useful when:
+    /// - You've finished training and want to save your model
+    /// - You want to use the model in a different application
+    /// - You need to share the model with others
+    /// - You want to deploy the model to production
+    /// </para>
+    /// </remarks>
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        byte[] serializedData = Serialize();
+        File.WriteAllBytes(filePath, serializedData);
+    }
+
+    /// <summary>
     /// Serializes the neural network to a byte array.
     /// </summary>
     /// <returns>A byte array representing the serialized neural network.</returns>
@@ -819,16 +862,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     {
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
-        
+
         // Write the number of layers
         writer.Write(Layers.Count);
-        
+
         // Write each layer's type and shape
         foreach (var layer in Layers)
         {
             // Write layer type
             writer.Write(layer.GetType().Name);
-            
+
             // Write input shape
             var inputShape = layer.GetInputShape();
             writer.Write(inputShape.Length);
@@ -836,7 +879,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             {
                 writer.Write(dim);
             }
-            
+
             // Write output shape
             var outputShape = layer.GetOutputShape();
             writer.Write(outputShape.Length);
@@ -844,10 +887,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             {
                 writer.Write(dim);
             }
-            
+
             // Write parameter count
             writer.Write(layer.ParameterCount);
-            
+
             // Write parameters if any
             if (layer.ParameterCount > 0)
             {
@@ -858,10 +901,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
                 }
             }
         }
-        
+
         // Write network-specific data
         SerializeNetworkSpecificData(writer);
-        
+
         return ms.ToArray();
     }
 
@@ -1220,10 +1263,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This method lets you manually select which parts of your input data
-    /// the neural network should pay attention to. For example, if your inputs include various 
+    /// the neural network should pay attention to. For example, if your inputs include various
     /// measurements or features, you can tell the network to focus only on specific ones
     /// that you know are important based on your domain knowledge.
-    /// 
+    ///
     /// This can be useful for:
     /// - Forcing the network to use features you know are important
     /// - Ignoring features you know are irrelevant or noisy
@@ -1271,6 +1314,107 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     }
 
     /// <summary>
+    /// Gets the feature importance scores for the model.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the importance of each input feature by analyzing the weights
+    /// in the first layer of the neural network. Features with larger absolute weights are
+    /// considered more important to the model's predictions.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you which parts of your input data are most important
+    /// for the neural network's decisions.
+    ///
+    /// For example, if you're predicting house prices with features like size, location, and age,
+    /// this method might tell you that "location" has an importance of 0.8, "size" has 0.6,
+    /// and "age" has 0.2 - meaning the network relies heavily on location and size, but less on age.
+    ///
+    /// This is useful for:
+    /// - Understanding what your model pays attention to
+    /// - Explaining model decisions to others
+    /// - Identifying which features matter most
+    /// - Simplifying your model by removing unimportant features
+    /// </para>
+    /// </remarks>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        var importance = new Dictionary<string, T>();
+
+        // If the network has no layers, return an empty dictionary
+        if (Layers.Count == 0)
+            return importance;
+
+        // Get the first layer for analysis
+        var firstLayer = Layers[0];
+
+        // If the first layer is not a dense or convolutional layer, we can't easily determine importance
+        if (!(firstLayer is DenseLayer<T> || firstLayer is ConvolutionalLayer<T>))
+        {
+            // Return uniform importance for all features (conservative approach)
+            int inputSize = firstLayer.GetInputShape()[0];
+            T uniformImportance = NumOps.FromDouble(1.0 / inputSize);
+
+            for (int i = 0; i < inputSize; i++)
+            {
+                importance[$"Feature_{i}"] = uniformImportance;
+            }
+
+            return importance;
+        }
+
+        // Get the weights from the first layer
+        Vector<T> weights = firstLayer.GetParameters();
+        int featureCount = firstLayer.GetInputShape()[0];
+        int outputSize = firstLayer.GetOutputShape()[0];
+
+        // Calculate feature importance by summing absolute weights per input feature
+        var featureScores = new Dictionary<int, T>();
+
+        for (int i = 0; i < featureCount; i++)
+        {
+            T score = NumOps.Zero;
+
+            // For each neuron in the first layer, add the absolute weight for this feature
+            for (int j = 0; j < outputSize; j++)
+            {
+                // In most layers, weights are organized as [input1-neuron1, input2-neuron1, ..., input1-neuron2, ...]
+                int weightIndex = j * featureCount + i;
+
+                if (weightIndex < weights.Length)
+                {
+                    score = NumOps.Add(score, NumOps.Abs(weights[weightIndex]));
+                }
+            }
+
+            featureScores[i] = score;
+        }
+
+        // Normalize the scores to sum to 1
+        T totalScore = featureScores.Values.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
+
+        if (NumOps.GreaterThan(totalScore, NumOps.Zero))
+        {
+            foreach (var kvp in featureScores)
+            {
+                importance[$"Feature_{kvp.Key}"] = NumOps.Divide(kvp.Value, totalScore);
+            }
+        }
+        else
+        {
+            // If all scores are zero, use uniform importance
+            T uniformImportance = NumOps.FromDouble(1.0 / featureCount);
+            for (int i = 0; i < featureCount; i++)
+            {
+                importance[$"Feature_{i}"] = uniformImportance;
+            }
+        }
+
+        return importance;
+    }
+
+    /// <summary>
     /// Sets the parameters of the neural network.
     /// </summary>
     /// <param name="parameters">The parameters to set.</param>
@@ -1305,11 +1449,219 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
                 {
                     layerParameters[i] = parameters[currentIndex + i];
                 }
-                
+
                 // Set the layer's parameters
                 layer.SetParameters(layerParameters);
                 currentIndex += layerParameterCount;
             }
         }
+    }
+
+    /// <summary>
+    /// Adds a layer to the neural network.
+    /// </summary>
+    /// <param name="layerType">The type of layer to add.</param>
+    /// <param name="units">The number of units/neurons in the layer.</param>
+    /// <param name="activation">The activation function to use.</param>
+    public virtual void AddLayer(LayerType layerType, int units, ActivationFunction activation)
+    {
+        ILayer<T> layer = layerType switch
+        {
+            LayerType.Dense => new DenseLayer<T>(units, activation),
+            _ => throw new NotSupportedException($"Layer type {layerType} not supported in AddLayer method")
+        };
+        Layers.Add(layer);
+    }
+
+    /// <summary>
+    /// Adds a convolutional layer to the neural network.
+    /// </summary>
+    public virtual void AddConvolutionalLayer(int filters, int kernelSize, int stride, ActivationFunction activation)
+    {
+        throw new NotImplementedException(
+            "AddConvolutionalLayer requires additional parameters that are not provided in this method signature. " +
+            "Use ConvolutionalLayer.Configure() with the full input shape, or create the layer directly with " +
+            "new ConvolutionalLayer<T>(inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation) " +
+            "and add it to Layers manually.");
+    }
+
+    /// <summary>
+    /// Adds an LSTM layer to the neural network.
+    /// </summary>
+    public virtual void AddLSTMLayer(int units, bool returnSequences = false)
+    {
+        throw new NotImplementedException(
+            "AddLSTMLayer requires additional parameters that are not provided in this method signature. " +
+            "Create the layer directly with new LSTMLayer<T>(inputSize, hiddenSize, inputShape, activation, recurrentActivation) " +
+            "and add it to Layers manually.");
+    }
+
+    /// <summary>
+    /// Adds a dropout layer to the neural network.
+    /// </summary>
+    public virtual void AddDropoutLayer(double dropoutRate)
+    {
+        var layer = new DropoutLayer<T>(dropoutRate);
+        Layers.Add(layer);
+    }
+
+    /// <summary>
+    /// Adds a batch normalization layer to the neural network.
+    /// </summary>
+    /// <param name="featureSize">The number of features to normalize.</param>
+    /// <param name="epsilon">A small constant for numerical stability (default: 1e-5).</param>
+    /// <param name="momentum">The momentum for running statistics (default: 0.9).</param>
+    public virtual void AddBatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9)
+    {
+        var layer = new BatchNormalizationLayer<T>(featureSize, epsilon, momentum);
+        Layers.Add(layer);
+    }
+
+    /// <summary>
+    /// Adds a pooling layer to the neural network.
+    /// </summary>
+    /// <param name="inputShape">The input shape (channels, height, width).</param>
+    /// <param name="poolingType">The type of pooling operation.</param>
+    /// <param name="poolSize">The size of the pooling window.</param>
+    /// <param name="strides">The step size when moving the pooling window (default: same as poolSize).</param>
+    public virtual void AddPoolingLayer(int[] inputShape, PoolingType poolingType, int poolSize, int? strides = null)
+    {
+        var layer = new MaxPoolingLayer<T>(inputShape, poolSize, strides ?? poolSize);
+        Layers.Add(layer);
+    }
+
+    /// <summary>
+    /// Gets the gradients from all layers in the neural network.
+    /// </summary>
+    /// <returns>A vector containing all gradients from all layers concatenated together.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method collects the gradients from every layer in the network and combines them
+    /// into a single vector. This is useful for optimization algorithms that need access to
+    /// all gradients at once.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> During training, each layer calculates how its parameters should change
+    /// (the gradients). This method gathers all those gradients from every layer and puts them
+    /// into one long list.
+    ///
+    /// Think of it like:
+    /// - Each layer has notes about how to improve (gradients)
+    /// - This method collects all those notes into one document
+    /// - The optimizer can then use this document to update the entire network
+    ///
+    /// This is essential for the learning process, as it tells the optimizer how to adjust
+    /// all the network's parameters to improve performance.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> GetGradients()
+    {
+        var allGradients = new List<T>();
+
+        foreach (var layer in Layers)
+        {
+            var layerGradients = layer.GetParameterGradients();
+            if (layerGradients != null && layerGradients.Length > 0)
+            {
+                for (int i = 0; i < layerGradients.Length; i++)
+                {
+                    allGradients.Add(layerGradients[i]);
+                }
+            }
+        }
+
+        return new Vector<T>(allGradients.ToArray());
+    }
+
+    /// <summary>
+    /// Gets the architecture of the neural network.
+    /// </summary>
+    /// <returns>The neural network architecture defining the structure and configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the architecture definition for this neural network, which includes
+    /// information about the layers, their configurations, and how they are connected.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The architecture is like a blueprint of your neural network. It describes
+    /// the structure - how many layers there are, what type each layer is, and how they connect.
+    /// This is useful for understanding, saving, or recreating the network structure.
+    /// </para>
+    /// </remarks>
+    public virtual NeuralNetworkArchitecture<T> GetArchitecture()
+    {
+        return Architecture;
+    }
+
+    /// <summary>
+    /// Gets the input shape expected by the neural network.
+    /// </summary>
+    /// <returns>An array representing the dimensions of the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the shape of input data that the network expects. For example,
+    /// if the network expects images of size 28x28 pixels, this might return [28, 28].
+    /// If it expects a vector of 100 features, it would return [100].
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you what size and shape of data the network needs as input.
+    /// Think of it like knowing what size batteries a device needs - you need to provide the right
+    /// dimensions of data for the network to work properly.
+    /// </para>
+    /// </remarks>
+    public virtual int[] GetInputShape()
+    {
+        if (Layers.Count == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        return Layers[0].GetInputShape();
+    }
+
+    /// <summary>
+    /// Gets the activations (outputs) from each layer for a given input.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>A dictionary mapping layer index to layer activation tensors.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method processes the input through the network and captures the output of each layer.
+    /// This is useful for visualizing what each layer is detecting, debugging the network, or
+    /// implementing techniques like feature extraction.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This shows you what each layer in your neural network "sees" or produces
+    /// when given an input. It's like following a signal through a circuit and measuring the output
+    /// at each component. This helps you understand what patterns each layer is detecting.
+    ///
+    /// For example, in an image recognition network:
+    /// - Early layers might detect edges and simple shapes
+    /// - Middle layers might detect parts of objects (like eyes or wheels)
+    /// - Later layers might detect whole objects
+    ///
+    /// This method lets you see all of these intermediate representations.
+    /// </para>
+    /// </remarks>
+    public virtual Dictionary<int, Tensor<T>> GetLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<int, Tensor<T>>();
+
+        if (Layers.Count == 0)
+        {
+            return activations;
+        }
+
+        var currentInput = input;
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+            var output = layer.Forward(currentInput);
+            activations[i] = output;
+            currentInput = output;
+        }
+
+        return activations;
     }
 }
