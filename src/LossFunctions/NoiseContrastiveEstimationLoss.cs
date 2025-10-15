@@ -35,7 +35,7 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// Small value to prevent numerical instability.
     /// </summary>
-    private readonly T _epsilon;
+    private readonly T _epsilon = default!;
     
     /// <summary>
     /// Initializes a new instance of the NoiseContrastiveEstimationLoss class.

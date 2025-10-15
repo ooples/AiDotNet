@@ -64,7 +64,7 @@ public class EmbeddingLayer<T> : LayerBase<T>
     /// During training, these values are adjusted to make similar tokens have similar vectors.
     /// </para>
     /// </remarks>
-    private Matrix<T> _embeddingMatrix;
+    private Matrix<T> _embeddingMatrix = default!;
 
     /// <summary>
     /// The gradients for the embedding matrix, computed during backpropagation.

@@ -11,8 +11,8 @@ namespace AiDotNet.Pipeline.Steps
     /// </summary>
     public class DataValidationStep : PipelineStepBase
     {
-        private readonly List<string> _validationErrors;
-        private readonly List<string> _validationWarnings;
+        private readonly List<string> _validationErrors = default!;
+        private readonly List<string> _validationWarnings = default!;
         private double _missingValueThreshold;
         private double _outlierThreshold;
         private bool _checkForDuplicates;
@@ -82,8 +82,8 @@ namespace AiDotNet.Pipeline.Steps
             for (int j = 0; j < numFeatures; j++)
             {
                 var featureValues = inputs.Select(row => row[j]).ToArray();
-                _featureMeans[j] = StatisticsHelper.Mean(featureValues);
-                _featureStdDevs[j] = StatisticsHelper.StandardDeviation(featureValues);
+                _featureMeans[j] = StatisticsHelper<double>.Mean(featureValues);
+                _featureStdDevs[j] = StatisticsHelper<double>.StandardDeviation(featureValues);
             }
 
             // Perform validation checks
@@ -292,7 +292,7 @@ namespace AiDotNet.Pipeline.Steps
             }
 
             // Check for constant target
-            var targetStdDev = StatisticsHelper.StandardDeviation(targets);
+            var targetStdDev = StatisticsHelper<double>.StandardDeviation(targets);
             if (Math.Abs(targetStdDev) < 1e-10)
             {
                 _validationWarnings.Add("Target has zero variance (constant target)");

@@ -43,7 +43,7 @@ public class PolyharmonicSplineRBF<T> : IRadialBasisFunction<T>
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The parameter k that determines the type and order of the polyharmonic spline.

@@ -48,7 +48,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// This adaptive memory allows the algorithm to respond differently to different parameters based on their history.
     /// </para>
     /// </remarks>
-    private Vector<T> _squaredGradient;
+    private Vector<T> _squaredGradient = default!;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -90,7 +90,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> _options;
+    private RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RootMeanSquarePropagationOptimizer{T, TInput, TOutput}"/> class with the specified model and options.

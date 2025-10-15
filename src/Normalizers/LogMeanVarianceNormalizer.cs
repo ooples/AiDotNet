@@ -65,7 +65,7 @@ public class LogMeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, T
     /// This prevents errors in the mathematics while preserving the meaning of your data.
     /// </para>
     /// </remarks>
-    private readonly T _epsilon;
+    private readonly T _epsilon = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LogMeanVarianceNormalizer{T, TInput, TOutput}"/> class.

@@ -14,7 +14,7 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class PPOModel<T> : ReinforcementLearningModelBase<T>
     {
-        private readonly PPOOptions<T> _options;
+        private readonly PPOOptions<T> _options = default!;
         private PPOAgent<Tensor<T>, int, T>? _discreteAgent;
         private PPOAgent<Tensor<T>, Vector<T>, T>? _continuousAgent;
         private readonly int _batchSize;
@@ -275,9 +275,9 @@ namespace AiDotNet.ReinforcementLearning.Models
         /// Gets the metadata for this model.
         /// </summary>
         /// <returns>The model metadata.</returns>
-        public override ModelMetaData<T> GetModelMetaData()
+        public override ModelMetadata<T> GetModelMetadata()
         {
-            var metadata = new ModelMetaData<T>
+            var metadata = new ModelMetadata<T>
             {
                 ModelType = Enums.ModelType.PPOModel,
                 AdditionalInfo = new Dictionary<string, object>

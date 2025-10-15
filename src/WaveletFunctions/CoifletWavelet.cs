@@ -39,7 +39,7 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The coefficients of the Coiflet wavelet.

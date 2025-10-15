@@ -34,12 +34,12 @@ namespace AiDotNet.Reasoning
     /// </remarks>
     public class IterativeRefinementModel<T> : ReasoningModelBase<T>
     {
-        private readonly NeuralNetwork<T> _initialReasoner;
-        private readonly NeuralNetwork<T> _critic;
-        private readonly NeuralNetwork<T> _refiner;
-        private readonly NeuralNetwork<T> _convergenceDetector;
-        private readonly IterativeRefinementOptions<T> _irOptions;
-        private readonly List<RefinementHistory> _refinementHistories;
+        private readonly NeuralNetwork<T> _initialReasoner = default!;
+        private readonly NeuralNetwork<T> _critic = default!;
+        private readonly NeuralNetwork<T> _refiner = default!;
+        private readonly NeuralNetwork<T> _convergenceDetector = default!;
+        private readonly IterativeRefinementOptions<T> _irOptions = default!;
+        private readonly List<RefinementHistory> _refinementHistories = default!;
 
         /// <summary>
         /// Tracks the history of refinements for analysis.

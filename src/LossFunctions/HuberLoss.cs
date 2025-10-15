@@ -34,7 +34,7 @@ public class HuberLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// The threshold parameter that determines the transition between quadratic and linear loss.
     /// </summary>
-    private readonly T _delta;
+    private readonly T _delta = default!;
     
     /// <summary>
     /// Initializes a new instance of the HuberLoss class with the specified delta.

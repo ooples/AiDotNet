@@ -39,7 +39,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// This layer processes the input and transforms it to the first hidden dimension.
     /// It applies the hidden activation function to its output.
     /// </remarks>
-    private readonly FullyConnectedLayer<T> _fc1;
+    private readonly FullyConnectedLayer<T> _fc1 = default!;
     
     /// <summary>
     /// The second fully connected layer in the reconstruction sequence.
@@ -48,7 +48,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// This layer takes the output from the first layer and transforms it to the second hidden dimension.
     /// It also applies the hidden activation function to its output.
     /// </remarks>
-    private readonly FullyConnectedLayer<T> _fc2;
+    private readonly FullyConnectedLayer<T> _fc2 = default!;
     
     /// <summary>
     /// The third fully connected layer in the reconstruction sequence.
@@ -57,7 +57,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// This layer takes the output from the second layer and transforms it to the final output dimension.
     /// It applies the output activation function, which is often sigmoid for reconstruction tasks.
     /// </remarks>
-    private readonly FullyConnectedLayer<T> _fc3;
+    private readonly FullyConnectedLayer<T> _fc3 = default!;
     
     /// <summary>
     /// Flag indicating whether vector activation functions are used instead of scalar activation functions.

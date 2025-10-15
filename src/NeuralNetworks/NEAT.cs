@@ -60,7 +60,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// This diversity in the population helps NEAT explore different possible solutions.
     /// </para>
     /// </remarks>
-    private List<Genome<T>> _population;
+    private List<Genome<T>> _population = default!;
 
     /// <summary>
     /// Gets or sets the size of the population (number of genomes).
@@ -296,7 +296,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// - Assigns random weights to these connections
     /// 
     /// For example, if you have 3 inputs and 2 outputs:
-    /// - You'll have 6 connections (3 inputs × 2 outputs)
+    /// - You'll have 6 connections (3 inputs ï¿½ 2 outputs)
     /// - Each connection gets a random weight between -1 and 1
     /// - Each connection gets a unique innovation number for tracking
     /// 
@@ -989,8 +989,11 @@ public class NEAT<T> : NeuralNetworkBase<T>
             T totalError = NumOps.Zero;
 
             // Calculate error for each training example
-            foreach (var (sampleInput, sampleExpected) in trainingData)
+            foreach (var trainingPair in trainingData)
             {
+                var sampleInput = trainingPair.sampleInput;
+                var sampleExpected = trainingPair.sampleExpected;
+                
                 // Get actual output from genome
                 var activations = ActivateGenome(genome, sampleInput);
 
@@ -1088,7 +1091,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the NEAT model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the NEAT model.</returns>
+    /// <returns>A ModelMetadata object containing information about the NEAT model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns comprehensive metadata about the NEAT model, including its architecture,
@@ -1110,7 +1113,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// - Understanding the evolved solution
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Get the best genome
         var bestGenome = GetBestGenome();
@@ -1128,7 +1131,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
         double avgNodes = nodeCounts.Average();
         int maxNodes = nodeCounts.Max();
     
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.NEAT,
             AdditionalInfo = new Dictionary<string, object>

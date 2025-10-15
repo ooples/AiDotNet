@@ -19,11 +19,13 @@ using System.IO;
 /// - How to set up the model with its distillation metadata
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <typeparam name="TModel">The type of model.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public interface IDistilledModelFactory<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public interface IDistilledModelFactory<T, TModel, TInput, TOutput>
+    where T : unmanaged
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Deserializes a distilled model from a binary reader.

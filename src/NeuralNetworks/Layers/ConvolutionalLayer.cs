@@ -176,7 +176,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// are what actually get updated when the network learns.
     /// </para>
     /// </remarks>
-    private Tensor<T> _kernels;
+    private Tensor<T> _kernels = default!;
 
     /// <summary>
     /// The bias values added to the convolution results for each output channel.
@@ -197,7 +197,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// perfectly match what the kernel is looking for.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Vector<T> _biases = default!;
 
     /// <summary>
     /// Stored input data from the most recent forward pass, used for backpropagation.
@@ -217,7 +217,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// so you can understand where you made a mistake.
     /// </para>
     /// </remarks>
-    private Tensor<T> _lastInput;
+    private Tensor<T> _lastInput = default!;
 
     /// <summary>
     /// Stored output data from the most recent forward pass, used for backpropagation.
@@ -237,7 +237,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// and adjust its internal values to make better predictions next time.
     /// </para>
     /// </remarks>
-    private Tensor<T> _lastOutput;
+    private Tensor<T> _lastOutput = default!;
 
     /// <summary>
     /// Random number generator used for weight initialization.
@@ -258,7 +258,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// Without randomness, all pattern detectors might end up looking for the same thing.
     /// </para>
     /// </remarks>
-    private readonly Random _random;
+    private readonly Random _random = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConvolutionalLayer{T}"/> class with the specified parameters

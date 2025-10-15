@@ -44,7 +44,7 @@ public class NegativeBinomialRegression<T> : RegressionModelBase<T>
     /// that large deviations from the average are normal for this data.
     /// </para>
     /// </remarks>
-    private T _dispersion;
+    private T _dispersion = default!;
 
     /// <summary>
     /// The configuration options for the negative binomial regression model.
@@ -65,7 +65,7 @@ public class NegativeBinomialRegression<T> : RegressionModelBase<T>
     /// These settings affect how quickly the model trains and how accurate it becomes.
     /// </para>
     /// </remarks>
-    private readonly NegativeBinomialRegressionOptions<T> _options;
+    private readonly NegativeBinomialRegressionOptions<T> _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NegativeBinomialRegression{T}"/> class with optional custom options and regularization.

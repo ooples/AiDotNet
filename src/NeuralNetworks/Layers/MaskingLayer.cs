@@ -49,7 +49,7 @@ public class MaskingLayer<T> : LayerBase<T>
     /// the mask value to -1 so the layer knows to ignore those specific values.
     /// </para>
     /// </remarks>
-    private readonly T _maskValue;
+    private readonly T _maskValue = default!;
 
     /// <summary>
     /// The input tensor from the last forward pass.

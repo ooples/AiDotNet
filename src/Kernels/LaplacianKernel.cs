@@ -49,12 +49,12 @@ public class LaplacianKernel<T> : IKernelFunction<T>
     /// The default value of 1.0 provides a good balance for many applications, but you can
     /// adjust it based on your specific needs.
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Laplacian kernel with an optional bandwidth parameter.

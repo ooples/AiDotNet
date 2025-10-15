@@ -510,7 +510,7 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
     /// <summary>
     /// Gets metadata about the algorithm and its current state.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the algorithm.</returns>
+    /// <returns>A ModelMetadata object containing information about the algorithm.</returns>
     /// <remarks>
     /// <para>
     /// This method extends the base implementation to include island model-specific information
@@ -528,7 +528,7 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
     /// which is useful for reproducing results or comparing different approaches.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetMetaData()
+    public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
         metadata.ModelType = ModelType.GeneticAlgorithmRegression;

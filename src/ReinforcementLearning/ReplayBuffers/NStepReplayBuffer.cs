@@ -31,7 +31,7 @@ namespace AiDotNet.ReinforcementLearning.ReplayBuffers
         /// </summary>
         protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
         private readonly int _nSteps;
-        private readonly T _gamma;
+        private readonly T _gamma = default!;
         private readonly Queue<(TState state, TAction action, T reward, TState nextState, bool done)> _nStepBuffer;
         private readonly LinkedList<(TState state, TAction action, T reward, bool done)> _recentExperiences;
 

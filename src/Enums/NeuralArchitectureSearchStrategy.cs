@@ -47,6 +47,11 @@ public enum NeuralArchitectureSearchStrategy
     /// and "mutate" to create better offspring architectures.
     /// </remarks>
     Evolutionary,
+    
+    /// <summary>
+    /// Evolutionary search (alias for Evolutionary).
+    /// </summary>
+    EvolutionarySearch = Evolutionary,
 
     /// <summary>
     /// Reinforcement learning-based search.

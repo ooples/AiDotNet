@@ -39,7 +39,7 @@ public readonly struct Complex<T>
     /// regardless of what numeric type (like double, float, decimal) we're using.
     /// You don't need to interact with this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _ops;
+    private readonly INumericOperations<T> _ops = default!;
 
     /// <summary>
     /// Gets the real part of the complex number.

@@ -32,7 +32,7 @@ public class TripletLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// The margin that enforces separation between positive and negative pairs.
     /// </summary>
-    private readonly T _margin;
+    private readonly T _margin = default!;
     
     /// <summary>
     /// Initializes a new instance of the TripletLoss class.

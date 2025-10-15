@@ -45,7 +45,7 @@ public class WaveKernel<T> : IKernelFunction<T>
     /// oscillate. A smaller sigma means more rapid oscillations, while a larger sigma means
     /// more gradual changes in similarity.
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
 
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -55,7 +55,7 @@ public class WaveKernel<T> : IKernelFunction<T>
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Wave kernel with the specified sigma parameter.

@@ -31,37 +31,37 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// Different kernel functions create different types of patterns in the predictions.
     /// </para>
     /// </remarks>
-    private IKernelFunction<T> _kernel;
+    private IKernelFunction<T> _kernel = default!;
     
     /// <summary>
     /// The input training data matrix.
     /// </summary>
-    private Matrix<T> _X;
+    private Matrix<T> _X = default!;
     
     /// <summary>
     /// The output training data matrix (multiple outputs).
     /// </summary>
-    private Matrix<T> _Y;
+    private Matrix<T> _Y = default!;
     
     /// <summary>
     /// The kernel matrix calculated from the training data.
     /// </summary>
-    private Matrix<T> _K;
+    private Matrix<T> _K = default!;
     
     /// <summary>
     /// The Cholesky decomposition of the kernel matrix, used for efficient calculations.
     /// </summary>
-    private Matrix<T> _L;
+    private Matrix<T> _L = default!;
     
     /// <summary>
     /// The alpha matrix used for making predictions.
     /// </summary>
-    private Matrix<T> _alpha;
+    private Matrix<T> _alpha = default!;
     
     /// <summary>
     /// Operations for the numeric type T.
     /// </summary>
-    private INumericOperations<T> _numOps;
+    private INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new instance of the MultiOutputGaussianProcess with the specified kernel function.

@@ -35,17 +35,17 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// <summary>
     /// Configuration options specific to the VARMA model.
     /// </summary>
-    private readonly VARMAModelOptions<T> _varmaOptions;
+    private readonly VARMAModelOptions<T> _varmaOptions = default!;
     
     /// <summary>
     /// Matrix of Moving Average (MA) coefficients that capture the dependency on past error terms.
     /// </summary>
-    private Matrix<T> _maCoefficients;
+    private Matrix<T> _maCoefficients = default!;
     
     /// <summary>
     /// Matrix of residuals (errors) from the model fit.
     /// </summary>
-    private Matrix<T> _residuals;
+    private Matrix<T> _residuals = default!;
 
     /// <summary>
     /// Initializes a new instance of the VARMAModel class with the specified options.

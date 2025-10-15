@@ -24,7 +24,7 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <summary>
     /// The options specific to the Tabu Search algorithm.
     /// </summary>
-    private TabuSearchOptions<T, TInput, TOutput> _tabuOptions;
+    private TabuSearchOptions<T, TInput, TOutput> _tabuOptions = default!;
 
     /// <summary>
     /// The current mutation rate used in generating neighboring solutions.
@@ -44,7 +44,7 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <summary>
     /// The genetic algorithm used to handle mutations and generate neighboring solutions.
     /// </summary>
-    private GeneticBase<T, TInput, TOutput> _geneticAlgorithm;
+    private GeneticBase<T, TInput, TOutput> _geneticAlgorithm = default!;
 
     /// <summary>
     /// Initializes a new instance of the TabuSearchOptimizer class.

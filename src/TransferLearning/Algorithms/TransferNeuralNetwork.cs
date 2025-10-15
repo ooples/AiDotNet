@@ -18,9 +18,9 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// </summary>
 public class TransferNeuralNetwork<T> : TransferLearningModelBase<T, Tensor<T>, Tensor<T>>
 {
-    private readonly NeuralNetworkBase<T> _baseNetwork;
-    private readonly NeuralNetworkArchitecture<T> _architecture;
-    private T _currentLearningRate;
+    private readonly NeuralNetworkBase<T> _baseNetwork = default!;
+    private readonly NeuralNetworkArchitecture<T> _architecture = default!;
+    private T _currentLearningRate = default!;
     
     /// <summary>
     /// Initializes a new instance of the TransferNeuralNetwork class.
@@ -508,9 +508,9 @@ public class TransferNeuralNetwork<T> : TransferLearningModelBase<T, Tensor<T>, 
         return _baseNetwork.Predict(input);
     }
     
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var baseMetadata = _baseNetwork.GetModelMetaData();
+        var baseMetadata = _baseNetwork.GetModelMetadata();
         baseMetadata.AdditionalInfo["TransferInfo"] = GetTransferInfo();
         baseMetadata.AdditionalInfo["FrozenLayers"] = GetFrozenLayers().ToList();
         return baseMetadata;

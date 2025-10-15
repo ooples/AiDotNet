@@ -33,47 +33,47 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Configuration options specific to the Transfer Function Model.
     /// </summary>
-    private readonly TransferFunctionOptions<T, Matrix<T>, Vector<T>> _tfOptions;
+    private readonly TransferFunctionOptions<T, Matrix<T>, Vector<T>> _tfOptions = default!;
     
     /// <summary>
     /// Autoregressive (AR) parameters that capture the dependency on past values of the output series.
     /// </summary>
-    private Vector<T> _arParameters;
+    private Vector<T> _arParameters = default!;
     
     /// <summary>
     /// Moving Average (MA) parameters that capture the dependency on past error terms.
     /// </summary>
-    private Vector<T> _maParameters;
+    private Vector<T> _maParameters = default!;
     
     /// <summary>
     /// Parameters that capture the effect of input variables at different lags.
     /// </summary>
-    private Vector<T> _inputLags;
+    private Vector<T> _inputLags = default!;
     
     /// <summary>
     /// Parameters that capture the effect of output variables at different lags.
     /// </summary>
-    private Vector<T> _outputLags;
+    private Vector<T> _outputLags = default!;
     
     /// <summary>
     /// Residuals (errors) from the model fit.
     /// </summary>
-    private Vector<T> _residuals;
+    private Vector<T> _residuals = default!;
     
     /// <summary>
     /// Fitted values from the model.
     /// </summary>
-    private Vector<T> _fitted;
+    private Vector<T> _fitted = default!;
     
     /// <summary>
     /// The original output time series data.
     /// </summary>
-    private Vector<T> _y;
+    private Vector<T> _y = default!;
     
     /// <summary>
     /// The optimization algorithm used to estimate model parameters.
     /// </summary>
-    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer = default!;
 
     /// <summary>
     /// Initializes a new instance of the TransferFunctionModel class with optional configuration options.
@@ -606,7 +606,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the model, including its type, parameters, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns detailed metadata about the Transfer Function Model, including its type,
@@ -630,9 +630,9 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// - Sharing model information with others
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.TransferFunctionModel,
             AdditionalInfo = new Dictionary<string, object>

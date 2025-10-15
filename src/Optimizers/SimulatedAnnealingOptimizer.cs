@@ -44,7 +44,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// This randomness is crucial for the algorithm to escape local optima and explore the solution space effectively.
     /// </para>
     /// </remarks>
-    private readonly Random _random;
+    private readonly Random _random = default!;
 
     /// <summary>
     /// Configuration options specific to the Simulated Annealing algorithm.
@@ -66,7 +66,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private SimulatedAnnealingOptions<T, TInput, TOutput> _saOptions;
+    private SimulatedAnnealingOptions<T, TInput, TOutput> _saOptions = default!;
 
     /// <summary>
     /// The current temperature controlling the acceptance probability of worse solutions.
@@ -88,7 +88,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// This temperature mechanism is what gives Simulated Annealing its power to escape local optima.
     /// </para>
     /// </remarks>
-    private T _currentTemperature;
+    private T _currentTemperature = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SimulatedAnnealingOptimizer{T, TInput, TOutput}"/> class with the specified model and options.

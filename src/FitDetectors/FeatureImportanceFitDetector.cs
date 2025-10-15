@@ -25,9 +25,9 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// <b>For Beginners:</b> These settings control how the detector interprets feature importances 
     /// and correlations, including thresholds for determining different types of model fit.
     /// </remarks>
-    private readonly FeatureImportanceFitDetectorOptions _options;
+    private readonly FeatureImportanceFitDetectorOptions _options = default!;
 
-    private Matrix<T> _featureCorrelations;
+    private Matrix<T> _featureCorrelations = default!;
 
     /// <summary>
     /// Initializes a new instance of the FeatureImportanceFitDetector class.
@@ -363,7 +363,7 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// </remarks>
     private Vector<T> PermuteFeature(Vector<T> feature)
     {
-        var permutedFeature = feature.Clone();
+        var permutedFeature = (Vector<T>)feature.Clone();
         int n = permutedFeature.Length;
 
         for (int i = n - 1; i > 0; i--)

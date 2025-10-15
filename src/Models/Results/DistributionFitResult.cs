@@ -32,7 +32,7 @@
 /// <typeparam name="T">The numeric type used for statistical values, typically float or double.</typeparam>
 public class DistributionFitResult<T>
 {
-    private readonly INumericOperations<T> _ops;
+    private readonly INumericOperations<T> _ops = default!;
 
     /// <summary>
     /// Gets or sets the type of distribution that best fits the data.

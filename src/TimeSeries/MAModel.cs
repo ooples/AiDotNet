@@ -33,7 +33,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Options specific to the MA model, including the order (q) parameter.
     /// </summary>
-    private MAModelOptions<T> _maOptions;
+    private MAModelOptions<T> _maOptions = default!;
 
     /// <summary>
     /// Coefficients for the moving average component of the model.
@@ -44,7 +44,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// For example, if the coefficient for yesterday's error is 0.7, it means yesterday's
     /// error strongly influences today's prediction adjustment.
     /// </remarks>
-    private Vector<T> _maCoefficients;
+    private Vector<T> _maCoefficients = default!;
 
     /// <summary>
     /// The mean of the time series, used as a baseline for predictions.
@@ -54,7 +54,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// This is the average value of your time series. In an MA model, predictions
     /// start with this average value and then get adjusted based on past errors.
     /// </remarks>
-    private T _mean;
+    private T _mean = default!;
 
     /// <summary>
     /// The most recent errors (residuals) from the model's predictions.
@@ -65,7 +65,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// These are the differences between the model's recent predictions and the actual values.
     /// The model uses these errors to adjust future predictions.
     /// </remarks>
-    private Vector<T> _recentErrors;
+    private Vector<T> _recentErrors = default!;
 
     /// <summary>
     /// The variance of the white noise process.
@@ -75,7 +75,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// This represents how much random noise is in your data. A higher value indicates
     /// more randomness and less predictability in the time series.
     /// </remarks>
-    private T _noiseVariance;
+    private T _noiseVariance = default!;
 
     /// <summary>
     /// Flag indicating whether the model has been trained.
@@ -90,7 +90,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Convergence tolerance for optimization algorithms.
     /// </summary>
-    private readonly T _convergenceTolerance;
+    private readonly T _convergenceTolerance = default!;
 
     /// <summary>
     /// Creates a new MA model with the specified options.
@@ -1086,7 +1086,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the model, including its type, parameters, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <b>For Beginners:</b>
     /// This method provides a summary of your model's settings and what it has learned.
@@ -1102,9 +1102,9 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// - Comparing different models to see which performs best
     /// - Understanding what patterns the model has identified in your data
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.MAModel,
             AdditionalInfo = new Dictionary<string, object>

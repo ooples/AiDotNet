@@ -32,12 +32,12 @@ public class CubicRBF<T> : IRadialBasisFunction<T>
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The width parameter controlling the scale of the function.
     /// </summary>
-    private readonly T _width;
+    private readonly T _width = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="CubicRBF{T}"/> class with a specified width parameter.

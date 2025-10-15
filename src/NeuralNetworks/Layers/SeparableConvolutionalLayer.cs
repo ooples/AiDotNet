@@ -40,7 +40,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// which makes the computation more efficient than standard convolution.
     /// </para>
     /// </remarks>
-    private Tensor<T> _depthwiseKernels;
+    private Tensor<T> _depthwiseKernels = default!;
 
     /// <summary>
     /// Kernels for the pointwise convolution operation.
@@ -55,7 +55,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// (that's what the depthwise kernels do) but instead mix information between channels.
     /// </para>
     /// </remarks>
-    private Tensor<T> _pointwiseKernels;
+    private Tensor<T> _pointwiseKernels = default!;
 
     /// <summary>
     /// Bias values added to each output channel.
@@ -70,7 +70,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// for the network to fit the data properly.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Vector<T> _biases = default!;
 
     /// <summary>
     /// Stores the input tensor from the most recent forward pass.

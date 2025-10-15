@@ -47,7 +47,7 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
     /// without having to write separate code for each number type.
     /// </para>
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Provides Fast Fourier Transform capabilities for frequency domain analysis.
@@ -70,7 +70,7 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
     /// is there, but organized by notes (frequencies) rather than by sounds changing over time.
     /// </para>
     /// </remarks>
-    private readonly FastFourierTransform<T> _fft;
+    private readonly FastFourierTransform<T> _fft = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MeyerWavelet{T}"/> class.

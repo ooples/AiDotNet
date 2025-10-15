@@ -35,7 +35,7 @@ public class GaussianWindow<T> : IWindowFunction<T>
     /// trigonometric functions for the generic numeric type T. It's essential for implementing
     /// the window function's mathematical formula across different numeric types.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The standard deviation (sigma) parameter that controls the width of the Gaussian window.
@@ -57,7 +57,7 @@ public class GaussianWindow<T> : IWindowFunction<T>
     /// precise timing information or better frequency detection.
     /// </para>
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GaussianWindow{T}"/> class with the specified sigma value.

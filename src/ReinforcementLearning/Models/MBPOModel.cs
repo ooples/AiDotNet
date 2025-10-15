@@ -30,7 +30,7 @@ namespace AiDotNet.ReinforcementLearning.Models;
 public class MBPOModel<T> : ReinforcementLearningModelBase<T>
     where T : struct
 {
-    private readonly Models.Options.MBPOOptions _options;
+    private readonly Models.Options.MBPOOptions _options = default!;
     private MBPOAgent<T>? _agent;
     
     // Statistics for monitoring

@@ -49,7 +49,7 @@ public class WaveletKernel<T> : IKernelFunction<T>
     /// A larger value makes the wavelet wider, which means it can detect broader patterns.
     /// A smaller value makes the wavelet narrower, which means it can detect finer details.
     /// </remarks>
-    private readonly T _a;
+    private readonly T _a = default!;
 
     /// <summary>
     /// The scaling parameter that affects the overall magnitude of the kernel value.
@@ -58,7 +58,7 @@ public class WaveletKernel<T> : IKernelFunction<T>
     /// <b>For Beginners:</b> This parameter controls the overall "strength" or "importance" of the
     /// kernel value. A larger value will increase the magnitude of the similarity measure.
     /// </remarks>
-    private readonly T _c;
+    private readonly T _c = default!;
 
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -68,7 +68,7 @@ public class WaveletKernel<T> : IKernelFunction<T>
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The wavelet function used to calculate similarity.
@@ -79,7 +79,7 @@ public class WaveletKernel<T> : IKernelFunction<T>
     /// middle and two smaller dips on either side. Different wavelet functions can capture different
     /// types of patterns in your data.
     /// </remarks>
-    private readonly IWaveletFunction<T> _waveletFunction;
+    private readonly IWaveletFunction<T> _waveletFunction = default!;
 
     /// <summary>
     /// Initializes a new instance of the Wavelet kernel with the specified parameters.

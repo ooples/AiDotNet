@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
+using AiDotNet.Statistics;
 
 namespace AiDotNet.OnlineLearning.Algorithms;
 
@@ -16,12 +17,12 @@ namespace AiDotNet.OnlineLearning.Algorithms;
 /// </summary>
 public class OnlineSVM<T> : OnlineModelBase<T, Vector<T>, T>
 {
-    private Vector<T> _weights;
-    private T _bias;
-    private readonly OnlineModelOptions<T> _options;
+    private Vector<T> _weights = default!;
+    private T _bias = default!;
+    private readonly OnlineModelOptions<T> _options = default!;
     private readonly IKernelFunction<T>? _kernel;
-    private readonly List<Vector<T>> _supportVectors;
-    private readonly List<T> _alphas;
+    private readonly List<Vector<T>> _supportVectors = default!;
+    private readonly List<T> _alphas = default!;
     private T _C; // Regularization parameter
     
     /// <summary>
@@ -119,7 +120,7 @@ public class OnlineSVM<T> : OnlineModelBase<T, Vector<T>, T>
         if (NumOps.LessThan(margin, NumOps.One))
         {
             // Add as support vector or update existing
-            _supportVectors.Add(input.Clone());
+            _supportVectors.Add((Vector<T>)input.Clone());
             _alphas.Add(NumOps.Multiply(NumOps.Multiply(y, _C), learningRate));
             
             // Update bias
@@ -173,9 +174,9 @@ public class OnlineSVM<T> : OnlineModelBase<T, Vector<T>, T>
     }
     
     /// <inheritdoc/>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.OnlineSVM,
             FeatureCount = _weights.Length,
@@ -451,4 +452,104 @@ public class OnlineSVM<T> : OnlineModelBase<T, Vector<T>, T>
     /// Gets whether this is a kernelized SVM.
     /// </summary>
     public bool IsKernelized => _kernel != null;
+
+    
+    /// <inheritdoc/>
+    public override int InputDimensions => _weights.Length;
+    
+    /// <inheritdoc/>
+    public override int OutputDimensions => 1;
+    
+    /// <inheritdoc/>
+    public override bool IsTrained => _samplesSeen > 0;
+    
+    /// <inheritdoc/>
+    public override T[] PredictBatch(Vector<T>[] inputBatch)
+    {
+        var predictions = new T[inputBatch.Length];
+        for (int i = 0; i < inputBatch.Length; i++)
+        {
+            predictions[i] = Predict(inputBatch[i]);
+        }
+        return predictions;
+    }
+    
+    /// <inheritdoc/>
+    public override Dictionary<string, double> Evaluate(Vector<T> testData, T testLabels)
+    {
+        // This method should accept arrays, but for now return basic metrics
+        var prediction = Predict(testData);
+        var error = CalculateError(prediction, testLabels);
+        
+        return new Dictionary<string, double>
+        {
+            ["Accuracy"] = NumOps.Equals(prediction, testLabels) ? 1.0 : 0.0,
+            ["Error"] = Convert.ToDouble(error)
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void SaveModel(string filePath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filePath, data);
+    }
+    
+    /// <inheritdoc/>
+    public override double GetTrainingLoss()
+    {
+        // Default implementation for models that don't track loss
+        return 0.0;
+    }
+    
+    /// <inheritdoc/>
+    public override double GetValidationLoss()
+    {
+        // In online learning, we don't have separate validation loss
+        return GetTrainingLoss();
+    }
+    
+    /// <inheritdoc/>
+    public override Vector<T> GetModelParameters()
+    {
+        return GetParameters();
+    }
+    
+    /// <inheritdoc/>
+    public override ModelStats<T> GetStats()
+    {
+        return new ModelStats<T>
+        {
+            SampleCount = SamplesSeen,
+            LearningRate = _learningRate,
+            TrainingLoss = NumOps.FromDouble(GetTrainingLoss()),
+            ValidationLoss = NumOps.FromDouble(GetValidationLoss()),
+            AdditionalMetrics = new Dictionary<string, T>
+            {
+                ["C"] = _C,
+                ["NumSupportVectors"] = NumOps.FromDouble(_supportVectors.Count)
+            }
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void Save()
+    {
+        // Default implementation saves to a standard location
+        SaveModel($"online_svm_model_{DateTime.Now:yyyyMMddHHmmss}.bin");
+    }
+    
+    /// <inheritdoc/>
+    public override void Load()
+    {
+        // Default implementation would load from a standard location
+        // For now, this is a no-op as we need a file path
+        throw new NotImplementedException("Load requires a file path. Use Deserialize instead.");
+    }
+    
+    /// <inheritdoc/>
+    public override void Dispose()
+    {
+        // Clean up any resources if needed
+    }
 }

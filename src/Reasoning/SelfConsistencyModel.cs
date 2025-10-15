@@ -33,11 +33,11 @@ namespace AiDotNet.Reasoning
     /// </remarks>
     public class SelfConsistencyModel<T> : ReasoningModelBase<T>
     {
-        private readonly NeuralNetwork<T> _pathGenerator;
-        private readonly NeuralNetwork<T> _pathEvaluator;
-        private readonly NeuralNetwork<T> _consistencyChecker;
-        private readonly SelfConsistencyOptions<T> _scOptions;
-        private readonly Dictionary<string, List<Tensor<T>>> _pathCache;
+        private readonly NeuralNetwork<T> _pathGenerator = default!;
+        private readonly NeuralNetwork<T> _pathEvaluator = default!;
+        private readonly NeuralNetwork<T> _consistencyChecker = default!;
+        private readonly SelfConsistencyOptions<T> _scOptions = default!;
+        private readonly Dictionary<string, List<Tensor<T>>> _pathCache = default!;
 
         /// <summary>
         /// Gets the maximum reasoning depth this model can handle effectively.

@@ -10,7 +10,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 public class MBPOAgent<T> : AgentBase<Tensor<T>, Vector<T>, T>
     where T : struct
 {
-    private readonly MBPOOptions _options;
+    private readonly MBPOOptions _options = default!;
     
     // Neural network components
     private readonly DynamicsModel<T>[] _dynamicsModels; // Ensemble of dynamics models
@@ -22,14 +22,14 @@ public class MBPOAgent<T> : AgentBase<Tensor<T>, Vector<T>, T>
     private readonly IReplayBuffer<Tensor<T>, Vector<T>, T> _modelExperienceBuffer; // Model-generated experiences
     
     // Temperature parameter for entropy regularization
-    private T _temperature;
-    private T _targetEntropy;
-    private T _temperatureOptimizer;
+    private T _temperature = default!;
+    private T _targetEntropy = default!;
+    private T _temperatureOptimizer = default!;
     
     // Loss tracking
-    private T _lastPolicyLoss;
-    private T _lastValueLoss;
-    private T _lastModelLoss;
+    private T _lastPolicyLoss = default!;
+    private T _lastValueLoss = default!;
+    private T _lastModelLoss = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MBPOAgent{T}"/> class.

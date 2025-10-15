@@ -42,22 +42,22 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     /// <summary>
     /// The options for configuring the Bayesian Optimization algorithm.
     /// </summary>
-    private BayesianOptimizerOptions<T, TInput, TOutput> _bayesianOptions;
+    private BayesianOptimizerOptions<T, TInput, TOutput> _bayesianOptions = default!;
 
     /// <summary>
     /// A matrix storing the points that have been sampled during the optimization process.
     /// </summary>
-    private Matrix<T> _sampledPoints;
+    private Matrix<T> _sampledPoints = default!;
 
     /// <summary>
     /// A vector storing the corresponding function values for the sampled points.
     /// </summary>
-    private Vector<T> _sampledValues;
+    private Vector<T> _sampledValues = default!;
 
     /// <summary>
     /// The Gaussian Process model used to approximate the objective function.
     /// </summary>
-    private IGaussianProcess<T> _gaussianProcess;
+    private IGaussianProcess<T> _gaussianProcess = default!;
 
     /// <summary>
     /// Initializes a new instance of the BayesianOptimizer class.

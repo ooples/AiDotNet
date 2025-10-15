@@ -128,7 +128,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// The model uses these as starting points and then updates them as it processes more data.
     /// </para>
     /// </remarks>
-    private Vector<T> _initialValues;
+    private Vector<T> _initialValues = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ExponentialSmoothingModel{T}"/> class with the specified options.
@@ -671,7 +671,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Returns metadata about the model, including its type, parameters, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns detailed metadata about the exponential smoothing model, including its type,
@@ -694,10 +694,10 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// - Sharing model information with others
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var esOptions = (ExponentialSmoothingOptions<T>)Options;
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ExponentialSmoothingModel,
             AdditionalInfo = new Dictionary<string, object>

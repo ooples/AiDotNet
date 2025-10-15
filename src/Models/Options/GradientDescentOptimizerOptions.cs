@@ -33,7 +33,7 @@ public class GradientDescentOptimizerOptions<T, TInput, TOutput> : GradientBased
     /// <remarks>
     /// This field follows the naming convention _variableName for private fields.
     /// </remarks>
-    private RegularizationOptions _regularizationOptions;
+    private RegularizationOptions _regularizationOptions = default!;
 
     /// <summary>
     /// Gets or sets the regularization options to control overfitting during optimization.
@@ -64,6 +64,24 @@ public class GradientDescentOptimizerOptions<T, TInput, TOutput> : GradientBased
     {
         get => _regularizationOptions;
         set => _regularizationOptions = value ?? CreateDefaultRegularizationOptions();
+    }
+
+    /// <summary>
+    /// Gets or sets the learning rate for gradient descent optimization.
+    /// </summary>
+    /// <value>
+    /// The learning rate value. This is an alias for <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.InitialLearningRate"/>.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The learning rate controls how big of steps the algorithm takes when learning.
+    /// A higher rate means bigger steps (faster learning but might overshoot), while a lower rate means smaller steps
+    /// (more precise but slower learning). This property provides a convenient way to access the initial learning rate
+    /// inherited from the base class.</para>
+    /// </remarks>
+    public double LearningRate
+    {
+        get => InitialLearningRate;
+        set => InitialLearningRate = value;
     }
 
     /// <summary>

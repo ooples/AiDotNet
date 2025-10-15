@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Interfaces;
+﻿using AiDotNet.LinearAlgebra;
+
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the contract for optimization algorithms used in machine learning models.
@@ -109,4 +111,57 @@ public interface IOptimizer<T, TInput, TOutput> : IModelSerializer
     /// </para>
     /// </remarks>
     IFullModel<T, TInput, TOutput> Model { get; }
+
+    /// <summary>
+    /// Performs a single optimization step, updating the model parameters based on gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method performs one iteration of parameter updates using the current gradients.
+    /// It's typically called after computing gradients through backpropagation.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like taking one small step toward a better model.
+    /// After calculating how wrong the model is (gradients), this method adjusts the
+    /// model's parameters slightly to make it more accurate.
+    ///
+    /// Think of it like adjusting a recipe:
+    /// 1. You taste the dish (check model performance)
+    /// 2. You determine what needs changing (calculate gradients)
+    /// 3. You adjust the ingredients (this Step method updates parameters)
+    /// 4. Repeat until the dish tastes good (model is accurate)
+    ///
+    /// Most training loops call this method many times, each time making the model
+    /// a little bit better.
+    /// </para>
+    /// </remarks>
+    void Step();
+
+    /// <summary>
+    /// Calculates the parameter update based on the provided gradients.
+    /// </summary>
+    /// <param name="gradients">The gradients used to compute the parameter updates.</param>
+    /// <returns>The calculated parameter updates as a dictionary mapping parameter names to their update vectors.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes how much each parameter should change based on the gradients
+    /// from backpropagation. It applies the optimizer's specific update rule (e.g., SGD, Adam, RMSProp)
+    /// to transform gradients into actual parameter updates.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> After your model calculates how wrong it is (gradients), this method
+    /// figures out exactly how much to adjust each parameter to improve the model. Different optimizers
+    /// use different strategies - some make simple adjustments, while others use momentum or adaptive
+    /// learning rates to make smarter updates.
+    ///
+    /// Think of it like GPS navigation:
+    /// 1. Gradients tell you "you're 10 miles off course"
+    /// 2. This method decides "adjust your route by 2 miles north, 3 miles east"
+    /// 3. The optimizer's strategy determines how aggressive the adjustment should be
+    ///
+    /// This is commonly used in federated learning and distributed training scenarios where
+    /// updates need to be calculated separately from their application.
+    /// </para>
+    /// </remarks>
+    Dictionary<string, Vector<T>> CalculateUpdate(Dictionary<string, Vector<T>> gradients);
 }

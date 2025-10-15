@@ -35,7 +35,7 @@ public class SinusoidalPositionalEncoding<T> : PositionalEncodingBase<T>
     /// <summary>
     /// The pre-computed positional encodings tensor.
     /// </summary>
-    private readonly Tensor<T> _encodings;
+    private readonly Tensor<T> _encodings = default!;
     
     
     /// <summary>

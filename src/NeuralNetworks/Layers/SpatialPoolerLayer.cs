@@ -45,8 +45,13 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// Larger input sizes can capture more detailed information but require more memory and processing power.
     /// </para>
     /// </remarks>
-    private readonly int InputSize;
-    
+    private readonly int _inputSize;
+
+    /// <summary>
+    /// Gets the size of the input dimension for this layer.
+    /// </summary>
+    public override int InputSize => _inputSize;
+
     /// <summary>
     /// The number of columns in the spatial pooler.
     /// </summary>
@@ -236,7 +241,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     public SpatialPoolerLayer(int inputSize, int columnCount, double sparsityThreshold)
         : base([inputSize], [columnCount])
     {
-        InputSize = inputSize;
+        _inputSize = inputSize;
         ColumnCount = columnCount;
         SparsityThreshold = sparsityThreshold;
         Connections = new Matrix<T>(inputSize, columnCount);

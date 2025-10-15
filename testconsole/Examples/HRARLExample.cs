@@ -409,7 +409,7 @@ namespace AiDotNet.Examples
             private readonly int _episodeLength;
             private readonly bool _includeMacroIndicators;
             private readonly bool _includeTechnicalIndicators;
-            private readonly Random _random;
+            private readonly Random _random = default!;
             
             private double[] _currentPrices;
             private double[] _positions;

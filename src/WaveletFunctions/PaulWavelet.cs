@@ -48,7 +48,7 @@ public class PaulWavelet<T> : IWaveletFunction<T>
     /// without having to write separate code for each number type.
     /// </para>
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The order parameter that controls the properties of the Paul wavelet.
@@ -93,7 +93,7 @@ public class PaulWavelet<T> : IWaveletFunction<T>
     /// for different types of analysis.
     /// </para>
     /// </remarks>
-    private readonly FastFourierTransform<T> _fft;
+    private readonly FastFourierTransform<T> _fft = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PaulWavelet{T}"/> class with the specified order.

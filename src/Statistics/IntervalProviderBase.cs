@@ -1,4 +1,10 @@
-﻿/// <summary>
+namespace AiDotNet.Statistics;
+
+using AiDotNet.Interfaces;
+using System;
+using System.Collections.Generic;
+
+/// <summary>
 /// Base class for interval-providing statistics.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>

@@ -18,18 +18,18 @@ namespace AiDotNet.ReinforcementLearning.Agents
     public class REINFORCEAgent<TState, TAction, T> : AgentBase<TState, TAction, T>
         where TState : Tensor<T>
     {
-        private readonly IPolicy<TState, TAction, T> _policy;
+        private readonly IPolicy<TState, TAction, T> _policy = default!;
         private readonly IValueFunction<TState, T>? _baseline;
-        private readonly T _learningRate;
-        private readonly T _baselineLearningRate;
-        private readonly T _entropyCoefficient;
+        private readonly T _learningRate = default!;
+        private readonly T _baselineLearningRate = default!;
+        private readonly T _entropyCoefficient = default!;
         private readonly bool _useBaseline;
         private readonly bool _normalizeReturns;
         private readonly bool _standardizeRewards;
 
         private readonly List<(TState state, TAction action, T reward, bool done)> _episode;
         private readonly List<(TState, TAction, T, TState, bool)> _memory;
-        private readonly RandomNumberGenerator<T> _rng;
+        private readonly RandomNumberGenerator<T> _rng = default!;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="REINFORCEAgent{TState, TAction, T}"/> class.
@@ -503,7 +503,7 @@ namespace AiDotNet.ReinforcementLearning.Agents
             /// Gets the numeric operations for type TNum.
             /// </summary>
             protected INumericOperations<TNum> NumOps => MathHelper.GetNumericOperations<TNum>();
-            private readonly Random _random;
+            private readonly Random _random = default!;
 
             public RandomNumberGenerator(int? seed = null)
             {
@@ -534,8 +534,8 @@ namespace AiDotNet.ReinforcementLearning.Agents
             /// Gets the numeric operations for type TNum.
             /// </summary>
             protected INumericOperations<TNum> NumOps => MathHelper.GetNumericOperations<TNum>();
-            private readonly List<LayerBase<TNum>> _layers;
-            private readonly TNum _learningRate;
+            private readonly List<LayerBase<TNum>> _layers = default!;
+            private readonly TNum _learningRate = default!;
 
             public ValueNetwork(int stateSize, int[] hiddenSizes, ActivationFunction activation, int? seed = null)
             {

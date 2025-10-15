@@ -39,7 +39,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// This field defines the upper limit on sequence length. Sequences longer than this value
     /// will cause an exception when passed through the layer.
     /// </remarks>
-    private readonly int maxSequenceLength;
+    private readonly int maxSequenceLength = default!;
     
     /// <summary>
     /// The size of each embedding vector.
@@ -48,7 +48,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// This field specifies the dimensionality of the embedding vectors to which
     /// positional encodings will be added.
     /// </remarks>
-    private readonly int embeddingSize;
+    private readonly int embeddingSize = default!;
     
     /// <summary>
     /// The pre-computed positional encodings tensor.
@@ -58,7 +58,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// up to maxSequenceLength. The encodings are calculated once during initialization
     /// and reused for all forward passes.
     /// </remarks>
-    private Tensor<T> encodings;
+    private Tensor<T> encodings = default!;
     
     /// <summary>
     /// Gets a value indicating whether this layer supports training.

@@ -48,7 +48,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// 
     /// The default value is 1.0, which provides a balanced approach for many applications.
     /// </remarks>
-    private readonly T _lengthScale;
+    private readonly T _lengthScale = default!;
     
     /// <summary>
     /// Defines the length of one complete cycle in the periodic pattern.
@@ -64,7 +64,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// The default value is 2π (approximately 6.28), which is the standard period for trigonometric functions.
     /// You'll typically want to set this to match the natural cycle length in your data.
     /// </remarks>
-    private readonly T _period;
+    private readonly T _period = default!;
     
     /// <summary>
     /// Controls the overall strength or magnitude of the kernel output.
@@ -78,12 +78,12 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// The default value is 1.0, which is a standard starting point. You might increase this if the
     /// periodic patterns in your data are very pronounced, or decrease it if they're more subtle.
     /// </remarks>
-    private readonly T _amplitude;
+    private readonly T _amplitude = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Locally Periodic kernel with optional parameters.

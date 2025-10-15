@@ -103,5 +103,5 @@ public interface IModel<TInput, TOutput, TMetadata>
     /// and decide if it's ready to use or needs more training.
     /// </remarks>
     /// <returns>An object containing metadata and performance metrics about the trained model.</returns>
-    TMetadata GetModelMetaData();
+    TMetadata GetModelMetadata();
 }

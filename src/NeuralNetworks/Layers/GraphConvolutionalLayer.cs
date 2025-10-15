@@ -43,7 +43,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     /// During training, these weights are adjusted to help the network make better predictions.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights;
+    private Matrix<T> _weights = default!;
 
     /// <summary>
     /// The bias vector that is added to the output of the transformation.
@@ -63,7 +63,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     /// Think of it as setting the initial position before fine-tuning.
     /// </para>
     /// </remarks>
-    private Vector<T> _bias;
+    private Vector<T> _bias = default!;
 
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.

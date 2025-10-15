@@ -24,7 +24,7 @@ public class BayesianFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// <b>For Beginners:</b> These settings control how the detector interprets various Bayesian metrics, 
     /// including thresholds for determining different types of model fit.
     /// </remarks>
-    private readonly BayesianFitDetectorOptions _options;
+    private readonly BayesianFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the BayesianFitDetector class.

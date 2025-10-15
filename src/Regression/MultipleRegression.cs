@@ -175,7 +175,7 @@ public class MultipleRegression<T> : RegressionModelBase<T>
         // Copy the coefficients
         if (Coefficients != null)
         {
-            newModel.Coefficients = Coefficients.Clone();
+            newModel.Coefficients = (Vector<T>)Coefficients.Clone();
         }
 
 		if (FeatureCount > 0)

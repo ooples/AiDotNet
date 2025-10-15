@@ -431,16 +431,19 @@ public class PredictionStats<T> : PredictionStatisticsBase<T>
     /// <remarks>
     /// For Beginners:
     /// BestDistributionFit helps you understand the shape of your prediction distribution.
-    /// 
+    ///
     /// Knowing the distribution can help with:
     /// - Creating better intervals (by using the right distribution assumptions)
     /// - Understanding the types of predictions your model makes (are they normally distributed? skewed?)
     /// - Identifying potential issues with your predictions
-    /// 
+    ///
     /// This object contains information about which distribution type best fits your data
     /// and parameters describing that distribution.
     /// </remarks>
     public DistributionFitResult<T> BestDistributionFit { get; private set; } = new();
+
+    // Backward compatibility alias
+    public T RSquared => R2;
 
     #endregion
 

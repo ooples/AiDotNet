@@ -58,7 +58,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// This complex structure allows each position to have its own specialized filter.
     /// </para>
     /// </remarks>
-    private Tensor<T> _weights;
+    private Tensor<T> _weights = default!;
 
     /// <summary>
     /// The bias values for each output channel.
@@ -78,7 +78,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// They're like a "starting point" that the network can adjust during learning.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Vector<T> _biases = default!;
 
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.

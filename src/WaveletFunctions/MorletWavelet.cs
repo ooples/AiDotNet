@@ -47,7 +47,7 @@ public class MorletWavelet<T> : IWaveletFunction<T>
     /// without having to write separate code for each number type.
     /// </para>
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The central frequency parameter of the Morlet wavelet.
@@ -69,7 +69,7 @@ public class MorletWavelet<T> : IWaveletFunction<T>
     /// exactly when something happens, use a lower value.
     /// </para>
     /// </remarks>
-    private readonly T _omega;
+    private readonly T _omega = default!;
 
     /// <summary>
     /// Provides Fast Fourier Transform capabilities for frequency domain analysis.
@@ -92,7 +92,7 @@ public class MorletWavelet<T> : IWaveletFunction<T>
     /// the same information.
     /// </para>
     /// </remarks>
-    private readonly FastFourierTransform<T> _fft;
+    private readonly FastFourierTransform<T> _fft = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MorletWavelet{T}"/> class with the specified omega parameter.

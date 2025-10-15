@@ -31,7 +31,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionModelBase<T>
     /// <value>
     /// Contains settings like the number of centers, gamma parameter, and random seed.
     /// </value>
-    private readonly RadialBasisFunctionOptions _options;
+    private readonly RadialBasisFunctionOptions _options = default!;
 
     /// <summary>
     /// The centers of the radial basis functions.
@@ -39,7 +39,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionModelBase<T>
     /// <value>
     /// A matrix where each row represents a center point in the input space.
     /// </value>
-    private Matrix<T> _centers;
+    private Matrix<T> _centers = default!;
 
     /// <summary>
     /// The weights used to combine the radial basis function outputs.
@@ -47,7 +47,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionModelBase<T>
     /// <value>
     /// A vector of weights, including a bias term.
     /// </value>
-    private Vector<T> _weights;
+    private Vector<T> _weights = default!;
 
     /// <summary>
     /// Initializes a new instance of the RadialBasisFunctionRegression class with the specified options and regularization.

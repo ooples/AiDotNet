@@ -47,7 +47,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// were detected in an image.
     /// </para>
     /// </remarks>
-    private Vector<T> _lastInput;
+    private Vector<T> _lastInput = default!;
 
     /// <summary>
     /// The output vector from the last forward pass.
@@ -68,7 +68,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// neurons activated in response to an image.
     /// </para>
     /// </remarks>
-    private Vector<T> _lastOutput;
+    private Vector<T> _lastOutput = default!;
 
     /// <summary>
     /// The weight matrix representing connection strengths between neurons.
@@ -90,7 +90,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// which gets updated as the network learns patterns.
     /// </para>
     /// </remarks>
-    private Tensor<T> _weights;
+    private Tensor<T> _weights = default!;
 
     /// <summary>
     /// The rate at which long-term potentiation (strengthening) occurs.
@@ -217,7 +217,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// were active in the recent past.
     /// </para>
     /// </remarks>
-    private Vector<T> _presynapticTraces;
+    private Vector<T> _presynapticTraces = default!;
 
     /// <summary>
     /// The activity traces of postsynaptic neurons.
@@ -238,7 +238,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// input and output activity, which is crucial for spike-timing-dependent plasticity.
     /// </para>
     /// </remarks>
-    private Vector<T> _postsynapticTraces;
+    private Vector<T> _postsynapticTraces = default!;
 
     /// <summary>
     /// The current spike state of presynaptic neurons (binary).
@@ -259,7 +259,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// version of how biological neurons generate electrical impulses when sufficiently activated.
     /// </para>
     /// </remarks>
-    private Vector<T> _presynapticSpikes;
+    private Vector<T> _presynapticSpikes = default!;
 
     /// <summary>
     /// The current spike state of postsynaptic neurons (binary).
@@ -280,7 +280,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// timing-dependent learning rules.
     /// </para>
     /// </remarks>
-    private Vector<T> _postsynapticSpikes;
+    private Vector<T> _postsynapticSpikes = default!;
 
     /// <summary>
     /// The decay rate of activity traces.

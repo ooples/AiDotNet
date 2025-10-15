@@ -38,7 +38,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// for one output neuron. These weights determine how strongly each input feature influences
     /// each output neuron and are the primary trainable parameters of the layer.
     /// </remarks>
-    private Matrix<T> _weights;
+    private Matrix<T> _weights = default!;
     
     /// <summary>
     /// Vector<double> storing the bias parameters for each output neuron.
@@ -48,7 +48,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// weighted sum for the corresponding output neuron. Biases allow the network to shift the
     /// activation function, giving it more flexibility to fit the data.
     /// </remarks>
-    private Vector<T> _bias;
+    private Vector<T> _bias = default!;
     
     /// <summary>
     /// Matrix<double> storing the gradients of the loss with respect to the weight parameters.
@@ -58,7 +58,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// gradients for all weight parameters during the backward pass. These gradients are used
     /// to update the weights during the parameter update step.
     /// </remarks>
-    private Matrix<T> _weightGradients;
+    private Matrix<T> _weightGradients = default!;
     
     /// <summary>
     /// Vector<double> storing the gradients of the loss with respect to the bias parameters.
@@ -68,7 +68,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// gradients for all bias parameters during the backward pass. These gradients are used
     /// to update the biases during the parameter update step.
     /// </remarks>
-    private Vector<T> _biasGradients;
+    private Vector<T> _biasGradients = default!;
     
     /// <summary>
     /// Stores the input vector from the most recent forward pass for use in backpropagation.

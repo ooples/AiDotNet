@@ -26,9 +26,9 @@ public class ConfusionMatrixFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// including which metric to use as the primary evaluation criterion and thresholds for determining 
     /// different levels of model fit.
     /// </remarks>
-    private readonly ConfusionMatrixFitDetectorOptions _options;
+    private readonly ConfusionMatrixFitDetectorOptions _options = default!;
 
-    private ConfusionMatrix<T> _confusionMatrix;
+    private ConfusionMatrix<T> _confusionMatrix = default!;
 
     /// <summary>
     /// Initializes a new instance of the ConfusionMatrixFitDetector class.

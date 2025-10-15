@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// </remarks>
     public class SACModel<T> : ReinforcementLearningModelBase<T>
     {
-        private readonly SACOptions _options;
+        private readonly SACOptions _options = default!;
         private SACAgent<Tensor<T>, T>? _agent;
         private readonly int _batchSize;
 

@@ -13,9 +13,9 @@ namespace AiDotNet.MultimodalAI.Encoders
     {
         private readonly int _vocabSize;
         private readonly int _maxSequenceLength;
-        private readonly Dictionary<string, int> _vocabulary;
+        private readonly Dictionary<string, int> _vocabulary = default!;
         private readonly bool _useTfIdf;
-        private readonly Dictionary<string, double> _idfWeights;
+        private readonly Dictionary<string, double> _idfWeights = default!;
 
         /// <summary>
         /// Initializes a new instance of TextEncoder

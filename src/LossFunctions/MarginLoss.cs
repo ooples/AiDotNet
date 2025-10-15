@@ -31,9 +31,9 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 public class MarginLoss<T> : LossFunctionBase<T>
 {
-    private readonly T _mPlus;
-    private readonly T _mMinus;
-    private readonly T _lambda;
+    private readonly T _mPlus = default!;
+    private readonly T _mMinus = default!;
+    private readonly T _lambda = default!;
     
     /// <summary>
     /// Initializes a new instance of the MarginLoss class with the specified parameters.

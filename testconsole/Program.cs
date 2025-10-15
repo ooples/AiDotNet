@@ -1,5 +1,4 @@
-﻿using AiDotNet.Examples;
-using AiDotNetTestConsole.Examples;
+﻿using AiDotNetTestConsole.Examples;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using TestConsoleApp.Examples;

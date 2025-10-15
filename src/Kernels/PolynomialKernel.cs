@@ -54,7 +54,7 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     /// Higher values can find more complex patterns but might lead to overfitting
     /// (where the model learns the training data too specifically and performs poorly on new data).
     /// </remarks>
-    private readonly T _degree;
+    private readonly T _degree = default!;
     
     /// <summary>
     /// The constant coefficient added to the dot product before raising to the power of the degree.
@@ -69,7 +69,7 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     /// 
     /// The default value is 1.0, which works well as a starting point for many applications.
     /// </remarks>
-    private readonly T _coef0;
+    private readonly T _coef0 = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -79,7 +79,7 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Polynomial kernel with optional degree and coefficient parameters.

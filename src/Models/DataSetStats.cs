@@ -32,7 +32,7 @@
 /// <typeparam name="TOutput">The type of output data (e.g., Vector<T> for regression, Tensor<T> for neural networks).</typeparam>
 public class DataSetStats<T, TInput, TOutput>
 {
-    private ModelType _modelType;
+    private ModelType _modelType = default!;
     private ErrorStats<T>? _errorStats;
     private PredictionStats<T>? _predictionStats;
     private BasicStats<T>? _actualBasicStats;

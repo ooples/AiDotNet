@@ -50,7 +50,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// - On average, the data stays centered at the same place
     /// </para>
     /// </remarks>
-    private readonly T _mean;
+    private readonly T _mean = default!;
 
     /// <summary>
     /// The standard deviation of the Gaussian noise distribution.
@@ -77,7 +77,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// - Too little noise won't help prevent overfitting
     /// </para>
     /// </remarks>
-    private readonly T _standardDeviation;
+    private readonly T _standardDeviation = default!;
 
     /// <summary>
     /// The noise tensor from the last forward pass, saved for potential use in backpropagation.

@@ -32,27 +32,27 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The state transition matrix that describes how the hidden state evolves from one time step to the next.
     /// </summary>
-    private Matrix<T> _transitionMatrix;
+    private Matrix<T> _transitionMatrix = default!;
 
     /// <summary>
     /// The observation matrix that relates the hidden state to the observed measurements.
     /// </summary>
-    private Matrix<T> _observationMatrix;
+    private Matrix<T> _observationMatrix = default!;
 
     /// <summary>
     /// The covariance matrix of the process noise, representing uncertainty in the state transition.
     /// </summary>
-    private Matrix<T> _processNoise;
+    private Matrix<T> _processNoise = default!;
 
     /// <summary>
     /// The covariance matrix of the observation noise, representing measurement uncertainty.
     /// </summary>
-    private Matrix<T> _observationNoise;
+    private Matrix<T> _observationNoise = default!;
 
     /// <summary>
     /// The initial state vector at time t=0.
     /// </summary>
-    private Vector<T> _initialState;
+    private Vector<T> _initialState = default!;
 
     /// <summary>
     /// The dimension of the state vector.
@@ -82,12 +82,12 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The transition matrix from the previous iteration, used to check convergence.
     /// </summary>
-    private Matrix<T> _previousTransitionMatrix;
+    private Matrix<T> _previousTransitionMatrix = default!;
 
     /// <summary>
     /// The observation matrix from the previous iteration, used to check convergence.
     /// </summary>
-    private Matrix<T> _previousObservationMatrix;
+    private Matrix<T> _previousObservationMatrix = default!;
 
     /// <summary>
     /// The threshold for determining when the parameter updates have converged.
@@ -606,7 +606,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the model, including its type, parameters, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns detailed metadata about the State Space Model, including its type,
@@ -631,9 +631,9 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// - Sharing model information with others
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.StateSpaceModel,
             AdditionalInfo = new Dictionary<string, object>

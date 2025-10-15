@@ -137,7 +137,7 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
             var validationPredictions = bestModel.Predict(X.Submatrix(validationIndices));
 
             // Get feature importance from the best model
-            var featureImportance = bestModel.GetModelMetaData().FeatureImportance;
+            var featureImportance = bestModel.GetModelMetadata().FeatureImportance;
 
             // Create adjusted fold result
             var adjustedFoldResult = new FoldResult<T>(

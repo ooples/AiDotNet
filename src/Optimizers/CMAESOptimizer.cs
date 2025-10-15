@@ -37,37 +37,37 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     /// <summary>
     /// The options specific to the CMA-ES optimization algorithm.
     /// </summary>
-    private CMAESOptimizerOptions<T, TInput, TOutput> _cmaesOptions;
+    private CMAESOptimizerOptions<T, TInput, TOutput> _cmaesOptions = default!;
 
     /// <summary>
     /// The current population of candidate solutions.
     /// </summary>
-    private Matrix<T> _population;
+    private Matrix<T> _population = default!;
 
     /// <summary>
     /// The mean of the current distribution.
     /// </summary>
-    private Vector<T> _mean;
+    private Vector<T> _mean = default!;
 
     /// <summary>
     /// The covariance matrix of the distribution.
     /// </summary>
-    private Matrix<T> _C;
+    private Matrix<T> _C = default!;
 
     /// <summary>
     /// Evolution path for covariance matrix adaptation.
     /// </summary>
-    private Vector<T> _pc;
+    private Vector<T> _pc = default!;
 
     /// <summary>
     /// Evolution path for step-size adaptation.
     /// </summary>
-    private Vector<T> _ps;
+    private Vector<T> _ps = default!;
 
     /// <summary>
     /// The current step size.
     /// </summary>
-    private T _sigma;
+    private T _sigma = default!;
 
     /// <summary>
     /// Initializes a new instance of the CMAESOptimizer class.

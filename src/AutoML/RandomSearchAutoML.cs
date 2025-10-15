@@ -125,6 +125,7 @@ namespace AiDotNet.AutoML
                             Duration = DateTime.UtcNow - trialStartTime,
                             ModelType = modelType,
                             Timestamp = DateTime.UtcNow,
+                            Status = TrialStatus.Failed,
                             ErrorMessage = ex.Message
                         };
 
@@ -168,15 +169,17 @@ namespace AiDotNet.AutoML
                 var modelSearchSpace = GetDefaultSearchSpace(modelType);
 
                 // Merge with user-defined search space
-                foreach (var (name, range) in _searchSpace)
+                foreach (var kvp in _searchSpace)
                 {
-                    modelSearchSpace[name] = range;
+                    modelSearchSpace[kvp.Key] = kvp.Value;
                 }
 
                 // Create hyperparameter space for sampling
                 var space = new HyperparameterSpace(_random.Next());
-                foreach (var (name, range) in modelSearchSpace)
+                foreach (var kvp in modelSearchSpace)
                 {
+                    var name = kvp.Key;
+                    var range = kvp.Value;
                     switch (range.Type)
                     {
                         case ParameterType.Continuous:
@@ -221,8 +224,10 @@ namespace AiDotNet.AutoML
             base.SetSearchSpace(searchSpace);
             
             // Update hyperparameter space
-            foreach (var (name, range) in searchSpace)
+            foreach (var kvp in searchSpace)
             {
+                var name = kvp.Key;
+                var range = kvp.Value;
                 switch (range.Type)
                 {
                     case ParameterType.Continuous:
@@ -255,14 +260,11 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Creates a model instance for the given type and parameters
         /// </summary>
-        protected override async Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(ModelType modelType, Dictionary<string, object> parameters)
+        protected override Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(ModelType modelType, Dictionary<string, object> parameters)
         {
-            return await Task.Run((Func<IFullModel<T, TInput, TOutput>>)(() =>
-            {
-                // This would use PredictionModelBuilder or a factory to create models
-                // For now, returning a placeholder
-                throw new NotImplementedException("Model creation should be implemented using PredictionModelBuilder");
-            }));
+            // This would use PredictionModelBuilder or a factory to create models
+            // For now, returning a placeholder
+            throw new NotImplementedException("Model creation should be implemented using PredictionModelBuilder");
         }
 
 
@@ -366,7 +368,7 @@ namespace AiDotNet.AutoML
                     };
                     break;
 
-                case ModelType.SupportVectorMachine:
+                case ModelType.SupportVectorRegression:
                     searchSpace["C"] = new ParameterRange
                     {
                         MinValue = 0.01,

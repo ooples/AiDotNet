@@ -25,32 +25,32 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <summary>
     /// The self-attention mechanism of the decoder layer.
     /// </summary>
-    private readonly AttentionLayer<T> _selfAttention;
+    private readonly AttentionLayer<T> _selfAttention = default!;
 
     /// <summary>
     /// The cross-attention mechanism that attends to the encoder output.
     /// </summary>
-    private readonly AttentionLayer<T> _crossAttention;
+    private readonly AttentionLayer<T> _crossAttention = default!;
 
     /// <summary>
     /// The feed-forward neural network component of the decoder layer.
     /// </summary>
-    private readonly FeedForwardLayer<T> _feedForward;
+    private readonly FeedForwardLayer<T> _feedForward = default!;
 
     /// <summary>
     /// Layer normalization applied after self-attention.
     /// </summary>
-    private readonly LayerNormalizationLayer<T> _norm1;
+    private readonly LayerNormalizationLayer<T> _norm1 = default!;
 
     /// <summary>
     /// Layer normalization applied after cross-attention.
     /// </summary>
-    private readonly LayerNormalizationLayer<T> _norm2;
+    private readonly LayerNormalizationLayer<T> _norm2 = default!;
 
     /// <summary>
     /// Layer normalization applied after the feed-forward network.
     /// </summary>
-    private readonly LayerNormalizationLayer<T> _norm3;
+    private readonly LayerNormalizationLayer<T> _norm3 = default!;
 
     /// <summary>
     /// Stores the last input tensor processed by the layer.
@@ -65,7 +65,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the size of the input features for this layer.
     /// </summary>
-    public int InputSize { get; private set; }
+    public override int InputSize { get; }
 
     /// <summary>
     /// Stores the gradient with respect to the input from the last backward pass.

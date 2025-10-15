@@ -283,7 +283,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the neural network.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the neural network.</returns>
+    /// <returns>A ModelMetadata object containing information about the neural network.</returns>
     /// <remarks>
     /// <para>
     /// This method returns comprehensive metadata about the neural network, including its architecture,
@@ -305,7 +305,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// - Creating reports or visualizations
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Count parameters by layer type
         Dictionary<string, int> layerCounts = [];
@@ -327,7 +327,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         // Get layer sizes
         int[] layerSizes = Architecture.GetLayerSizes();
         
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

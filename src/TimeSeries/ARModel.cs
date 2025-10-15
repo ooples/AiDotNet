@@ -49,7 +49,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// Larger coefficients mean stronger influence from that time period.
     /// These values are learned during training to best fit your historical data.
     /// </remarks>
-    private Vector<T> _arCoefficients;
+    private Vector<T> _arCoefficients = default!;
 
     /// <summary>
     /// The number of past observations to consider (the AR order).
@@ -423,7 +423,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the trained model, including its type, coefficients, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method provides comprehensive information about the model, including its type, parameters, coefficients,
@@ -446,10 +446,10 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// all the important information about how it works and was configured.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var arOptions = (ARModelOptions<T>)Options;
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ARModel,
             AdditionalInfo = new Dictionary<string, object>

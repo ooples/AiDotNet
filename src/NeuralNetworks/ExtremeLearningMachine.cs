@@ -330,7 +330,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the Extreme Learning Machine model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns metadata about the ELM, including its model type, hidden layer size,
@@ -349,9 +349,9 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// of your neural network. This is useful for organizing and managing multiple models.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.ExtremeLearningMachine,
             AdditionalInfo = new Dictionary<string, object>

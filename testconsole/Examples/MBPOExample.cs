@@ -390,7 +390,7 @@ namespace AiDotNet.Examples
     /// </summary>
     public class SimpleStockEnvironment
     {
-        private readonly Random _random;
+        private readonly Random _random = default!;
         private readonly double _initialPrice;
         private readonly int _maxSteps;
         

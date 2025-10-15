@@ -40,7 +40,7 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// </remarks>
     public class TD3Model<T> : ReinforcementLearningModelBase<T>
     {
-        private readonly TD3Options _options;
+        private readonly TD3Options _options = default!;
         private TD3Agent<Tensor<T>, T> _agent = null!;
         private readonly int _batchSize;
 

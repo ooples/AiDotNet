@@ -27,7 +27,7 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// <summary>
     /// The options specific to the AMSGrad optimizer.
     /// </summary>
-    private AMSGradOptimizerOptions<T, TInput, TOutput> _amsGradOptions;
+    private AMSGradOptimizerOptions<T, TInput, TOutput> _amsGradOptions = default!;
 
     /// <summary>
     /// The first moment vector (moving average of gradients).

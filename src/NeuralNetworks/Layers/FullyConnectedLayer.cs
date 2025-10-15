@@ -57,7 +57,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// so every input-output pair has exactly one weight value.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights;
+    private Matrix<T> _weights = default!;
 
     /// <summary>
     /// The bias values for each output neuron.
@@ -82,7 +82,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// Each output neuron has its own bias value that can be learned independently.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Vector<T> _biases = default!;
 
     /// <summary>
     /// The input tensor from the last forward pass, saved for backpropagation.

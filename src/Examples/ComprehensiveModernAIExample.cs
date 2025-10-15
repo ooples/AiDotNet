@@ -121,8 +121,6 @@ namespace AiDotNet.Examples
 
             // Create architecture for Vision Transformer
             var vitArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 3, 224, 224 },
-                outputShape: new[] { 1000 },
                 taskType: NeuralNetworkTaskType.ImageClassification
             );
 
@@ -164,8 +162,6 @@ namespace AiDotNet.Examples
             // 1. Standard DDPM (Denoising Diffusion Probabilistic Model)
             Console.WriteLine("\n3.1 Standard DDPM:");
             var ddpmArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 3, 64, 64 },
-                outputShape: new[] { 3, 64, 64 },
                 taskType: NeuralNetworkTaskType.ImageGeneration
             );
             var ddpm = new DiffusionModel(
@@ -185,7 +181,11 @@ namespace AiDotNet.Examples
 
             // 2. DDIM (Faster deterministic sampling)
             Console.WriteLine("\n3.2 DDIM (Denoising Diffusion Implicit Models):");
+            var ddimArchitecture = new NeuralNetworkArchitecture<double>(
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
             var ddim = new DDIMModel(
+                architecture: ddimArchitecture,
                 timesteps: 1000,
                 samplingSteps: 50,  // Much faster - only 50 steps instead of 1000
                 eta: 0.0  // Deterministic sampling
@@ -203,8 +203,12 @@ namespace AiDotNet.Examples
             var encoder = CreateVAEEncoder();
             var decoder = CreateVAEDecoder();
             var textEncoder = CreateTextEncoder();
-            
+
+            var ldmArchitecture = new NeuralNetworkArchitecture<double>(
+                taskType: NeuralNetworkTaskType.ImageGeneration
+            );
             var ldm = new LatentDiffusionModel(
+                architecture: ldmArchitecture,
                 encoder: encoder,
                 decoder: decoder,
                 textEncoder: textEncoder,
@@ -235,8 +239,6 @@ namespace AiDotNet.Examples
             Console.WriteLine("\n3.4 Score-based SDE:");
             var scoreNetwork = CreateScoreNetwork();
             var scoreSdeArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 3, 64, 64 },
-                outputShape: new[] { 3, 64, 64 },
                 taskType: NeuralNetworkTaskType.ImageGeneration
             );
             var scoreSDE = new ScoreSDE(
@@ -265,8 +267,6 @@ namespace AiDotNet.Examples
             Console.WriteLine("\n3.5 Consistency Model:");
             var consistencyFunction = CreateConsistencyFunction();
             var consistencyArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 3, 64, 64 },
-                outputShape: new[] { 3, 64, 64 },
                 taskType: NeuralNetworkTaskType.ImageGeneration
             );
             var consistency = new ConsistencyModel(
@@ -297,8 +297,6 @@ namespace AiDotNet.Examples
             Console.WriteLine("\n3.6 Flow Matching Model:");
             var velocityNetwork = CreateVelocityNetwork();
             var flowMatchingArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 3, 64, 64 },
-                outputShape: new[] { 3, 64, 64 },
                 taskType: NeuralNetworkTaskType.ImageGeneration
             );
             var flowMatching = new FlowMatchingModel(
@@ -321,7 +319,11 @@ namespace AiDotNet.Examples
             var trainingData = new Tensor<double>(new[] { 100, 3, 64, 64 });
             FillWithRandomData(trainingData);
 
-            var optimizer = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(learningRate: 0.0001);
+            var adamOptions = new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                LearningRate = 0.0001
+            };
+            var optimizer = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(ddpm, adamOptions);
             for (int epoch = 0; epoch < 3; epoch++)
             {
                 var loss = await Task.Run(() => ddpm.TrainStep(trainingData, optimizer));
@@ -414,8 +416,6 @@ namespace AiDotNet.Examples
 
             // Create a sample neural network
             var deploymentArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 784 },
-                outputShape: new[] { 10 },
                 taskType: NeuralNetworkTaskType.Classification
             );
             var model = new NeuralNetwork<double>(deploymentArchitecture);
@@ -449,7 +449,7 @@ namespace AiDotNet.Examples
 
             // Deploy to edge device
             var edgeOptimizer = new MobileOptimizer<Tensor<double>, Tensor<double>, ModelMetaData<double>>();
-            var optimizedModel = await edgeOptimizer.OptimizeAsync(quantizedModel, new AiDotNet.Deployment.Techniques.OptimizationOptions());
+            var optimizedModel = await edgeOptimizer.OptimizeAsync(quantizedModel, new AiDotNet.Deployment.OptimizationOptions());
             Console.WriteLine("Model optimized for mobile deployment!");
         }
 
@@ -501,8 +501,6 @@ namespace AiDotNet.Examples
         {
             // Create a simple U-Net architecture for diffusion
             var unetArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 3, 64, 64 },
-                outputShape: new[] { 3, 64, 64 },
                 taskType: NeuralNetworkTaskType.ImageGeneration
             );
             var unet = new NeuralNetwork<double>(unetArchitecture);
@@ -534,8 +532,6 @@ namespace AiDotNet.Examples
         {
             // Create U-Net for latent space
             var latentUnetArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 4, 64, 64 },
-                outputShape: new[] { 4, 64, 64 },
                 taskType: NeuralNetworkTaskType.ImageGeneration
             );
             var unet = new NeuralNetwork<double>(latentUnetArchitecture);
@@ -549,8 +545,6 @@ namespace AiDotNet.Examples
         {
             // Create score network for SDE
             var scoreNetArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 3, 64, 64 },
-                outputShape: new[] { 3, 64, 64 },
                 taskType: NeuralNetworkTaskType.ImageGeneration
             );
             var scoreNet = new NeuralNetwork<double>(scoreNetArchitecture);
@@ -564,8 +558,6 @@ namespace AiDotNet.Examples
         {
             // Create consistency function network
             var consistencyNetArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 3, 64, 64 },
-                outputShape: new[] { 3, 64, 64 },
                 taskType: NeuralNetworkTaskType.ImageGeneration
             );
             var consistencyNet = new NeuralNetwork<double>(consistencyNetArchitecture);
@@ -579,8 +571,6 @@ namespace AiDotNet.Examples
         {
             // Create velocity network for flow matching
             var velocityNetArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 3, 64, 64 },
-                outputShape: new[] { 3, 64, 64 },
                 taskType: NeuralNetworkTaskType.ImageGeneration
             );
             var velocityNet = new NeuralNetwork<double>(velocityNetArchitecture);

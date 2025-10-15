@@ -32,12 +32,12 @@ public class GeneticAlgorithmRegression<T> : RegressionModelBase<T>
     /// <summary>
     /// Configuration options for the genetic algorithm optimizer.
     /// </summary>
-    private readonly GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>> _gaOptions;
+    private readonly GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>> _gaOptions = default!;
     
     /// <summary>
     /// The genetic algorithm optimizer that finds optimal model parameters.
     /// </summary>
-    private GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>> _optimizer = default!;
     
     /// <summary>
     /// The best model found by the genetic algorithm.

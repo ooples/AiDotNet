@@ -1,4 +1,7 @@
-﻿namespace AiDotNet.Genetics;
+﻿using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+
+namespace AiDotNet.Genetics;
 
 /// <summary>
 /// Represents an individual that is also a full model, allowing direct evolution of models
@@ -25,6 +28,7 @@
 /// </para>
 /// </remarks>
 public class ModelIndividual<T, TInput, TOutput, TGene> :
+    Interpretability.InterpretableModelBase<T, TInput, TOutput>,
     IEvolvable<TGene, T>,
     IFullModel<T, TInput, TOutput>
     where TGene : class
@@ -86,7 +90,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// models with higher fitness scores have a better chance of contributing to future generations.
     /// </para>
     /// </remarks>
-    private T _fitness;
+    private T _fitness = default!;
 
     /// <summary>
     /// The actual machine learning model contained within this individual.
@@ -106,7 +110,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// inner model is rebuilt to reflect those changes.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> _innerModel;
+    private IFullModel<T, TInput, TOutput> _innerModel = default!;
 
     /// <summary>
     /// A factory function that creates a model from a collection of genes.
@@ -127,7 +131,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// you a new house that reflects those changes.
     /// </para>
     /// </remarks>
-    private readonly Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> _modelFactory;
+    private readonly Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> _modelFactory = default!;
 
     /// <summary>
     /// Provides operations for the numeric type used in this model.
@@ -404,7 +408,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// and producing useful outputs or predictions.
     /// </para>
     /// </remarks>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
         return _innerModel.Predict(input);
     }
@@ -415,7 +419,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <returns>The model metadata.</returns>
     /// <remarks>
     /// <para>
-    /// This method delegates to GetModelMetaData to retrieve metadata about the model,
+    /// This method delegates to GetModelMetadata to retrieve metadata about the model,
     /// which includes information like the model type, parameters, performance metrics,
     /// and other descriptive data.
     /// </para>
@@ -431,9 +435,9 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// This information is useful for understanding, comparing, and documenting models.
     /// </para>
     /// </remarks>
-    public ModelMetaData<T> GetMetaData()
+    public ModelMetadata<T> GetMetaData()
     {
-        return GetModelMetaData();
+        return GetModelMetadata();
     }
 
     /// <summary>
@@ -642,7 +646,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// In most cases, you would improve this model through evolution rather than direct training.
     /// </para>
     /// </remarks>
-    public void Train(TInput input, TOutput expectedOutput)
+    public override void Train(TInput input, TOutput expectedOutput)
     {
         // Try to use reflection to check if the inner model has a Train method
         var trainMethod = _innerModel.GetType().GetMethod("Train", [typeof(TInput), typeof(TOutput)]);
@@ -682,14 +686,14 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// This comprehensive information helps with model selection, comparison, and documentation.
     /// </para>
     /// </remarks>
-    public ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Get the inner model's metadata
-        var metadata = _innerModel.GetModelMetaData();
+        var metadata = _innerModel.GetModelMetadata();
 
-        // If inner model's GetModelMetaData method is not properly implemented or returns null,
+        // If inner model's GetModelMetadata method is not properly implemented or returns null,
         // create a new metadata object
-        metadata ??= new ModelMetaData<T>
+        metadata ??= new ModelMetadata<T>
             {
                 ModelType = ModelType.GeneticAlgorithmRegression,
                 Description = "Genetically evolved model individual",
@@ -935,6 +939,120 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         }
 
         _innerModel.SetActiveFeatureIndices(featureIndices);
+    }
+    
+    /// <inheritdoc/>
+    public override async Task<TOutput> PredictAsync(TInput input)
+    {
+        return await _innerModel.PredictAsync(input);
+    }
+    
+    /// <inheritdoc/>
+    public override async Task TrainAsync(TInput input, TOutput expectedOutput)
+    {
+        await _innerModel.TrainAsync(input, expectedOutput);
+    }
+    
+    /// <inheritdoc/>
+    public override void SetModelMetadata(ModelMetadata<T> metadata)
+    {
+        // Update the inner model's metadata
+        if (_innerModel is IModel<TInput, TOutput, ModelMetadata<T>> model)
+        {
+            model.SetModelMetadata(metadata);
+        }
+        
+        // Update fitness based on metadata complexity or other metrics
+        if (metadata.Complexity > 0)
+        {
+            // Optionally update fitness based on model complexity
+            // Lower complexity might mean better fitness in some scenarios
+        }
+    }
+    
+    /// <inheritdoc/>
+    public override void Save(string filepath)
+    {
+        _innerModel.Save(filepath);
+    }
+    
+    /// <inheritdoc/>
+    public override void Load(string filepath)
+    {
+        _innerModel.Load(filepath);
+    }
+    
+    /// <inheritdoc/>
+    public override void Dispose()
+    {
+        if (_innerModel is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+        _genes.Clear();
+        _explicitlySetActiveFeatures?.Clear();
+    }
+    
+    // Override interpretability methods to delegate to inner model
+    public override async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
+    {
+        return await _innerModel.GetGlobalFeatureImportanceAsync();
+    }
+    
+    public override async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(TInput input)
+    {
+        return await _innerModel.GetLocalFeatureImportanceAsync(input);
+    }
+    
+    public override async Task<LimeExplanation<T>> GetLimeExplanationAsync(TInput input, int numFeatures = 10)
+    {
+        return await _innerModel.GetLimeExplanationAsync(input, numFeatures);
+    }
+    
+    public override async Task<Matrix<T>> GetShapValuesAsync(TInput inputs)
+    {
+        return await _innerModel.GetShapValuesAsync(inputs);
+    }
+    
+    public override async Task<string> GenerateTextExplanationAsync(TInput input, TOutput prediction)
+    {
+        return await _innerModel.GenerateTextExplanationAsync(input, prediction);
+    }
+
+    #endregion
+
+    #region IFullModel Interface Members - Added by Team 23
+
+    /// <summary>
+    /// Gets the total number of parameters in the model
+    /// </summary>
+    public virtual int ParameterCount => _innerModel?.ParameterCount ?? 0;
+
+    /// <summary>
+    /// Saves the model to a file
+    /// </summary>
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        byte[] serializedData = Serialize();
+        File.WriteAllBytes(filePath, serializedData);
+    }
+
+    /// <summary>
+    /// Gets feature importance scores
+    /// </summary>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        // Delegate to inner model if available
+        if (_innerModel != null)
+        {
+            return _innerModel.GetFeatureImportance();
+        }
+
+        // Return empty dictionary as default
+        return new Dictionary<string, T>();
     }
 
     #endregion

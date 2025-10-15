@@ -20,7 +20,7 @@ public class HeteroscedasticityFitDetector<T, TInput, TOutput> : FitDetectorBase
     /// <summary>
     /// Configuration options that control how the detector evaluates heteroscedasticity.
     /// </summary>
-    private readonly HeteroscedasticityFitDetectorOptions _options;
+    private readonly HeteroscedasticityFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HeteroscedasticityFitDetector{T}"/> class.
@@ -175,7 +175,7 @@ public class HeteroscedasticityFitDetector<T, TInput, TOutput> : FitDetectorBase
             Predicted = auxiliaryRegression.Predict(X),
             NumberOfParameters = X.Columns,
         };
-        var predictionStats = new PredictionStats<T>(predictionStatsInputs, evaluationData.ModelStats.Model?.GetModelMetaData().ModelType ?? ModelType.None);
+        var predictionStats = new PredictionStats<T>(predictionStatsInputs, evaluationData.ModelStats.Model?.GetModelMetadata().ModelType ?? ModelType.None);
 
         return NumOps.Multiply(NumOps.FromDouble(X.Rows), predictionStats.R2);
     }
@@ -242,7 +242,7 @@ public class HeteroscedasticityFitDetector<T, TInput, TOutput> : FitDetectorBase
             NumberOfParameters = augmentedX.Columns,
         };
 
-        var predictionStats = new PredictionStats<T>(predictionStatsInputs, evaluationData.ModelStats.Model?.GetModelMetaData().ModelType ?? ModelType.None);
+        var predictionStats = new PredictionStats<T>(predictionStatsInputs, evaluationData.ModelStats.Model?.GetModelMetadata().ModelType ?? ModelType.None);
 
         return NumOps.Multiply(NumOps.FromDouble(X.Rows), predictionStats.R2);
     }

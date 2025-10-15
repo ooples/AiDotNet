@@ -54,7 +54,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionModelBase<T>
     /// (which might not generalize well) and one that's too simple to capture important patterns.
     /// </para>
     /// </remarks>
-    private readonly SupportVectorRegressionOptions _options;
+    private readonly SupportVectorRegressionOptions _options = default!;
 
     /// <summary>
     /// Creates a new Support Vector Regression model.
@@ -422,9 +422,9 @@ public class SupportVectorRegression<T> : NonLinearRegressionModelBase<T>
     /// which settings worked best for your problem.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = base.GetModelMetaData();
+        var metadata = base.GetModelMetadata();
         metadata.AdditionalInfo["Epsilon"] = _options.Epsilon;
         metadata.AdditionalInfo["C"] = _options.C;
         metadata.AdditionalInfo["RegularizationType"] = Regularization.GetType().Name;

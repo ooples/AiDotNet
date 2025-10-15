@@ -35,7 +35,7 @@ public class HybridFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, 
     /// </list>
     /// </para>
     /// </remarks>
-    private readonly ResidualAnalysisFitDetector<T, TInput, TOutput> _residualAnalyzer;
+    private readonly ResidualAnalysisFitDetector<T, TInput, TOutput> _residualAnalyzer = default!;
 
     /// <summary>
     /// The learning curve component of the hybrid detector.
@@ -55,7 +55,7 @@ public class HybridFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, 
     /// </list>
     /// </para>
     /// </remarks>
-    private readonly LearningCurveFitDetector<T, TInput, TOutput> _learningCurveDetector;
+    private readonly LearningCurveFitDetector<T, TInput, TOutput> _learningCurveDetector = default!;
 
     /// <summary>
     /// Configuration options that control how the hybrid detector combines and weighs results from its components.
@@ -75,7 +75,7 @@ public class HybridFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, 
     /// customize these settings to better suit specific modeling challenges.
     /// </para>
     /// </remarks>
-    private readonly HybridFitDetectorOptions _options;
+    private readonly HybridFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the HybridFitDetector class.

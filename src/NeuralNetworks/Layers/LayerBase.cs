@@ -26,6 +26,35 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public abstract class LayerBase<T> : ILayer<T>
 {
     /// <summary>
+    /// Gets the name of this layer.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is a label or identifier for the layer, making it easier to track
+    /// and debug which layer is which in a neural network with many layers.
+    /// </remarks>
+    public virtual string Name { get; protected set; } = "Layer";
+
+    /// <summary>
+    /// Gets the size of the input dimension for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This tells you how many input values this layer expects.
+    /// For example, if the layer expects a vector of 784 values (like flattened 28x28 images),
+    /// this property would return 784.
+    /// </remarks>
+    public virtual int InputSize => InputShape?.Aggregate((a, b) => a * b) ?? 0;
+
+    /// <summary>
+    /// Gets the size of the output dimension for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This tells you how many output values this layer produces.
+    /// For example, a dense layer with 10 neurons will output 10 values,
+    /// so this property would return 10.
+    /// </remarks>
+    public virtual int OutputSize => OutputShape?.Aggregate((a, b) => a * b) ?? 0;
+
+    /// <summary>
     /// Gets the element-wise activation function for this layer, if specified.
     /// </summary>
     /// <remarks>
@@ -1345,6 +1374,26 @@ public abstract class LayerBase<T> : ILayer<T>
     /// </para>
     /// </remarks>
     public virtual int ParameterCount => Parameters.Length;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <returns>The total count of trainable parameters.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method returns the same information as the ParameterCount property,
+    /// but as a method call instead of a property access. It's provided for consistency with code
+    /// that expects to call a GetParameterCount() method.
+    ///
+    /// The number of parameters tells you how much the layer can learn. For example:
+    /// - A dense layer with 100 inputs and 50 outputs: 100×50 weights + 50 biases = 5,050 parameters
+    /// - A pooling layer (no learning): 0 parameters
+    ///
+    /// This is useful when analyzing model complexity or debugging parameter updates.
+    /// </remarks>
+    public virtual int GetParameterCount()
+    {
+        return ParameterCount;
+    }
 
     /// <summary>
     /// Serializes the layer's parameters to a binary writer.

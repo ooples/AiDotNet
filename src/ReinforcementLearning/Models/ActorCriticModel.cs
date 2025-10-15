@@ -11,7 +11,7 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class ActorCriticModel<T> : ReinforcementLearningModelBase<T>
     {
-        private readonly ActorCriticOptions<T> _options;
+        private readonly ActorCriticOptions<T> _options = default!;
         private AdvantageActorCriticAgent<Tensor<T>, int, T>? _discreteAgent;
         private AdvantageActorCriticAgent<Tensor<T>, Vector<T>, T>? _continuousAgent;
         private readonly int _batchSize;
@@ -272,9 +272,9 @@ namespace AiDotNet.ReinforcementLearning.Models
         /// Gets the metadata for this model.
         /// </summary>
         /// <returns>The model metadata.</returns>
-        public override ModelMetaData<T> GetModelMetaData()
+        public override ModelMetadata<T> GetModelMetadata()
         {
-            var metadata = base.GetModelMetaData();
+            var metadata = base.GetModelMetadata();
             
             metadata.ModelType = ModelType.ActorCriticModel;
             metadata.Description = "Actor-Critic reinforcement learning algorithm";
@@ -293,15 +293,6 @@ namespace AiDotNet.ReinforcementLearning.Models
             return metadata;
         }
         
-        /// <summary>
-        /// Gets the metadata for this model (backward compatibility).
-        /// </summary>
-        /// <returns>The model metadata.</returns>
-        public override ModelMetaData<T> GetModelMetadata()
-        {
-            // Just call the base implementation
-            return base.GetModelMetadata();
-        }
 
         /// <summary>
         /// Saves the model to the specified path.

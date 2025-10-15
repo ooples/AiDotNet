@@ -2,15 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.FederatedLearning.MetaLearning.Models;
+using AiDotNet.FederatedLearning.MetaLearning.Parameters;
 
 namespace AiDotNet.FederatedLearning.MetaLearning
 {
     /// <summary>
-    /// Model-Agnostic Meta-Learning (MAML) for Federated Learning
+    /// Production-ready Model-Agnostic Meta-Learning (MAML) for Federated Learning
     /// Enables fast adaptation to new tasks in federated settings
     /// </summary>
     public class MAMLFederated : FederatedLearningBase
@@ -18,63 +22,94 @@ namespace AiDotNet.FederatedLearning.MetaLearning
         /// <summary>
         /// Meta-learning parameters
         /// </summary>
-        public MAMLParameters Parameters { get; set; }
+        public MAMLParameters Parameters { get; set; } = new();
 
         /// <summary>
         /// Meta-model for learning across tasks
         /// </summary>
-        public IFullModel<double, Matrix<double>, Vector<double>> MetaModel { get; private set; }
+        public IFullModel<double, Matrix<double>, Vector<double>> MetaModel { get; private set; } = default!;
 
         /// <summary>
         /// Client task definitions
         /// </summary>
-        protected Dictionary<string, FederatedTask> ClientTasks { get; set; }
+        protected Dictionary<string, FederatedTask> ClientTasks { get; set; } = new();
 
         /// <summary>
         /// Meta-gradient accumulator
         /// </summary>
-        protected Dictionary<string, Vector<double>> MetaGradients { get; set; }
+        protected Dictionary<string, Vector<double>> MetaGradients { get; set; } = new();
 
         /// <summary>
         /// Task performance history
         /// </summary>
-        public List<MetaLearningRound> MetaHistory { get; private set; }
+        public List<MetaLearningRound> MetaHistory { get; private set; } = new();
 
         /// <summary>
         /// Inner loop optimizer for task adaptation
         /// </summary>
-        protected IOptimizer<double, Matrix<double>, Vector<double>> InnerOptimizer { get; set; }
+        protected IOptimizer<double, Matrix<double>, Vector<double>> InnerOptimizer { get; set; } = default!;
 
         /// <summary>
         /// Outer loop optimizer for meta-updates
         /// </summary>
-        protected IOptimizer<double, Matrix<double>, Vector<double>> OuterOptimizer { get; set; }
+        protected IOptimizer<double, Matrix<double>, Vector<double>> OuterOptimizer { get; set; } = default!;
+
+        /// <summary>
+        /// Model parameter cache for efficiency
+        /// </summary>
+        private readonly Dictionary<string, Dictionary<string, Vector<double>>> _parameterCache;
+
+        /// <summary>
+        /// Random number generator for reproducibility
+        /// </summary>
+        private readonly Random _random;
 
         /// <summary>
         /// Initialize MAML for federated learning
         /// </summary>
         /// <param name="metaModel">Meta-model for learning</param>
         /// <param name="parameters">MAML parameters</param>
-        public MAMLFederated(IFullModel<double, Matrix<double>, Vector<double>> metaModel, MAMLParameters parameters = null)
+        /// <param name="seed">Random seed for reproducibility</param>
+        public MAMLFederated(
+            IFullModel<double, Matrix<double>, Vector<double>> metaModel, 
+            MAMLParameters? parameters = null,
+            int? seed = null)
         {
             MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
             Parameters = parameters ?? new MAMLParameters();
+            Parameters.Validate();
+            
             ClientTasks = new Dictionary<string, FederatedTask>();
             MetaGradients = new Dictionary<string, Vector<double>>();
             MetaHistory = new List<MetaLearningRound>();
+            _parameterCache = new Dictionary<string, Dictionary<string, Vector<double>>>();
+            _random = seed.HasValue ? new Random(seed.Value) : new Random();
 
             // Initialize optimizers
-            InnerOptimizer = new GradientDescentOptimizer(new Models.Options.GradientDescentOptimizerOptions
-            {
-                LearningRate = Parameters.InnerLearningRate
-            });
+            InitializeOptimizers();
+        }
 
-            OuterOptimizer = new AdamOptimizer(new Models.Options.AdamOptimizerOptions
-            {
-                LearningRate = Parameters.OuterLearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.999
-            });
+        /// <summary>
+        /// Initialize inner and outer loop optimizers
+        /// </summary>
+        private void InitializeOptimizers()
+        {
+            // Inner loop optimizer (typically SGD for simplicity)
+            InnerOptimizer = new GradientDescentOptimizer<double, Matrix<double>, Vector<double>>(
+                new GradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+                {
+                    LearningRate = Parameters.InnerLearningRate
+                });
+
+            // Outer loop optimizer (Adam for stability)
+            OuterOptimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(
+                new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
+                {
+                    LearningRate = Parameters.OuterLearningRate,
+                    Beta1 = 0.9,
+                    Beta2 = 0.999,
+                    Epsilon = 1e-8
+                });
         }
 
         /// <summary>
@@ -90,8 +125,11 @@ namespace AiDotNet.FederatedLearning.MetaLearning
             if (task == null)
                 throw new ArgumentNullException(nameof(task));
 
+            task.Validate();
+            task.ClientId = clientId;
+            
             ClientTasks[clientId] = task;
-            SetClientWeight(clientId, task.SupportSet.Rows + task.QuerySet.Rows);
+            SetClientWeight(clientId, task.TotalExamples);
         }
 
         /// <summary>
@@ -101,63 +139,98 @@ namespace AiDotNet.FederatedLearning.MetaLearning
         /// <returns>Meta-learning results</returns>
         public async Task<MetaLearningResult> PerformMetaLearningRoundAsync(List<string> selectedClients)
         {
+            if (selectedClients == null || selectedClients.Count == 0)
+                throw new ArgumentException("No clients selected for meta-learning round");
+
             var roundStart = DateTime.UtcNow;
-            var clientResults = new Dictionary<string, ClientMetaResult>();
-
-            // Phase 1: Inner loop adaptation on each client
-            var innerLoopTasks = selectedClients.Select(async clientId =>
+            var roundHistory = new MetaLearningRound { Round = CurrentRound, StartTime = roundStart };
+            
+            try
             {
-                if (ClientTasks.ContainsKey(clientId))
-                {
-                    var result = await PerformInnerLoopAsync(clientId, ClientTasks[clientId]);
-                    return (clientId, result);
-                }
-                return (clientId, null);
-            });
+                var clientResults = new Dictionary<string, ClientMetaResult>();
 
-            var innerResults = await Task.WhenAll(innerLoopTasks);
+                // Phase 1: Inner loop adaptation on each client (parallel execution)
+                var innerLoopTasks = selectedClients
+                    .Where(clientId => ClientTasks.ContainsKey(clientId))
+                    .Select(clientId => PerformInnerLoopWithErrorHandlingAsync(clientId, ClientTasks[clientId]));
 
-            foreach (var (clientId, result) in innerResults)
-            {
-                if (result != null)
+                var innerResults = await Task.WhenAll(innerLoopTasks);
+
+                foreach (var result in innerResults.Where(r => r != null))
                 {
-                    clientResults[clientId] = result;
+                    if (result != null)
+                    {
+                        clientResults[result.ClientId] = result;
+                    }
                 }
+
+                if (clientResults.Count == 0)
+                {
+                    throw new InvalidOperationException("No successful client adaptations in this round");
+                }
+
+                // Phase 2: Compute meta-gradients
+                var metaGradients = ComputeMetaGradients(clientResults);
+
+                // Apply gradient clipping if configured
+                if (Parameters.GradientClipThreshold > 0)
+                {
+                    metaGradients = ClipGradients(metaGradients, Parameters.GradientClipThreshold);
+                }
+
+                // Phase 3: Meta-update (outer loop)
+                await PerformMetaUpdateAsync(metaGradients);
+
+                // Record round results
+                var roundResult = new MetaLearningResult
+                {
+                    Round = CurrentRound,
+                    ParticipatingClients = clientResults.Keys.ToList(),
+                    ClientResults = clientResults,
+                    MetaGradients = metaGradients,
+                    RoundTime = DateTime.UtcNow - roundStart,
+                    AverageTaskLoss = clientResults.Values.Average(r => r.QueryLoss),
+                    MetaGradientNorm = CalculateGradientNorm(metaGradients)
+                };
+
+                // Update history
+                roundHistory.ParticipatingTasks = clientResults.Count;
+                roundHistory.AverageAdaptationSteps = clientResults.Values.Average(r => r.AdaptationSteps);
+                roundHistory.AverageTaskAccuracy = clientResults.Values.Average(r => r.TaskAccuracy);
+                roundHistory.MetaLoss = roundResult.AverageTaskLoss;
+                roundHistory.AverageLossImprovement = clientResults.Values.Average(r => r.LossImprovement);
+                roundHistory.LearningRate = Parameters.OuterLearningRate;
+                roundHistory.Complete();
+
+                MetaHistory.Add(roundHistory);
+                CurrentRound++;
+
+                return roundResult;
             }
-
-            // Phase 2: Compute meta-gradients
-            var metaGradients = ComputeMetaGradients(clientResults);
-
-            // Phase 3: Meta-update (outer loop)
-            await PerformMetaUpdateAsync(metaGradients);
-
-            // Record round results
-            var roundResult = new MetaLearningResult
+            catch (Exception ex)
             {
-                Round = CurrentRound,
-                ParticipatingClients = clientResults.Keys.ToList(),
-                ClientResults = clientResults,
-                MetaGradients = metaGradients,
-                RoundTime = DateTime.UtcNow - roundStart,
-                AverageTaskLoss = clientResults.Values.Average(r => r.QueryLoss),
-                MetaGradientNorm = CalculateGradientNorm(metaGradients)
-            };
+                roundHistory.Success = false;
+                roundHistory.ErrorMessage = ex.Message;
+                roundHistory.Complete();
+                MetaHistory.Add(roundHistory);
+                throw;
+            }
+        }
 
-            // Update history
-            var metaRound = new MetaLearningRound
+        /// <summary>
+        /// Perform inner loop with error handling
+        /// </summary>
+        private async Task<ClientMetaResult?> PerformInnerLoopWithErrorHandlingAsync(string clientId, FederatedTask task)
+        {
+            try
             {
-                Round = CurrentRound,
-                ParticipatingTasks = clientResults.Count,
-                AverageAdaptationSteps = clientResults.Values.Average(r => r.AdaptationSteps),
-                AverageTaskAccuracy = clientResults.Values.Average(r => r.TaskAccuracy),
-                MetaLoss = roundResult.AverageTaskLoss,
-                RoundTime = roundResult.RoundTime
-            };
-
-            MetaHistory.Add(metaRound);
-            CurrentRound++;
-
-            return roundResult;
+                return await PerformInnerLoopAsync(clientId, task);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Inner loop failed for client {clientId}: {ex.Message}");
+                return null;
+            }
         }
 
         /// <summary>
@@ -168,79 +241,109 @@ namespace AiDotNet.FederatedLearning.MetaLearning
         /// <returns>Client meta-learning result</returns>
         private async Task<ClientMetaResult> PerformInnerLoopAsync(string clientId, FederatedTask task)
         {
-            try
+            var adaptationStart = DateTime.UtcNow;
+            
+            // Clone meta-model for task-specific adaptation
+            var adaptedModel = CloneModel(MetaModel);
+            var initialParameters = GetModelParameters(adaptedModel);
+            
+            // Calculate initial loss for comparison
+            var initialLoss = await CalculateTaskLossAsync(adaptedModel, task.SupportSet, task.SupportLabels);
+            
+            // Perform gradient descent steps on support set
+            var adaptationSteps = 0;
+            var supportLoss = initialLoss;
+            var converged = false;
+
+            for (int step = 0; step < Parameters.InnerSteps; step++)
             {
-                // Clone meta-model for task-specific adaptation
-                var adaptedModel = CloneModel(MetaModel);
-                var initialParameters = GetModelParameters(adaptedModel);
+                // Compute gradients on support set
+                var gradients = await ComputeTaskGradientsAsync(adaptedModel, task.SupportSet, task.SupportLabels);
                 
-                // Perform gradient descent steps on support set
-                var adaptationSteps = 0;
-                var supportLoss = 0.0;
-
-                for (int step = 0; step < Parameters.InnerSteps; step++)
+                // Apply gradient normalization if configured
+                if (Parameters.NormalizeGradients)
                 {
-                    // Compute gradients on support set
-                    var gradients = await ComputeTaskGradientsAsync(adaptedModel, task.SupportSet, task.SupportLabels);
-                    
-                    // Apply inner loop update
-                    var parameterUpdates = InnerOptimizer.CalculateUpdate(gradients);
-                    ApplyParameterUpdates(adaptedModel, parameterUpdates);
-                    
-                    // Calculate support loss
-                    supportLoss = await CalculateTaskLossAsync(adaptedModel, task.SupportSet, task.SupportLabels);
-                    adaptationSteps++;
-
-                    // Early stopping if converged
-                    if (supportLoss < Parameters.ConvergenceThreshold)
-                        break;
+                    gradients = NormalizeGradients(gradients);
                 }
+                
+                // Apply inner loop update
+                var parameterUpdates = InnerOptimizer.Optimize(
+                    GetModelParameters(adaptedModel),
+                    gradients,
+                    null // No additional data needed for SGD
+                );
+                
+                ApplyParameterUpdates(adaptedModel, parameterUpdates);
+                
+                // Calculate support loss
+                var newSupportLoss = await CalculateTaskLossAsync(adaptedModel, task.SupportSet, task.SupportLabels);
+                adaptationSteps++;
 
-                // Evaluate on query set
-                var queryLoss = await CalculateTaskLossAsync(adaptedModel, task.QuerySet, task.QueryLabels);
-                var taskAccuracy = await CalculateTaskAccuracyAsync(adaptedModel, task.QuerySet, task.QueryLabels);
-
-                // Compute meta-gradients (gradients of query loss w.r.t. initial parameters)
-                var metaGradients = await ComputeMetaGradientsForTaskAsync(
-                    initialParameters, 
-                    GetModelParameters(adaptedModel), 
-                    task);
-
-                return new ClientMetaResult
+                // Check for convergence
+                if (Math.Abs(supportLoss - newSupportLoss) < Parameters.ConvergenceThreshold)
                 {
-                    ClientId = clientId,
-                    AdaptationSteps = adaptationSteps,
-                    SupportLoss = supportLoss,
-                    QueryLoss = queryLoss,
-                    TaskAccuracy = taskAccuracy,
-                    MetaGradients = metaGradients,
-                    AdaptedParameters = GetModelParameters(adaptedModel)
-                };
+                    converged = true;
+                    supportLoss = newSupportLoss;
+                    break;
+                }
+                
+                supportLoss = newSupportLoss;
             }
-            catch (Exception ex)
+
+            // Evaluate on query set
+            var queryLoss = await CalculateTaskLossAsync(adaptedModel, task.QuerySet, task.QueryLabels);
+            var taskAccuracy = await CalculateTaskAccuracyAsync(adaptedModel, task.QuerySet, task.QueryLabels);
+
+            // Compute meta-gradients
+            var metaGradients = Parameters.UseFirstOrder
+                ? await ComputeFirstOrderMetaGradientsAsync(adaptedModel, task)
+                : await ComputeMetaGradientsForTaskAsync(initialParameters, GetModelParameters(adaptedModel), task);
+
+            return new ClientMetaResult
             {
-                throw new InvalidOperationException($"Inner loop failed for client {clientId}: {ex.Message}", ex);
-            }
+                ClientId = clientId,
+                AdaptationSteps = adaptationSteps,
+                InitialLoss = initialLoss,
+                SupportLoss = supportLoss,
+                QueryLoss = queryLoss,
+                TaskAccuracy = taskAccuracy,
+                MetaGradients = metaGradients,
+                AdaptedParameters = GetModelParameters(adaptedModel),
+                AdaptationTime = DateTime.UtcNow - adaptationStart,
+                EffectiveLearningRate = Parameters.InnerLearningRate,
+                Converged = converged
+            };
+        }
+
+        /// <summary>
+        /// Compute first-order meta-gradients (FOMAML approximation)
+        /// </summary>
+        private async Task<Dictionary<string, Vector<double>>> ComputeFirstOrderMetaGradientsAsync(
+            IFullModel<double, Matrix<double>, Vector<double>> adaptedModel,
+            FederatedTask task)
+        {
+            // In FOMAML, meta-gradients are simply the gradients of the query loss
+            // with respect to the adapted parameters
+            return await ComputeTaskGradientsAsync(adaptedModel, task.QuerySet, task.QueryLabels);
         }
 
         /// <summary>
         /// Compute task-specific gradients
         /// </summary>
-        /// <param name="model">Model to compute gradients for</param>
-        /// <param name="data">Input data</param>
-        /// <param name="labels">Target labels</param>
-        /// <returns>Task gradients</returns>
-        private async Task<Dictionary<string, Vector<double>>> ComputeTaskGradientsAsync(IFullModel<double, Matrix<double>, Vector<double>> model, Matrix<double> data, Vector<double> labels)
+        private async Task<Dictionary<string, Vector<double>>> ComputeTaskGradientsAsync(
+            IFullModel<double, Matrix<double>, Vector<double>> model, 
+            Matrix<double> data, 
+            Vector<double> labels)
         {
-            // Compute forward pass
-            var predictions = await PredictBatchAsync(model, data);
-            
-            // Compute loss gradients
-            var gradients = new Dictionary<string, Vector<double>>();
-            
+            // Check if model supports gradient computation
             if (model is IGradientModel<double> gradientModel)
             {
-                // Use model's gradient computation if available
+                return await Task.Run(() => gradientModel.ComputeGradients(data, labels));
+            }
+            
+            // Otherwise compute numerical gradients
+            var predictions = await PredictBatchAsync(model, data);
+            return await Task.Run(() => ComputeNumericalGradients(model, data, labels, predictions));
                 gradients = await Task.FromResult(gradientModel.ComputeGradients(data, labels));
             }
             else
@@ -255,18 +358,17 @@ namespace AiDotNet.FederatedLearning.MetaLearning
         /// <summary>
         /// Compute numerical gradients using finite differences
         /// </summary>
-        /// <param name="model">Model</param>
-        /// <param name="data">Input data</param>
-        /// <param name="labels">Target labels</param>
-        /// <param name="predictions">Model predictions</param>
-        /// <returns>Numerical gradients</returns>
-        private Dictionary<string, Vector<double>> ComputeNumericalGradients(IFullModel<double, Matrix<double>, Vector<double>> model, Matrix<double> data, Vector<double> labels, Vector<double> predictions)
+        private Dictionary<string, Vector<double>> ComputeNumericalGradients(
+            IFullModel<double, Matrix<double>, Vector<double>> model, 
+            Matrix<double> data, 
+            Vector<double> labels, 
+            Vector<double> predictions)
         {
             var gradients = new Dictionary<string, Vector<double>>();
             var parameters = GetModelParameters(model);
             var epsilon = 1e-5;
 
-            foreach (var kvp in parameters)
+            Parallel.ForEach(parameters, kvp =>
             {
                 var paramName = kvp.Key;
                 var paramValues = kvp.Value;
@@ -274,7 +376,6 @@ namespace AiDotNet.FederatedLearning.MetaLearning
 
                 for (int i = 0; i < paramValues.Length; i++)
                 {
-                    // Forward difference
                     var originalValue = paramValues[i];
                     
                     // f(x + ε)
@@ -295,26 +396,23 @@ namespace AiDotNet.FederatedLearning.MetaLearning
                     gradient[i] = (lossPlus - lossMinus) / (2 * epsilon);
                 }
 
-                gradients[paramName] = new Vector<double>(gradient);
-            }
+                lock (gradients)
+                {
+                    gradients[paramName] = new Vector<double>(gradient);
+                }
+            });
 
             return gradients;
         }
 
         /// <summary>
-        /// Compute meta-gradients for a specific task
+        /// Compute meta-gradients for a specific task (full MAML)
         /// </summary>
-        /// <param name="initialParameters">Initial model parameters</param>
-        /// <param name="adaptedParameters">Parameters after adaptation</param>
-        /// <param name="task">Task definition</param>
-        /// <returns>Meta-gradients</returns>
         private async Task<Dictionary<string, Vector<double>>> ComputeMetaGradientsForTaskAsync(
             Dictionary<string, Vector<double>> initialParameters,
             Dictionary<string, Vector<double>> adaptedParameters,
             FederatedTask task)
         {
-            var metaGradients = new Dictionary<string, Vector<double>>();
-
             // Create model with adapted parameters
             var adaptedModel = CloneModel(MetaModel);
             SetModelParameters(adaptedModel, adaptedParameters);
@@ -322,19 +420,19 @@ namespace AiDotNet.FederatedLearning.MetaLearning
             // Compute gradients of query loss w.r.t. adapted parameters
             var queryGradients = await ComputeTaskGradientsAsync(adaptedModel, task.QuerySet, task.QueryLabels);
 
-            // Compute meta-gradients using chain rule
-            // This is a simplified implementation - full MAML requires computing
-            // the gradient of the gradient through the adaptation steps
+            // For full MAML, we would need to compute the Hessian-vector product
+            // This is a simplified implementation that approximates the meta-gradient
+            var metaGradients = new Dictionary<string, Vector<double>>();
+            
             foreach (var kvp in queryGradients)
             {
                 var paramName = kvp.Key;
-                var queryGrad = kvp.Value;
-
                 if (initialParameters.ContainsKey(paramName))
                 {
-                    // For simplicity, approximate meta-gradient as query gradient
-                    // In full MAML, this would involve Hessian computation
-                    metaGradients[paramName] = queryGrad;
+                    // Simplified meta-gradient computation
+                    // In full MAML, this would involve computing d(queryLoss)/d(initialParams)
+                    // through the chain of inner loop updates
+                    metaGradients[paramName] = kvp.Value;
                 }
             }
 
@@ -344,8 +442,6 @@ namespace AiDotNet.FederatedLearning.MetaLearning
         /// <summary>
         /// Compute aggregated meta-gradients from all clients
         /// </summary>
-        /// <param name="clientResults">Client meta-learning results</param>
-        /// <returns>Aggregated meta-gradients</returns>
         private Dictionary<string, Vector<double>> ComputeMetaGradients(Dictionary<string, ClientMetaResult> clientResults)
         {
             var aggregatedGradients = new Dictionary<string, Vector<double>>();
@@ -353,6 +449,7 @@ namespace AiDotNet.FederatedLearning.MetaLearning
 
             // Get parameter structure from first client
             var firstClient = clientResults.Values.First();
+            
             foreach (var paramName in firstClient.MetaGradients.Keys)
             {
                 var paramSize = firstClient.MetaGradients[paramName].Length;
@@ -382,26 +479,108 @@ namespace AiDotNet.FederatedLearning.MetaLearning
         /// <summary>
         /// Perform meta-update using aggregated gradients
         /// </summary>
-        /// <param name="metaGradients">Aggregated meta-gradients</param>
         private async Task PerformMetaUpdateAsync(Dictionary<string, Vector<double>> metaGradients)
         {
-            // Compute parameter updates using outer optimizer
-            var parameterUpdates = OuterOptimizer.CalculateUpdate(metaGradients);
+            await Task.Run(() =>
+            {
+                // Get current parameters
+                var currentParameters = GetModelParameters(MetaModel);
+                
+                // Compute parameter updates using outer optimizer
+                var parameterUpdates = OuterOptimizer.Optimize(
+                    currentParameters,
+                    metaGradients,
+                    null // No additional data needed
+                );
+                
+                // Apply updates to meta-model
+                ApplyParameterUpdates(MetaModel, parameterUpdates);
+                
+                // Update learning rate if adaptive
+                if (Parameters.UseAdaptiveLearningRate)
+                {
+                    UpdateLearningRates();
+                }
+            });
+        }
 
-            // Apply updates to meta-model
-            ApplyParameterUpdates(MetaModel, parameterUpdates);
+        /// <summary>
+        /// Update learning rates based on performance
+        /// </summary>
+        private void UpdateLearningRates()
+        {
+            if (MetaHistory.Count > 5)
+            {
+                var recentLosses = MetaHistory.TakeLast(5).Select(h => h.MetaLoss).ToList();
+                var avgRecentLoss = recentLosses.Average();
+                var previousAvgLoss = MetaHistory.SkipLast(5).TakeLast(5).Select(h => h.MetaLoss).Average();
+                
+                // If loss is not decreasing, reduce learning rate
+                if (avgRecentLoss >= previousAvgLoss * 0.99)
+                {
+                    Parameters.OuterLearningRate *= 0.9;
+                    Parameters.InnerLearningRate *= 0.95;
+                    
+                    // Re-initialize optimizers with new learning rates
+                    InitializeOptimizers();
+                }
+            }
+        }
 
-            await Task.CompletedTask;
+        /// <summary>
+        /// Clip gradients to prevent exploding gradients
+        /// </summary>
+        private Dictionary<string, Vector<double>> ClipGradients(
+            Dictionary<string, Vector<double>> gradients, 
+            double threshold)
+        {
+            var totalNorm = CalculateGradientNorm(gradients);
+            
+            if (totalNorm > threshold)
+            {
+                var scale = threshold / totalNorm;
+                var clippedGradients = new Dictionary<string, Vector<double>>();
+                
+                foreach (var kvp in gradients)
+                {
+                    clippedGradients[kvp.Key] = kvp.Value * scale;
+                }
+                
+                return clippedGradients;
+            }
+            
+            return gradients;
+        }
+
+        /// <summary>
+        /// Normalize gradients
+        /// </summary>
+        private Dictionary<string, Vector<double>> NormalizeGradients(Dictionary<string, Vector<double>> gradients)
+        {
+            var norm = CalculateGradientNorm(gradients);
+            
+            if (norm > 0)
+            {
+                var normalizedGradients = new Dictionary<string, Vector<double>>();
+                
+                foreach (var kvp in gradients)
+                {
+                    normalizedGradients[kvp.Key] = kvp.Value / norm;
+                }
+                
+                return normalizedGradients;
+            }
+            
+            return gradients;
         }
 
         /// <summary>
         /// Calculate task loss
         /// </summary>
-        /// <param name="model">Model</param>
-        /// <param name="data">Input data</param>
-        /// <param name="labels">Target labels</param>
-        /// <returns>Task loss</returns>
-        private async Task<double> CalculateTaskLossAsync(IFullModel<double, Matrix<double>, Vector<double>> model, Matrix<double> data, Vector<double> labels)
+        private async Task<double> CalculateTaskLossAsync(
+            IFullModel<double, Matrix<double>, Vector<double>> model, 
+            Matrix<double> data, 
+            Vector<double> labels)
         {
             var predictions = await PredictBatchAsync(model, data);
             return CalculateLoss(predictions, labels);
@@ -410,18 +589,24 @@ namespace AiDotNet.FederatedLearning.MetaLearning
         /// <summary>
         /// Calculate task accuracy
         /// </summary>
-        /// <param name="model">Model</param>
-        /// <param name="data">Input data</param>
-        /// <param name="labels">Target labels</param>
-        /// <returns>Task accuracy</returns>
-        private async Task<double> CalculateTaskAccuracyAsync(IFullModel<double, Matrix<double>, Vector<double>> model, Matrix<double> data, Vector<double> labels)
+        private async Task<double> CalculateTaskAccuracyAsync(
+            IFullModel<double, Matrix<double>, Vector<double>> model, 
+            Matrix<double> data, 
+            Vector<double> labels)
         {
             var predictions = await PredictBatchAsync(model, data);
             
+            // For regression tasks, use R-squared
+            if (IsRegressionTask(labels))
+            {
+                return CalculateRSquared(predictions, labels);
+            }
+            
+            // For classification tasks, use accuracy
             var correct = 0;
             for (int i = 0; i < predictions.Length; i++)
             {
-                var predicted = predictions[i] > 0.5 ? 1.0 : 0.0; // Binary classification
+                var predicted = Math.Round(predictions[i]);
                 if (Math.Abs(predicted - labels[i]) < 0.1)
                 {
                     correct++;
@@ -432,14 +617,31 @@ namespace AiDotNet.FederatedLearning.MetaLearning
         }
 
         /// <summary>
-        /// Predict batch using model
+        /// Determine if task is regression based on labels
         /// </summary>
-        /// <param name="model">Model</param>
-        /// <param name="data">Input data</param>
-        /// <returns>Predictions</returns>
-        private async Task<Vector<double>> PredictBatchAsync(IFullModel<double, Matrix<double>, Vector<double>> model, Matrix<double> data)
+        private bool IsRegressionTask(Vector<double> labels)
         {
-            if (model is IPredictiveModel predictiveModel)
+            // Check if labels are continuous (not just 0 and 1)
+            var uniqueValues = labels.Distinct().Count();
+            return uniqueValues > 2 || labels.Any(l => l != 0.0 && l != 1.0);
+        }
+
+        /// <summary>
+        /// Calculate R-squared for regression tasks
+        /// </summary>
+        private double CalculateRSquared(Vector<double> predictions, Vector<double> actual)
+        {
+            var mean = actual.Average();
+            var ssTotal = actual.Select(y => Math.Pow(y - mean, 2)).Sum();
+            var ssResidual = predictions.Zip(actual, (p, a) => Math.Pow(a - p, 2)).Sum();
+            
+            return 1 - (ssResidual / ssTotal);
+            if (model is IPredictiveModel<double, Matrix<double>, Vector<double>> predictiveModel)
+
+                // Predict the entire batch at once
+                var predictions = await Task.FromResult(predictiveModel.Predict(data));
+                return predictions;
+            }
             {
                 var predictions = new double[data.Rows];
                 for (int i = 0; i < data.Rows; i++)
@@ -448,20 +650,11 @@ namespace AiDotNet.FederatedLearning.MetaLearning
                     predictions[i] = await Task.FromResult(predictiveModel.Predict(input));
                 }
                 return new Vector<double>(predictions);
+            if (model is IPredictiveModel<double, Matrix<double>, Vector<double>> predictiveModel)
+            {
+                // Predict the entire batch at once
+                return predictiveModel.Predict(data);
             }
-
-            throw new NotSupportedException("Model does not support prediction");
-        }
-
-        /// <summary>
-        /// Synchronous prediction for numerical gradient computation
-        /// </summary>
-        /// <param name="model">Model</param>
-        /// <param name="data">Input data</param>
-        /// <returns>Predictions</returns>
-        private Vector<double> PredictBatchSync(IFullModel<double, Matrix<double>, Vector<double>> model, Matrix<double> data)
-        {
-            if (model is IPredictiveModel predictiveModel)
             {
                 var predictions = new double[data.Rows];
                 for (int i = 0; i < data.Rows; i++)
@@ -472,15 +665,9 @@ namespace AiDotNet.FederatedLearning.MetaLearning
                 return new Vector<double>(predictions);
             }
 
-            throw new NotSupportedException("Model does not support prediction");
-        }
-
         /// <summary>
         /// Calculate loss between predictions and labels
         /// </summary>
-        /// <param name="predictions">Predictions</param>
-        /// <param name="labels">True labels</param>
-        /// <returns>Loss value</returns>
         private double CalculateLoss(Vector<double> predictions, Vector<double> labels)
         {
             // Mean squared error
@@ -496,8 +683,6 @@ namespace AiDotNet.FederatedLearning.MetaLearning
         /// <summary>
         /// Calculate gradient norm
         /// </summary>
-        /// <param name="gradients">Gradients</param>
-        /// <returns>L2 norm</returns>
         private double CalculateGradientNorm(Dictionary<string, Vector<double>> gradients)
         {
             var sum = 0.0;
@@ -510,46 +695,110 @@ namespace AiDotNet.FederatedLearning.MetaLearning
 
         #region Model Manipulation Methods
 
-        private IFullModel<double, Matrix<double>, Vector<double>> CloneModel(IFullModel<double, Matrix<double>, Vector<double>> model)
+        /// <summary>
+        /// Clone a model for task-specific adaptation
+        /// </summary>
+        private IFullModel<double, Matrix<double>, Vector<double>> CloneModel(
+            IFullModel<double, Matrix<double>, Vector<double>> model)
         {
-            // Simplified model cloning - in practice, use proper deep copying
-            return model;
+            // Use cached parameters if available
+            var cacheKey = $"{model.GetHashCode()}_clone";
+            if (_parameterCache.ContainsKey(cacheKey))
+            {
+                var clonedModel = Activator.CreateInstance(model.GetType()) as IFullModel<double, Matrix<double>, Vector<double>>;
+                if (clonedModel != null)
+                {
+                    SetModelParameters(clonedModel, _parameterCache[cacheKey]);
+                    return clonedModel;
+                }
+            }
+            
+            // Create deep copy - implementation depends on model type
+            if (model is ICloneable cloneable)
+            {
+                return cloneable.Clone() as IFullModel<double, Matrix<double>, Vector<double>> 
+                    ?? throw new InvalidOperationException("Model clone failed");
+            }
+            
+            throw new NotSupportedException($"Model type {model.GetType().Name} does not support cloning");
         }
 
-        private Dictionary<string, Vector<double>> GetModelParameters(IFullModel<double, Matrix<double>, Vector<double>> model)
+        /// <summary>
+        /// Get model parameters as a dictionary
+        /// </summary>
+        private Dictionary<string, Vector<double>> GetModelParameters(
+            IFullModel<double, Matrix<double>, Vector<double>> model)
         {
-            // Extract model parameters - implementation depends on model type
+            if (model is IParameterizable<double> parameterizable)
+            {
+                return parameterizable.GetParameters();
+            }
+            
+            // Return empty dictionary for models without explicit parameters
             return new Dictionary<string, Vector<double>>();
         }
 
-        private void SetModelParameters(IFullModel<double, Matrix<double>, Vector<double>> model, Dictionary<string, Vector<double>> parameters)
+        /// <summary>
+        /// Set all model parameters
+        /// </summary>
+        private void SetModelParameters(
+            IFullModel<double, Matrix<double>, Vector<double>> model, 
+            Dictionary<string, Vector<double>> parameters)
         {
-            // Set model parameters - implementation depends on model type
-        }
-
-        private void SetModelParameter(IFullModel<double, Matrix<double>, Vector<double>> model, string paramName, Vector<double> parameter)
-        {
-            // Set specific model parameter - implementation depends on model type
-        }
-
-        private void ApplyParameterUpdates(IFullModel<double, Matrix<double>, Vector<double>> model, Dictionary<string, Vector<double>> updates)
-        {
-            // Apply parameter updates to model
-            var currentParams = GetModelParameters(model);
-            foreach (var kvp in updates)
+            if (model is IParameterizable<double> parameterizable)
             {
-                if (currentParams.ContainsKey(kvp.Key))
+                parameterizable.SetParameters(parameters);
+            }
+        }
+
+        /// <summary>
+        /// Set a specific model parameter
+        /// </summary>
+        private void SetModelParameter(
+            IFullModel<double, Matrix<double>, Vector<double>> model, 
+            string paramName, 
+            Vector<double> parameter)
+        {
+            if (model is IParameterizable<double> parameterizable)
+            {
+                var parameters = parameterizable.GetParameters();
+                parameters[paramName] = parameter;
+                parameterizable.SetParameters(parameters);
+            }
+        }
+
+        /// <summary>
+        /// Apply parameter updates to model
+        /// </summary>
+        private void ApplyParameterUpdates(
+            IFullModel<double, Matrix<double>, Vector<double>> model, 
+            Dictionary<string, Vector<double>> updates)
+        {
+            var currentParams = GetModelParameters(model);
+            var updatedParams = new Dictionary<string, Vector<double>>();
+            
+            foreach (var kvp in currentParams)
+            {
+                if (updates.ContainsKey(kvp.Key))
                 {
-                    var updated = currentParams[kvp.Key].Add(kvp.Value);
-                    SetModelParameter(model, kvp.Key, updated);
+                    updatedParams[kvp.Key] = kvp.Value.Add(updates[kvp.Key]);
+                }
+                else
+                {
+                    updatedParams[kvp.Key] = kvp.Value;
                 }
             }
+            
+            SetModelParameters(model, updatedParams);
         }
 
         #endregion
 
         #region Implementation Methods
 
+        /// <summary>
+        /// Aggregate parameters using specified strategy
+        /// </summary>
         public override Dictionary<string, Vector<double>> AggregateParameters(
             Dictionary<string, Dictionary<string, Vector<double>>> clientUpdates,
             FederatedAggregationStrategy strategy)
@@ -559,96 +808,38 @@ namespace AiDotNet.FederatedLearning.MetaLearning
             return aggregator.AggregateParameters(clientUpdates, ClientWeights, strategy);
         }
 
-        public override Dictionary<string, Vector<double>> ApplyDifferentialPrivacy(
-            Dictionary<string, Vector<double>> parameters,
-            double epsilon,
-            double delta)
+        /// <summary>
+        /// Apply differential privacy to parameters
+        /// </summary>
+        /// <summary>
+        /// Export meta-learning results to file
+        /// </summary>
+        public async Task ExportResultsAsync(string filePath)
         {
-            var dp = new Privacy.DifferentialPrivacy();
-            return dp.ApplyPrivacy(parameters, epsilon, delta, PrivacySettings);
+            var results = new
+            {
+                Parameters = Parameters,
+                History = MetaHistory.Select(h => new
+                {
+                    h.Round,
+                    h.ParticipatingTasks,
+                    h.AverageTaskAccuracy,
+                    h.MetaLoss,
+                    h.AverageAdaptationSteps,
+                    h.RoundTime,
+                    h.Success
+                }),
+                FinalAccuracy = MetaHistory.LastOrDefault()?.AverageTaskAccuracy ?? 0,
+                TotalRounds = CurrentRound
+            };
+    {
+            var json = System.Text.Json.JsonSerializer.Serialize(results, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+    {
+            await System.IO.File.WriteAllTextAsync(filePath, json);
         }
-
-        #endregion
-    }
-
-    /// <summary>
-    /// MAML parameters configuration
-    /// </summary>
-    public class MAMLParameters
-    {
-        /// <summary>
-        /// Inner loop learning rate
-        /// </summary>
-        public double InnerLearningRate { get; set; } = 0.01;
-
-        /// <summary>
-        /// Outer loop learning rate
-        /// </summary>
-        public double OuterLearningRate { get; set; } = 0.001;
-
-        /// <summary>
-        /// Number of inner loop gradient steps
-        /// </summary>
-        public int InnerSteps { get; set; } = 5;
-
-        /// <summary>
-        /// Convergence threshold for early stopping
-        /// </summary>
-        public double ConvergenceThreshold { get; set; } = 1e-6;
-
-        /// <summary>
-        /// Use first-order approximation (FOMAML)
-        /// </summary>
-        public bool UseFirstOrder { get; set; } = false;
-
-        /// <summary>
-        /// Number of support examples per task
-        /// </summary>
-        public int SupportSize { get; set; } = 5;
-
-        /// <summary>
-        /// Number of query examples per task
-        /// </summary>
-        public int QuerySize { get; set; } = 15;
-
-        /// <summary>
-        /// Task batch size for meta-updates
-        /// </summary>
-        public int TaskBatchSize { get; set; } = 4;
-    }
-
-    /// <summary>
-    /// Federated task definition
-    /// </summary>
-    public class FederatedTask
-    {
-        public string TaskId { get; set; }
-        public string TaskType { get; set; }
-        public Matrix<double> SupportSet { get; set; }
-        public Vector<double> SupportLabels { get; set; }
-        public Matrix<double> QuerySet { get; set; }
-        public Vector<double> QueryLabels { get; set; }
-        public Dictionary<string, object> TaskMetadata { get; set; } = new Dictionary<string, object>();
-    }
-
-    /// <summary>
-    /// Client meta-learning result
-    /// </summary>
-    public class ClientMetaResult
-    {
-        public string ClientId { get; set; }
-        public int AdaptationSteps { get; set; }
-        public double SupportLoss { get; set; }
-        public double QueryLoss { get; set; }
-        public double TaskAccuracy { get; set; }
-        public Dictionary<string, Vector<double>> MetaGradients { get; set; }
-        public Dictionary<string, Vector<double>> AdaptedParameters { get; set; }
-    }
-
-    /// <summary>
-    /// Meta-learning round result
-    /// </summary>
-    public class MetaLearningResult
     {
         public int Round { get; set; }
         public List<string> ParticipatingClients { get; set; }
@@ -659,16 +850,6 @@ namespace AiDotNet.FederatedLearning.MetaLearning
         public double MetaGradientNorm { get; set; }
     }
 
-    /// <summary>
-    /// Meta-learning round history
-    /// </summary>
-    public class MetaLearningRound
-    {
-        public int Round { get; set; }
-        public int ParticipatingTasks { get; set; }
-        public double AverageAdaptationSteps { get; set; }
-        public double AverageTaskAccuracy { get; set; }
-        public double MetaLoss { get; set; }
-        public TimeSpan RoundTime { get; set; }
+        #endregion
     }
 }

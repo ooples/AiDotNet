@@ -39,7 +39,7 @@ public class ContrastiveLossFitnessCalculator<T, TInput, TOutput> : FitnessCalcu
     /// A typical default value is 1.0, but you can adjust it based on your specific problem.
     /// </para>
     /// </remarks>
-    private readonly T _margin;
+    private readonly T _margin = default!;
 
     /// <summary>
     /// Initializes a new instance of the ContrastiveLossFitnessCalculator class.

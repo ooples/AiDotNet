@@ -24,6 +24,7 @@ namespace AiDotNet.ReinforcementLearning
         public static PredictionModelBuilder<T> UseREINFORCE<T>(
             this PredictionModelBuilder<T> builder,
             PolicyGradientOptions options)
+            where T : struct, IComparable<T>
         {
             // Create the model and set it in the builder
             var model = new REINFORCEModel<T>(options);
@@ -47,6 +48,7 @@ namespace AiDotNet.ReinforcementLearning
             int actionSize,
             bool isContinuous = false,
             bool useBaseline = true)
+            where T : struct, IComparable<T>
         {
             // Create options with default values
             var options = new PolicyGradientOptions
@@ -70,6 +72,7 @@ namespace AiDotNet.ReinforcementLearning
         public static PredictionModelBuilder<T> UseActorCritic<T>(
             this PredictionModelBuilder<T> builder,
             ActorCriticOptions<T> options)
+            where T : struct, IComparable<T>
         {
             // Create the model and set it in the builder
             var model = new ActorCriticModel<T>(options);
@@ -93,6 +96,7 @@ namespace AiDotNet.ReinforcementLearning
             int actionSize,
             bool isContinuous = false,
             bool useGAE = true)
+            where T : struct, IComparable<T>
         {
             // Create options with default values
             var options = new ActorCriticOptions<T>
@@ -116,6 +120,7 @@ namespace AiDotNet.ReinforcementLearning
         public static PredictionModelBuilder<T> UsePPO<T>(
             this PredictionModelBuilder<T> builder,
             PPOOptions<T> options)
+            where T : struct, IComparable<T>
         {
             // Create the model and set it in the builder
             var model = new PPOModel<T>(options);
@@ -137,6 +142,7 @@ namespace AiDotNet.ReinforcementLearning
             int stateSize,
             int actionSize,
             bool isContinuous = false)
+            where T : struct, IComparable<T>
         {
             // Create options with default values
             var options = new PPOOptions<T>
@@ -159,6 +165,7 @@ namespace AiDotNet.ReinforcementLearning
         public static PredictionModelBuilder<T> UseDDPG<T>(
             this PredictionModelBuilder<T> builder,
             DDPGOptions options)
+            where T : struct, IComparable<T>
         {
             // Create the model and set it in the builder
             var model = new DDPGModel<T>(options);
@@ -180,6 +187,7 @@ namespace AiDotNet.ReinforcementLearning
             int stateSize,
             int actionSize,
             bool usePrioritizedReplay = true)
+            where T : struct, IComparable<T>
         {
             // Create options with default values
             var options = new DDPGOptions
@@ -204,6 +212,7 @@ namespace AiDotNet.ReinforcementLearning
         public static PredictionModelBuilder<T> UseTD3<T>(
             this PredictionModelBuilder<T> builder,
             TD3Options options)
+            where T : struct, IComparable<T>
         {
             // Create the model and set it in the builder
             var model = new TD3Model<T>(options);
@@ -225,6 +234,7 @@ namespace AiDotNet.ReinforcementLearning
             int stateSize,
             int actionSize,
             int policyUpdateFrequency = 2)
+            where T : struct, IComparable<T>
         {
             // Create options with default values
             var options = new TD3Options
@@ -249,6 +259,7 @@ namespace AiDotNet.ReinforcementLearning
         public static PredictionModelBuilder<T> UseSAC<T>(
             this PredictionModelBuilder<T> builder,
             SACOptions options)
+            where T : struct, IComparable<T>
         {
             // Create the model and set it in the builder
             var model = new SACModel<T>(options);
@@ -270,6 +281,7 @@ namespace AiDotNet.ReinforcementLearning
             int stateSize,
             int actionSize,
             bool autoTuneEntropyCoefficient = true)
+            where T : struct, IComparable<T>
         {
             // Create options with default values
             var options = new SACOptions
@@ -294,6 +306,7 @@ namespace AiDotNet.ReinforcementLearning
         public static PredictionModelBuilder<T> UseDQN<T>(
             this PredictionModelBuilder<T> builder,
             DQNOptions options)
+            where T : struct, IComparable<T>
         {
             // Create the model and set it in the builder
             var model = new DQNModel<T>(options);
@@ -317,6 +330,7 @@ namespace AiDotNet.ReinforcementLearning
             int actionSize,
             bool useDoubleDQN = true,
             bool useDuelingDQN = true)
+            where T : struct, IComparable<T>
         {
             // Create options with default values
             var options = new DQNOptions
@@ -353,6 +367,7 @@ namespace AiDotNet.ReinforcementLearning
         public static PredictionModelBuilder<T> UseRainbowDQN<T>(
             this PredictionModelBuilder<T> builder,
             RainbowDQNOptions options)
+            where T : struct, IComparable<T>
         {
             // Create the model and set it in the builder
             var model = new RainbowDQNModel<T>(options);
@@ -376,6 +391,7 @@ namespace AiDotNet.ReinforcementLearning
             int actionSize,
             bool useDistributionalRL = true,
             bool useNoisyNetworks = true)
+            where T : struct, IComparable<T>
         {
             // Create options with default values
             var options = new RainbowDQNOptions
@@ -399,6 +415,7 @@ namespace AiDotNet.ReinforcementLearning
         /// <returns>The prediction model builder for method chaining.</returns>
         public static PredictionModelBuilder<T> WithReinforcementLearning<T>(
             this PredictionModelBuilder<T> builder)
+            where T : struct, IComparable<T>
         {
             // This method is a placeholder to enable discovery of the extension methods
             // in IDEs through method chaining. It doesn't change the builder.
@@ -422,6 +439,7 @@ namespace AiDotNet.ReinforcementLearning
             T reward,
             Tensor<T> nextState,
             bool done)
+            where T : struct, IComparable<T>
         {
             // If the model is a ReinforcementLearningModelBase, use its Update method
             if (model is ReinforcementLearningModelBase<T> rlModel)
@@ -470,6 +488,7 @@ namespace AiDotNet.ReinforcementLearning
             this IFullModel<T, Tensor<T>, Tensor<T>> model,
             Tensor<T> state,
             bool isTraining = true)
+            where T : struct, IComparable<T>
         {
             // If the model is a ReinforcementLearningModelBase, use its SelectAction method
             if (model is ReinforcementLearningModelBase<T> rlModel)

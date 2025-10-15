@@ -21,6 +21,11 @@ public enum PipelinePosition
     Start,
 
     /// <summary>
+    /// Alias for Start - component runs at the very beginning of the pipeline.
+    /// </summary>
+    Beginning = Start,
+
+    /// <summary>
     /// Component runs during data preprocessing phase.
     /// </summary>
     /// <remarks>

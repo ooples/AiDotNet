@@ -52,7 +52,7 @@ public class TripletLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// - Ensuring better separation between classes (if margin is larger)
     /// </para>
     /// </remarks>
-    private readonly T _margin;
+    private readonly T _margin = default!;
 
     /// <summary>
     /// Initializes a new instance of the TripletLossFitnessCalculator class.

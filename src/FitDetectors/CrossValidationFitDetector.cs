@@ -26,7 +26,7 @@ public class CrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// <b>For Beginners:</b> These settings control how the detector interprets performance metrics 
     /// across different datasets, including thresholds for determining different types of model fit.
     /// </remarks>
-    private readonly CrossValidationFitDetectorOptions _options;
+    private readonly CrossValidationFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Threshold for determining if a model is overfitting.
@@ -35,7 +35,7 @@ public class CrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// <b>For Beginners:</b> This is the maximum acceptable difference between training and validation 
     /// performance before a model is considered to be overfitting.
     /// </remarks>
-    private readonly T _overfitThreshold;
+    private readonly T _overfitThreshold = default!;
     
     /// <summary>
     /// Threshold for determining if a model is underfitting.
@@ -44,7 +44,7 @@ public class CrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// <b>For Beginners:</b> This is the minimum acceptable performance across all datasets before 
     /// a model is considered to be underfitting.
     /// </remarks>
-    private readonly T _underfitThreshold;
+    private readonly T _underfitThreshold = default!;
     
     /// <summary>
     /// Threshold for determining if a model has a good fit.
@@ -53,7 +53,7 @@ public class CrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// <b>For Beginners:</b> This is the minimum acceptable performance across all datasets for 
     /// a model to be considered as having a good fit.
     /// </remarks>
-    private readonly T _goodFitThreshold;
+    private readonly T _goodFitThreshold = default!;
 
     /// <summary>
     /// Initializes a new instance of the CrossValidationFitDetector class.

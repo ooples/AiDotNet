@@ -39,17 +39,17 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 public class DecisionTransformerAgent<TState, T> : AgentBase<TState, Vector<T>, T>
     where TState : Tensor<T>
 {
-    private readonly DecisionTransformerOptions<T> _options;
+    private readonly DecisionTransformerOptions<T> _options = default!;
     
     // Neural network components
-    private TransformerEncoderLayer<T> _transformer;
-    private FullyConnectedLayer<T> _stateEncoder;
-    private FullyConnectedLayer<T> _actionEncoder;
-    private FullyConnectedLayer<T> _returnEncoder;
-    private FullyConnectedLayer<T> _actionDecoder;
+    private TransformerEncoderLayer<T> _transformer = default!;
+    private FullyConnectedLayer<T> _stateEncoder = default!;
+    private FullyConnectedLayer<T> _actionEncoder = default!;
+    private FullyConnectedLayer<T> _returnEncoder = default!;
+    private FullyConnectedLayer<T> _actionDecoder = default!;
     
     // Memory for storing sequences
-    private ISequentialReplayBuffer<TState, Vector<T>, T> _replayBuffer;
+    private ISequentialReplayBuffer<TState, Vector<T>, T> _replayBuffer = default!;
     
     // Optimizer for training
     private readonly IGradientBasedOptimizer<T, Vector<T>, T>? _optimizer;
@@ -58,10 +58,10 @@ public class DecisionTransformerAgent<TState, T> : AgentBase<TState, Vector<T>, 
     private int _step;
     
     // Sequence tracking for context window
-    private List<TState> _stateHistory;
-    private List<Vector<T>> _actionHistory;
-    private List<T> _returnHistory;
-    private List<T> _targetReturnHistory;
+    private List<TState> _stateHistory = default!;
+    private List<Vector<T>> _actionHistory = default!;
+    private List<T> _returnHistory = default!;
+    private List<T> _targetReturnHistory = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="DecisionTransformerAgent{TState, T}"/> class.

@@ -41,7 +41,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionModelBase<T>
     /// <summary>
     /// Options for configuring the AdaBoost.R2 regression algorithm.
     /// </summary>
-    private AdaBoostR2RegressionOptions _options;
+    private AdaBoostR2RegressionOptions _options = default!;
     
     /// <summary>
     /// The ensemble of decision trees and their corresponding weights.
@@ -392,7 +392,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionModelBase<T>
     /// <summary>
     /// Gets metadata about the trained model.
     /// </summary>
-    /// <returns>A <see cref="ModelMetaData{T}"/> object containing information about the model.</returns>
+    /// <returns>A <see cref="ModelMetadata{T}"/> object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns metadata about the trained AdaBoost.R2 regression model, including
@@ -412,9 +412,9 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionModelBase<T>
     /// their characteristics without having to retrain or examine the internal structure.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.AdaBoostR2,
             AdditionalInfo = new Dictionary<string, object>

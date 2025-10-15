@@ -20,22 +20,22 @@ public class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The z-values (heights) at each (x,y) grid point.
     /// </summary>
-    private readonly Matrix<T> _z;
+    private readonly Matrix<T> _z = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new cubic convolution interpolation from the given 2D data points.

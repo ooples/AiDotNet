@@ -47,7 +47,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// It's like the recipe that tells the model how to analyze your data.
     /// </para>
     /// </remarks>
-    private readonly InterventionAnalysisOptions<T, Matrix<T>, Vector<T>> _iaOptions;
+    private readonly InterventionAnalysisOptions<T, Matrix<T>, Vector<T>> _iaOptions = default!;
 
     /// <summary>
     /// The autoregressive (AR) parameters of the model.
@@ -69,7 +69,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// and uses each past time period.
     /// </para>
     /// </remarks>
-    private Vector<T> _arParameters;
+    private Vector<T> _arParameters = default!;
 
     /// <summary>
     /// The moving average (MA) parameters of the model.
@@ -91,7 +91,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// adjusts based on each past prediction error.
     /// </para>
     /// </remarks>
-    private Vector<T> _maParameters;
+    private Vector<T> _maParameters = default!;
 
     /// <summary>
     /// The effects of interventions on the time series.
@@ -112,7 +112,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// or a natural disaster might decrease production by 15% for three weeks.
     /// </para>
     /// </remarks>
-    private List<InterventionEffect<T>> _interventionEffects;
+    private List<InterventionEffect<T>> _interventionEffects = default!;
 
     /// <summary>
     /// The residuals (errors) of the model predictions on the training data.
@@ -134,7 +134,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// If residuals look random (no pattern), the model is doing a good job.
     /// </para>
     /// </remarks>
-    private Vector<T> _residuals;
+    private Vector<T> _residuals = default!;
 
     /// <summary>
     /// The fitted (predicted) values for the training data.
@@ -155,7 +155,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// the model would have predicted history if we had used it in the past.
     /// </para>
     /// </remarks>
-    private Vector<T> _fitted;
+    private Vector<T> _fitted = default!;
 
     /// <summary>
     /// The optimizer used to find the best model parameters.
@@ -177,7 +177,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// The optimizer automatically turns the dials until the reception is optimal.
     /// </para>
     /// </remarks>
-    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer = default!;
 
     /// <summary>
     /// The target values (observed time series data) used for training.
@@ -197,7 +197,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// This is the ground truth that the model compares its predictions against.
     /// </para>
     /// </remarks>
-    private Vector<T> _y;
+    private Vector<T> _y = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InterventionAnalysisModel{T}"/> class with the specified options.
@@ -732,7 +732,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Returns metadata about the model, including its type, parameters, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns detailed metadata about the intervention analysis model, including its type, 
@@ -756,9 +756,9 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// - Understanding the relative importance of different interventions
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.InterventionAnalysisModel,
             AdditionalInfo = new Dictionary<string, object>

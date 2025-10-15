@@ -85,6 +85,30 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Creates a deep copy of this vector.
+    /// </summary>
+    /// <returns>A new vector that is a copy of this vector.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates an exact duplicate of the vector that can be modified independently.</para>
+    /// </remarks>
+    public override VectorBase<T> Clone()
+    {
+        return new Vector<T>(_data);
+    }
+
+    /// <summary>
+    /// Creates a deep copy of this vector.
+    /// </summary>
+    /// <returns>A new vector that is a copy of this vector.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is an alias for Clone() that creates an exact duplicate of the vector.</para>
+    /// </remarks>
+    public Vector<T> DeepCopy()
+    {
+        return new Vector<T>(_data);
+    }
+
+    /// <summary>
     /// Performs element-wise division of this vector by another vector.
     /// </summary>
     /// <param name="other">The vector to divide by.</param>
@@ -155,18 +179,6 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         return new Vector<TResult>(_data.Select(selector));
     }
 
-    /// <summary>
-    /// Creates a deep copy of this vector.
-    /// </summary>
-    /// <returns>A new vector with the same values as this vector.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This creates an exact duplicate of your vector.
-    /// Changes to the copy won't affect the original vector, and vice versa.</para>
-    /// </remarks>
-    public new Vector<T> Clone()
-    {
-        return new Vector<T>([.. this]);
-    }
 
     /// <summary>
     /// Creates a vector of the specified size with all elements set to zero.

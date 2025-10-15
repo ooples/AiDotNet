@@ -30,7 +30,7 @@ public class OrthogonalRegression<T> : RegressionModelBase<T>
     /// <value>
     /// Contains settings like tolerance, maximum iterations, and whether to scale variables.
     /// </value>
-    private readonly OrthogonalRegressionOptions<T> _options;
+    private readonly OrthogonalRegressionOptions<T> _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the OrthogonalRegression class with the specified options and regularization.

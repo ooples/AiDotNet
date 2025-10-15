@@ -30,7 +30,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionModelBase<T>
     /// <value>
     /// Contains settings like number of trees, maximum depth, minimum samples to split, and maximum features.
     /// </value>
-    private RandomForestRegressionOptions _options;
+    private RandomForestRegressionOptions _options = default!;
 
     /// <summary>
     /// The collection of decision trees that make up the forest.
@@ -38,7 +38,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionModelBase<T>
     /// <value>
     /// A list of decision tree regression models.
     /// </value>
-    private List<DecisionTreeRegression<T>> _trees;
+    private List<DecisionTreeRegression<T>> _trees = default!;
 
     /// <summary>
     /// Random number generator used for bootstrap sampling and feature selection.
@@ -46,7 +46,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionModelBase<T>
     /// <value>
     /// An instance of the Random class.
     /// </value>
-    private Random _random;
+    private Random _random = default!;
 
     /// <summary>
     /// Gets the number of trees in the forest.
@@ -205,9 +205,9 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionModelBase<T>
     /// variables are most influential in making predictions.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.RandomForest,
             AdditionalInfo = new Dictionary<string, object>

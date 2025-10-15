@@ -39,6 +39,14 @@ namespace AiDotNet.Deployment.Techniques
         }
 
         /// <summary>
+        /// Prunes a model synchronously using the specified strategy.
+        /// </summary>
+        public IFullModel<T, TInput, TOutput> Prune(IFullModel<T, TInput, TOutput> model, string strategy = "magnitude", float sparsity = 0.5f)
+        {
+            return PruneModelAsync(model, strategy, sparsity).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
         /// Prunes a model using the specified strategy.
         /// </summary>
         public async Task<IFullModel<T, TInput, TOutput>> PruneModelAsync(IFullModel<T, TInput, TOutput> model, string strategy = "magnitude", float sparsity = 0.5f)
@@ -252,7 +260,7 @@ namespace AiDotNet.Deployment.Techniques
             return 1000000; // Default 1M parameters
         }
 
-        private async Task<LayerPruningInfo> AnalyzeLayerAsync(ILayer layer)
+        private async Task<LayerPruningInfo> AnalyzeLayerAsync(ILayer<T> layer)
         {
             await Task.Delay(10);
 
@@ -266,46 +274,38 @@ namespace AiDotNet.Deployment.Techniques
             };
         }
 
-        private float CalculateLayerImportance(ILayer layer)
+        private float CalculateLayerImportance(ILayer<T> layer)
         {
             // Simplified importance calculation
             // In reality, would analyze weight magnitudes, gradients, etc.
             // Note: Using Name property as ILayer doesn't have LayerType enum
-            return layer.Name.Contains("Output", StringComparison.OrdinalIgnoreCase) ? 1.0f : 0.5f;
+            return layer.Name.ToLowerInvariant().Contains("output") ? 1.0f : 0.5f;
         }
 
-        private float DetermineMaxSparsity(ILayer layer)
+        private float DetermineMaxSparsity(ILayer<T> layer)
         {
-            // Conservative max sparsity based on layer name
-            // Note: Using Name property as ILayer doesn't have LayerType enum
-            var layerName = layer.Name.ToLowerInvariant();
-            if (layerName.Contains("input"))
-                return 0.0f;
-            else if (layerName.Contains("output"))
-                return 0.3f;
-            else if (layerName.Contains("conv"))
-                return 0.7f;
-            else if (layerName.Contains("dense") || layerName.Contains("fully"))
-                return 0.9f;
-            else
-                return 0.5f;
+            // Conservative max sparsity based on layer type
+            return layer.LayerType switch
+            {
+                LayerType.Input => 0.0f,
+                LayerType.Output => 0.3f,
+                LayerType.Convolutional => 0.7f,
+                LayerType.FullyConnected => 0.9f,
+                _ => 0.5f
+            };
         }
 
-        private int CalculatePruningPriority(ILayer layer)
+        private int CalculatePruningPriority(ILayer<T> layer)
         {
             // Higher priority = prune first
-            // Note: Using Name property as ILayer doesn't have LayerType enum
-            var layerName = layer.Name.ToLowerInvariant();
-            if (layerName.Contains("dense") || layerName.Contains("fully"))
-                return 1;
-            else if (layerName.Contains("conv"))
-                return 2;
-            else if (layerName.Contains("output"))
-                return 3;
-            else if (layerName.Contains("input"))
-                return 4;
-            else
-                return 2;
+            return layer.LayerType switch
+            {
+                LayerType.FullyConnected => 1,
+                LayerType.Convolutional => 2,
+                LayerType.Output => 3,
+                LayerType.Input => 4,
+                _ => 2
+            };
         }
 
         private float CalculateRedundancy(PruningAnalysis analysis)
@@ -341,7 +341,7 @@ namespace AiDotNet.Deployment.Techniques
             return 0.95f; // Example accuracy
         }
 
-        private async Task<SparseMatrix> ConvertLayerToSparseAsync(ILayer layer)
+        private async Task<SparseMatrix> ConvertLayerToSparseAsync(ILayer<T> layer)
         {
             // Simulate sparse conversion
             await Task.Delay(50);
@@ -367,7 +367,7 @@ namespace AiDotNet.Deployment.Techniques
         {
             // Calculate compression ratio based on sparse representation
             var originalSize = sparseModel.SparsityInfo.Count * 1000000 * 4; // Assume 1M params per layer, 4 bytes each
-            var sparseSize = sparseModel.SparseWeights.Values.Sum(w => w.Value.Values.Count * 8); // 4 bytes value + 4 bytes index
+            var sparseSize = sparseModel.SparseWeights.Values.Sum(w => w.Values.Count * 8); // 4 bytes value + 4 bytes index
             return (float)originalSize / sparseSize;
         }
     }
@@ -403,7 +403,7 @@ namespace AiDotNet.Deployment.Techniques
         public float TargetSparsity { get; set; }
         public string Strategy { get; set; } = "magnitude";
         public int FineTuneEpochs { get; set; } = 5;
-        public Action<IFullModel<T, TInput, TOutput>, float> OnComplete { get; set; } = default!;
+        public Action<IFullModel<T, TInput, TOutput>, float>? OnComplete { get; set; }
     }
 
     /// <summary>
@@ -415,7 +415,7 @@ namespace AiDotNet.Deployment.Techniques
         public float EstimatedRedundancy { get; set; }
         public float RecommendedSparsity { get; set; }
         public float ExpectedSpeedup { get; set; }
-        public List<LayerPruningInfo> LayerAnalysis { get; set; } = default!;
+        public List<LayerPruningInfo> LayerAnalysis { get; set; } = new();
         public Dictionary<string, float> LayerSensitivities { get; set; } = new Dictionary<string, float>();
     }
 
@@ -424,7 +424,7 @@ namespace AiDotNet.Deployment.Techniques
     /// </summary>
     public class LayerPruningInfo
     {
-        public string LayerName { get; set; } = default!;
+        public string LayerName { get; set; } = string.Empty;
         public long Parameters { get; set; }
         public float Importance { get; set; }
         public float MaxSparsity { get; set; }
@@ -437,8 +437,8 @@ namespace AiDotNet.Deployment.Techniques
     /// </summary>
     public class ValidationData<T>
     {
-        public List<Vector<T>> Inputs { get; set; } = default!;
-        public List<Vector<T>> Targets { get; set; } = default!;
+        public List<Vector<T>> Inputs { get; set; } = new List<Vector<T>>();
+        public List<Vector<T>> Targets { get; set; } = new List<Vector<T>>();
         public int BatchSize { get; set; } = 32;
     }
 
@@ -448,8 +448,8 @@ namespace AiDotNet.Deployment.Techniques
     public class SparseModel<T, TInput, TOutput>
     {
         public IFullModel<T, TInput, TOutput> OriginalModel { get; set; } = default!;
-        public Dictionary<string, SparseMatrix> SparseWeights { get; set; } = default!;
-        public Dictionary<string, float> SparsityInfo { get; set; } = default!;
+        public Dictionary<string, SparseMatrix> SparseWeights { get; set; } = new();
+        public Dictionary<string, float> SparsityInfo { get; set; } = new();
         public float TotalSparsity { get; set; }
         public float CompressionRatio { get; set; }
     }
@@ -461,9 +461,9 @@ namespace AiDotNet.Deployment.Techniques
     {
         public int Rows { get; set; }
         public int Cols { get; set; }
-        public List<float> Values { get; set; } = default!;
-        public List<int> RowIndices { get; set; } = default!;
-        public List<int> ColIndices { get; set; } = default!;
+        public List<float> Values { get; set; } = new();
+        public List<int> RowIndices { get; set; } = new();
+        public List<int> ColIndices { get; set; } = new();
     }
 
     /// <summary>
@@ -472,7 +472,7 @@ namespace AiDotNet.Deployment.Techniques
     public interface IPruningStrategy<T, TInput, TOutput>
     {
         Task<IFullModel<T, TInput, TOutput>> PruneAsync(IFullModel<T, TInput, TOutput> model, PruningConfig config, PruningAnalysis analysis);
-        Task<ILayer> PruneLayerAsync(ILayer layer, float sparsity, PruningConfig config);
+        Task<ILayer<T>> PruneLayerAsync(ILayer<T> layer, float sparsity, PruningConfig config);
         bool SupportsStructuredPruning { get; }
     }
 
@@ -495,7 +495,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> PruneLayerAsync(ILayer layer, float sparsity, PruningConfig config)
+        public async Task<ILayer<T>> PruneLayerAsync(ILayer<T> layer, float sparsity, PruningConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -520,7 +520,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> PruneLayerAsync(ILayer layer, float sparsity, PruningConfig config)
+        public async Task<ILayer<T>> PruneLayerAsync(ILayer<T> layer, float sparsity, PruningConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -545,7 +545,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> PruneLayerAsync(ILayer layer, float sparsity, PruningConfig config)
+        public async Task<ILayer<T>> PruneLayerAsync(ILayer<T> layer, float sparsity, PruningConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -570,7 +570,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> PruneLayerAsync(ILayer layer, float sparsity, PruningConfig config)
+        public async Task<ILayer<T>> PruneLayerAsync(ILayer<T> layer, float sparsity, PruningConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -595,7 +595,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> PruneLayerAsync(ILayer layer, float sparsity, PruningConfig config)
+        public async Task<ILayer<T>> PruneLayerAsync(ILayer<T> layer, float sparsity, PruningConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -620,7 +620,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> PruneLayerAsync(ILayer layer, float sparsity, PruningConfig config)
+        public async Task<ILayer<T>> PruneLayerAsync(ILayer<T> layer, float sparsity, PruningConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -645,7 +645,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> PruneLayerAsync(ILayer layer, float sparsity, PruningConfig config)
+        public async Task<ILayer<T>> PruneLayerAsync(ILayer<T> layer, float sparsity, PruningConfig config)
         {
             await Task.Delay(50);
             return layer;
@@ -670,7 +670,7 @@ namespace AiDotNet.Deployment.Techniques
             return model;
         }
 
-        public async Task<ILayer> PruneLayerAsync(ILayer layer, float sparsity, PruningConfig config)
+        public async Task<ILayer<T>> PruneLayerAsync(ILayer<T> layer, float sparsity, PruningConfig config)
         {
             await Task.Delay(50);
             return layer;

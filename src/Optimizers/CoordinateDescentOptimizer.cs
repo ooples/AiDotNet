@@ -20,22 +20,22 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// <summary>
     /// The options specific to the Coordinate Descent optimization algorithm.
     /// </summary>
-    private CoordinateDescentOptimizerOptions<T, TInput, TOutput> _options;
+    private CoordinateDescentOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// Vector<double> of learning rates for each coordinate (variable) in the optimization problem.
     /// </summary>
-    private Vector<T> _learningRates;
+    private Vector<T> _learningRates = default!;
 
     /// <summary>
     /// Vector<double> of momentum values for each coordinate (variable) in the optimization problem.
     /// </summary>
-    private Vector<T> _momentums;
+    private Vector<T> _momentums = default!;
 
     /// <summary>
     /// Vector<double> of previous update values for each coordinate (variable) in the optimization problem.
     /// </summary>
-    private Vector<T> _previousUpdate;
+    private Vector<T> _previousUpdate = default!;
 
     /// <summary>
     /// Initializes a new instance of the CoordinateDescentOptimizer class.

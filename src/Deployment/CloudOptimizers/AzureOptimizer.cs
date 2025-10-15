@@ -21,6 +21,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
 
         public AzureOptimizer()
         {
+            _serviceConfigs = new Dictionary<string, AzureServiceConfig>();
             InitializeServiceConfigs();
             ConfigureForAzure();
         }
@@ -35,30 +36,29 @@ namespace AiDotNet.Deployment.CloudOptimizers
                     MaxModelSize = double.MaxValue,
                     SupportedFormats = new[] { "Tensor<double>Flow", "PyTorch", "ONNX", "Scikit-learn" },
                     ComputeTargets = new[] { "AmlCompute", "ComputeInstance", "Kubernetes" }
-                },
-                ["Functions"] = new AzureServiceConfig
+                };
+            _serviceConfigs["Functions"] = new AzureServiceConfig
                 {
                     ServiceName = "Azure Functions",
                     MaxModelSize = 1000, // 1 GB for consumption plan
                     MaxMemory = 1536, // 1.5 GB
                     MaxTimeout = 600, // 10 minutes
                     SupportedFormats = new[] { "ONNX", "Tensor<double>Flow Lite" }
-                },
-                ["ContainerInstances"] = new AzureServiceConfig
+                };
+            _serviceConfigs["ContainerInstances"] = new AzureServiceConfig
                 {
                     ServiceName = "Azure Container Instances",
                     MaxModelSize = 15000, // 15 GB
                     MaxMemory = 16384, // 16 GB
                     SupportedFormats = new[] { "Any" }
-                },
-                ["CognitiveServices"] = new AzureServiceConfig
+                };
+            _serviceConfigs["CognitiveServices"] = new AzureServiceConfig
                 {
                     ServiceName = "Azure Cognitive Services",
                     MaxModelSize = 4000, // 4 GB
                     SupportedFormats = new[] { "ONNX", "Custom Vision" },
                     Capabilities = new[] { "AutoScale", "MultiRegion", "EdgeDeployment" }
-                }
-            };
+                };
         }
 
         private void ConfigureForAzure()
@@ -430,13 +430,13 @@ numpy";
 
         private class AzureServiceConfig
         {
-            public string ServiceName { get; set; } = default!;
+            public string ServiceName { get; set; } = string.Empty;
             public double MaxModelSize { get; set; }
             public double MaxMemory { get; set; }
             public double MaxTimeout { get; set; }
-            public string[] SupportedFormats { get; set; } = default!;
-            public string[] ComputeTargets { get; set; } = default!;
-            public string[] Capabilities { get; set; } = default!;
+            public string[] SupportedFormats { get; set; } = Array.Empty<string>();
+            public string[] ComputeTargets { get; set; } = Array.Empty<string>();
+            public string[] Capabilities { get; set; } = Array.Empty<string>();
         }
     }
 }

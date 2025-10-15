@@ -50,7 +50,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// needed to create the model.
     /// </para>
     /// </remarks>
-    private GARCHModelOptions<T> _garchOptions;
+    private GARCHModelOptions<T> _garchOptions = default!;
 
     /// <summary>
     /// The model used to forecast the mean (average value) of the time series.
@@ -72,7 +72,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// how much that price might vary from the $100 prediction.
     /// </para>
     /// </remarks>
-    private ITimeSeriesModel<T> _meanModel;
+    private ITimeSeriesModel<T> _meanModel = default!;
 
     /// <summary>
     /// The constant term in the GARCH variance equation.
@@ -157,7 +157,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// but the actual price was $103, the residual would be $3.
     /// </para>
     /// </remarks>
-    private Vector<T> _residuals;
+    private Vector<T> _residuals = default!;
 
     /// <summary>
     /// The estimated conditional variances for each time point in the series.
@@ -178,7 +178,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// differ from our prediction?" at each point in time.
     /// </para>
     /// </remarks>
-    private Vector<T> _conditionalVariances;
+    private Vector<T> _conditionalVariances = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GARCHModel{T}"/> class with the specified options.
@@ -399,9 +399,9 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         T convergenceThreshold = NumOps.FromDouble(1e-6);
         T momentumFactor = NumOps.FromDouble(0.9);
 
-        Vector<T> previousOmega = _omega.Clone();
-        Vector<T> previousAlpha = _alpha.Clone();
-        Vector<T> previousBeta = _beta.Clone();
+        Vector<T> previousOmega = (Vector<T>)_omega.Clone();
+        Vector<T> previousAlpha = (Vector<T>)_alpha.Clone();
+        Vector<T> previousBeta = (Vector<T>)_beta.Clone();
 
         Vector<T> velocityOmega = new Vector<T>(_omega.Length);
         Vector<T> velocityAlpha = new Vector<T>(_alpha.Length);
@@ -442,17 +442,17 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
             if (NumOps.GreaterThan(improvement, NumOps.Zero))
             {
                 currentLearningRate = NumOps.Multiply(currentLearningRate, NumOps.FromDouble(1.05)); // Increase learning rate
-                previousOmega = _omega.Clone();
-                previousAlpha = _alpha.Clone();
-                previousBeta = _beta.Clone();
+                previousOmega = (Vector<T>)_omega.Clone();
+                previousAlpha = (Vector<T>)_alpha.Clone();
+                previousBeta = (Vector<T>)_beta.Clone();
                 previousLogLikelihood = currentLogLikelihood;
             }
             else
             {
                 currentLearningRate = NumOps.Multiply(currentLearningRate, NumOps.FromDouble(0.5)); // Decrease learning rate
-                _omega = previousOmega.Clone();
-                _alpha = previousAlpha.Clone();
-                _beta = previousBeta.Clone();
+                _omega = (Vector<T>)previousOmega.Clone();
+                _alpha = (Vector<T>)previousAlpha.Clone();
+                _beta = (Vector<T>)previousBeta.Clone();
 
                 if (NumOps.LessThan(currentLearningRate, minLearningRate))
                 {
@@ -955,7 +955,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Returns metadata about the model, including its type, parameters, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns detailed metadata about the GARCH model, including its type, current parameters (omega, alpha, beta),
@@ -978,9 +978,9 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// - Storing model details in a database or registry
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.GARCHModel,
             AdditionalInfo = new Dictionary<string, object>

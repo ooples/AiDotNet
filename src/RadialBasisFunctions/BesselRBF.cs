@@ -30,17 +30,17 @@ public class BesselRBF<T> : IRadialBasisFunction<T>
     /// <summary>
     /// The width parameter (epsilon) controlling how quickly the function decreases with distance.
     /// </summary>
-    private readonly T _epsilon;
+    private readonly T _epsilon = default!;
     
     /// <summary>
     /// The order parameter (nu) of the Bessel function.
     /// </summary>
-    private readonly T _nu;
+    private readonly T _nu = default!;
     
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BesselRBF{T}"/> class with specified parameters.

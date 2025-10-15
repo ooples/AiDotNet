@@ -26,7 +26,7 @@ public class AutocorrelationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// <b>For Beginners:</b> These settings control how the detector interprets the Durbin-Watson 
     /// statistic, including thresholds for determining different types of autocorrelation.
     /// </remarks>
-    private readonly AutocorrelationFitDetectorOptions _options;
+    private readonly AutocorrelationFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the AutocorrelationFitDetector class.

@@ -31,10 +31,10 @@ namespace AiDotNet.ReinforcementLearning.ReplayBuffers
     public class PrioritizedNStepReplayBuffer<TState, TAction, T> : PrioritizedReplayBuffer<TState, TAction, T>
     {
         private readonly int _nSteps;
-        private readonly T _gamma;
+        private readonly T _gamma = default!;
         private readonly Queue<(TState state, TAction action, T reward, TState nextState, bool done)> _nStepBuffer;
         private readonly LinkedList<(TState state, TAction action, T reward, bool done)> _recentExperiences;
-        private readonly Dictionary<int, int> _experienceIdToIndex;
+        private readonly Dictionary<int, int> _experienceIdToIndex = default!;
         private int _experienceCounter;
 
         /// <summary>

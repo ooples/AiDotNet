@@ -29,11 +29,11 @@
 public class QuantumLayer<T> : LayerBase<T>
 {
     private readonly int _numQubits;
-    private Tensor<Complex<T>> _quantumCircuit;
+    private Tensor<Complex<T>> _quantumCircuit = default!;
     private Tensor<T>? _lastInput;
-    private Vector<T> _rotationAngles;
-    private Vector<T> _angleGradients;
-    private readonly INumericOperations<Complex<T>> _complexOps;
+    private Vector<T> _rotationAngles = default!;
+    private Vector<T> _angleGradients = default!;
+    private readonly INumericOperations<Complex<T>> _complexOps = default!;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -348,7 +348,7 @@ public class QuantumLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Return a copy of the rotation angles
-        return _rotationAngles.Clone();
+        return (Vector<T>)_rotationAngles.Clone();
     }
 
     /// <summary>

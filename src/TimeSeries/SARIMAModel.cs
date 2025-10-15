@@ -29,32 +29,32 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Stores the configuration options for the SARIMA model.
     /// </summary>
-    private readonly SARIMAOptions<T> _sarimaOptions;
+    private readonly SARIMAOptions<T> _sarimaOptions = default!;
 
     /// <summary>
     /// Coefficients for the non-seasonal autoregressive (AR) component.
     /// </summary>
-    private Vector<T> _arCoefficients;
+    private Vector<T> _arCoefficients = default!;
 
     /// <summary>
     /// Coefficients for the non-seasonal moving average (MA) component.
     /// </summary>
-    private Vector<T> _maCoefficients;
+    private Vector<T> _maCoefficients = default!;
 
     /// <summary>
     /// Coefficients for the seasonal autoregressive (SAR) component.
     /// </summary>
-    private Vector<T> _sarCoefficients;
+    private Vector<T> _sarCoefficients = default!;
 
     /// <summary>
     /// Coefficients for the seasonal moving average (SMA) component.
     /// </summary>
-    private Vector<T> _smaCoefficients;
+    private Vector<T> _smaCoefficients = default!;
 
     /// <summary>
     /// The constant term in the SARIMA model.
     /// </summary>
-    private T _constant;
+    private T _constant = default!;
 
     /// <summary>
     /// Order of the non-seasonal autoregressive component.
@@ -700,7 +700,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the model, including its type, parameters, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b>
@@ -712,9 +712,9 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// - Saving model metadata along with predictions
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.SARIMAModel,
             AdditionalInfo = new Dictionary<string, object>

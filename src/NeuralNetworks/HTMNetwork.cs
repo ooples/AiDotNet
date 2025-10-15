@@ -622,7 +622,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the HTM network.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the HTM network.</returns>
+    /// <returns>A ModelMetadata object containing information about the HTM network.</returns>
     /// <remarks>
     /// <para>
     /// This method returns comprehensive metadata about the HTM network, including its architecture,
@@ -640,9 +640,9 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// and keeping track of different network configurations.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.HTMNetwork,
             AdditionalInfo = new Dictionary<string, object>

@@ -52,7 +52,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
     /// but different parameters as the genetic algorithm explores the solution space.
     /// </para>
     /// </remarks>
-    private readonly Func<IFullModel<T, TInput, TOutput>> _modelFactory;
+    private readonly Func<IFullModel<T, TInput, TOutput>> _modelFactory = default!;
 
     /// <summary>
     /// Initializes a new instance of the StandardGeneticAlgorithm class.
@@ -584,7 +584,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
     private int EstimateInputDimension(IFullModel<T, TInput, TOutput> model)
     {
         // Try to estimate input dimension from model's metadata or type information
-        var metadata = model.GetModelMetaData();
+        var metadata = model.GetModelMetadata();
         var parameters = model.GetParameters();
 
         if (metadata.AdditionalInfo.TryGetValue("InputFeatures", out object? inputFeaturesObj))
@@ -641,7 +641,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
     private int EstimateOutputDimension(IFullModel<T, TInput, TOutput> model)
     {
         // Try to estimate output dimension from model's metadata
-        var metadata = model.GetModelMetaData();
+        var metadata = model.GetModelMetadata();
 
         if (metadata.AdditionalInfo.TryGetValue("OutputFeatures", out object? outputFeaturesObj))
         {
@@ -734,7 +734,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
     /// <summary>
     /// Gets metadata about the algorithm and its current state.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the algorithm.</returns>
+    /// <returns>A ModelMetadata object containing information about the algorithm.</returns>
     /// <remarks>
     /// <para>
     /// This method creates a metadata object containing information about the genetic algorithm,
@@ -754,9 +754,9 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
     /// how it's configured and what stage it has reached.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetMetaData()
+    public override ModelMetadata<T> GetMetaData()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.GeneticAlgorithmRegression,
             Description = "Model evolved using a standard genetic algorithm",

@@ -29,8 +29,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class BidirectionalLayer<T> : LayerBase<T>
 {
-    private readonly LayerBase<T> _forwardLayer;
-    private readonly LayerBase<T> _backwardLayer;
+    private readonly LayerBase<T> _forwardLayer = default!;
+    private readonly LayerBase<T> _backwardLayer = default!;
     private readonly bool _mergeMode;
 
     private Tensor<T>? _lastInput;

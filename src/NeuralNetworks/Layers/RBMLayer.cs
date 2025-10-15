@@ -85,7 +85,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// During training, these weights are adjusted to capture patterns in your data.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights;
+    private Matrix<T> _weights = default!;
 
     /// <summary>
     /// Gets or sets the bias values for the visible units.
@@ -108,7 +108,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// the biases for those background pixels would become negative during training.
     /// </para>
     /// </remarks>
-    private Vector<T> _visibleBiases;
+    private Vector<T> _visibleBiases = default!;
 
     /// <summary>
     /// Gets or sets the bias values for the hidden units.
@@ -130,7 +130,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// These biases help the RBM learn features that occur with different frequencies in your data.
     /// </para>
     /// </remarks>
-    private Vector<T> _hiddenBiases;
+    private Vector<T> _hiddenBiases = default!;
 
     /// <summary>
     /// Stores the last input from the visible layer during training.

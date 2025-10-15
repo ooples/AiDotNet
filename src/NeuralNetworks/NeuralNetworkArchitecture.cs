@@ -252,6 +252,7 @@ public class NeuralNetworkArchitecture<T>
     /// </remarks>
     public NetworkComplexity Complexity { get; }
 
+
     /// <summary>
     /// Gets the dimensionality of the input (1, 2, or 3).
     /// </summary>
@@ -314,6 +315,39 @@ public class NeuralNetworkArchitecture<T>
     /// A cache name to be used to look for a custom input cache
     /// </summary>
     public string CacheName { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the loss function to be used for training this neural network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The loss function measures how far the network's predictions are from the actual values.
+    /// Different tasks require different loss functions (e.g., cross-entropy for classification,
+    /// mean squared error for regression).
+    /// </para>
+    /// <para><b>For Beginners:</b> The loss function tells the network how wrong it is.
+    /// Think of it like a scoring system that measures the difference between what the network
+    /// predicted and what the answer should be. The network tries to minimize this "wrongness"
+    /// during training.
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T>? LossFunction { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optimizer used to update the network's parameters during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The optimizer determines how the network's weights are updated based on the gradients
+    /// computed from the loss function. Common optimizers include SGD, Adam, and RMSProp.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer is the strategy used to improve the network.
+    /// After measuring how wrong the network is (using the loss function), the optimizer
+    /// decides exactly how to adjust the network's parameters to make it more accurate.
+    /// Different optimizers use different strategies to find the best adjustments.
+    /// </para>
+    /// </remarks>
+    public IOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether this architecture instance is a placeholder.
@@ -536,92 +570,7 @@ public class NeuralNetworkArchitecture<T>
         return true;
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="NeuralNetworkArchitecture{T}"/> class for regression tasks.
-    /// </summary>
-    /// <param name="inputFeatures">The number of input features (columns in the input matrix).</param>
-    /// <param name="outputSize">The number of output values to predict (typically 1 for simple regression).</param>
-    /// <param name="complexity">The complexity level of the neural network. Default is Medium.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor provides a simplified way to create a neural network architecture specifically for regression tasks.
-    /// It automatically sets the appropriate input type to TwoDimensional (for a matrix of samples × features) and
-    /// sets the task type to Regression.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a simpler way to create a neural network for predicting numerical values.
-    /// 
-    /// Use this constructor when:
-    /// - Your input is a matrix where each row is a sample and each column is a feature
-    ///   (like house size, number of bedrooms, etc. for multiple houses)
-    /// - You want to predict one or more numerical values (like house prices)
-    /// 
-    /// For example, to create a network that predicts house prices based on 5 features:
-    /// 
-    /// ```csharp
-    /// var architecture = new NeuralNetworkArchitecture<double>(
-    ///     inputFeatures: 5,  // 5 features (size, bedrooms, etc.)
-    ///     outputSize: 1      // 1 output (price)
-    /// );
-    /// ```
-    /// 
-    /// The network will automatically create appropriate layers based on the complexity setting.
-    /// You don't need to specify the number of samples - the network will handle any number of samples.
-    /// </para>
-    /// </remarks>
-    public NeuralNetworkArchitecture(
-        NetworkComplexity complexity = NetworkComplexity.Medium)
-        : this(
-            taskType: NeuralNetworkTaskType.Regression,
-            complexity: complexity,
-            isDynamicSampleCount: true)
-    {
-        // The base constructor handles validation and setup
-        // We don't need to create custom layers here as the neural network will create
-        // appropriate default layers based on the architecture parameters
-    }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="NeuralNetworkArchitecture{T}"/> class for classification tasks.
-    /// </summary>
-    /// <param name="inputFeatures">The number of input features (columns in the input matrix).</param>
-    /// <param name="numClasses">The number of classes to classify into.</param>
-    /// <param name="isMultiClass">Whether this is a multi-class classification (true) or binary classification (false). Default is true.</param>
-    /// <param name="complexity">The complexity level of the neural network. Default is Medium.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor provides a simplified way to create a neural network architecture specifically for classification tasks.
-    /// It automatically sets the appropriate input type to TwoDimensional (for a matrix of samples × features) and
-    /// sets the task type to either MultiClassClassification or BinaryClassification based on the isMultiClass parameter.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a simpler way to create a neural network for classifying data into categories.
-    /// 
-    /// Use this constructor when:
-    /// - Your input is a matrix where each row is a sample and each column is a feature
-    ///   (like petal length, petal width, etc. for multiple flowers)
-    /// - You want to classify each sample into one of several categories (like flower species)
-    /// 
-    /// For example, to create a network that classifies flowers into 3 species based on 4 features:
-    /// 
-    /// ```csharp
-    /// var architecture = new NeuralNetworkArchitecture<double>(
-    ///     inputFeatures: 4,  // 4 features (petal length, width, etc.)
-    ///     numClasses: 3      // 3 classes (setosa, versicolor, virginica)
-    /// );
-    /// ```
-    /// 
-    /// The network will automatically create appropriate layers based on the complexity setting.
-    /// You don't need to specify the number of samples - the network will handle any number of samples.
-    /// </para>
-    /// </remarks>
-    public NeuralNetworkArchitecture(
-        bool isMultiClass = true,
-        NetworkComplexity complexity = NetworkComplexity.Medium)
-        : this(
-            taskType: isMultiClass ? NeuralNetworkTaskType.MultiClassClassification : NeuralNetworkTaskType.BinaryClassification,
-            complexity: complexity)  // For binary classification, we only need 1 output (probability)
-    {
-        // The base constructor handles validation and setup
-    }
 
     /// <summary>
     /// Gets the sizes of the hidden layers in the neural network.

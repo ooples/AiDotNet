@@ -27,7 +27,7 @@ namespace AiDotNet.Models;
 /// </remarks>
 public class VotingEnsemble<T, TInput, TOutput> : EnsembleModelBase<T, TInput, TOutput>
 {
-    private readonly VotingEnsembleOptions<T> _votingOptions;
+    private readonly VotingEnsembleOptions<T> _votingOptions = default!;
     
     /// <summary>
     /// Initializes a new instance of the VotingEnsemble class.

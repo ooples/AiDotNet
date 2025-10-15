@@ -60,7 +60,7 @@ public class HuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// to be an "outlier" that shouldn't influence your model too strongly.
     /// </para>
     /// </remarks>
-    private readonly T _delta;
+    private readonly T _delta = default!;
 
     /// <summary>
     /// Initializes a new instance of the HuberLossFitnessCalculator class.

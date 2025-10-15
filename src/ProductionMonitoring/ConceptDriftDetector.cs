@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,11 +10,12 @@ namespace AiDotNet.ProductionMonitoring
     /// <summary>
     /// Detects concept drift in model predictions over time
     /// </summary>
-    public class ConceptDriftDetector : ProductionMonitorBase
+    /// <typeparam name="T">The numeric type used for calculations</typeparam>
+    public class ConceptDriftDetector<T> : ProductionMonitorBase<T>
     {
-        private readonly ConceptDriftMethod _method;
+        private readonly ConceptDriftMethod _method = default!;
         private readonly int _windowSize;
-        private readonly Queue<double> _errorWindow;
+        private readonly Queue<T> _errorWindow;
         private readonly Dictionary<string, DriftDetectorState> _detectorStates;
 
         public enum ConceptDriftMethod
@@ -31,7 +33,7 @@ namespace AiDotNet.ProductionMonitoring
         {
             _method = method;
             _windowSize = windowSize;
-            _errorWindow = new Queue<double>();
+            _errorWindow = new Queue<T>();
             _detectorStates = new Dictionary<string, DriftDetectorState>();
             InitializeDetectorStates();
         }
@@ -39,7 +41,7 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Detects concept drift in model predictions
         /// </summary>
-        public override async Task<DriftDetectionResult> DetectConceptDriftAsync(double[] predictions, double[] actuals)
+        public override async Task<DriftDetectionResult> DetectConceptDriftAsync(Vector<T> predictions, Vector<T> actuals)
         {
             if (predictions.Length != actuals.Length)
             {
@@ -105,18 +107,18 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Detects data drift (delegates to DataDriftDetector for specialized handling)
         /// </summary>
-        public override async Task<DriftDetectionResult> DetectDataDriftAsync(double[,] productionData, double[,] referenceData = null)
+        public override async Task<DriftDetectionResult> DetectDataDriftAsync(Matrix<T> productionData, Matrix<T>? referenceData = null)
         {
             // For concept drift detector, we focus on prediction errors rather than feature distributions
             // This is a simplified implementation
-            return new DriftDetectionResult
+            return Task.FromResult(new DriftDetectionResult
             {
                 IsDriftDetected = false,
                 DriftScore = 0,
                 DriftType = "DataDrift",
                 Details = "Use DataDriftDetector for comprehensive data drift detection",
                 DetectionTimestamp = DateTime.UtcNow
-            };
+            });
         }
 
         /// <summary>

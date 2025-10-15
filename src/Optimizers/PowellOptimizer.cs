@@ -47,7 +47,7 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private PowellOptimizerOptions<T, TInput, TOutput> _powellOptions;
+    private PowellOptimizerOptions<T, TInput, TOutput> _powellOptions = default!;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -90,7 +90,7 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// directions and smaller steps when fine-tuning a solution.
     /// </para>
     /// </remarks>
-    private T _adaptiveStepSize;
+    private T _adaptiveStepSize = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PowellOptimizer{T}"/> class with the specified model and options.

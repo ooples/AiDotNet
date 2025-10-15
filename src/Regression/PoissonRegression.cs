@@ -28,7 +28,7 @@ public class PoissonRegression<T> : RegressionModelBase<T>
     /// <value>
     /// Contains settings like maximum iterations and convergence tolerance.
     /// </value>
-    private readonly PoissonRegressionOptions<T> _options;
+    private readonly PoissonRegressionOptions<T> _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the PoissonRegression class with the specified options and regularization.

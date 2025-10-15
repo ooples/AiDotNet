@@ -22,7 +22,7 @@ namespace AiDotNet.FitDetectors;
 /// </remarks>
 public class PrecisionRecallCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
-    private readonly PrecisionRecallCurveFitDetectorOptions _options;
+    private readonly PrecisionRecallCurveFitDetectorOptions _options = default!;
     
     /// <summary>
     /// Gets or sets the Area Under the Curve value for the precision-recall curve.

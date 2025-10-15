@@ -37,7 +37,7 @@ namespace AiDotNet.ReinforcementLearning.Models;
 /// </remarks>
 public class DecisionTransformerModel<T> : ReinforcementLearningModelBase<T>
 {
-    private readonly DecisionTransformerOptions<T> _options;
+    private readonly DecisionTransformerOptions<T> _options = default!;
     private DecisionTransformerAgent<Tensor<T>, T>? _agent;
 
     /// <summary>
@@ -606,9 +606,9 @@ public class DecisionTransformerModel<T> : ReinforcementLearningModelBase<T>
     /// Gets the metadata for this model.
     /// </summary>
     /// <returns>The model metadata.</returns>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = base.GetModelMetaData();
+        var metadata = base.GetModelMetadata();
         
         metadata.ModelType = ModelType.DecisionTransformerModel;
         metadata.Description = "A transformer-based reinforcement learning model that generates optimal action sequences";

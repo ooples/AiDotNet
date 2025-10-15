@@ -43,7 +43,7 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the ContinuousMexicanHatWavelet class.

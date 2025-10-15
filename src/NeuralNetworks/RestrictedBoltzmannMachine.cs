@@ -204,7 +204,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// converge to good weights; too low and it might take too long to learn anything useful.
     /// </para>
     /// </remarks>
-    private T _learningRate;
+    private T _learningRate = default!;
 
     /// <summary>
     /// Gets or sets the number of steps to run the Gibbs sampling chain during Contrastive Divergence.
@@ -872,7 +872,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the RBM model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the RBM.</returns>
+    /// <returns>A ModelMetadata object containing information about the RBM.</returns>
     /// <remarks>
     /// <para>
     /// This method returns comprehensive metadata about the RBM, including its architecture,
@@ -891,7 +891,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// and understanding the structure of your model at a glance.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Count total parameters
         int totalParams = (VisibleSize * HiddenSize) + VisibleSize + HiddenSize;
@@ -901,7 +901,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             ? _vectorActivation.GetType().Name 
             : (_scalarActivation != null ? _scalarActivation.GetType().Name : "None");
         
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.RestrictedBoltzmannMachine,
             AdditionalInfo = new Dictionary<string, object>

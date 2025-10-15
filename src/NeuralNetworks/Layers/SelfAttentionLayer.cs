@@ -40,7 +40,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     /// This matrix transforms input embeddings into query vectors, which are used to compute attention scores.
     /// Queries represent what each position in the sequence is looking for in other positions.
     /// </remarks>
-    private Matrix<T> _queryWeights;
+    private Matrix<T> _queryWeights = default!;
     
     /// <summary>
     /// Matrix<double> of weights for transforming input embeddings into key vectors.
@@ -49,7 +49,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     /// This matrix transforms input embeddings into key vectors, which are used to compute attention scores.
     /// Keys represent what each position in the sequence has to offer to other positions.
     /// </remarks>
-    private Matrix<T> _keyWeights;
+    private Matrix<T> _keyWeights = default!;
     
     /// <summary>
     /// Matrix<double> of weights for transforming input embeddings into value vectors.
@@ -59,7 +59,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     /// that will be aggregated based on attention scores. Values represent the information that
     /// is being extracted from each position.
     /// </remarks>
-    private Matrix<T> _valueWeights;
+    private Matrix<T> _valueWeights = default!;
     
     /// <summary>
     /// Vector<double> of biases added to the output of the attention mechanism.
@@ -69,7 +69,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     /// before applying the final activation function. Biases allow the network to adjust the
     /// baseline activation level of the attention output.
     /// </remarks>
-    private Vector<T> _outputBias;
+    private Vector<T> _outputBias = default!;
 
     /// <summary>
     /// Stores the input tensor from the most recent forward pass for use in backpropagation.

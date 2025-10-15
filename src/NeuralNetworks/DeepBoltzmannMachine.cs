@@ -47,7 +47,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// the statistical patterns in your data.
     /// </para>
     /// </remarks>
-    private List<Tensor<T>> _layerBiases;
+    private List<Tensor<T>> _layerBiases = default!;
 
     /// <summary>
     /// Gets or sets the weight matrices connecting adjacent layers in the network.
@@ -72,7 +72,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// These weights form the "knowledge" of the DBM, capturing the patterns and relationships in your data.
     /// </para>
     /// </remarks>
-    private List<Tensor<T>> _layerWeights;
+    private List<Tensor<T>> _layerWeights = default!;
 
     /// <summary>
     /// Gets or sets the number of units in each layer of the network.
@@ -81,7 +81,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// This list contains the size (number of units) for each layer in the DBM, from the visible
     /// layer to the deepest hidden layer.
     /// </remarks>
-    private List<int> _layerSizes;
+    private List<int> _layerSizes = default!;
 
     /// <summary>
     /// Gets or sets the number of training epochs.
@@ -112,7 +112,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// Typical values range from 0.001 to 0.1, with 0.01 being a common starting point.
     /// </para>
     /// </remarks>
-    private T _learningRate;
+    private T _learningRate = default!;
 
     /// <summary>
     /// Gets or sets the number of examples processed in each training batch.
@@ -207,9 +207,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// This approach often leads to better final results than using a fixed learning rate.
     /// </para>
     /// </remarks>
-    private T _learningRateDecay;
+    private T _learningRateDecay = default!;
 
-    private ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction = default!;
 
     /// <summary>
     /// Initializes a new instance of the DeepBoltzmannMachine class with scalar activation.
@@ -685,15 +685,15 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the Deep Boltzmann Machine model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// This method returns metadata about the DBM, including the model type, number of layers,
     /// layer sizes, and training parameters. This information can be useful for model management
     /// and serialization.
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.DeepBoltzmannMachine,
             AdditionalInfo = new Dictionary<string, object>

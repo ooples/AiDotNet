@@ -52,7 +52,7 @@ public class WeightedRegression<T> : RegressionModelBase<T>
     /// for those who might be less reliable.
     /// </para>
     /// </remarks>
-    private readonly Vector<T> _weights;
+    private readonly Vector<T> _weights = default!;
     
     /// <summary>
     /// The polynomial order for feature expansion.

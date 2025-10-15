@@ -18,11 +18,13 @@ using AiDotNet.Compression.KnowledgeDistillation;
 /// - Transfer their knowledge to the student model
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <typeparam name="TModel">The type of the model.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public interface IDistillableModel<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public interface IDistillableModel<T, TModel, TInput, TOutput>
+    where T : unmanaged
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Creates a student model architecture based on this teacher model.
@@ -87,7 +89,7 @@ public interface IDistillableModel<TModel, TInput, TOutput>
     /// </para>
     /// </remarks>
     void DistillKnowledgeToStudent(
-        IDistillableStudent<TInput, TOutput> student,
+        IDistillableStudent<T, TInput, TOutput> student,
         TInput[] unlabeledData,
         (TInput[] inputs, TOutput[] outputs)? labeledData,
         DistillationParameters parameters);

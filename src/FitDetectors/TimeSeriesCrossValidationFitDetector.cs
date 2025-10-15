@@ -30,7 +30,7 @@ public class TimeSeriesCrossValidationFitDetector<T, TInput, TOutput> : FitDetec
     /// <summary>
     /// Configuration options for the time series cross-validation fit detector.
     /// </summary>
-    private readonly TimeSeriesCrossValidationFitDetectorOptions _options;
+    private readonly TimeSeriesCrossValidationFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the TimeSeriesCrossValidationFitDetector class.

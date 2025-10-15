@@ -32,12 +32,12 @@ public class ALiBiPositionalEncoding<T> : PositionalEncodingBase<T>
     /// <summary>
     /// The pre-computed bias matrix.
     /// </summary>
-    private readonly Tensor<T> _biasMatrix;
+    private readonly Tensor<T> _biasMatrix = default!;
     
     /// <summary>
     /// The slope parameter that controls how quickly the penalty increases with distance.
     /// </summary>
-    private readonly T _slope;
+    private readonly T _slope = default!;
     
     /// <summary>
     /// A flag indicating whether we've adjusted the input format yet.

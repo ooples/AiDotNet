@@ -104,7 +104,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// It is initialized randomly based on the connection probability and then scaled to
     /// achieve the desired spectral radius. These weights remain fixed during training.
     /// </remarks>
-    private Matrix<T> _reservoirWeights;
+    private Matrix<T> _reservoirWeights = default!;
     
     /// <summary>
     /// The current state of the reservoir, representing the activation of all neurons.
@@ -115,7 +115,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// The reservoir state is the output of this layer and contains the features that
     /// will be used by subsequent layers for prediction or classification.
     /// </remarks>
-    private Vector<T> _reservoirState;
+    private Vector<T> _reservoirState = default!;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.

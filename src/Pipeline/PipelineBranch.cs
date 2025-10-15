@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,10 +11,11 @@ namespace AiDotNet.Pipeline
     /// <summary>
     /// Represents a branch in a pipeline that can execute steps conditionally or in parallel
     /// </summary>
-    public class PipelineBranch
+    /// <typeparam name="T">The numeric type for computations</typeparam>
+    public class PipelineBranch<T>
     {
-        private readonly List<IPipelineStep> _steps;
-        private readonly Predicate<double[][]>? _condition;
+        private readonly List<IPipelineStep<T>> _steps;
+        private readonly Predicate<Matrix<T>>? _condition;
         private BranchMergeStrategy _mergeStrategy;
         private Dictionary<string, object>? _mergeParameters;
 
@@ -30,7 +32,7 @@ namespace AiDotNet.Pipeline
         /// <summary>
         /// Gets the steps in this branch
         /// </summary>
-        public IReadOnlyList<IPipelineStep> Steps => _steps.AsReadOnly();
+        public IReadOnlyList<IPipelineStep<T>> Steps => _steps.AsReadOnly();
 
         /// <summary>
         /// Gets whether this branch is conditional
@@ -85,11 +87,11 @@ namespace AiDotNet.Pipeline
         /// </summary>
         /// <param name="name">Name of the branch</param>
         /// <param name="condition">Optional condition for branch execution</param>
-        public PipelineBranch(string name, Predicate<double[][]>? condition = null)
+        public PipelineBranch(string name, Predicate<Matrix<T>>? condition = null)
         {
             Id = Guid.NewGuid().ToString();
             Name = name;
-            _steps = new List<IPipelineStep>();
+            _steps = new List<IPipelineStep<T>>();
             _condition = condition;
             _mergeStrategy = BranchMergeStrategy.Concatenate;
             ExecuteInParallel = false;
@@ -102,7 +104,7 @@ namespace AiDotNet.Pipeline
         /// Adds a step to this branch
         /// </summary>
         /// <param name="step">The pipeline step to add</param>
-        public void AddStep(IPipelineStep step)
+        public void AddStep(IPipelineStep<T> step)
         {
             if (step == null)
             {
@@ -117,7 +119,7 @@ namespace AiDotNet.Pipeline
         /// </summary>
         /// <param name="step">The pipeline step to remove</param>
         /// <returns>True if the step was removed, false otherwise</returns>
-        public bool RemoveStep(IPipelineStep step)
+        public bool RemoveStep(IPipelineStep<T> step)
         {
             return _steps.Remove(step);
         }
@@ -144,7 +146,7 @@ namespace AiDotNet.Pipeline
         /// </summary>
         /// <param name="data">Input data</param>
         /// <returns>True if the branch should execute, false otherwise</returns>
-        public bool ShouldExecute(double[][] data)
+        public bool ShouldExecute(Matrix<T> data)
         {
             if (!IsEnabled)
             {
@@ -156,464 +158,87 @@ namespace AiDotNet.Pipeline
                 return true;
             }
 
-            try
-            {
-                return _condition(data);
-            }
-            catch
-            {
-                // If condition evaluation fails, don't execute the branch
-                return false;
-            }
+            return _condition(data);
         }
 
         /// <summary>
-        /// Executes the branch pipeline on the given data
+        /// Executes all steps in this branch
         /// </summary>
         /// <param name="inputs">Input data</param>
-        /// <param name="targets">Optional target data</param>
-        /// <returns>Transformed data</returns>
-        public async Task<double[][]> ExecuteAsync(double[][] inputs, double[]? targets = null)
-        {
-            var startTime = DateTime.UtcNow;
-
-            try
-            {
-                if (!ShouldExecute(inputs))
-                {
-                    Statistics.SkippedCount++;
-                    return inputs;
-                }
-
-                var currentData = inputs;
-
-                // Execute each step in sequence
-                foreach (var step in _steps)
-                {
-                    if (!step.IsFitted && targets != null)
-                    {
-                        await step.FitAsync(currentData, targets).ConfigureAwait(false);
-                    }
-
-                    currentData = await step.TransformAsync(currentData).ConfigureAwait(false);
-                }
-
-                Statistics.ExecutionCount++;
-                Statistics.LastExecutedAt = DateTime.UtcNow;
-                return currentData;
-            }
-            finally
-            {
-                Statistics.TotalExecutionTime += DateTime.UtcNow - startTime;
-            }
-        }
-
-        /// <summary>
-        /// Fits all steps in the branch
-        /// </summary>
-        /// <param name="inputs">Input data</param>
-        /// <param name="targets">Optional target data</param>
-        public async Task FitAsync(double[][] inputs, double[]? targets = null)
+        /// <param name="targets">Target data (optional)</param>
+        /// <returns>Transformed data from the branch</returns>
+        public async Task<Matrix<T>> ExecuteAsync(Matrix<T> inputs, Vector<T>? targets = null)
         {
             if (!ShouldExecute(inputs))
             {
-                return;
+                Statistics.SkippedCount++;
+                return inputs;
             }
+
+            var startTime = DateTime.UtcNow;
+            Statistics.ExecutionCount++;
 
             var currentData = inputs;
 
-            foreach (var step in _steps)
+            try
             {
-                await step.FitAsync(currentData, targets).ConfigureAwait(false);
-                
-                // Transform data for next step
-                if (_steps.IndexOf(step) < _steps.Count - 1)
+                // Execute all steps in sequence
+                foreach (var step in _steps)
                 {
-                    currentData = await step.TransformAsync(currentData).ConfigureAwait(false);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Merges multiple branch results according to the merge strategy
-        /// </summary>
-        /// <param name="results">Results from multiple branches</param>
-        /// <returns>Merged result</returns>
-        public static double[][] MergeBranchResults(List<(PipelineBranch branch, double[][] data)> results)
-        {
-            if (results.Count == 0)
-            {
-                throw new ArgumentException("No results to merge", nameof(results));
-            }
-
-            if (results.Count == 1)
-            {
-                return results[0].data;
-            }
-
-            // Group by merge strategy
-            var strategyGroups = results.GroupBy(r => r.branch.MergeStrategy).ToList();
-
-            if (strategyGroups.Count > 1)
-            {
-                // Multiple strategies - merge each group then combine
-                var groupResults = new List<double[][]>();
-                
-                foreach (var group in strategyGroups)
-                {
-                    var groupData = group.Select(g => g.data).ToList();
-                    var merged = ApplyMergeStrategy(group.Key, groupData, group.First().branch._mergeParameters);
-                    groupResults.Add(merged);
-                }
-
-                // Final merge using concatenation
-                return ApplyMergeStrategy(BranchMergeStrategy.Concatenate, groupResults, null);
-            }
-            else
-            {
-                // Single strategy - merge all at once
-                var strategy = strategyGroups[0].Key;
-                var allData = results.Select(r => r.data).ToList();
-                return ApplyMergeStrategy(strategy, allData, results[0].branch._mergeParameters);
-            }
-        }
-
-        /// <summary>
-        /// Applies a specific merge strategy to combine results
-        /// </summary>
-        private static double[][] ApplyMergeStrategy(BranchMergeStrategy strategy, 
-            List<double[][]> results, Dictionary<string, object>? parameters)
-        {
-            switch (strategy)
-            {
-                case BranchMergeStrategy.Concatenate:
-                    return MergeConcatenate(results);
-
-                case BranchMergeStrategy.Average:
-                    return MergeAverage(results);
-
-                case BranchMergeStrategy.WeightedAverage:
-                    return MergeWeightedAverage(results, parameters);
-
-                case BranchMergeStrategy.Maximum:
-                    return MergeMaximum(results);
-
-                case BranchMergeStrategy.Minimum:
-                    return MergeMinimum(results);
-
-                case BranchMergeStrategy.Sum:
-                    return MergeSum(results);
-
-                case BranchMergeStrategy.Product:
-                    return MergeProduct(results);
-
-                case BranchMergeStrategy.Voting:
-                    return MergeVoting(results, parameters);
-
-                case BranchMergeStrategy.FirstCompleted:
-                    return results[0]; // Assumes first in list completed first
-
-                case BranchMergeStrategy.BestPerforming:
-                    return MergeBestPerforming(results, parameters);
-
-                case BranchMergeStrategy.LogicalAnd:
-                    return MergeLogicalAnd(results);
-
-                case BranchMergeStrategy.LogicalOr:
-                    return MergeLogicalOr(results);
-
-                default:
-                    return MergeConcatenate(results);
-            }
-        }
-
-        /// <summary>
-        /// Concatenates results horizontally (adds features)
-        /// </summary>
-        private static double[][] MergeConcatenate(List<double[][]> results)
-        {
-            int numSamples = results[0].Length;
-            int totalFeatures = results.Sum(r => r[0].Length);
-
-            var merged = new double[numSamples][];
-            
-            for (int i = 0; i < numSamples; i++)
-            {
-                merged[i] = new double[totalFeatures];
-                int currentIndex = 0;
-
-                foreach (var result in results)
-                {
-                    Array.Copy(result[i], 0, merged[i], currentIndex, result[i].Length);
-                    currentIndex += result[i].Length;
-                }
-            }
-
-            return merged;
-        }
-
-        /// <summary>
-        /// Averages results element-wise
-        /// </summary>
-        private static double[][] MergeAverage(List<double[][]> results)
-        {
-            int numSamples = results[0].Length;
-            int numFeatures = results[0][0].Length;
-
-            var merged = new double[numSamples][];
-            
-            for (int i = 0; i < numSamples; i++)
-            {
-                merged[i] = new double[numFeatures];
-                
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    double sum = 0;
-                    foreach (var result in results)
+                    if (!step.IsFitted)
                     {
-                        sum += result[i][j];
+                        await step.FitAsync(currentData, targets);
                     }
-                    merged[i][j] = sum / results.Count;
+                    currentData = await step.TransformAsync(currentData);
                 }
-            }
 
-            return merged;
+                var executionTime = DateTime.UtcNow - startTime;
+                Statistics.TotalExecutionTime = Statistics.TotalExecutionTime.Add(executionTime);
+                Statistics.LastExecutedAt = DateTime.UtcNow;
+
+                return currentData;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Branch '{Name}' execution failed: {ex.Message}", ex);
+            }
         }
 
         /// <summary>
-        /// Weighted average of results
+        /// Gets merge parameters
         /// </summary>
-        private static double[][] MergeWeightedAverage(List<double[][]> results, Dictionary<string, object>? parameters)
+        /// <returns>Dictionary of merge parameters</returns>
+        public Dictionary<string, object> GetMergeParameters()
         {
-            var weights = parameters?.GetValueOrDefault("Weights") as double[] 
-                ?? Enumerable.Repeat(1.0 / results.Count, results.Count).ToArray();
-
-            int numSamples = results[0].Length;
-            int numFeatures = results[0][0].Length;
-
-            var merged = new double[numSamples][];
-            
-            for (int i = 0; i < numSamples; i++)
-            {
-                merged[i] = new double[numFeatures];
-                
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    double weightedSum = 0;
-                    for (int k = 0; k < results.Count; k++)
-                    {
-                        weightedSum += results[k][i][j] * weights[k];
-                    }
-                    merged[i][j] = weightedSum;
-                }
-            }
-
-            return merged;
+            return _mergeParameters ?? new Dictionary<string, object>();
         }
 
         /// <summary>
-        /// Takes maximum value element-wise
+        /// Validates the branch configuration
         /// </summary>
-        private static double[][] MergeMaximum(List<double[][]> results)
+        /// <returns>Validation result</returns>
+        public (bool IsValid, string? ErrorMessage) Validate()
         {
-            int numSamples = results[0].Length;
-            int numFeatures = results[0][0].Length;
-
-            var merged = new double[numSamples][];
-            
-            for (int i = 0; i < numSamples; i++)
+            if (string.IsNullOrWhiteSpace(Name))
             {
-                merged[i] = new double[numFeatures];
-                
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    merged[i][j] = results.Max(r => r[i][j]);
-                }
+                return (false, "Branch name cannot be empty");
             }
 
-            return merged;
+            if (_steps.Count == 0)
+            {
+                return (false, "Branch must contain at least one step");
+            }
+
+            return (true, null);
         }
 
         /// <summary>
-        /// Takes minimum value element-wise
+        /// Creates a deep copy of this branch
         /// </summary>
-        private static double[][] MergeMinimum(List<double[][]> results)
+        /// <returns>A new instance with the same configuration</returns>
+        public PipelineBranch<T> Clone()
         {
-            int numSamples = results[0].Length;
-            int numFeatures = results[0][0].Length;
-
-            var merged = new double[numSamples][];
-            
-            for (int i = 0; i < numSamples; i++)
-            {
-                merged[i] = new double[numFeatures];
-                
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    merged[i][j] = results.Min(r => r[i][j]);
-                }
-            }
-
-            return merged;
-        }
-
-        /// <summary>
-        /// Sums results element-wise
-        /// </summary>
-        private static double[][] MergeSum(List<double[][]> results)
-        {
-            int numSamples = results[0].Length;
-            int numFeatures = results[0][0].Length;
-
-            var merged = new double[numSamples][];
-            
-            for (int i = 0; i < numSamples; i++)
-            {
-                merged[i] = new double[numFeatures];
-                
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    merged[i][j] = results.Sum(r => r[i][j]);
-                }
-            }
-
-            return merged;
-        }
-
-        /// <summary>
-        /// Multiplies results element-wise
-        /// </summary>
-        private static double[][] MergeProduct(List<double[][]> results)
-        {
-            int numSamples = results[0].Length;
-            int numFeatures = results[0][0].Length;
-
-            var merged = new double[numSamples][];
-            
-            for (int i = 0; i < numSamples; i++)
-            {
-                merged[i] = new double[numFeatures];
-                
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    double product = 1.0;
-                    foreach (var result in results)
-                    {
-                        product *= result[i][j];
-                    }
-                    merged[i][j] = product;
-                }
-            }
-
-            return merged;
-        }
-
-        /// <summary>
-        /// Voting-based merge (for classification-like outputs)
-        /// </summary>
-        private static double[][] MergeVoting(List<double[][]> results, Dictionary<string, object>? parameters)
-        {
-            int numSamples = results[0].Length;
-            int numFeatures = results[0][0].Length;
-            var threshold = parameters?.GetValueOrDefault("Threshold") as double? ?? 0.5;
-
-            var merged = new double[numSamples][];
-            
-            for (int i = 0; i < numSamples; i++)
-            {
-                merged[i] = new double[numFeatures];
-                
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    int votes = results.Count(r => r[i][j] > threshold);
-                    merged[i][j] = votes > results.Count / 2 ? 1.0 : 0.0;
-                }
-            }
-
-            return merged;
-        }
-
-        /// <summary>
-        /// Selects best performing result based on a metric
-        /// </summary>
-        private static double[][] MergeBestPerforming(List<double[][]> results, Dictionary<string, object>? parameters)
-        {
-            // If no metric provided, return first result
-            var metricFunc = parameters?.GetValueOrDefault("MetricFunction") as Func<double[][], double>;
-            if (metricFunc == null)
-            {
-                return results[0];
-            }
-
-            double bestScore = double.MinValue;
-            double[][] bestResult = results[0];
-
-            foreach (var result in results)
-            {
-                double score = metricFunc(result);
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestResult = result;
-                }
-            }
-
-            return bestResult;
-        }
-
-        /// <summary>
-        /// Logical AND merge (for binary outputs)
-        /// </summary>
-        private static double[][] MergeLogicalAnd(List<double[][]> results)
-        {
-            int numSamples = results[0].Length;
-            int numFeatures = results[0][0].Length;
-
-            var merged = new double[numSamples][];
-            
-            for (int i = 0; i < numSamples; i++)
-            {
-                merged[i] = new double[numFeatures];
-                
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    merged[i][j] = results.All(r => r[i][j] > 0.5) ? 1.0 : 0.0;
-                }
-            }
-
-            return merged;
-        }
-
-        /// <summary>
-        /// Logical OR merge (for binary outputs)
-        /// </summary>
-        private static double[][] MergeLogicalOr(List<double[][]> results)
-        {
-            int numSamples = results[0].Length;
-            int numFeatures = results[0][0].Length;
-
-            var merged = new double[numSamples][];
-            
-            for (int i = 0; i < numSamples; i++)
-            {
-                merged[i] = new double[numFeatures];
-                
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    merged[i][j] = results.Any(r => r[i][j] > 0.5) ? 1.0 : 0.0;
-                }
-            }
-
-            return merged;
-        }
-
-        /// <summary>
-        /// Creates a clone of this branch
-        /// </summary>
-        /// <returns>A new branch with the same configuration</returns>
-        public PipelineBranch Clone()
-        {
-            var clone = new PipelineBranch(Name, _condition)
+            var clone = new PipelineBranch<T>(Name + "_Clone", _condition)
             {
                 MergeStrategy = MergeStrategy,
                 ExecuteInParallel = ExecuteInParallel,
@@ -632,6 +257,93 @@ namespace AiDotNet.Pipeline
             }
 
             return clone;
+        }
+
+        /// <summary>
+        /// Converts a 2D double array to a Tensor
+        /// </summary>
+        private static Tensor<double> ArrayToTensor(double[][] array)
+        {
+            if (array == null || array.Length == 0)
+            {
+                throw new ArgumentException("Array cannot be null or empty", nameof(array));
+            }
+
+            var rows = array.Length;
+            var cols = array[0].Length;
+            var tensor = new Tensor<double>(new[] { rows, cols });
+
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    tensor[i, j] = array[i][j];
+                }
+            }
+
+            return tensor;
+        }
+
+        /// <summary>
+        /// Converts a 1D double array to a Tensor
+        /// </summary>
+        private static Tensor<double> ArrayTo1DTensor(double[] array)
+        {
+            if (array == null || array.Length == 0)
+            {
+                throw new ArgumentException("Array cannot be null or empty", nameof(array));
+            }
+
+            var tensor = new Tensor<double>(new[] { array.Length });
+            for (int i = 0; i < array.Length; i++)
+            {
+                tensor[i] = array[i];
+            }
+
+            return tensor;
+        }
+
+        /// <summary>
+        /// Converts a Tensor to a 2D double array
+        /// </summary>
+        private static double[][] TensorToArray(Tensor<double> tensor)
+        {
+            if (tensor == null)
+            {
+                throw new ArgumentNullException(nameof(tensor));
+            }
+
+            var shape = tensor.Shape;
+            if (shape.Length == 1)
+            {
+                // 1D tensor - convert to 2D with single column
+                var result = new double[shape[0]][];
+                for (int i = 0; i < shape[0]; i++)
+                {
+                    result[i] = new double[] { tensor[i] };
+                }
+                return result;
+            }
+            else if (shape.Length == 2)
+            {
+                // 2D tensor - direct conversion
+                var rows = shape[0];
+                var cols = shape[1];
+                var result = new double[rows][];
+                for (int i = 0; i < rows; i++)
+                {
+                    result[i] = new double[cols];
+                    for (int j = 0; j < cols; j++)
+                    {
+                        result[i][j] = tensor[i, j];
+                    }
+                }
+                return result;
+            }
+            else
+            {
+                throw new ArgumentException($"Unsupported tensor rank: {shape.Length}. Expected 1D or 2D tensor.", nameof(tensor));
+            }
         }
     }
 }

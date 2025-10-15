@@ -9,6 +9,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
+using AiDotNet.Statistics;
 
 namespace AiDotNet.OnlineLearning.Algorithms;
 
@@ -18,14 +19,14 @@ namespace AiDotNet.OnlineLearning.Algorithms;
 /// </summary>
 public class OnlineRandomForest<T> : OnlineModelBase<T, Vector<T>, T>
 {
-    private readonly List<HoeffdingTree<T>> _trees;
-    private readonly OnlineModelOptions<T> _options;
+    private readonly List<HoeffdingTree<T>> _trees = default!;
+    private readonly OnlineModelOptions<T> _options = default!;
     private readonly int _numTrees;
     private readonly int _numClasses;
     private readonly int _numFeatures;
     private readonly int _subspaceSize;
     private readonly List<int[]> _featureSubsets;
-    private readonly Random _random;
+    private readonly Random _random = default!;
     private readonly bool _useParallel;
     
     /// <summary>
@@ -295,15 +296,15 @@ public class OnlineRandomForest<T> : OnlineModelBase<T, Vector<T>, T>
     }
     
     /// <inheritdoc/>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var totalNodes = _trees.Sum(t => 
         {
-            var meta = t.GetModelMetaData();
+            var meta = t.GetModelMetadata();
             return (int)meta.AdditionalInfo["DecisionNodes"] + (int)meta.AdditionalInfo["ActiveLeaves"];
         });
         
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.OnlineRandomForest,
             FeatureCount = _numFeatures,
@@ -519,14 +520,10 @@ public class OnlineRandomForest<T> : OnlineModelBase<T, Vector<T>, T>
     /// <summary>
     /// Gets the feature importance scores based on how often features are used in splits.
     /// </summary>
-    public Vector<T> GetFeatureImportance()
+    public override Dictionary<string, T> GetFeatureImportance()
     {
-        var importance = new T[_numFeatures];
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            importance[i] = NumOps.Zero;
-        }
-        
+        var result = new Dictionary<string, T>();
+
         // Count how many trees use each feature
         for (int f = 0; f < _numFeatures; f++)
         {
@@ -543,9 +540,109 @@ public class OnlineRandomForest<T> : OnlineModelBase<T, Vector<T>, T>
                     }
                 }
             }
-            importance[f] = NumOps.Divide(NumOps.FromDouble(count), NumOps.FromDouble(_numTrees));
+            result[$"Feature_{f}"] = NumOps.Divide(NumOps.FromDouble(count), NumOps.FromDouble(_numTrees));
         }
+
+        return result;
+    }
+
+    
+    /// <inheritdoc/>
+    public override int InputDimensions => _numFeatures;
+    
+    /// <inheritdoc/>
+    public override int OutputDimensions => 1;
+    
+    /// <inheritdoc/>
+    public override bool IsTrained => _samplesSeen > 0;
+    
+    /// <inheritdoc/>
+    public override T[] PredictBatch(Vector<T>[] inputBatch)
+    {
+        var predictions = new T[inputBatch.Length];
+        for (int i = 0; i < inputBatch.Length; i++)
+        {
+            predictions[i] = Predict(inputBatch[i]);
+        }
+        return predictions;
+    }
+    
+    /// <inheritdoc/>
+    public override Dictionary<string, double> Evaluate(Vector<T> testData, T testLabels)
+    {
+        // This method should accept arrays, but for now return basic metrics
+        var prediction = Predict(testData);
+        var error = CalculateError(prediction, testLabels);
         
-        return new Vector<T>(importance);
+        return new Dictionary<string, double>
+        {
+            ["Accuracy"] = NumOps.Equals(prediction, testLabels) ? 1.0 : 0.0,
+            ["Error"] = Convert.ToDouble(error)
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void SaveModel(string filePath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filePath, data);
+    }
+    
+    /// <inheritdoc/>
+    public override double GetTrainingLoss()
+    {
+        // Default implementation for models that don't track loss
+        return 0.0;
+    }
+    
+    /// <inheritdoc/>
+    public override double GetValidationLoss()
+    {
+        // In online learning, we don't have separate validation loss
+        return GetTrainingLoss();
+    }
+    
+    /// <inheritdoc/>
+    public override Vector<T> GetModelParameters()
+    {
+        return GetParameters();
+    }
+    
+    /// <inheritdoc/>
+    public override ModelStats<T> GetStats()
+    {
+        return new ModelStats<T>
+        {
+            SampleCount = SamplesSeen,
+            LearningRate = _learningRate,
+            TrainingLoss = NumOps.FromDouble(GetTrainingLoss()),
+            ValidationLoss = NumOps.FromDouble(GetValidationLoss()),
+            AdditionalMetrics = new Dictionary<string, T>
+            {
+                ["NumTrees"] = NumOps.FromDouble(_numTrees),
+                ["SubspaceSize"] = NumOps.FromDouble(_subspaceSize)
+            }
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void Save()
+    {
+        // Default implementation saves to a standard location
+        SaveModel($"online_random_forest_model_{DateTime.Now:yyyyMMddHHmmss}.bin");
+    }
+    
+    /// <inheritdoc/>
+    public override void Load()
+    {
+        // Default implementation would load from a standard location
+        // For now, this is a no-op as we need a file path
+        throw new NotImplementedException("Load requires a file path. Use Deserialize instead.");
+    }
+    
+    /// <inheritdoc/>
+    public override void Dispose()
+    {
+        // Clean up any resources if needed
     }
 }

@@ -46,7 +46,7 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
     /// without having to write separate code for each number type.
     /// </para>
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The low-pass filter coefficients used during signal decomposition.
@@ -68,7 +68,7 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
     /// major shapes and contours but not the fine details.
     /// </para>
     /// </remarks>
-    private readonly Vector<T> _decompositionLowPass;
+    private readonly Vector<T> _decompositionLowPass = default!;
 
     /// <summary>
     /// The high-pass filter coefficients used during signal decomposition.
@@ -90,7 +90,7 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
     /// while ignoring the broader shapes.
     /// </para>
     /// </remarks>
-    private readonly Vector<T> _decompositionHighPass;
+    private readonly Vector<T> _decompositionHighPass = default!;
 
     /// <summary>
     /// The low-pass filter coefficients used during signal reconstruction.
@@ -112,7 +112,7 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
     /// to ensure that after decomposition and reconstruction, you get back exactly the original data.
     /// </para>
     /// </remarks>
-    private readonly Vector<T> _reconstructionLowPass;
+    private readonly Vector<T> _reconstructionLowPass = default!;
 
     /// <summary>
     /// The high-pass filter coefficients used during signal reconstruction.
@@ -134,7 +134,7 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
     /// all the fine details of your original data are preserved during the transform process.
     /// </para>
     /// </remarks>
-    private readonly Vector<T> _reconstructionHighPass;
+    private readonly Vector<T> _reconstructionHighPass = default!;
 
     /// <summary>
     /// The method used to handle boundary conditions when processing signals of finite length.
@@ -157,7 +157,7 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
     /// assume there's nothing beyond the edge?
     /// </para>
     /// </remarks>
-    private readonly BoundaryHandlingMethod _boundaryMethod;
+    private readonly BoundaryHandlingMethod _boundaryMethod = default!;
 
     /// <summary>
     /// The size of data chunks used when processing large signals.
@@ -201,7 +201,7 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
     /// capturing certain kinds of details or features in your data.
     /// </para>
     /// </remarks>
-    private readonly WaveletType _waveletType;
+    private readonly WaveletType _waveletType = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ReverseBiorthogonalWavelet{T}"/> class with the specified parameters.

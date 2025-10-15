@@ -27,7 +27,7 @@ public class InformationCriteriaFitDetector<T, TInput, TOutput> : FitDetectorBas
     /// They include thresholds that determine when a model is considered to be overfitting, underfitting, etc.
     /// </para>
     /// </remarks>
-    private readonly InformationCriteriaFitDetectorOptions _options;
+    private readonly InformationCriteriaFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the InformationCriteriaFitDetector class.

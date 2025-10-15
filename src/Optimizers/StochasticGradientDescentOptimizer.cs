@@ -22,7 +22,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
-    private StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> _options;
+    private StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the StochasticGradientDescentOptimizer class.

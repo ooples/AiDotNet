@@ -31,12 +31,12 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// <summary>
     /// Random number generator for stochastic components of the algorithm.
     /// </summary>
-    private readonly Random _random;
+    private readonly Random _random = default!;
 
     /// <summary>
     /// Configuration options specific to Particle Swarm Optimization.
     /// </summary>
-    private ParticleSwarmOptimizationOptions<T, TInput, TOutput> _psoOptions;
+    private ParticleSwarmOptimizationOptions<T, TInput, TOutput> _psoOptions = default!;
 
     /// <summary>
     /// The current inertia weight that controls a particle's tendency to continue its current trajectory.

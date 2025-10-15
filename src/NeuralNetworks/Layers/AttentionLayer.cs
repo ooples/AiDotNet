@@ -40,7 +40,7 @@ public class AttentionLayer<T> : LayerBase<T>
     /// Think of it as formulating what information we're looking for in the input sequence.
     /// </para>
     /// </remarks>
-    private Tensor<T> _Wq;
+    private Tensor<T> _Wq = default!;
 
     /// <summary>
     /// The weight tensor for the key transformation.
@@ -54,7 +54,7 @@ public class AttentionLayer<T> : LayerBase<T>
     /// Think of it as creating a way to identify or index different parts of the input.
     /// </para>
     /// </remarks>
-    private Tensor<T> _Wk;
+    private Tensor<T> _Wk = default!;
 
     /// <summary>
     /// The weight tensor for the value transformation.
@@ -68,7 +68,7 @@ public class AttentionLayer<T> : LayerBase<T>
     /// Think of it as extracting the useful information from each part of the input sequence.
     /// </para>
     /// </remarks>
-    private Tensor<T> _Wv;
+    private Tensor<T> _Wv = default!;
 
     /// <summary>
     /// The size of the input features.

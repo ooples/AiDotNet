@@ -10,7 +10,7 @@ namespace AiDotNet.ReinforcementLearning.Tournament.Visualization
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class TournamentVisualizer<T>
     {
-        private readonly TournamentResult<T> _results;
+        private readonly TournamentResult<T> _results = default!;
         
         /// <summary>
         /// Initializes a new instance of the <see cref="TournamentVisualizer{T}"/> class.

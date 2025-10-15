@@ -48,7 +48,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// (trend, seasonal patterns, regression effects) and various technical settings
     /// that determine how the model learns from data.
     /// </remarks>
-    private readonly BayesianStructuralTimeSeriesOptions<T> _bayesianOptions;
+    private readonly BayesianStructuralTimeSeriesOptions<T> _bayesianOptions = default!;
 
     /// <summary>
     /// The current level (baseline value) of the time series.
@@ -60,7 +60,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// around which other components fluctuate. In a business context, it might
     /// represent your baseline sales before seasonal peaks and special events.
     /// </remarks>
-    private T _level;
+    private T _level = default!;
 
     /// <summary>
     /// The current trend (rate of change) of the time series.
@@ -72,7 +72,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// while a negative trend means they're declining. For example, in sales data,
     /// a positive trend might indicate growing market share or increased demand.
     /// </remarks>
-    private T _trend;
+    private T _trend = default!;
 
     /// <summary>
     /// The seasonal components of the time series, representing cyclical patterns.
@@ -88,7 +88,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// Each seasonal component represents a different cycle length (daily, weekly, yearly, etc.).
     /// The model learns these patterns from your data and uses them to make better predictions.
     /// </remarks>
-    private List<Vector<T>> _seasonalComponents;
+    private List<Vector<T>> _seasonalComponents = default!;
 
     /// <summary>
     /// The uncertainty in the state estimates, represented as a covariance matrix.
@@ -102,7 +102,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// Think of it like error bars around the model's internal estimates - they tend to
     /// get smaller as more data confirms the patterns.
     /// </remarks>
-    private Matrix<T> _stateCovariance;
+    private Matrix<T> _stateCovariance = default!;
 
     /// <summary>
     /// The estimated variance (uncertainty) in observations.
@@ -117,7 +117,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// trends and seasonal patterns. This parameter measures the size of those
     /// unexplained fluctuations.
     /// </remarks>
-    private T _observationVariance;
+    private T _observationVariance = default!;
 
     /// <summary>
     /// Coefficients for the regression component (impact of external variables).
@@ -1292,7 +1292,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the trained model, including its type, components, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method provides comprehensive information about the model, including its type, parameters, components,
@@ -1313,10 +1313,10 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// - Understanding which components are most important in your forecasts
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var bstsOptions = (BayesianStructuralTimeSeriesOptions<T>)Options;
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.BayesianStructuralTimeSeriesModel,
             AdditionalInfo = new Dictionary<string, object>

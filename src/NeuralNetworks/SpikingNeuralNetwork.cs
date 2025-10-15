@@ -50,7 +50,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// and can be important for processing temporal patterns.
     /// </para>
     /// </remarks>
-    private T _membraneDecay;
+    private T _membraneDecay = default!;
     
     /// <summary>
     /// Gets or sets the refractory period for neurons after firing.
@@ -99,7 +99,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// processing capability - neurons remember their recent inputs via this potential.
     /// </para>
     /// </remarks>
-    private List<Vector<T>> _membranePotentials;
+    private List<Vector<T>> _membranePotentials = default!;
     
     /// <summary>
     /// Tracks the refractory state of each neuron.
@@ -145,7 +145,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// stronger signals before they respond.
     /// </para>
     /// </remarks>
-    private List<Vector<T>> _firingThresholds;
+    private List<Vector<T>> _firingThresholds = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SpikingNeuralNetwork{T}"/> class with the specified architecture and a vector activation function.
@@ -795,7 +795,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the spiking neural network.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the network.</returns>
+    /// <returns>A ModelMetadata object containing information about the network.</returns>
     /// <remarks>
     /// <para>
     /// This method returns comprehensive metadata about the spiking neural network, including its
@@ -817,7 +817,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// - Reproducing results in future experiments
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Collect layer types
         Dictionary<string, int> layerTypes = new Dictionary<string, int>();
@@ -846,7 +846,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             ? _vectorActivation.GetType().Name 
             : (_scalarActivation != null ? _scalarActivation.GetType().Name : "None");
         
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.SpikingNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

@@ -32,12 +32,12 @@ namespace AiDotNet.ReinforcementLearning.Policies
         private readonly List<LayerBase<T>> _stdDevLayers; // Layers for action standard deviations
         private readonly TanhActivation<T> _finalMeanActivation; // Tanh for bounding action means
         private readonly SoftPlusActivation<T> _finalStdDevActivation; // Softplus for positive std devs
-        private readonly Random _random;
-        private readonly Vector<T> _actionLowerBound;
-        private readonly Vector<T> _actionUpperBound;
+        private readonly Random _random = default!;
+        private readonly Vector<T> _actionLowerBound = default!;
+        private readonly Vector<T> _actionUpperBound = default!;
         private readonly bool _learnStdDev;
-        private readonly T _minStdDev;
-        private readonly T _maxStdDev;
+        private readonly T _minStdDev = default!;
+        private readonly T _maxStdDev = default!;
 
         /// <summary>
         /// Gets a value indicating whether the policy is stochastic.

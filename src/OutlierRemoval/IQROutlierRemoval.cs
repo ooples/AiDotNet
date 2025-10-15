@@ -16,8 +16,8 @@
 /// </remarks>
 public class IQROutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, TOutput>
 {
-    private readonly T _iqrMultiplier;
-    private readonly INumericOperations<T> _numOps;
+    private readonly T _iqrMultiplier = default!;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new instance of the IQR-based outlier removal algorithm.

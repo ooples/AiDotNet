@@ -48,7 +48,7 @@ public class MultiquadricKernel<T> : IKernelFunction<T>
     /// You might want to adjust this parameter based on the scale of your data and the specific
     /// problem you're trying to solve.
     /// </remarks>
-    private readonly T _c;
+    private readonly T _c = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -58,7 +58,7 @@ public class MultiquadricKernel<T> : IKernelFunction<T>
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Multiquadric kernel with an optional shape parameter.

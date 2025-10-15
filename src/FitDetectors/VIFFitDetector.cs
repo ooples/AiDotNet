@@ -28,12 +28,12 @@ public class VIFFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOu
     /// <summary>
     /// Configuration options for the VIF fit detector.
     /// </summary>
-    private readonly VIFFitDetectorOptions _options;
+    private readonly VIFFitDetectorOptions _options = default!;
     
     /// <summary>
     /// Configuration options for model statistics calculations.
     /// </summary>
-    private readonly ModelStatsOptions _modelStatsOptions;
+    private readonly ModelStatsOptions _modelStatsOptions = default!;
 
     /// <summary>
     /// Initializes a new instance of the VIFFitDetector class.

@@ -47,6 +47,24 @@ public abstract class TensorBase<T>
     public int Rank => Shape.Length;
 
     /// <summary>
+    /// Gets the underlying data vector of the tensor.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This gives you direct access to the internal vector storing the tensor's values.
+    /// The data is stored in a flattened format.</para>
+    /// </remarks>
+    public Vector<T> Data => _data;
+
+    /// <summary>
+    /// Gets or sets metadata associated with the tensor.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Metadata is additional information about the tensor,
+    /// such as labels, descriptions, or other contextual data.</para>
+    /// </remarks>
+    public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
+
+    /// <summary>
     /// Initializes a new instance of the TensorBase class with the specified shape.
     /// </summary>
     /// <param name="shape">The shape of the tensor.</param>

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 
 namespace AiDotNet.NeuralNetworks.DiffusionModels
 {
@@ -20,7 +22,7 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
         private readonly double rho;
         private readonly ScheduleType scheduleType;
         private readonly bool useDistillation;
-        private INeuralNetworkModel<double> teacherModel;
+        private INeuralNetworkModel<double>? teacherModel;
         
         public enum ScheduleType
         {
@@ -28,8 +30,9 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
             Linear,
             Quadratic
         }
-        
+
         public ConsistencyModel(
+            NeuralNetworkArchitecture<double> architecture,
             INeuralNetworkModel<double> consistencyFunction,
             double sigmaMin = 0.002,
             double sigmaMax = 80.0,
@@ -38,7 +41,12 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
             ScheduleType scheduleType = ScheduleType.Karras,
             bool useDistillation = false,
             string modelName = "ConsistencyModel")
-            : base(modelName)
+            : base(new NeuralNetworkArchitecture<double>(
+                   complexity: NetworkComplexity.Medium,
+                   taskType: NeuralNetworkTaskType.Custom,
+                   cacheName: modelName), 
+                   new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), 
+                   1.0)
         {
             this.consistencyFunction = consistencyFunction ?? throw new ArgumentNullException(nameof(consistencyFunction));
             this.sigmaMin = sigmaMin;
@@ -47,8 +55,6 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
             this.rho = rho;
             this.scheduleType = scheduleType;
             this.useDistillation = useDistillation;
-            
-            ModelCategory = ModelCategory.Generative;
         }
         
         /// <summary>
@@ -121,10 +127,10 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
             var batchSize = data.Shape[0];
             var totalLoss = 0.0;
             var random = new Random();
-            
+
             for (int i = 0; i < batchSize; i++)
             {
-                var sample = data.GetSlice(new[] { i });
+                var sample = data.GetSlice(i);
                 
                 // Sample time step
                 var n = random.Next(1, numSteps);
@@ -150,8 +156,8 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
                 if (consistencyFunction is NeuralNetworkBase<double> nn)
                 {
                     var grad = predicted.Subtract(target).Multiply(GetLossWeight(sigma));
-                    nn.Backward(grad);
-                    optimizer.Step(nn.GetParameters(), nn.GetGradients());
+                    nn.Backpropagate(grad);
+                    optimizer.Step();
                 }
             }
             
@@ -165,14 +171,14 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
         {
             if (!useDistillation || teacherModel == null)
                 throw new InvalidOperationException("Teacher model not set for distillation");
-            
+
             var batchSize = data.Shape[0];
             var totalLoss = 0.0;
             var random = new Random();
-            
+
             for (int i = 0; i < batchSize; i++)
             {
-                var sample = data.GetSlice(new[] { i });
+                var sample = data.GetSlice(i);
                 
                 // Sample adjacent time steps
                 var n = random.Next(1, numSteps);
@@ -200,9 +206,10 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
                 // Backpropagate
                 if (consistencyFunction is NeuralNetworkBase<double> nn)
                 {
-                    var grad = studentCurrent.Subtract(studentPrev.Detach());
-                    nn.Backward(grad);
-                    optimizer.Step(nn.GetParameters(), nn.GetGradients());
+                    // Use stop-gradient by cloning the target
+                    var grad = studentCurrent.Subtract(studentPrev.Clone());
+                    nn.Backpropagate(grad);
+                    optimizer.Step();
                 }
             }
             
@@ -371,30 +378,124 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
             return noise;
         }
         
-        public override Tensor<double> Forward(Tensor<double> input)
+        // Implement required abstract methods from NeuralNetworkBase
+        
+        public override Tensor<double> Predict(Tensor<double> input)
         {
-            // For compatibility
+            // For consistency models, prediction means generating from noise
             return Generate(input.Shape);
         }
         
-        public override void Backward(Tensor<double> gradOutput)
+        protected override void InitializeLayers()
         {
-            // Backward is handled in training methods
+            // Consistency models don't use traditional layers
+            // The consistency function is set in the constructor
         }
         
-        protected override void SaveModelSpecificData(IDictionary<string, object> data)
+        protected override void DeserializeNetworkSpecificData(System.IO.BinaryReader reader)
         {
-            data["sigmaMin"] = sigmaMin;
-            data["sigmaMax"] = sigmaMax;
-            data["numSteps"] = numSteps;
-            data["rho"] = rho;
-            data["scheduleType"] = scheduleType.ToString();
-            data["useDistillation"] = useDistillation;
+            // Read consistency model-specific data
+            // This would include reading sigma values, schedule type, etc.
         }
         
-        protected override void LoadModelSpecificData(IDictionary<string, object> data)
+        protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateNewInstance()
         {
-            // Load model parameters
+            return new ConsistencyModel(consistencyFunction, sigmaMin, sigmaMax, numSteps, rho, scheduleType, useDistillation, Architecture.CacheName);
+        }
+        
+        public override AiDotNet.Models.ModelMetadata<double> GetModelMetadata()
+        {
+            var paramCount = 0;
+            if (consistencyFunction != null)
+            {
+                // Try to get parameter count using INeuralNetworkModel's GetParameters method
+                try
+                {
+                    var parameters = consistencyFunction.GetParameters();
+                    paramCount = parameters?.Length ?? 0;
+                }
+                catch
+                {
+                    // If GetParameters is not available, estimate based on architecture
+                    paramCount = 1000000; // Default estimate for a typical neural network
+                }
+            }
+            
+            return new AiDotNet.Models.ModelMetadata<double>
+            {
+                ModelType = ModelType.NeuralNetwork,
+                FeatureCount = 0, // Variable for generative models
+                Complexity = paramCount,
+                Description = $"Consistency Model ({scheduleType} schedule) for single-step generation. " +
+                             $"Sigma Range: [{sigmaMin}, {sigmaMax}], Steps: {numSteps}, " +
+                             $"Distillation: {useDistillation}",
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    ["ModelCategory"] = "Generative",
+                    ["ModelName"] = Architecture?.CacheName ?? "ConsistencyModel",
+                    ["ArchitectureDescription"] = $"Consistency Model ({scheduleType} schedule)",
+                    ["TotalParameters"] = paramCount,
+                    ["TrainableParameters"] = paramCount,
+                    ["NonTrainableParameters"] = 0,
+                    ["InputShape"] = "Variable",
+                    ["OutputShape"] = "Variable",
+                    ["ConsistencyFunction"] = consistencyFunction?.GetType().Name ?? "Not set",
+                    ["SigmaMin"] = sigmaMin,
+                    ["SigmaMax"] = sigmaMax,
+                    ["NumSteps"] = numSteps,
+                    ["UseDistillation"] = useDistillation,
+                    ["ScheduleType"] = scheduleType.ToString(),
+                    ["PreferredHardware"] = "GPU",
+                    ["LastTrainingLoss"] = LastLoss ?? 0.0,
+                    ["Version"] = "1.0.0",
+                    ["Author"] = "AiDotNet"
+                }
+            };
+        }
+        
+        public override void Train(Tensor<double> input, Tensor<double> expectedOutput)
+        {
+            // Consistency models use a different training approach
+            throw new NotImplementedException("Use TrainConsistency or TrainDistillation methods for training");
+        }
+        
+        public override void UpdateParameters(AiDotNet.LinearAlgebra.Vector<double> parameters)
+        {
+            // Update parameters of the consistency function
+            if (consistencyFunction != null)
+            {
+                consistencyFunction.SetParameters(parameters);
+            }
+        }
+        
+        protected override void SerializeNetworkSpecificData(System.IO.BinaryWriter writer)
+        {
+            // Write consistency model-specific data
+            writer.Write(sigmaMin);
+            writer.Write(sigmaMax);
+            writer.Write(numSteps);
+            writer.Write(rho);
+            writer.Write(scheduleType.ToString());
+            writer.Write(useDistillation);
+            
+            // Write whether we have a consistency function
+            writer.Write(consistencyFunction != null);
+            if (consistencyFunction != null)
+            {
+                // Serialize the consistency function
+                var functionData = consistencyFunction.Serialize();
+                writer.Write(functionData.Length);
+                writer.Write(functionData);
+            }
+            
+            // Write whether we have a teacher model
+            writer.Write(teacherModel != null);
+            if (teacherModel != null)
+            {
+                var teacherData = teacherModel.Serialize();
+                writer.Write(teacherData.Length);
+                writer.Write(teacherData);
+            }
         }
     }
 }

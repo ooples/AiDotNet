@@ -141,7 +141,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// complex information over long periods, unlike regular neural networks.
     /// </para>
     /// </remarks>
-    private Matrix<T> _memory;
+    private Matrix<T> _memory = default!;
 
     /// <summary>
     /// Gets or sets the vector tracking which memory locations are free to be written to.
@@ -163,7 +163,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// valuable information it might need later.
     /// </para>
     /// </remarks>
-    private Vector<T> _usageFree;
+    private Vector<T> _usageFree = default!;
 
     /// <summary>
     /// Gets or sets the vector that determines where to write in memory.
@@ -186,7 +186,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// This focused writing allows the system to organize information in a way it can find later.
     /// </para>
     /// </remarks>
-    private Vector<T> _writeWeighting;
+    private Vector<T> _writeWeighting = default!;
 
     /// <summary>
     /// Gets or sets the list of vectors that determine where to read from memory.
@@ -209,7 +209,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// This allows the system to retrieve relevant information it previously stored.
     /// </para>
     /// </remarks>
-    private List<Vector<T>> _readWeightings;
+    private List<Vector<T>> _readWeightings = default!;
 
     /// <summary>
     /// Gets or sets the vector that tracks the order in which memory locations were written to.
@@ -233,7 +233,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// following the sequence in which information was stored.
     /// </para>
     /// </remarks>
-    private Vector<T> _precedenceWeighting;
+    private Vector<T> _precedenceWeighting = default!;
 
     /// <summary>
     /// Gets or sets the matrix representing temporal links between memory locations.
@@ -257,7 +257,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// algorithm-like reasoning.
     /// </para>
     /// </remarks>
-    private Matrix<T> _temporalLinkMatrix;
+    private Matrix<T> _temporalLinkMatrix = default!;
 
     /// <summary>
     /// Gets or sets the list of vectors read from memory.
@@ -281,7 +281,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// to produce its final output for a given input.
     /// </para>
     /// </remarks>
-    private List<Vector<T>> _readVectors;
+    private List<Vector<T>> _readVectors = default!;
 
     /// <summary>
     /// Gets or sets the scalar activation function for the network.
@@ -296,9 +296,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The output weight matrix for combining controller output with read vectors.
     /// </summary>
-    private Matrix<T> _outputWeights;
+    private Matrix<T> _outputWeights = default!;
 
-    private ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DifferentiableNeuralComputer{T}"/> class with the specified parameters.
@@ -1591,7 +1591,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the Differentiable Neural Computer model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns metadata about the DNC, including its model type, memory configuration,
@@ -1611,9 +1611,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// and for saving/loading models for later use.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.DifferentiableNeuralComputer,
             AdditionalInfo = new Dictionary<string, object>

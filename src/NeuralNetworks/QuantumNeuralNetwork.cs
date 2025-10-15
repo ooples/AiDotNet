@@ -50,7 +50,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private int _numQubits;
 
-    private readonly INormalizer<T, Tensor<T>, Tensor<T>> _normalizer;
+    private readonly INormalizer<T, Tensor<T>, Tensor<T>> _normalizer = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="QuantumNeuralNetwork{T}"/> class with the specified architecture and number of qubits.
@@ -236,7 +236,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Retrieves metadata about the quantum neural network model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the network.</returns>
+    /// <returns>A ModelMetadata object containing information about the network.</returns>
     /// <remarks>
     /// <para>
     /// This method collects and returns various pieces of information about the quantum neural network's
@@ -248,9 +248,9 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// a blueprint of the network's current state.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.QuantumNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

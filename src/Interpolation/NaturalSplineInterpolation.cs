@@ -20,12 +20,12 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the known data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates (values) of the known data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The degree of the spline polynomial. Default is 3 for cubic splines.
@@ -58,7 +58,7 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new instance of the Natural Spline interpolation algorithm.

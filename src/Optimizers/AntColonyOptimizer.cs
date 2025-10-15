@@ -31,17 +31,17 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     /// <summary>
     /// Options specific to the Ant Colony Optimization algorithm.
     /// </summary>
-    private AntColonyOptimizationOptions<T, TInput, TOutput> _antColonyOptions;
+    private AntColonyOptimizationOptions<T, TInput, TOutput> _antColonyOptions = default!;
 
     /// <summary>
     /// The current rate at which pheromone evaporates from the trails.
     /// </summary>
-    private T _currentPheromoneEvaporationRate;
+    private T _currentPheromoneEvaporationRate = default!;
 
     /// <summary>
     /// The current intensity of pheromone deposited by ants.
     /// </summary>
-    private T _currentPheromoneIntensity;
+    private T _currentPheromoneIntensity = default!;
 
     /// <summary>
     /// Initializes a new instance of the AntColonyOptimizer class.

@@ -41,7 +41,7 @@ public class RobustRegression<T> : RegressionModelBase<T>
     /// - They determine when the model decides it's "good enough" and stops improving
     /// </para>
     /// </remarks>
-    private readonly RobustRegressionOptions<T> _options;
+    private readonly RobustRegressionOptions<T> _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RobustRegression{T}"/> class with the specified options 

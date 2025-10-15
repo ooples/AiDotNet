@@ -33,10 +33,10 @@ namespace AiDotNet.Reasoning
     /// </remarks>
     public class ChainOfThoughtModel<T> : ReasoningModelBase<T>
     {
-        private readonly NeuralNetwork<T> _reasoningNetwork;
-        private readonly NeuralNetwork<T> _validationNetwork;
-        private readonly Dictionary<string, List<Tensor<T>>> _reasoningCache;
-        private readonly ChainOfThoughtOptions<T> _cotOptions;
+        private readonly NeuralNetwork<T> _reasoningNetwork = default!;
+        private readonly NeuralNetwork<T> _validationNetwork = default!;
+        private readonly Dictionary<string, List<Tensor<T>>> _reasoningCache = default!;
+        private readonly ChainOfThoughtOptions<T> _cotOptions = default!;
 
         /// <summary>
         /// Gets the maximum reasoning depth this model can handle effectively.

@@ -46,7 +46,7 @@ public class HighwayLayer<T> : LayerBase<T>
     /// During training, these weights are adjusted to better recognize important patterns in your data.
     /// </para>
     /// </remarks>
-    private Matrix<T> _transformWeights;
+    private Matrix<T> _transformWeights = default!;
 
     /// <summary>
     /// The bias vector added to the transformed input.
@@ -66,7 +66,7 @@ public class HighwayLayer<T> : LayerBase<T>
     /// It's like setting the initial position before fine-tuning.
     /// </para>
     /// </remarks>
-    private Vector<T> _transformBias;
+    private Vector<T> _transformBias = default!;
 
     /// <summary>
     /// The weight matrix used to compute the gate values.
@@ -86,7 +86,7 @@ public class HighwayLayer<T> : LayerBase<T>
     /// During training, these weights learn the optimal balance between preserving and transforming the input.
     /// </para>
     /// </remarks>
-    private Matrix<T> _gateWeights;
+    private Matrix<T> _gateWeights = default!;
 
     /// <summary>
     /// The bias vector added to the gate computation.
@@ -107,7 +107,7 @@ public class HighwayLayer<T> : LayerBase<T>
     /// the best settings for each specific input pattern.
     /// </para>
     /// </remarks>
-    private Vector<T> _gateBias;
+    private Vector<T> _gateBias = default!;
 
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.

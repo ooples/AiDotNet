@@ -11,8 +11,8 @@ namespace AiDotNet.Interfaces
     /// Interface for AutoML capabilities that can automatically find the best model for any type of data
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
-    /// <typeparam name="TInput">The input data type (e.g., Matrix<double>, Tensor<double>, Vector<double>)</typeparam>
-    /// <typeparam name="TOutput">The output data type (e.g., Vector<double>, Tensor<double>)</typeparam>
+    /// <typeparam name="TInput">The input data type (e.g., Matrix<T>, Tensor<T>, Vector<T>)</typeparam>
+    /// <typeparam name="TOutput">The output data type (e.g., Vector<T>, Tensor<T>)</typeparam>
     public interface IAutoMLModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     {
         /// <summary>
@@ -105,64 +105,37 @@ namespace AiDotNet.Interfaces
         /// </summary>
         /// <param name="constraints">List of constraints</param>
         void SetConstraints(List<SearchConstraint> constraints);
-    }
-
-    /// <summary>
-    /// Represents a parameter range for hyperparameter search
-    /// </summary>
-    public class ParameterRange
-    {
-        public object MinValue { get; set; }
-        public object MaxValue { get; set; }
-        public ParameterType Type { get; set; }
-        public object[]? CategoricalValues { get; set; }
-        public bool LogScale { get; set; }
-    }
-
-    /// <summary>
-    /// Parameter types for AutoML search
-    /// </summary>
-    public enum ParameterType
-    {
-        Continuous,
-        Integer,
-        Categorical,
-        Boolean
-    }
-
-    /// <summary>
-    /// AutoML optimization status
-    /// </summary>
-    public enum AutoMLStatus
-    {
-        NotStarted,
-        Running,
-        Paused,
-        Completed,
-        Failed,
-        Cancelled
-    }
-
-
-    /// <summary>
-    /// Search constraint for AutoML
-    /// </summary>
-    public class SearchConstraint
-    {
-        public string Name { get; set; } = string.Empty;
-        public ConstraintType Type { get; set; }
-        public object Value { get; set; } = new object();
-    }
-
-    /// <summary>
-    /// Types of constraints for AutoML search
-    /// </summary>
-    public enum ConstraintType
-    {
-        MaxModelSize,
-        MaxInferenceTime,
-        MinAccuracy,
-        MaxMemoryUsage,
-        RequireInterpretability
+        
+        /// <summary>
+        /// Configures the search space for hyperparameters
+        /// </summary>
+        /// <param name="config">Search space configuration</param>
+        void ConfigureSearchSpace(HyperparameterSearchSpace config);
+        
+        /// <summary>
+        /// Sets the time limit for the search
+        /// </summary>
+        /// <param name="timeLimit">Maximum time to spend searching</param>
+        void SetTimeLimit(TimeSpan timeLimit);
+        
+        /// <summary>
+        /// Sets the trial limit for the search
+        /// </summary>
+        /// <param name="trialLimit">Maximum number of trials to run</param>
+        void SetTrialLimit(int trialLimit);
+        
+        /// <summary>
+        /// Enables Neural Architecture Search
+        /// </summary>
+        /// <param name="enabled">Whether to enable NAS</param>
+        void EnableNAS(bool enabled);
+        
+        /// <summary>
+        /// Searches for the best model synchronously
+        /// </summary>
+        /// <param name="inputs">Training inputs</param>
+        /// <param name="targets">Training targets</param>
+        /// <returns>Best model found</returns>
+        IFullModel<T, TInput, TOutput> SearchBestModel(TInput inputs, TOutput targets);
     }
 }

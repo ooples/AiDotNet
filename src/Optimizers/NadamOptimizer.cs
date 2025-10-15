@@ -26,7 +26,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <summary>
     /// The options specific to the Nadam optimizer.
     /// </summary>
-    private NadamOptimizerOptions<T, TInput, TOutput> _options;
+    private NadamOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// The first moment vector (momentum).

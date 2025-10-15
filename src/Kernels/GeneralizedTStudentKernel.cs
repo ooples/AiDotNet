@@ -45,12 +45,12 @@ public class GeneralizedTStudentKernel<T> : IKernelFunction<T>
     /// The default value of 1.0 provides a good balance for many applications, but you can adjust it
     /// based on how much you want to emphasize or de-emphasize distant points in your analysis.
     /// </remarks>
-    private readonly T _degree;
+    private readonly T _degree = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Generalized T-Student kernel with an optional degree parameter.

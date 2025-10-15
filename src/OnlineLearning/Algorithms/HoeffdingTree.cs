@@ -8,6 +8,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
+using AiDotNet.Statistics;
 
 namespace AiDotNet.OnlineLearning.Algorithms;
 
@@ -17,12 +18,12 @@ namespace AiDotNet.OnlineLearning.Algorithms;
 /// </summary>
 public class HoeffdingTree<T> : OnlineModelBase<T, Vector<T>, T>
 {
-    private HoeffdingNode _root;
-    private readonly OnlineModelOptions<T> _options;
+    private HoeffdingNode _root = default!;
+    private readonly OnlineModelOptions<T> _options = default!;
     private readonly int _numClasses;
-    private T _splitConfidence;
+    private T _splitConfidence = default!;
     private int _gracePeriod;
-    private T _tieThreshold;
+    private T _tieThreshold = default!;
     private int _maxDepth;
     private int _activeLeafCount;
     private int _inactiveLeafCount;
@@ -175,9 +176,9 @@ public class HoeffdingTree<T> : OnlineModelBase<T, Vector<T>, T>
     }
     
     /// <inheritdoc/>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.HoeffdingTree,
             FeatureCount = _root.NumFeatures,
@@ -420,6 +421,111 @@ public class HoeffdingTree<T> : OnlineModelBase<T, Vector<T>, T>
         _logger.Warning("SetActiveFeatureIndices is not supported for Hoeffding Tree");
     }
     
+    /// <inheritdoc/>
+    public override int InputDimensions => _root.NumFeatures;
+    
+    /// <inheritdoc/>
+    public override int OutputDimensions => _numClasses;
+    
+    /// <inheritdoc/>
+    public override bool IsTrained => _samplesSeen > 0;
+    
+    /// <inheritdoc/>
+    public override T[] PredictBatch(Vector<T>[] inputBatch)
+    {
+        var predictions = new T[inputBatch.Length];
+        for (int i = 0; i < inputBatch.Length; i++)
+        {
+            predictions[i] = Predict(inputBatch[i]);
+        }
+        return predictions;
+    }
+    
+    /// <inheritdoc/>
+    public override Dictionary<string, double> Evaluate(Vector<T> testData, T testLabels)
+    {
+        // This method should accept arrays, but for now return basic metrics
+        var prediction = Predict(testData);
+        var classIndex = Convert.ToInt32(testLabels);
+        var predIndex = Convert.ToInt32(prediction);
+        
+        return new Dictionary<string, double>
+        {
+            ["Accuracy"] = classIndex == predIndex ? 1.0 : 0.0,
+            ["Error"] = classIndex == predIndex ? 0.0 : 1.0
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void SaveModel(string filePath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filePath, data);
+    }
+    
+    /// <inheritdoc/>
+    public override double GetTrainingLoss()
+    {
+        // Hoeffding tree doesn't track loss directly
+        return 0.0;
+    }
+    
+    /// <inheritdoc/>
+    public override double GetValidationLoss()
+    {
+        // In online learning, we don't have separate validation loss
+        return GetTrainingLoss();
+    }
+    
+    /// <inheritdoc/>
+    public override Vector<T> GetModelParameters()
+    {
+        return GetParameters();
+    }
+    
+    /// <inheritdoc/>
+    public override ModelStats<T> GetStats()
+    {
+        return new ModelStats<T>
+        {
+            SampleCount = SamplesSeen,
+            LearningRate = _learningRate,
+            TrainingLoss = NumOps.FromDouble(GetTrainingLoss()),
+            ValidationLoss = NumOps.FromDouble(GetValidationLoss()),
+            AdditionalMetrics = new Dictionary<string, T>
+            {
+                ["ActiveLeaves"] = NumOps.FromDouble(_activeLeafCount),
+                ["InactiveLeaves"] = NumOps.FromDouble(_inactiveLeafCount),
+                ["DecisionNodes"] = NumOps.FromDouble(_decisionNodeCount),
+                ["MaxDepth"] = NumOps.FromDouble(_maxDepth),
+                ["SplitConfidence"] = _splitConfidence,
+                ["GracePeriod"] = NumOps.FromDouble(_gracePeriod)
+            }
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void Save()
+    {
+        // Default implementation saves to a standard location
+        SaveModel($"hoeffding_tree_model_{DateTime.Now:yyyyMMddHHmmss}.bin");
+    }
+    
+    /// <inheritdoc/>
+    public override void Load()
+    {
+        // Default implementation would load from a standard location
+        // For now, this is a no-op as we need a file path
+        throw new NotImplementedException("Load requires a file path. Use Deserialize instead.");
+    }
+    
+    /// <inheritdoc/>
+    public override void Dispose()
+    {
+        // Clean up any resources if needed
+        _root = null!;
+    }
+    
     /// <summary>
     /// Inner class representing a node in the Hoeffding tree.
     /// </summary>
@@ -435,7 +541,7 @@ public class HoeffdingTree<T> : OnlineModelBase<T, Vector<T>, T>
         
         private readonly int _numClasses;
         private readonly int[] _classCounts;
-        private readonly Dictionary<int, GaussianEstimator>[] _attributeObservers;
+        private readonly Dictionary<int, GaussianEstimator>[] _attributeObservers = default!;
         private int _seenInstances;
         
         public HoeffdingNode(int numFeatures, int numClasses, INumericOperations<T> numOps, int depth)

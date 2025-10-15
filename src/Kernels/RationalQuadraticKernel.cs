@@ -49,7 +49,7 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
     /// 
     /// The default value is 1.0, which provides a balanced sensitivity for many applications.
     /// </remarks>
-    private readonly T _c;
+    private readonly T _c = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -59,7 +59,7 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Rational Quadratic kernel with an optional scale parameter.

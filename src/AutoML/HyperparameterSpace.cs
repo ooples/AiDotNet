@@ -142,9 +142,9 @@ namespace AiDotNet.AutoML
         {
             var result = new Dictionary<string, object>();
 
-            foreach (var (name, range) in _parameters)
+            foreach (var kvp in _parameters)
             {
-                result[name] = SampleParameter(range);
+                result[kvp.Key] = SampleParameter(kvp.Value);
             }
 
             return result;
@@ -159,9 +159,9 @@ namespace AiDotNet.AutoML
         {
             var parameterValues = new Dictionary<string, List<object>>();
 
-            foreach (var (name, range) in _parameters)
+            foreach (var kvp in _parameters)
             {
-                parameterValues[name] = GenerateParameterValues(range, stepsPerDimension);
+                parameterValues[kvp.Key] = GenerateParameterValues(kvp.Value, stepsPerDimension);
             }
 
             return GenerateCombinations(parameterValues);
@@ -174,12 +174,12 @@ namespace AiDotNet.AutoML
         /// <returns>True if valid, false otherwise</returns>
         public bool Validate(Dictionary<string, object> parameters)
         {
-            foreach (var (name, value) in parameters)
+            foreach (var kvp in parameters)
             {
-                if (!_parameters.ContainsKey(name))
+                if (!_parameters.ContainsKey(kvp.Key))
                     return false;
 
-                if (!ValidateParameter(name, value))
+                if (!ValidateParameter(kvp.Key, kvp.Value))
                     return false;
             }
 

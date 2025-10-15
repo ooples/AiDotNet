@@ -25,12 +25,12 @@ namespace AiDotNet.ReinforcementLearning.Exploration
         /// </summary>
         protected static INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
         private readonly bool _isContinuous;
-        private readonly T _initialTemperature;
-        private readonly T _minTemperature;
-        private readonly T _decayRate;
+        private readonly T _initialTemperature = default!;
+        private readonly T _minTemperature = default!;
+        private readonly T _decayRate = default!;
         private readonly long _decaySteps;
-        private readonly Random _random;
-        private readonly Func<T, TAction, TAction> _applyTemperature;
+        private readonly Random _random = default!;
+        private readonly Func<T, TAction, TAction> _applyTemperature = default!;
 
         /// <summary>
         /// Gets the current exploration rate (temperature parameter).

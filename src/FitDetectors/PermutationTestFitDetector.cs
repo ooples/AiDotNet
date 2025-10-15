@@ -20,12 +20,12 @@ public class PermutationTestFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// <summary>
     /// Random number generator used for permutation simulations.
     /// </summary>
-    private readonly Random _random;
+    private readonly Random _random = default!;
     
     /// <summary>
     /// Configuration options for the permutation test detector.
     /// </summary>
-    private readonly PermutationTestFitDetectorOptions _options;
+    private readonly PermutationTestFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the PermutationTestFitDetector class.

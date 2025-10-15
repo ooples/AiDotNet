@@ -23,12 +23,12 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The slope of the curve at the first data point.
@@ -38,7 +38,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// leaves the first point. A positive value means the curve goes upward, a negative
     /// value means it goes downward, and zero means it's flat (horizontal).
     /// </remarks>
-    private readonly T _startSlope;
+    private readonly T _startSlope = default!;
     
     /// <summary>
     /// The slope of the curve at the last data point.
@@ -48,7 +48,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// approaches the last point. A positive value means the curve comes from below,
     /// a negative value means it comes from above, and zero means it approaches horizontally.
     /// </remarks>
-    private readonly T _endSlope;
+    private readonly T _endSlope = default!;
     
     /// <summary>
     /// The matrix decomposition method used to solve the spline equations.
@@ -77,7 +77,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// and multiplication) on different types of numbers. You don't need to interact with
     /// this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the ClampedSplineInterpolation class.

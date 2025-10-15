@@ -1,0 +1,10 @@
+/mnt/c/projects/AiDotNet/src/FoundationModels/Providers/ONNXModelProvider.cs
+/mnt/c/projects/AiDotNet/src/Pipeline/DataLoadingStep.cs
+/mnt/c/projects/AiDotNet/src/Pipeline/MLPipelineExample.cs
+/mnt/c/projects/AiDotNet/src/Pipeline/PipelineOrchestrator.cs
+/mnt/c/projects/AiDotNet/src/ProductionMonitoring/AlertManager.cs
+/mnt/c/projects/AiDotNet/src/ProductionMonitoring/ConceptDriftDetector.cs
+/mnt/c/projects/AiDotNet/src/ProductionMonitoring/ModelHealthScorer.cs
+/mnt/c/projects/AiDotNet/src/ProductionMonitoring/PerformanceMonitor.cs
+/mnt/c/projects/AiDotNet/src/ProductionMonitoring/ProductionMonitorBase.cs
+/mnt/c/projects/AiDotNet/src/ProductionMonitoring/RetrainingRecommender.cs

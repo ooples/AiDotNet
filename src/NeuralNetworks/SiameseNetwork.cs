@@ -34,12 +34,12 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// This network creates the embeddings (compact representations) for each input.
     /// </remarks>
-    private ConvolutionalNeuralNetwork<T> _subnetwork;
+    private ConvolutionalNeuralNetwork<T> _subnetwork = default!;
     
     /// <summary>
     /// The final layer that compares the embeddings and produces a similarity score.
     /// </summary>
-    private DenseLayer<T> _outputLayer;
+    private DenseLayer<T> _outputLayer = default!;
 
     /// <summary>
     /// Initializes a new instance of the SiameseNetwork class.
@@ -410,7 +410,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the Siamese Network.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the network.</returns>
+    /// <returns>A ModelMetadata object containing information about the network.</returns>
     /// <remarks>
     /// <para>
     /// This method returns comprehensive metadata about the Siamese network, including information
@@ -422,10 +422,10 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// is useful for documentation, debugging, and understanding the network's configuration.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Prepare Siamese-specific information
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.SiameseNetwork,
             AdditionalInfo = new Dictionary<string, object>

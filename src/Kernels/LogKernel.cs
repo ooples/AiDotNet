@@ -43,12 +43,12 @@ public class LogKernel<T> : IKernelFunction<T>
     /// 
     /// The default value is 1.0, which applies the logarithm directly without raising it to any power.
     /// </remarks>
-    private readonly T _degree;
+    private readonly T _degree = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Log kernel with an optional degree parameter.

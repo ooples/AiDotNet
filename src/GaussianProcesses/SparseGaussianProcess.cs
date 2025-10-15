@@ -24,52 +24,52 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
     /// <summary>
     /// The kernel function that defines the similarity between data points.
     /// </summary>
-    private IKernelFunction<T> _kernel;
+    private IKernelFunction<T> _kernel = default!;
     
     /// <summary>
     /// The training input data matrix.
     /// </summary>
-    private Matrix<T> _X;
+    private Matrix<T> _X = default!;
     
     /// <summary>
     /// The training output data vector.
     /// </summary>
-    private Vector<T> _y;
+    private Vector<T> _y = default!;
     
     /// <summary>
     /// A subset of training points used to approximate the full Gaussian Process.
     /// </summary>
-    private Matrix<T> _inducingPoints;
+    private Matrix<T> _inducingPoints = default!;
     
     /// <summary>
     /// Helper for performing numeric operations on type T.
     /// </summary>
-    private INumericOperations<T> _numOps;
+    private INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The lower triangular matrix from Cholesky decomposition of the kernel matrix.
     /// </summary>
-    private Matrix<T> _L;
+    private Matrix<T> _L = default!;
     
     /// <summary>
     /// Intermediate matrix used for efficient predictions.
     /// </summary>
-    private Matrix<T> _V;
+    private Matrix<T> _V = default!;
     
     /// <summary>
     /// Diagonal elements used in the sparse approximation.
     /// </summary>
-    private Vector<T> _D;
+    private Vector<T> _D = default!;
     
     /// <summary>
     /// Weights vector used for mean prediction.
     /// </summary>
-    private Vector<T> _alpha;
+    private Vector<T> _alpha = default!;
     
     /// <summary>
     /// The type of matrix decomposition to use for solving linear systems.
     /// </summary>
-    private readonly MatrixDecompositionType _decompositionType;
+    private readonly MatrixDecompositionType _decompositionType = default!;
 
     /// <summary>
     /// Initializes a new instance of the SparseGaussianProcess class.

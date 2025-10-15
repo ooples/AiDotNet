@@ -23,32 +23,32 @@ public class TrigonometricInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates (values) of the data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The coefficients for the cosine terms in the Fourier series.
     /// </summary>
-    private readonly Vector<T> _a;
+    private readonly Vector<T> _a = default!;
     
     /// <summary>
     /// The coefficients for the sine terms in the Fourier series.
     /// </summary>
-    private readonly Vector<T> _b;
+    private readonly Vector<T> _b = default!;
     
     /// <summary>
     /// The period of the data (the interval after which the pattern repeats).
     /// </summary>
-    private readonly T _period;
+    private readonly T _period = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of trigonometric interpolation with the specified data points.

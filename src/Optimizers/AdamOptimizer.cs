@@ -18,17 +18,17 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// The options specific to the Adam optimizer.
     /// </summary>
-    private AdamOptimizerOptions<T, TInput, TOutput> _options;
+    private AdamOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// The first moment vector (moving average of gradients).
     /// </summary>
-    private Vector<T> _m;
+    private Vector<T> _m = default!;
 
     /// <summary>
     /// The second moment vector (moving average of squared gradients).
     /// </summary>
-    private Vector<T> _v;
+    private Vector<T> _v = default!;
 
     /// <summary>
     /// The current time step (iteration count).
@@ -38,17 +38,17 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// The current learning rate.
     /// </summary>
-    private T _currentLearningRate;
+    private T _currentLearningRate = default!;
 
     /// <summary>
     /// The current value of beta1 (exponential decay rate for first moment estimates).
     /// </summary>
-    private T _currentBeta1;
+    private T _currentBeta1 = default!;
 
     /// <summary>
     /// The current value of beta2 (exponential decay rate for second moment estimates).
     /// </summary>
-    private T _currentBeta2;
+    private T _currentBeta2 = default!;
 
     /// <summary>
     /// Initializes a new instance of the AdamOptimizer class.

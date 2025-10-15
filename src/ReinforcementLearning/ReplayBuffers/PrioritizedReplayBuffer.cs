@@ -25,14 +25,14 @@ namespace AiDotNet.ReinforcementLearning.ReplayBuffers
         /// </summary>
         protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
         
-        private readonly SumTree<T> _sumTree;
+        private readonly SumTree<T> _sumTree = default!;
         private readonly Experience<TState, TAction, T>[] _experiences;
-        private readonly T _alpha;
-        private readonly T _betaIncrement;
-        private readonly T _epsilonPriority;
-        private readonly T _maxPriority;
-        private readonly Random _random;
-        private T _currentBeta;
+        private readonly T _alpha = default!;
+        private readonly T _betaIncrement = default!;
+        private readonly T _epsilonPriority = default!;
+        private readonly T _maxPriority = default!;
+        private readonly Random _random = default!;
+        private T _currentBeta = default!;
         private int _currentIndex;
         private bool _isFull;
 

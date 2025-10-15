@@ -27,22 +27,22 @@ public class AdaptiveCubicSplineInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The natural cubic spline interpolation instance.
     /// </summary>
-    private readonly IInterpolation<T> _naturalSpline;
+    private readonly IInterpolation<T> _naturalSpline = default!;
     
     /// <summary>
     /// The monotonic cubic spline interpolation instance.
     /// </summary>
-    private readonly IInterpolation<T> _monotonicSpline;
+    private readonly IInterpolation<T> _monotonicSpline = default!;
     
     /// <summary>
     /// Array indicating which interpolation method to use for each interval.
@@ -56,7 +56,7 @@ public class AdaptiveCubicSplineInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the AdaptiveCubicSplineInterpolation class.

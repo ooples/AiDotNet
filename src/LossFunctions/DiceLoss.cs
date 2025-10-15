@@ -31,7 +31,7 @@ public class DiceLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// Small value to prevent division by zero.
     /// </summary>
-    private readonly T _epsilon;
+    private readonly T _epsilon = default!;
     
     /// <summary>
     /// Initializes a new instance of the DiceLoss class.

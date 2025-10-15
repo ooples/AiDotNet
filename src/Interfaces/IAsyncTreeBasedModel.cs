@@ -1,3 +1,5 @@
+global using System.Threading.Tasks;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>

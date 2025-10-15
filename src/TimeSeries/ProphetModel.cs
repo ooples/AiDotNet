@@ -31,7 +31,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// which holidays to consider, and how the model should learn from your data.
     /// </para>
     /// </remarks>
-    private ProphetOptions<T, TInput, TOutput> _prophetOptions;
+    private ProphetOptions<T, TInput, TOutput> _prophetOptions = default!;
 
     /// <summary>
     /// Represents the overall trend component of the time series.
@@ -46,7 +46,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// increasing, decreasing, or staying flat over the long term, ignoring seasonal ups and downs.
     /// </para>
     /// </remarks>
-    private T _trend;
+    private T _trend = default!;
 
     /// <summary>
     /// Stores the coefficients for all seasonal components.
@@ -62,7 +62,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// regular patterns at different time scales (daily, weekly, yearly, etc.).
     /// </para>
     /// </remarks>
-    private Vector<T> _seasonalComponents;
+    private Vector<T> _seasonalComponents = default!;
 
     /// <summary>
     /// Stores the effect of each holiday on the time series.
@@ -78,7 +78,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// increase or decrease the values in your data.
     /// </para>
     /// </remarks>
-    private Vector<T> _holidayComponents;
+    private Vector<T> _holidayComponents = default!;
 
     /// <summary>
     /// Represents the coefficient for the changepoint component.
@@ -94,7 +94,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// account for these unexpected shifts instead of treating them as noise.
     /// </para>
     /// </remarks>
-    private T _changepoint;
+    private T _changepoint = default!;
 
     /// <summary>
     /// Stores the coefficients for additional regressor variables.
@@ -110,7 +110,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// each external factor influences your data.
     /// </para>
     /// </remarks>
-    private Vector<T> _regressors;
+    private Vector<T> _regressors = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProphetModel{T}"/> class.
@@ -1597,7 +1597,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the model, including its type, parameters, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method provides detailed information about the model's configuration, learned parameters,
@@ -1612,9 +1612,9 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// - Saving the model's configuration for future reference
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ProphetModel,
             AdditionalInfo = []

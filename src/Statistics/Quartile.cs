@@ -67,7 +67,7 @@ public class Quartile<T>
     /// For example, if your original data is [7, 3, 9, 5], it would be stored as [3, 5, 7, 9].
     /// </para>
     /// </remarks>
-    private readonly Vector<T> _sortedData;
+    private readonly Vector<T> _sortedData = default!;
 
     /// <summary>
     /// Gets the first quartile (Q1, 25th percentile) of the dataset.

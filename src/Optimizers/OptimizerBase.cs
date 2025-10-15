@@ -124,7 +124,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <summary>
     /// The model that this optimizer is configured to optimize.
     /// </summary>
-    private IFullModel<T, TInput, TOutput> _model;
+    private IFullModel<T, TInput, TOutput> _model = default!;
 
     /// <summary>
     /// Initializes a new instance of the OptimizerBase class.
@@ -474,7 +474,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(OptimizationStepData<T, TInput, TOutput> bestStepData, OptimizationInputData<T, TInput, TOutput> input)
     {
-        var modelType = bestStepData.Solution.GetModelMetaData().ModelType;
+        var modelType = bestStepData.Solution.GetModelMetadata().ModelType;
         return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
             bestStepData.Solution,
             bestStepData.FitnessScore,
@@ -1079,20 +1079,65 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected abstract void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options);
 
     /// <summary>
+    /// Performs a single optimization step, updating the model parameters based on gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method performs one iteration of parameter updates. The default implementation
+    /// throws a NotImplementedException, and gradient-based optimizers should override this method
+    /// to implement their specific parameter update logic.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like taking one small step toward a better model.
+    /// After calculating how wrong the model is (gradients), this method adjusts the
+    /// model's parameters slightly to make it more accurate.
+    ///
+    /// Think of it like adjusting a recipe:
+    /// 1. You taste the dish (check model performance)
+    /// 2. You determine what needs changing (calculate gradients)
+    /// 3. You adjust the ingredients (this Step method updates parameters)
+    /// 4. Repeat until the dish tastes good (model is accurate)
+    ///
+    /// Most training loops call this method many times, each time making the model
+    /// a little bit better.
+    /// </para>
+    /// </remarks>
+    public virtual void Step()
+    {
+        throw new NotImplementedException(
+            "Step() method is not implemented for this optimizer type. " +
+            "This optimizer may be a non-gradient-based optimizer that uses the Optimize() method instead, " +
+            "or the derived class needs to implement the Step() method.");
+    }
+
+    /// <summary>
+    /// Calculates the parameter update based on the provided gradients.
+    /// </summary>
+    /// <param name="gradients">The gradients used to compute the parameter updates.</param>
+    /// <returns>The calculated parameter updates as a dictionary mapping parameter names to their update vectors.</returns>
+    public virtual Dictionary<string, Vector<T>> CalculateUpdate(Dictionary<string, Vector<T>> gradients)
+    {
+        throw new NotImplementedException(
+            "CalculateUpdate() method is not implemented for this optimizer type. " +
+            "This optimizer may be a non-gradient-based optimizer that uses the Optimize() method instead, " +
+            "or the derived class needs to implement the CalculateUpdate() method.");
+    }
+
+    /// <summary>
     /// Gets the current options for this optimizer.
     /// </summary>
     /// <returns>The current optimization algorithm options.</returns>
     /// <remarks>
     /// <para>
-    /// This abstract method must be implemented by derived classes to return their current 
+    /// This abstract method must be implemented by derived classes to return their current
     /// configuration options.
     /// </para>
     /// <para><b>For Beginners:</b> This method retrieves the current settings of the optimizer.
-    /// 
+    ///
     /// It's like checking the current configuration of your device:
     /// - It returns all the settings that control how the optimizer behaves
     /// - Each type of optimizer will implement this differently to return its specific settings
-    /// 
+    ///
     /// This is useful for:
     /// - Seeing what settings are currently active
     /// - Making a copy of settings to modify and apply later
@@ -1100,4 +1145,22 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </para>
     /// </remarks>
     public abstract OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions();
+    
+    /// <summary>
+    /// Calculates the parameter updates based on the gradients.
+    /// </summary>
+    /// <param name="gradients">The gradients of the loss function with respect to the parameters.</param>
+    /// <param name="parameters">The current parameter values.</param>
+    /// <returns>The updates to be applied to the parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This base implementation returns the gradients as-is,
+    /// which represents vanilla gradient descent. Derived classes should override this
+    /// to implement specific optimization algorithms (like Adam, SGD with momentum, etc.).</para>
+    /// </remarks>
+    public virtual Vector<T> CalculateUpdate(Vector<T> gradients, Vector<T> parameters)
+    {
+        // Base implementation: return gradients as-is (vanilla gradient descent)
+        // Derived classes should override this for specific optimization algorithms
+        return gradients;
+    }
 }

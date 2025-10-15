@@ -28,17 +28,17 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Configuration options for the spectral analysis model.
     /// </summary>
-    private SpectralAnalysisOptions<T> _spectralOptions;
+    private SpectralAnalysisOptions<T> _spectralOptions = default!;
 
     /// <summary>
     /// The frequency values corresponding to each point in the periodogram.
     /// </summary>
-    private Vector<T> _frequencies;
+    private Vector<T> _frequencies = default!;
 
     /// <summary>
     /// The power spectral density (periodogram) values for each frequency.
     /// </summary>
-    private Vector<T> _periodogram;
+    private Vector<T> _periodogram = default!;
 
     /// <summary>
     /// Initializes a new instance of the SpectralAnalysisModel class with optional configuration options.
@@ -544,7 +544,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the model, including its type, parameters, and characteristics of the spectral analysis.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b>
@@ -557,10 +557,10 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// or sharing your findings with others.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Create a new metadata object
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.SpectralAnalysisModel,
             AdditionalInfo = new Dictionary<string, object>()

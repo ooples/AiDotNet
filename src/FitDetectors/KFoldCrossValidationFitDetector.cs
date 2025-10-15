@@ -24,7 +24,7 @@ public class KFoldCrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBa
     /// <summary>
     /// Configuration options for the K-Fold Cross-Validation fit detector.
     /// </summary>
-    private readonly KFoldCrossValidationFitDetectorOptions _options;
+    private readonly KFoldCrossValidationFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the K-Fold Cross-Validation fit detector.

@@ -639,7 +639,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the Graph Neural Network model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns metadata about the Graph Neural Network, including its model type,
@@ -660,9 +660,9 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// - Saving the model for later use
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

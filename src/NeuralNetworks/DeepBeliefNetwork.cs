@@ -50,7 +50,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// During pre-training, we train each floor separately, then combine them into a complete tower.
     /// </para>
     /// </remarks>
-    private List<RBMLayer<T>> _rbmLayers;
+    private List<RBMLayer<T>> _rbmLayers = default!;
 
     /// <summary>
     /// Gets or sets the learning rate for parameter updates during fine-tuning.
@@ -71,7 +71,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// Typical values range from 0.0001 to 0.1, with 0.01 being a common starting point.
     /// </para>
     /// </remarks>
-    private T _learningRate;
+    private T _learningRate = default!;
 
     /// <summary>
     /// Gets or sets the number of epochs for fine-tuning.
@@ -141,7 +141,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// - For regression tasks: Mean squared error loss
     /// </para>
     /// </remarks>
-    private ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction = default!;
 
     /// <summary>
     /// Indicates whether the network supports training (learning from data).
@@ -663,7 +663,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the Deep Belief Network model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns metadata that describes the Deep Belief Network, including its type,
@@ -684,7 +684,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// - Reproducing your model setup later
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var layerSizes = new List<int>();
         
@@ -700,7 +700,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
             layerSizes.Add(_rbmLayers[_rbmLayers.Count - 1].GetOutputShape()[0]);
         }
         
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.DeepBeliefNetwork,
             AdditionalInfo = new Dictionary<string, object>

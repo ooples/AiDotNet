@@ -39,12 +39,12 @@ public class CircularKernel<T> : IKernelFunction<T>
     /// Adjusting sigma lets you control how far the "neighborhood" extends - a larger sigma means
     /// more distant points will still be considered somewhat similar.
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Circular kernel with an optional scaling parameter.

@@ -28,7 +28,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <summary>
     /// The options specific to the Nelder-Mead optimizer.
     /// </summary>
-    private NelderMeadOptimizerOptions<T, TInput, TOutput> _options;
+    private NelderMeadOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// The current iteration count.
@@ -38,22 +38,22 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <summary>
     /// The reflection coefficient.
     /// </summary>
-    private T _alpha;
+    private T _alpha = default!;
 
     /// <summary>
     /// The contraction coefficient.
     /// </summary>
-    private T _beta;
+    private T _beta = default!;
 
     /// <summary>
     /// The expansion coefficient.
     /// </summary>
-    private T _gamma;
+    private T _gamma = default!;
 
     /// <summary>
     /// The shrinkage coefficient.
     /// </summary>
-    private T _delta;
+    private T _delta = default!;
 
     /// <summary>
     /// Initializes a new instance of the NelderMeadOptimizer class.

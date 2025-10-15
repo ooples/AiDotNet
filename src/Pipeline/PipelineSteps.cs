@@ -25,7 +25,6 @@ namespace AiDotNet.Pipeline
         private readonly string source = default!;
         private readonly DataSourceType sourceType = default!;
         private readonly Func<(Tensor<double> data, Tensor<double> labels)> customLoader = default!;
-        private double[][] loadedData = default!;
 
         public DataLoadingStep(string source, DataSourceType sourceType) : base("DataLoading")
         {
@@ -471,7 +470,7 @@ namespace AiDotNet.Pipeline
     public class ModelTrainingStep : PipelineStepBase
     {
         private readonly ModelTrainingConfig config = default!;
-        protected IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> trainedModel = default!;
+        protected IPredictiveModel<double, Matrix<double>, Vector<double>> trainedModel = default!;
 
         public ModelTrainingStep(ModelTrainingConfig config) : base("ModelTraining")
         {
@@ -480,9 +479,13 @@ namespace AiDotNet.Pipeline
 
         protected override void FitCore(double[][] inputs, double[]? targets)
         {
+            // Convert inputs and targets to appropriate types
+            var x = ConvertToMatrix(inputs);
+            var y = ConvertToVector(targets ?? Array.Empty<double>());
+
             // Train the model
             var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
-            trainedModel = modelBuilder.BuildModel(config.ModelType);
+            trainedModel = modelBuilder.Build(x, y);
 
             // Configure hyperparameters if provided
             if (config.Hyperparameters != null && config.Hyperparameters.Count > 0)
@@ -536,6 +539,18 @@ namespace AiDotNet.Pipeline
             return matrix;
         }
 
+        private Vector<double> ConvertToVector(double[] data)
+        {
+            if (data.Length == 0) return new Vector<double>(0);
+
+            var vector = new Vector<double>(data.Length);
+            for (int i = 0; i < data.Length; i++)
+            {
+                vector[i] = data[i];
+            }
+            return vector;
+        }
+
         private double[][] ConvertFromVector(Vector<double> vector)
         {
             var result = new double[vector.Length][];
@@ -546,7 +561,7 @@ namespace AiDotNet.Pipeline
             return result;
         }
 
-        public IModel<Matrix<double>, Vector<double>, ModelMetaData<double>> GetTrainedModel()
+        public IPredictiveModel<double, Matrix<double>, Vector<double>> GetTrainedModel()
         {
             return trainedModel;
         }
@@ -631,12 +646,10 @@ namespace AiDotNet.Pipeline
         {
             // Build model from architecture with appropriate default configuration
             var neuralArchitecture = new NeuralNetworkArchitecture<double>(
-                inputShape: new[] { 784 }, // Default for typical image classification (28x28 flattened)
-                outputShape: new[] { 10 }, // Default for 10-class classification
                 taskType: NeuralNetworkTaskType.Classification
             );
 
-            return new NeuralNetwork<double>(neuralArchitecture); // Placeholder
+            return (IModel<Matrix<double>, Vector<double>, ModelMetaData<double>>)new NeuralNetwork<double>(neuralArchitecture); // Placeholder
         }
 
         public NeuralArchitectureSearch<double> GetNAS()
@@ -827,7 +840,7 @@ namespace AiDotNet.Pipeline
                 case AiDotNet.Enums.DeploymentTarget.Mobile:
                     return new MobileOptimizer<Matrix<double>, Vector<double>, ModelMetaData<double>>();
                 default:
-                    return new ModelOptimizer<Matrix<double>, Vector<double>, ModelMetaData<double>>();
+                    return new MobileOptimizer<Matrix<double>, Vector<double>, ModelMetaData<double>>();
             }
         }
 
@@ -842,7 +855,7 @@ namespace AiDotNet.Pipeline
                 case CloudPlatform.GCP:
                     return new GCPOptimizer<Matrix<double>, Vector<double>, ModelMetaData<double>>();
                 default:
-                    return new ModelOptimizer<Matrix<double>, Vector<double>, ModelMetaData<double>>();
+                    return new MobileOptimizer<Matrix<double>, Vector<double>, ModelMetaData<double>>();
             }
         }
     }
@@ -865,7 +878,7 @@ namespace AiDotNet.Pipeline
         {
             // Store baseline data for drift detection
             baselineData = inputs;
-            monitor = new ProductionMonitorBase();
+            monitor = new PerformanceMonitor();
 
             if (config.EnableDriftDetection)
             {
@@ -1822,7 +1835,7 @@ namespace AiDotNet.Pipeline
         protected override void FitCore(double[][] inputs, double[]? targets)
         {
             // Initialize ensemble configuration
-            UpdateMetadata("EnsembleType", ensembleConfig.EnsembleType.ToString());
+            UpdateMetadata("EnsembleType", ensembleConfig.Strategy.ToString());
             UpdateMetadata("ModelCount", ensembleConfig.Models?.Count.ToString() ?? "0");
         }
 

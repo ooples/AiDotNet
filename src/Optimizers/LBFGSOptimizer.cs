@@ -21,7 +21,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <summary>
     /// Options specific to the L-BFGS optimizer.
     /// </summary>
-    private LBFGSOptimizerOptions<T, TInput, TOutput> _options;
+    private LBFGSOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// List of position (solution) differences used in the L-BFGS update.
@@ -34,7 +34,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// Think of this as the optimizer's memory of how the solution has changed over recent iterations.
     /// </para>
     /// </remarks>
-    private List<Vector<T>> _s;
+    private List<Vector<T>> _s = default!;
 
     /// <summary>
     /// List of gradient differences used in the L-BFGS update.
@@ -48,7 +48,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// This represents how the direction of steepest descent has changed over recent iterations.
     /// </para>
     /// </remarks>
-    private List<Vector<T>> _y;
+    private List<Vector<T>> _y = default!;
 
     /// <summary>
     /// The current iteration count of the optimization process.

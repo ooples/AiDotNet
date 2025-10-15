@@ -16,12 +16,12 @@ public class LearningTask<T, TInput, TOutput>
     /// <summary>
     /// Gets or sets the support set (training examples) for the task.
     /// </summary>
-    public (TInput Input, TOutput Output)[] SupportSet { get; set; } = Array.Empty<(TInput, TOutput)>();
+    public (TInput Input, TOutput Output)[] SupportSet { get; set; } = new (TInput, TOutput)[0];
     
     /// <summary>
     /// Gets or sets the query set (test examples) for the task.
     /// </summary>
-    public (TInput Input, TOutput Output)[] QuerySet { get; set; } = Array.Empty<(TInput, TOutput)>();
+    public (TInput Input, TOutput Output)[] QuerySet { get; set; } = new (TInput, TOutput)[0];
     
     /// <summary>
     /// Gets or sets the task description.

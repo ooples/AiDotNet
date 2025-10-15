@@ -48,8 +48,8 @@ namespace AiDotNet.ReinforcementLearning.Tournament
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class SharpeRatioMetric<T> : IEvaluationMetric<T>
     {
-        private readonly T _riskFreeRate;
-        private readonly T _annualizationFactor;
+        private readonly T _riskFreeRate = default!;
+        private readonly T _annualizationFactor = default!;
         
         /// <summary>
         /// Gets the numeric operations for type T.
@@ -203,7 +203,7 @@ namespace AiDotNet.ReinforcementLearning.Tournament
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class CalmarRatioMetric<T> : IEvaluationMetric<T>
     {
-        private readonly T _annualizationFactor;
+        private readonly T _annualizationFactor = default!;
         
         /// <summary>
         /// Gets the numeric operations for type T.
@@ -282,8 +282,8 @@ namespace AiDotNet.ReinforcementLearning.Tournament
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class SortinoRatioMetric<T> : IEvaluationMetric<T>
     {
-        private readonly T _riskFreeRate;
-        private readonly T _annualizationFactor;
+        private readonly T _riskFreeRate = default!;
+        private readonly T _annualizationFactor = default!;
         
         /// <summary>
         /// Gets the numeric operations for type T.

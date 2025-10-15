@@ -28,7 +28,7 @@ public class ModelStats<T, TInput, TOutput> : ModelStatisticsBase<T>
     /// <summary>
     /// Configuration options for statistical calculations.
     /// </summary>
-    private readonly ModelStatsOptions _options;
+    private readonly ModelStatsOptions _options = default!;
 
     /// <summary>
     /// Gets the correlation matrix showing relationships between features.
@@ -184,6 +184,36 @@ public class ModelStats<T, TInput, TOutput> : ModelStatisticsBase<T>
     /// Gets a dictionary mapping feature names to their values.
     /// </summary>
     public Dictionary<string, TOutput> FeatureValues { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the name of the model.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is a friendly name for your model that helps you identify it
+    /// among other models. For example, "Customer Churn Predictor" or "House Price Model v2".
+    /// </para>
+    /// </remarks>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the type of the model.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This describes what kind of model it is, such as "RandomForest",
+    /// "LinearRegression", or "NeuralNetwork". It helps categorize and organize your models.
+    /// </para>
+    /// </remarks>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the timestamp when the model statistics were calculated.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This records when these statistics were generated,
+    /// which is useful for tracking model performance over time or comparing different versions.
+    /// </para>
+    /// </remarks>
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
     /// <summary>
     /// Gets the Euclidean distance between actual and predicted values.

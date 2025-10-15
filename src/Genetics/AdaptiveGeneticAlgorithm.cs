@@ -277,7 +277,7 @@ public class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
     /// <summary>
     /// Gets metadata about the algorithm and its current state.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the algorithm.</returns>
+    /// <returns>A ModelMetadata object containing information about the algorithm.</returns>
     /// <remarks>
     /// <para>
     /// This method extends the base implementation to include adaptive-specific information in the metadata.
@@ -290,7 +290,7 @@ public class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
     /// after many cycles of adjustments.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetMetaData()
+    public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
         metadata.ModelType = ModelType.GeneticAlgorithmRegression;

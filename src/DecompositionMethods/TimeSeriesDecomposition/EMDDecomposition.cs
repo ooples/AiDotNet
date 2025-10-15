@@ -82,7 +82,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private void DecomposeStandard()
     {
-        Vector<T> residual = TimeSeries.Clone();
+        Vector<T> residual = (Vector<T>)TimeSeries.Clone();
         List<Vector<T>> imfs = new List<Vector<T>>();
 
         for (int i = 0; i < _maxImf; i++)
@@ -162,7 +162,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
         double noiseAmplitude = 0.2; // Initial amplitude of added white noise
 
         List<Vector<T>> imfs = new List<Vector<T>>();
-        Vector<T> residual = TimeSeries.Clone();
+        Vector<T> residual = (Vector<T>)TimeSeries.Clone();
 
         while (!IsResidual(residual) && imfs.Count < _maxImf)
         {
@@ -253,7 +253,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> AddWhiteNoise(Vector<T> signal, double amplitude)
     {
         Random random = new Random();
-        Vector<T> noisySignal = signal.Clone();
+        Vector<T> noisySignal = (Vector<T>)signal.Clone();
         for (int i = 0; i < signal.Length; i++)
         {
             double noise = (random.NextDouble() * 2 - 1) * amplitude;
@@ -276,7 +276,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     private List<Vector<T>> DecomposeSignal(Vector<T> signal)
     {
         List<Vector<T>> imfs = [];
-        Vector<T> residual = signal.Clone();
+        Vector<T> residual = (Vector<T>)signal.Clone();
 
         while (!IsResidual(residual) && imfs.Count < _maxImf)
         {
@@ -333,7 +333,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private static Vector<T> CalculateResidual(Vector<T> original, List<Vector<T>> imfs)
     {
-        Vector<T> residual = original.Clone();
+        Vector<T> residual = (Vector<T>)original.Clone();
         foreach (var imf in imfs)
         {
             residual = residual.Subtract(imf);
@@ -619,12 +619,12 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Vector<T> ExtractIMF(Vector<T> signal)
     {
-        Vector<T> h = signal.Clone();
+        Vector<T> h = (Vector<T>)signal.Clone();
         Vector<T> prevH;
 
         do
         {
-            prevH = h.Clone();
+            prevH = (Vector<T>)h.Clone();
             Vector<T> upperEnvelope = ComputeEnvelope(h, EnvelopeType.Upper);
             Vector<T> lowerEnvelope = ComputeEnvelope(h, EnvelopeType.Lower);
             Vector<T> mean = upperEnvelope.Add(lowerEnvelope).Divide(NumOps.FromDouble(2));
@@ -651,7 +651,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
         if (extremaIndices.Count < 2)
         {
             // Not enough extrema to compute envelope, return original signal
-            return signal.Clone();
+            return (Vector<T>)signal.Clone();
         }
 
         // Ensure the envelope starts and ends with the signal

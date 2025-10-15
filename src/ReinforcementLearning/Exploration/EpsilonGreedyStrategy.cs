@@ -21,12 +21,12 @@ namespace AiDotNet.ReinforcementLearning.Exploration
         /// Gets the numeric operations for type T.
         /// </summary>
         protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
-        private readonly T _initialEpsilon;
-        private readonly T _finalEpsilon;
-        private readonly T _decayRate;
+        private readonly T _initialEpsilon = default!;
+        private readonly T _finalEpsilon = default!;
+        private readonly T _decayRate = default!;
         private readonly int _actionSize;
-        private readonly Random _random;
-        private readonly T _minStepsForDecay;
+        private readonly Random _random = default!;
+        private readonly T _minStepsForDecay = default!;
 
         /// <summary>
         /// Gets the current exploration rate (epsilon).

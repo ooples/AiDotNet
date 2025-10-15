@@ -45,7 +45,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> _options;
+    private ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -89,7 +89,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// Think of it as adding a preference for simpler, more stable solutions that are less likely to overfit.
     /// </para>
     /// </remarks>
-    private IRegularization<T, TInput, TOutput> _regularization;
+    private IRegularization<T, TInput, TOutput> _regularization = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProximalGradientDescentOptimizer{T, TInput, TOutput}"/> class with the specified model and options.

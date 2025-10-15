@@ -66,6 +66,24 @@ public abstract class VectorBase<T>
     public int Length => _data.Length;
 
     /// <summary>
+    /// Gets the dimension (number of elements) in the vector. Alias for Length.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is another way to get the size of your vector.
+    /// It returns the same value as Length.</para>
+    /// </remarks>
+    public int Dimension => _data.Length;
+
+    /// <summary>
+    /// Gets the underlying data array of the vector.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This gives you direct access to the internal array storing the vector's values.
+    /// Be careful when modifying this array as it will change the vector's contents.</para>
+    /// </remarks>
+    public T[] Data => _data;
+
+    /// <summary>
     /// Gets a value indicating whether the vector contains no elements.
     /// </summary>
     /// <remarks>

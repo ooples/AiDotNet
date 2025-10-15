@@ -67,7 +67,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// anomalous should be judged relative to recent patterns.
     /// </para>
     /// </remarks>
-    private Queue<double> _anomalyHistory;
+    private Queue<double> _anomalyHistory = default!;
     
     /// <summary>
     /// The maximum number of anomaly scores to keep in history.

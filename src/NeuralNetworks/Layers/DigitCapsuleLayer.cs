@@ -42,7 +42,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// - During training, these weights are adjusted to make better predictions
     /// </para>
     /// </remarks>
-    private Tensor<T> _weights;
+    private Tensor<T> _weights = default!;
 
     /// <summary>
     /// Gradients for the weight tensor, used during backpropagation.

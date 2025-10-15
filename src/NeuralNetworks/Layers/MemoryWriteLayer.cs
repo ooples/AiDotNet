@@ -35,7 +35,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     /// <remarks>
     /// This matrix transforms the input vector into query vectors used to determine where to write in memory.
     /// </remarks>
-    private Matrix<T> _queryWeights;
+    private Matrix<T> _queryWeights = default!;
     
     /// <summary>
     /// The weight matrix used to transform the input into key vectors.
@@ -43,7 +43,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     /// <remarks>
     /// This matrix transforms the input vector into key vectors used with memory keys for attention calculation.
     /// </remarks>
-    private Matrix<T> _keyWeights;
+    private Matrix<T> _keyWeights = default!;
     
     /// <summary>
     /// The weight matrix used to transform the input into value vectors.
@@ -51,7 +51,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     /// <remarks>
     /// This matrix transforms the input vector into value vectors that determine what to write to memory.
     /// </remarks>
-    private Matrix<T> _valueWeights;
+    private Matrix<T> _valueWeights = default!;
     
     /// <summary>
     /// The weight matrix applied to the output after value transformation.
@@ -59,7 +59,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     /// <remarks>
     /// This matrix applies a final transformation to the output before adding the bias.
     /// </remarks>
-    private Matrix<T> _outputWeights;
+    private Matrix<T> _outputWeights = default!;
     
     /// <summary>
     /// The bias vector added to the output.
@@ -67,7 +67,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     /// <remarks>
     /// This vector is added to the output after all weight transformations.
     /// </remarks>
-    private Vector<T> _outputBias;
+    private Vector<T> _outputBias = default!;
 
     /// <summary>
     /// The input tensor from the most recent forward pass.

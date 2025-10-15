@@ -36,7 +36,7 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// <summary>
     /// The options specific to the Conjugate Gradient optimization algorithm.
     /// </summary>
-    private ConjugateGradientOptimizerOptions<T, TInput, TOutput> _cgOptions;
+    private ConjugateGradientOptimizerOptions<T, TInput, TOutput> _cgOptions = default!;
 
     /// <summary>
     /// The direction vector from the previous iteration.

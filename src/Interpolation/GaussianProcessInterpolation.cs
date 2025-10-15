@@ -21,22 +21,22 @@ public class GaussianProcessInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points (independent variable).
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points (dependent variable).
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The Gaussian Process Regression model used for interpolation.
     /// </summary>
-    private readonly GaussianProcessRegression<T> _gpr;
+    private readonly GaussianProcessRegression<T> _gpr = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new Gaussian Process interpolation from the given data points.

@@ -1,5 +1,7 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Inputs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,10 +24,11 @@ namespace AiDotNet.AutoML
         private readonly Random _random = default!;
         
         // Gaussian Process components for Bayesian optimization
-        private readonly List<double[]> _observedPoints = new();
-        private readonly List<double> _observedValues = new();
-        private double[]? _kernelMatrix;
-        private double _noiseVariance = 1e-6;
+        private readonly List<T[]> _observedPoints = new();
+        private readonly List<T> _observedValues = new();
+        private T[]? _kernelMatrix;
+        private readonly T _noiseVariance;
+        private readonly INumericOperations<T> _numOps;
 
         /// <summary>
         /// Initializes a new instance of the BayesianOptimizationAutoML class
@@ -39,6 +42,8 @@ namespace AiDotNet.AutoML
             _explorationWeight = explorationWeight;
             _random = seed.HasValue ? new Random(seed.Value) : new Random();
             _hyperparameterSpace = new HyperparameterSpace(seed);
+            _numOps = Helpers.MathHelper.GetNumericOperations<T>();
+            _noiseVariance = _numOps.FromDouble(1e-6);
         }
 
         /// <summary>
@@ -172,7 +177,8 @@ namespace AiDotNet.AutoML
             lock (_lock)
             {
                 _observedPoints.Add(point);
-                _observedValues.Add(_maximize ? score : -score); // Normalize to maximization
+                var scoreT = _numOps.FromDouble(score);
+                _observedValues.Add(_maximize ? scoreT : _numOps.Negate(scoreT)); // Normalize to maximization
             }
         }
 
@@ -241,9 +247,9 @@ namespace AiDotNet.AutoML
             var searchSpace = GetDefaultSearchSpace(modelType);
             
             // Merge with user-defined search space
-            foreach (var (name, range) in _searchSpace)
+            foreach (var kvp in _searchSpace)
             {
-                searchSpace[name] = range;
+                searchSpace[kvp.Key] = kvp.Value;
             }
 
             var space = new HyperparameterSpace(_random.Next());
@@ -258,19 +264,21 @@ namespace AiDotNet.AutoML
         private void UpdateKernelMatrix()
         {
             int n = _observedPoints.Count;
-            _kernelMatrix = new double[n * n];
+            _kernelMatrix = new T[n * n];
 
             // Compute RBF kernel matrix
             for (int i = 0; i < n; i++)
             {
                 for (int j = 0; j < n; j++)
                 {
-                    double distance = CalculateDistance(_observedPoints[i], _observedPoints[j]);
-                    _kernelMatrix[i * n + j] = Math.Exp(-0.5 * distance * distance);
+                    var distance = CalculateDistance(_observedPoints[i], _observedPoints[j]);
+                    var distSquared = _numOps.Multiply(distance, distance);
+                    var expArg = _numOps.Multiply(_numOps.FromDouble(-0.5), distSquared);
+                    _kernelMatrix[i * n + j] = _numOps.Exp(expArg);
                     
                     if (i == j)
                     {
-                        _kernelMatrix[i * n + j] += _noiseVariance;
+                        _kernelMatrix[i * n + j] = _numOps.Add(_kernelMatrix[i * n + j], _noiseVariance);
                     }
                 }
             }
@@ -408,52 +416,59 @@ namespace AiDotNet.AutoML
             var (mean, variance) = PredictGaussianProcess(point);
             
             // Upper Confidence Bound (UCB) acquisition function
-            double ucb = mean + _explorationWeight * Math.Sqrt(variance);
+            var meanDouble = Convert.ToDouble((object)mean!);
+            var varianceDouble = Convert.ToDouble((object)variance!);
+            double ucb = meanDouble + _explorationWeight * Math.Sqrt(varianceDouble);
             return ucb;
         }
 
-        private (double mean, double variance) PredictGaussianProcess(double[] point)
+        private (T mean, T variance) PredictGaussianProcess(T[] point)
         {
             int n = _observedPoints.Count;
             if (n == 0 || _kernelMatrix == null)
-                return (0.0, 1.0);
+                return (_numOps.Zero, _numOps.One);
 
             // Compute kernel vector between test point and observed points
-            var k = new double[n];
+            var k = new T[n];
             for (int i = 0; i < n; i++)
             {
-                double distance = CalculateDistance(point, _observedPoints[i]);
-                k[i] = Math.Exp(-0.5 * distance * distance);
+                var distance = CalculateDistance(point, _observedPoints[i]);
+                var distSquared = _numOps.Multiply(distance, distance);
+                var expArg = _numOps.Multiply(_numOps.FromDouble(-0.5), distSquared);
+                k[i] = _numOps.Exp(expArg);
             }
 
             // Solve for weights: K^-1 * y
             var weights = SolveLinearSystem(_kernelMatrix, _observedValues.ToArray(), n);
 
             // Compute mean prediction
-            double mean = 0.0;
+            var mean = _numOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                mean += weights[i] * k[i];
+                mean = _numOps.Add(mean, _numOps.Multiply(weights[i], k[i]));
             }
 
             // Compute variance
             var kInvK = SolveLinearSystem(_kernelMatrix, k, n);
-            double variance = 1.0; // Prior variance
+            var variance = _numOps.One; // Prior variance
             for (int i = 0; i < n; i++)
             {
-                variance -= k[i] * kInvK[i];
+                variance = _numOps.Subtract(variance, _numOps.Multiply(k[i], kInvK[i]));
             }
-            variance = Math.Max(1e-6, variance); // Ensure positive variance
+            // Ensure positive variance
+            var minVariance = _numOps.FromDouble(1e-6);
+            if (_numOps.LessThan(variance, minVariance))
+                variance = minVariance;
 
             return (mean, variance);
         }
 
-        private double[] SolveLinearSystem(double[] matrix, double[] vector, int n)
+        private T[] SolveLinearSystem(T[] matrix, T[] vector, int n)
         {
             // Simple Gaussian elimination (for demonstration)
             // In practice, use more stable methods like Cholesky decomposition
-            var a = new double[n, n];
-            var b = (double[])vector.Clone();
+            var a = new T[n, n];
+            var b = (T[])vector.Clone();
 
             // Copy matrix
             for (int i = 0; i < n; i++)
@@ -469,82 +484,88 @@ namespace AiDotNet.AutoML
             {
                 for (int i = k + 1; i < n; i++)
                 {
-                    double factor = a[i, k] / a[k, k];
+                    var factor = _numOps.Divide(a[i, k], a[k, k]);
                     for (int j = k + 1; j < n; j++)
                     {
-                        a[i, j] -= factor * a[k, j];
+                        a[i, j] = _numOps.Subtract(a[i, j], _numOps.Multiply(factor, a[k, j]));
                     }
-                    b[i] -= factor * b[k];
+                    b[i] = _numOps.Subtract(b[i], _numOps.Multiply(factor, b[k]));
                 }
             }
 
             // Back substitution
-            var x = new double[n];
+            var x = new T[n];
             for (int i = n - 1; i >= 0; i--)
             {
-                double sum = b[i];
+                var sum = b[i];
                 for (int j = i + 1; j < n; j++)
                 {
-                    sum -= a[i, j] * x[j];
+                    sum = _numOps.Subtract(sum, _numOps.Multiply(a[i, j], x[j]));
                 }
-                x[i] = sum / a[i, i];
+                x[i] = _numOps.Divide(sum, a[i, i]);
             }
 
             return x;
         }
 
-        private double[] ParametersToVector(Dictionary<string, object> parameters)
+        private T[] ParametersToVector(Dictionary<string, object> parameters)
         {
-            var vector = new List<double>();
+            var vector = new List<T>();
 
-            foreach (var (key, value) in parameters.OrderBy(kvp => kvp.Key))
+            foreach (var kvp in parameters.OrderBy(kvp => kvp.Key))
             {
+                var key = kvp.Key;
+                var value = kvp.Value;
+                
                 if (key == "__modelType__")
                 {
                     // Encode model type as one-hot
                     var modelType = (ModelType)value;
                     for (int i = 0; i < _candidateModels.Count; i++)
                     {
-                        vector.Add(_candidateModels[i] == modelType ? 1.0 : 0.0);
+                        vector.Add(_candidateModels[i] == modelType ? _numOps.One : _numOps.Zero);
                     }
                 }
                 else if (value is bool b)
                 {
-                    vector.Add(b ? 1.0 : 0.0);
+                    vector.Add(b ? _numOps.One : _numOps.Zero);
                 }
                 else if (value is string s)
                 {
                     // Simple hash encoding for categorical values
-                    vector.Add(s.GetHashCode() % 100 / 100.0);
+                    vector.Add(_numOps.FromDouble(s.GetHashCode() % 100 / 100.0));
                 }
                 else
                 {
-                    vector.Add(Convert.ToDouble(value));
+                    vector.Add(_numOps.FromDouble(Convert.ToDouble(value)));
                 }
             }
 
             return vector.ToArray();
         }
 
-        private double CalculateDistance(double[] a, double[] b)
+        private T CalculateDistance(T[] a, T[] b)
         {
             if (a.Length != b.Length)
-                throw new ArgumentException("Vector<double>s must have same length");
+                throw new ArgumentException("Vectors must have same length");
 
-            double sum = 0.0;
+            var sum = _numOps.Zero;
             for (int i = 0; i < a.Length; i++)
             {
-                double diff = a[i] - b[i];
-                sum += diff * diff;
+                var diff = _numOps.Subtract(a[i], b[i]);
+                sum = _numOps.Add(sum, _numOps.Multiply(diff, diff));
             }
 
-            return Math.Sqrt(sum);
+            return _numOps.Sqrt(sum);
         }
 
         private void ConfigureHyperparameterSpace(HyperparameterSpace space, Dictionary<string, ParameterRange> searchSpace)
         {
-            foreach (var (name, range) in searchSpace)
+            foreach (var kvp in searchSpace)
             {
+                var name = kvp.Key;
+                var range = kvp.Value;
+                
                 switch (range.Type)
                 {
                     case ParameterType.Continuous:
@@ -579,12 +600,10 @@ namespace AiDotNet.AutoML
         /// </summary>
         protected override async Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(ModelType modelType, Dictionary<string, object> parameters)
         {
-            return await Task.Run((Func<IFullModel<T, TInput, TOutput>>)(() =>
-            {
-                // This would use PredictionModelBuilder or a factory to create models
-                // For now, returning a placeholder
-                throw new NotImplementedException("Model creation should be implemented using PredictionModelBuilder");
-            }));
+            // This would use PredictionModelBuilder or a factory to create models
+            // For now, throwing an exception to indicate this needs to be implemented
+            await Task.CompletedTask;
+            throw new NotImplementedException($"Model creation for {modelType} needs to be implemented using PredictionModelBuilder");
         }
 
         /// <summary>
@@ -595,21 +614,9 @@ namespace AiDotNet.AutoML
             TInput validationInputs,
             TOutput validationTargets)
         {
-            return await Task.Run((Func<double>)(() =>
-            {
-                var predictions = model.Predict(validationInputs);
-
-                // Calculate metric based on optimization metric
-                return _optimizationMetric switch
-                {
-                    MetricType.Accuracy => CalculateAccuracy(predictions, validationTargets),
-                    MetricType.MeanSquaredError => CalculateMSE(predictions, validationTargets),
-                    MetricType.RootMeanSquaredError => Math.Sqrt(CalculateMSE(predictions, validationTargets)),
-                    MetricType.MeanAbsoluteError => CalculateMAE(predictions, validationTargets),
-                    MetricType.RSquared => CalculateRSquared(predictions, validationTargets),
-                    _ => throw new NotSupportedException($"Metric {_optimizationMetric} not supported")
-                };
-            }));
+            // For now, use the base class implementation
+            // The base class should handle metric calculation appropriately
+            return await base.EvaluateModelAsync(model, validationInputs, validationTargets);
         }
 
         /// <summary>
@@ -701,90 +708,5 @@ namespace AiDotNet.AutoML
             });
         }
 
-        private double CalculateAccuracy(TOutput predictions, TOutput targets)
-        {
-            // Handle the case where TOutput is double[]
-            if (predictions is double[] predArray && targets is double[] targArray)
-            {
-                if (predArray.Length != targArray.Length)
-                    throw new ArgumentException("Predictions and targets must have same length");
-
-                int correct = 0;
-                for (int i = 0; i < predArray.Length; i++)
-                {
-                    if (Math.Abs(predArray[i] - targArray[i]) < 0.5)
-                        correct++;
-                }
-
-                return (double)correct / predArray.Length;
-            }
-
-            throw new NotSupportedException($"Accuracy calculation not supported for type {typeof(TOutput)}");
-        }
-
-        private double CalculateMSE(TOutput predictions, TOutput targets)
-        {
-            // Handle the case where TOutput is double[]
-            if (predictions is double[] predArray && targets is double[] targArray)
-            {
-                if (predArray.Length != targArray.Length)
-                    throw new ArgumentException("Predictions and targets must have same length");
-
-                double sum = 0;
-                for (int i = 0; i < predArray.Length; i++)
-                {
-                    double diff = predArray[i] - targArray[i];
-                    sum += diff * diff;
-                }
-
-                return sum / predArray.Length;
-            }
-
-            throw new NotSupportedException($"MSE calculation not supported for type {typeof(TOutput)}");
-        }
-
-        private double CalculateMAE(TOutput predictions, TOutput targets)
-        {
-            // Handle the case where TOutput is double[]
-            if (predictions is double[] predArray && targets is double[] targArray)
-            {
-                if (predArray.Length != targArray.Length)
-                    throw new ArgumentException("Predictions and targets must have same length");
-
-                double sum = 0;
-                for (int i = 0; i < predArray.Length; i++)
-                {
-                    sum += Math.Abs(predArray[i] - targArray[i]);
-                }
-
-                return sum / predArray.Length;
-            }
-
-            throw new NotSupportedException($"MAE calculation not supported for type {typeof(TOutput)}");
-        }
-
-        private double CalculateRSquared(TOutput predictions, TOutput targets)
-        {
-            // Handle the case where TOutput is double[]
-            if (predictions is double[] predArray && targets is double[] targArray)
-            {
-                if (predArray.Length != targArray.Length)
-                    throw new ArgumentException("Predictions and targets must have same length");
-
-                double mean = targArray.Average();
-                double ssTotal = 0;
-                double ssResidual = 0;
-
-                for (int i = 0; i < targArray.Length; i++)
-                {
-                    ssTotal += Math.Pow(targArray[i] - mean, 2);
-                    ssResidual += Math.Pow(targArray[i] - predArray[i], 2);
-                }
-
-                return 1 - (ssResidual / ssTotal);
-            }
-
-            throw new NotSupportedException($"R-Squared calculation not supported for type {typeof(TOutput)}");
-        }
     }
 }

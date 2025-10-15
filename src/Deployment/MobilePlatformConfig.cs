@@ -1,3 +1,5 @@
+using System;
+
 namespace AiDotNet.Deployment
 {
     /// <summary>
@@ -5,10 +7,10 @@ namespace AiDotNet.Deployment
     /// </summary>
     public class MobilePlatformConfig
     {
-        public string PlatformName { get; set; }
+        public string PlatformName { get; set; } = string.Empty;
         public double MaxModelSize { get; set; } // MB
-        public string[] SupportedFormats { get; set; }
-        public string MinOSVersion { get; set; }
-        public string[] HardwareAccelerators { get; set; }
+        public string[] SupportedFormats { get; set; } = new string[0];
+        public string MinOSVersion { get; set; } = string.Empty;
+        public string[] HardwareAccelerators { get; set; } = new string[0];
     }
 }

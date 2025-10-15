@@ -35,7 +35,7 @@ public class NormalizationParameters<T>
     /// This field provides access to basic mathematical operations for the generic type T,
     /// allowing the class to perform calculations regardless of the specific numeric type.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the NormalizationParameters class with default values.

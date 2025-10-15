@@ -8,6 +8,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
+using AiDotNet.Statistics;
 
 namespace AiDotNet.OnlineLearning.Algorithms;
 
@@ -21,7 +22,7 @@ public class AROW<T> : AdaptiveOnlineModelBase<T, Vector<T>, T>
     private Vector<T> _mean; // Mean weight vector
     private Vector<T> _variance; // Diagonal of covariance matrix
     private T _r; // Regularization parameter
-    private readonly OnlineModelOptions<T> _options;
+    private readonly OnlineModelOptions<T> _options = default!;
     
     /// <summary>
     /// Initializes a new instance of the AROW class.
@@ -172,9 +173,9 @@ public class AROW<T> : AdaptiveOnlineModelBase<T, Vector<T>, T>
     }
     
     /// <inheritdoc/>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.AROW,
             FeatureCount = _mean.Length,
@@ -399,14 +400,118 @@ public class AROW<T> : AdaptiveOnlineModelBase<T, Vector<T>, T>
     /// Gets the feature importance based on the inverse of variance.
     /// Lower variance indicates higher confidence in the feature weight.
     /// </summary>
-    public Vector<T> GetFeatureImportance()
+    public override Dictionary<string, T> GetFeatureImportance()
     {
-        var importance = new T[_variance.Length];
+        var result = new Dictionary<string, T>();
         for (int i = 0; i < _variance.Length; i++)
         {
             // Importance is inversely proportional to variance
-            importance[i] = NumOps.Divide(NumOps.One, _variance[i]);
+            result[$"Feature_{i}"] = NumOps.Divide(NumOps.One, _variance[i]);
         }
-        return new Vector<T>(importance);
+        return result;
+    }
+    
+    /// <inheritdoc/>
+    public override int InputDimensions => _mean.Length;
+    
+    /// <inheritdoc/>
+    public override int OutputDimensions => 1;
+    
+    /// <inheritdoc/>
+    public override bool IsTrained => _samplesSeen > 0;
+    
+    /// <inheritdoc/>
+    public override T[] PredictBatch(Vector<T>[] inputBatch)
+    {
+        var predictions = new T[inputBatch.Length];
+        for (int i = 0; i < inputBatch.Length; i++)
+        {
+            predictions[i] = Predict(inputBatch[i]);
+        }
+        return predictions;
+    }
+    
+    /// <inheritdoc/>
+    public override Dictionary<string, double> Evaluate(Vector<T> testData, T testLabels)
+    {
+        // This method should accept arrays, but for now return basic metrics
+        var prediction = Predict(testData);
+        var error = CalculateError(prediction, testLabels);
+        
+        return new Dictionary<string, double>
+        {
+            ["Accuracy"] = NumOps.Equals(prediction, testLabels) ? 1.0 : 0.0,
+            ["Error"] = Convert.ToDouble(error)
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void SaveModel(string filePath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filePath, data);
+    }
+    
+    /// <inheritdoc/>
+    public override double GetTrainingLoss()
+    {
+        if (_recentErrors.Count == 0)
+            return 0.0;
+            
+        var avgError = CalculateMean(_recentErrors.ToArray());
+        return Convert.ToDouble(avgError);
+    }
+    
+    /// <inheritdoc/>
+    public override double GetValidationLoss()
+    {
+        // In online learning, we don't have separate validation loss
+        // Return the same as training loss
+        return GetTrainingLoss();
+    }
+    
+    /// <inheritdoc/>
+    public override Vector<T> GetModelParameters()
+    {
+        return GetParameters();
+    }
+    
+    /// <inheritdoc/>
+    public override ModelStats<T> GetStats()
+    {
+        return new ModelStats<T>
+        {
+            SampleCount = SamplesSeen,
+            LearningRate = _learningRate,
+            TrainingLoss = NumOps.FromDouble(GetTrainingLoss()),
+            ValidationLoss = NumOps.FromDouble(GetValidationLoss()),
+            AdditionalMetrics = new Dictionary<string, T>
+            {
+                ["DriftLevel"] = _driftLevel,
+                ["RegularizationParameter"] = _r
+            }
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void Save()
+    {
+        // Default implementation saves to a standard location
+        SaveModel($"arow_model_{DateTime.Now:yyyyMMddHHmmss}.bin");
+    }
+    
+    /// <inheritdoc/>
+    public override void Load()
+    {
+        // Default implementation would load from a standard location
+        // For now, this is a no-op as we need a file path
+        throw new NotImplementedException("Load requires a file path. Use Deserialize instead.");
+    }
+    
+    /// <inheritdoc/>
+    public override void Dispose()
+    {
+        // Clean up any resources if needed
+        _recentErrors?.Clear();
     }
 }

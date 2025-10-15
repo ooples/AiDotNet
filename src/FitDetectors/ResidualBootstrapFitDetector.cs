@@ -17,12 +17,12 @@ public class ResidualBootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// <summary>
     /// Configuration options for the residual bootstrap fit detector.
     /// </summary>
-    private readonly ResidualBootstrapFitDetectorOptions _options;
+    private readonly ResidualBootstrapFitDetectorOptions _options = default!;
     
     /// <summary>
     /// Random number generator used for bootstrap resampling.
     /// </summary>
-    private readonly Random _random;
+    private readonly Random _random = default!;
 
     /// <summary>
     /// Initializes a new instance of the ResidualBootstrapFitDetector class.

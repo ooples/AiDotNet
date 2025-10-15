@@ -47,7 +47,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// During training, both these mean weights and the noise scale are learned.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weightsMu;
+    private Matrix<T> _weightsMu = default!;
     
     /// <summary>
     /// The mean bias parameters (without noise).
@@ -65,7 +65,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// - Get adjusted during training based on experience
     /// </para>
     /// </remarks>
-    private Vector<T> _biasesMu;
+    private Vector<T> _biasesMu = default!;
     
     /// <summary>
     /// The weight noise parameters that control the scale of noise.
@@ -87,7 +87,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// where it needs more exploration and where it needs less.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weightsSigma;
+    private Matrix<T> _weightsSigma = default!;
     
     /// <summary>
     /// The bias noise parameters that control the scale of noise.
@@ -107,7 +107,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// Together with weight sigmas, they give the layer a "confidence level" for its output.
     /// </para>
     /// </remarks>
-    private Vector<T> _biasesSigma;
+    private Vector<T> _biasesSigma = default!;
     
     /// <summary>
     /// The noise samples for the input features.
@@ -127,7 +127,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// These random values are resampled before each forward pass during training.
     /// </para>
     /// </remarks>
-    private Vector<T> _epsilonInput;
+    private Vector<T> _epsilonInput = default!;
     
     /// <summary>
     /// The noise samples for the output features.
@@ -143,7 +143,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// They're also used to add noise to the bias terms.
     /// </para>
     /// </remarks>
-    private Vector<T> _epsilonOutput;
+    private Vector<T> _epsilonOutput = default!;
     
     /// <summary>
     /// The noisy weights used in the current forward pass.
@@ -163,7 +163,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// The level of noise decreases over time as the agent learns.
     /// </para>
     /// </remarks>
-    private Tensor<T> _weights;
+    private Tensor<T> _weights = default!;
     
     /// <summary>
     /// The noisy biases used in the current forward pass.
@@ -181,7 +181,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// - Change slightly each time during training
     /// </para>
     /// </remarks>
-    private Tensor<T> _biases;
+    private Tensor<T> _biases = default!;
     
     /// <summary>
     /// The gradients for the mean weights calculated during the backward pass.
@@ -211,7 +211,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// <summary>
     /// The initial scale of the noise.
     /// </summary>
-    private readonly T _initialSigma;
+    private readonly T _initialSigma = default!;
     
     /// <summary>
     /// The number of output features.
@@ -221,7 +221,7 @@ public class NoisyLinearLayer<T> : LayerBase<T>
     /// <summary>
     /// The random number generator used to sample noise.
     /// </summary>
-    private readonly Random _random;
+    private readonly Random _random = default!;
     
     /// <summary>
     /// Gets a value indicating whether this layer supports training.

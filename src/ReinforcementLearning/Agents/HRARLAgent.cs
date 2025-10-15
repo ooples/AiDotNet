@@ -24,27 +24,27 @@ public class HRARLAgent<TState, T> : AgentBase<TState, Vector<T>, T>
     private readonly int _goalDimension;
     private readonly bool _useRecurrentHighLevelPolicy;
     private readonly bool _useIntrinsicRewards;
-    private readonly T _intrinsicRewardScale;
+    private readonly T _intrinsicRewardScale = default!;
     private readonly bool _useTargetNetwork;
     private readonly int _targetUpdateFrequency;
     private readonly bool _useHindsightExperienceReplay;
     private readonly int _riskMetricType; // 0 = Variance, 1 = VaR, 2 = CVaR
-    private readonly T _confidenceLevel;
+    private readonly T _confidenceLevel = default!;
     
     // Discount factors
-    private readonly T _highLevelGamma;
-    private readonly T _lowLevelGamma;
+    private readonly T _highLevelGamma = default!;
+    private readonly T _lowLevelGamma = default!;
     
     // Risk aversion parameter
-    private T _riskAversionParameter;
+    private T _riskAversionParameter = default!;
     
     // Neural network components
-    private readonly NeuralNetwork<T> _highLevelPolicy;
-    private readonly NeuralNetwork<T> _highLevelValue;
-    private readonly NeuralNetwork<T> _lowLevelPolicy;
-    private readonly NeuralNetwork<T> _lowLevelValue;
-    private readonly NeuralNetwork<T> _riskAssessmentNetwork;
-    private readonly NeuralNetwork<T> _distributionalValueNetwork;
+    private readonly NeuralNetwork<T> _highLevelPolicy = default!;
+    private readonly NeuralNetwork<T> _highLevelValue = default!;
+    private readonly NeuralNetwork<T> _lowLevelPolicy = default!;
+    private readonly NeuralNetwork<T> _lowLevelValue = default!;
+    private readonly NeuralNetwork<T> _riskAssessmentNetwork = default!;
+    private readonly NeuralNetwork<T> _distributionalValueNetwork = default!;
     
     // Target networks for stable learning
     private NeuralNetwork<T>? _highLevelValueTarget;
@@ -55,15 +55,15 @@ public class HRARLAgent<TState, T> : AgentBase<TState, Vector<T>, T>
     private readonly List<(TState state, Vector<T> goal, Vector<T> action, T reward, TState nextState, bool done)> _lowLevelMemory;
     
     // Optimizers
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _highLevelPolicyOptimizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _highLevelValueOptimizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _lowLevelPolicyOptimizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _lowLevelValueOptimizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _distributionalValueOptimizer;
+    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _highLevelPolicyOptimizer = default!;
+    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _highLevelValueOptimizer = default!;
+    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _lowLevelPolicyOptimizer = default!;
+    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _lowLevelValueOptimizer = default!;
+    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _distributionalValueOptimizer = default!;
     
     // State tracking
     private int _updateCounter;
-    private Vector<T> _currentGoal;
+    private Vector<T> _currentGoal = default!;
     private TState? _lastHighLevelState;
     private int _lowLevelStepsCounter;
     

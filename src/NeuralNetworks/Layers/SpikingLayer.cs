@@ -51,7 +51,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// biological details.
     /// </para>
     /// </remarks>
-    private SpikingNeuronType _neuronType;
+    private SpikingNeuronType _neuronType = default!;
 
     /// <summary>
     /// Time constant for membrane potential decay.
@@ -152,7 +152,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// This helps the network gradually improve its performance on the given task.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weightGradients;
+    private Matrix<T> _weightGradients = default!;
 
     /// <summary>
     /// Accumulated gradients for bias updates during training.
@@ -171,7 +171,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// The network uses these gradients to update the biases after processing a batch of examples.
     /// </para>
     /// </remarks>
-    private Vector<T> _biasGradients;
+    private Vector<T> _biasGradients = default!;
 
     /// <summary>
     /// Stores the input tensor from the most recent forward pass.
@@ -225,7 +225,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// This is the key internal state that determines when neurons fire.
     /// </para>
     /// </remarks>
-    private Vector<T> _membranePotential;
+    private Vector<T> _membranePotential = default!;
 
     /// <summary>
     /// Countdown timer for refractory period for each output neuron.
@@ -246,7 +246,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// This prevents unrealistically rapid firing and better matches biological neurons.
     /// </para>
     /// </remarks>
-    private Vector<T> _refractoryCountdown;
+    private Vector<T> _refractoryCountdown = default!;
 
     /// <summary>
     /// Output spikes for each output neuron (1.0 for spike, 0.0 for no spike).
@@ -266,7 +266,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// similar to how real neurons in the brain work.
     /// </para>
     /// </remarks>
-    private Vector<T> _spikes;
+    private Vector<T> _spikes = default!;
 
     /// <summary>
     /// Recovery variable for Izhikevich neuron model.

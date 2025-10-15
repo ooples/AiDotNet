@@ -52,7 +52,7 @@ public class FocalLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// - Decrease it if your model is overfitting to a few difficult examples
     /// </para>
     /// </remarks>
-    private readonly T _gamma;
+    private readonly T _gamma = default!;
 
     /// <summary>
     /// The weighting factor that balances the importance of positive/negative examples.
@@ -74,7 +74,7 @@ public class FocalLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// based on how imbalanced your classes are.
     /// </para>
     /// </remarks>
-    private readonly T _alpha;
+    private readonly T _alpha = default!;
 
     /// <summary>
     /// Initializes a new instance of the FocalLossFitnessCalculator class.

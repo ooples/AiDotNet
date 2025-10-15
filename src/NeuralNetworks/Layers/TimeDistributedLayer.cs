@@ -48,7 +48,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// that each word is processed independently but in sequence.
     /// </para>
     /// </remarks>
-    private readonly LayerBase<T> _innerLayer;
+    private readonly LayerBase<T> _innerLayer = default!;
 
     /// <summary>
     /// The input tensor from the last forward pass.

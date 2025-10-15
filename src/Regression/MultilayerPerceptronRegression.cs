@@ -49,7 +49,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionModelBase<T>
     /// to get better performance for your specific problem.
     /// </para>
     /// </remarks>
-    private readonly MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>> _options;
+    private readonly MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>> _options = default!;
 
     /// <summary>
     /// The weights connecting the layers of the neural network.
@@ -72,7 +72,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionModelBase<T>
     /// for this output."
     /// </para>
     /// </remarks>
-    private readonly List<Matrix<T>> _weights;
+    private readonly List<Matrix<T>> _weights = default!;
 
     /// <summary>
     /// The bias values for each layer of the neural network.
@@ -93,7 +93,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionModelBase<T>
     /// whether the neuron tends to fire or remain inactive.
     /// </para>
     /// </remarks>
-    private readonly List<Vector<T>> _biases;
+    private readonly List<Vector<T>> _biases = default!;
 
     /// <summary>
     /// The optimization algorithm used to update the weights and biases during training.
@@ -114,7 +114,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionModelBase<T>
     /// instead of following a fixed plan regardless of results.
     /// </para>
     /// </remarks>
-    private IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private IOptimizer<T, Matrix<T>, Vector<T>> _optimizer = default!;
 
     /// <summary>
     /// Gets or sets the loss function used to calculate the error between predictions and targets.
@@ -152,7 +152,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionModelBase<T>
     /// - Multi-class classification → Categorical Cross-Entropy + Softmax output activation
     /// </para>
     /// </remarks>
-    private ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultilayerPerceptronRegression{T}"/> class with optional custom options and regularization.

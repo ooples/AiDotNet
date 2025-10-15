@@ -30,12 +30,12 @@ public class ALiBiAttentionLayer<T> : MultiHeadAttentionLayer<T>
     /// <summary>
     /// The slope parameter that controls how quickly the penalty increases with distance.
     /// </summary>
-    private readonly T _slope;
+    private readonly T _slope = default!;
     
     /// <summary>
     /// The pre-computed bias matrix.
     /// </summary>
-    private readonly Tensor<T> _biasMatrix;
+    private readonly Tensor<T> _biasMatrix = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="ALiBiAttentionLayer{T}"/> class.

@@ -34,7 +34,7 @@ public class ANOVAKernel<T> : IKernelFunction<T>
     /// the kernel is more sensitive to small differences between data points, while a larger sigma makes
     /// the kernel more tolerant of differences.
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
     
     /// <summary>
     /// The polynomial degree parameter that controls the complexity of the kernel.
@@ -49,7 +49,7 @@ public class ANOVAKernel<T> : IKernelFunction<T>
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the ANOVA kernel with optional parameters.

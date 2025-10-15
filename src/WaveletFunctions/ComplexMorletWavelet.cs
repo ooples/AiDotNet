@@ -42,17 +42,17 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The central frequency of the wavelet.
     /// </summary>
-    private readonly T _omega;
+    private readonly T _omega = default!;
     
     /// <summary>
     /// The bandwidth parameter controlling the width of the Gaussian window.
     /// </summary>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
 
     /// <summary>
     /// Initializes a new instance of the ComplexMorletWavelet class with the specified parameters.

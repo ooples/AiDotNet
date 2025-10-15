@@ -43,7 +43,7 @@ public class SymletWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The order of the Symlet wavelet.
@@ -53,22 +53,22 @@ public class SymletWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// The decomposition low-pass filter coefficients.
     /// </summary>
-    private readonly Vector<T> _lowDecomp;
+    private readonly Vector<T> _lowDecomp = default!;
     
     /// <summary>
     /// The decomposition high-pass filter coefficients.
     /// </summary>
-    private readonly Vector<T> _highDecomp;
+    private readonly Vector<T> _highDecomp = default!;
     
     /// <summary>
     /// The reconstruction low-pass filter coefficients.
     /// </summary>
-    private readonly Vector<T> _lowRecon;
+    private readonly Vector<T> _lowRecon = default!;
     
     /// <summary>
     /// The reconstruction high-pass filter coefficients.
     /// </summary>
-    private readonly Vector<T> _highRecon;
+    private readonly Vector<T> _highRecon = default!;
 
     /// <summary>
     /// Initializes a new instance of the SymletWavelet class with the specified order.

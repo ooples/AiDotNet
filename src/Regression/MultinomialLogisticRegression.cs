@@ -46,7 +46,7 @@ public class MultinomialLogisticRegression<T> : RegressionModelBase<T>
     /// Think of them as the "knobs" you can adjust to fine-tune the learning process.
     /// </para>
     /// </remarks>
-    private readonly MultinomialLogisticRegressionOptions<T> _options;
+    private readonly MultinomialLogisticRegressionOptions<T> _options = default!;
 
     /// <summary>
     /// The coefficients matrix, where each row corresponds to a class and each column to a feature (plus intercept).

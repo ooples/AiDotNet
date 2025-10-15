@@ -38,7 +38,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// <remarks>
     /// This matrix contains the learnable weights for the convolution operation.
     /// </remarks>
-    private Matrix<T> _convWeights;
+    private Matrix<T> _convWeights = default!;
     
     /// <summary>
     /// The bias vector for convolution operations.
@@ -46,7 +46,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// <remarks>
     /// This vector contains the learnable biases for the convolution operation.
     /// </remarks>
-    private Vector<T> _convBias;
+    private Vector<T> _convBias = default!;
     
     /// <summary>
     /// The gradient of the loss with respect to the convolution weights.

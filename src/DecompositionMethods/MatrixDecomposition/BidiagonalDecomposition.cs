@@ -255,7 +255,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     private Vector<T> HouseholderVector(Vector<T> x)
     {
         T norm = x.Norm();
-        Vector<T> v = x.Clone();
+        Vector<T> v = (Vector<T>)x.Clone();
         v[0] = _numOps.Add(v[0], _numOps.Multiply(_numOps.SignOrZero(x[0]), norm));
 
         return v.Divide(v.Norm());

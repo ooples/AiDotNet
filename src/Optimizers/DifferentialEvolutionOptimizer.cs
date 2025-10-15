@@ -31,7 +31,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// (refining good solutions).
     /// </para>
     /// </remarks>
-    private DifferentialEvolutionOptions<T, TInput, TOutput> _deOptions;
+    private DifferentialEvolutionOptions<T, TInput, TOutput> _deOptions = default!;
 
     /// <summary>
     /// The current crossover rate used in the optimization process.
@@ -46,7 +46,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// This value can change during optimization to balance exploration and refinement.
     /// </para>
     /// </remarks>
-    private T _currentCrossoverRate;
+    private T _currentCrossoverRate = default!;
 
     /// <summary>
     /// The current mutation rate used in the optimization process.
@@ -61,7 +61,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// This value can change during optimization to balance exploration and refinement.
     /// </para>
     /// </remarks>
-    private T _currentMutationRate;
+    private T _currentMutationRate = default!;
 
     /// <summary>
     /// Initializes a new instance of the DifferentialEvolutionOptimizer class.

@@ -49,12 +49,12 @@ public class BayesianRegression<T> : RegressionModelBase<T>
     /// <summary>
     /// Options specific to Bayesian regression.
     /// </summary>
-    private readonly BayesianRegressionOptions<T> _bayesOptions;
+    private readonly BayesianRegressionOptions<T> _bayesOptions = default!;
     
     /// <summary>
     /// The covariance matrix of the posterior distribution over model parameters.
     /// </summary>
-    private Matrix<T> _posteriorCovariance;
+    private Matrix<T> _posteriorCovariance = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BayesianRegression{T}"/> class with the specified options and regularization.

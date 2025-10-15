@@ -36,7 +36,7 @@ public class AdaGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// These settings can be customized to make the optimizer work better for different types of problems.
     /// </para>
     /// </remarks>
-    private AdagradOptimizerOptions<T, TInput, TOutput> _options;
+    private AdagradOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// Stores the sum of squared gradients for each parameter during optimization.

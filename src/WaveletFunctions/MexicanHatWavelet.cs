@@ -46,7 +46,7 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     /// without having to write separate code for each number type.
     /// </para>
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The standard deviation parameter that controls the width of the Mexican Hat wavelet.
@@ -69,7 +69,7 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     /// This parameter gives you the flexibility to analyze your data at different scales.
     /// </para>
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MexicanHatWavelet{T}"/> class with the specified sigma.

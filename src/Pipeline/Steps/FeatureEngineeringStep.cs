@@ -11,9 +11,9 @@ namespace AiDotNet.Pipeline.Steps
     /// </summary>
     public class FeatureEngineeringStep : PipelineStepBase
     {
-        private readonly List<FeatureTransformation> _transformations;
-        private Dictionary<int, double[]>? _polynomialCoefficients;
-        private Dictionary<string, int>? _interactionFeatureMap;
+        private readonly List<FeatureTransformation> _transformations = default!;
+        private Dictionary<int, double[]>? _polynomialCoefficients = default!;
+        private Dictionary<string, int>? _interactionFeatureMap = default!;
         private double[]? _logOffsets;
         private double[]? _powerExponents;
         private int _originalFeatureCount;

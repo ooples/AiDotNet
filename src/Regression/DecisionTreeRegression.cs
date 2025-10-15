@@ -31,22 +31,22 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionModelBase<T>
     /// <summary>
     /// The configuration options for the decision tree algorithm.
     /// </summary>
-    private readonly DecisionTreeOptions _options;
+    private readonly DecisionTreeOptions _options = default!;
     
     /// <summary>
     /// Random number generator used for feature selection and other randomized operations.
     /// </summary>
-    private readonly Random _random;
+    private readonly Random _random = default!;
     
     /// <summary>
     /// Vector storing the importance scores for each feature in the model.
     /// </summary>
-    private Vector<T> _featureImportances;
+    private Vector<T> _featureImportances = default!;
     
     /// <summary>
     /// The regularization strategy applied to the model to prevent overfitting.
     /// </summary>
-    private readonly IRegularization<T, Matrix<T>, Vector<T>> _regularization;
+    private readonly IRegularization<T, Matrix<T>, Vector<T>> _regularization = default!;
 
     /// <summary>
     /// Gets the number of trees in this model, which is always 1 for a single decision tree.
@@ -235,9 +235,9 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionModelBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.DecisionTree,
             AdditionalInfo = new Dictionary<string, object>

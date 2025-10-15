@@ -1,0 +1,12 @@
+MSBuild version 17.8.27+3ab07f0cf for .NET
+/home/ooples/AiDotNet/src/PredictionModelBuilder.cs(45,59): error CS0535: 'PredictionModelBuilder<T, TInput, TOutput>' does not implement interface member 'IPredictionModelBuilder<T, TInput, TOutput>.ConfigureFineTuning(FineTuningOptions<double>)' [/home/ooples/AiDotNet/src/AiDotNet.csproj::TargetFramework=net6.0]
+/home/ooples/AiDotNet/src/PredictionModelBuilder.cs(45,59): error CS0535: 'PredictionModelBuilder<T, TInput, TOutput>' does not implement interface member 'IPredictionModelBuilder<T, TInput, TOutput>.ConfigureFineTuning(FineTuningOptions<double>)' [/home/ooples/AiDotNet/src/AiDotNet.csproj::TargetFramework=net8.0]
+
+Build FAILED.
+
+/home/ooples/AiDotNet/src/PredictionModelBuilder.cs(45,59): error CS0535: 'PredictionModelBuilder<T, TInput, TOutput>' does not implement interface member 'IPredictionModelBuilder<T, TInput, TOutput>.ConfigureFineTuning(FineTuningOptions<double>)' [/home/ooples/AiDotNet/src/AiDotNet.csproj::TargetFramework=net6.0]
+/home/ooples/AiDotNet/src/PredictionModelBuilder.cs(45,59): error CS0535: 'PredictionModelBuilder<T, TInput, TOutput>' does not implement interface member 'IPredictionModelBuilder<T, TInput, TOutput>.ConfigureFineTuning(FineTuningOptions<double>)' [/home/ooples/AiDotNet/src/AiDotNet.csproj::TargetFramework=net8.0]
+    0 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:05.89

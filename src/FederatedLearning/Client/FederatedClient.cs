@@ -81,9 +81,9 @@ namespace AiDotNet.FederatedLearning.Client
             BatchSize = 32;
             TrainingHistory = new List<ClientTrainingRound>();
             Status = ClientStatus.Ready;
-            
+
             // Initialize local optimizer
-            LocalOptimizer = new AdamOptimizer(new Models.Options.AdamOptimizerOptions
+            LocalOptimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(new Models.Options.AdamOptimizerOptions
             {
                 LearningRate = 0.001,
                 Beta1 = 0.9,
@@ -197,7 +197,7 @@ namespace AiDotNet.FederatedLearning.Client
                 var endIdx = Math.Min(startIdx + BatchSize, TrainingData.Rows);
                 
                 // Get batch data
-                var batchData = TrainingData.GetRows(startIdx, endIdx - startIdx);
+                var batchData = TrainingData.GetSubMatrix(startIdx, 0, endIdx - startIdx, TrainingData.Columns);
                 var batchLabels = TrainingLabels.GetRange(startIdx, endIdx - startIdx);
                 
                 // Forward pass
@@ -221,18 +221,13 @@ namespace AiDotNet.FederatedLearning.Client
         /// <returns>Predictions</returns>
         private async Task<Vector<double>> PredictBatchAsync(Matrix<double> batchData)
         {
-            if (LocalModel is IPredictiveModel predictiveModel)
+            if (LocalModel is IPredictiveModel<double, Matrix<double>, Vector<double>> predictiveModel)
             {
-                var predictions = new double[batchData.Rows];
-                for (int i = 0; i < batchData.Rows; i++)
-                {
-                    var input = batchData.GetRow(i);
-                    var prediction = await Task.FromResult(predictiveModel.Predict(input));
-                    predictions[i] = prediction;
-                }
-                return new Vector<double>(predictions);
+                // Predict the entire batch at once
+                var predictions = await Task.FromResult(predictiveModel.Predict(batchData));
+                return predictions;
             }
-            
+
             throw new NotSupportedException("Local model does not support prediction");
         }
 
@@ -465,28 +460,4 @@ namespace AiDotNet.FederatedLearning.Client
         #endregion
     }
 
-    /// <summary>
-    /// Client training round information
-    /// </summary>
-    public class ClientTrainingRound
-    {
-        public int Round { get; set; }
-        public double TrainingLoss { get; set; }
-        public TimeSpan TrainingTime { get; set; }
-        public int DataSize { get; set; }
-        public double ParameterUpdateNorm { get; set; }
-    }
-
-    /// <summary>
-    /// Client status enumeration
-    /// </summary>
-    public enum ClientStatus
-    {
-        Ready,
-        Training,
-        UpdatingModel,
-        Communicating,
-        Error,
-        Disconnected
-    }
 }

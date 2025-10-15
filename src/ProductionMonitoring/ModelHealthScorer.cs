@@ -1,4 +1,6 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,14 +11,15 @@ namespace AiDotNet.ProductionMonitoring
     /// <summary>
     /// Calculates comprehensive model health scores based on multiple factors
     /// </summary>
-    public class ModelHealthScorer : ProductionMonitorBase
+    /// <typeparam name="T">The numeric type used for calculations</typeparam>
+    public class ModelHealthScorer<T> : ProductionMonitorBase<T>
     {
-        private readonly HealthScoringConfiguration _configuration;
-        private readonly Dictionary<string, HealthComponent> _healthComponents;
-        private readonly List<HealthCheckResult> _healthHistory;
-        private readonly Dictionary<string, Func<Task<double>>> _customHealthChecks;
+        private readonly HealthScoringConfiguration _configuration = default!;
+        private readonly Dictionary<string, HealthComponent> _healthComponents = default!;
+        private readonly List<HealthCheckResult> _healthHistory = default!;
+        private readonly Dictionary<string, Func<Task<double>>> _customHealthChecks = default!;
 
-        public ModelHealthScorer(HealthScoringConfiguration configuration = null)
+        public ModelHealthScorer(HealthScoringConfiguration? configuration = null)
         {
             _configuration = configuration ?? new HealthScoringConfiguration();
             _healthComponents = new Dictionary<string, HealthComponent>();
@@ -130,31 +133,33 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Gets health trends over time
         /// </summary>
-        public async Task<HealthTrendAnalysis> AnalyzeHealthTrendsAsync(int lookbackDays = 7)
+        public Task<HealthTrendAnalysis> AnalyzeHealthTrendsAsync(int lookbackDays = 7)
         {
-            List<HealthCheckResult> relevantHistory;
-            lock (_lockObject)
+            return Task.Run(() =>
             {
-                var cutoff = DateTime.UtcNow.AddDays(-lookbackDays);
-                relevantHistory = _healthHistory
-                    .Where(h => h.Timestamp >= cutoff)
-                    .OrderBy(h => h.Timestamp)
-                    .ToList();
-            }
+                List<HealthCheckResult> relevantHistory;
+                lock (_lockObject)
+                {
+                    var cutoff = DateTime.UtcNow.AddDays(-lookbackDays);
+                    relevantHistory = _healthHistory
+                        .Where(h => h.Timestamp >= cutoff)
+                        .OrderBy(h => h.Timestamp)
+                        .ToList();
+                }
             
             if (!relevantHistory.Any())
             {
-                return new HealthTrendAnalysis
+                return Task.FromResult(new HealthTrendAnalysis
                 {
                     TrendDirection = "Unknown",
                     TrendStrength = 0,
                     ComponentTrends = new Dictionary<string, TrendInfo>()
-                };
+                });
             }
-            
+
             // Calculate overall trend
             var overallTrend = CalculateTrend(relevantHistory.Select(h => h.OverallScore).ToList());
-            
+
             // Calculate component trends
             var componentTrends = new Dictionary<string, TrendInfo>();
             foreach (var componentName in _healthComponents.Keys)
@@ -163,7 +168,7 @@ namespace AiDotNet.ProductionMonitoring
                     .Where(h => h.ComponentScores.ContainsKey(componentName))
                     .Select(h => h.ComponentScores[componentName])
                     .ToList();
-                
+
                 if (componentScores.Any())
                 {
                     componentTrends[componentName] = new TrendInfo
@@ -177,10 +182,10 @@ namespace AiDotNet.ProductionMonitoring
                     };
                 }
             }
-            
-            return new HealthTrendAnalysis
+
+            return Task.FromResult(new HealthTrendAnalysis
             {
-                TrendDirection = overallTrend > 0.05 ? "Improving" : 
+                TrendDirection = overallTrend > 0.05 ? "Improving" :
                                 overallTrend < -0.05 ? "Degrading" : "Stable",
                 TrendStrength = Math.Abs(overallTrend),
                 OverallTrend = overallTrend,
@@ -188,36 +193,37 @@ namespace AiDotNet.ProductionMonitoring
                 AnalysisPeriod = lookbackDays,
                 DataPoints = relevantHistory.Count
             };
+            });
         }
 
         /// <summary>
         /// Detects data drift (delegates to DataDriftDetector)
         /// </summary>
-        public override async Task<DriftDetectionResult> DetectDataDriftAsync(double[,] productionData, double[,] referenceData = null)
+        public override async Task<DriftDetectionResult> DetectDataDriftAsync(Matrix<T> productionData, Matrix<T>? referenceData = null)
         {
-            return new DriftDetectionResult
+            return Task.FromResult(new DriftDetectionResult
             {
                 IsDriftDetected = false,
                 DriftScore = 0,
                 DriftType = "DataDrift",
                 Details = "Use DataDriftDetector for data drift detection",
                 DetectionTimestamp = DateTime.UtcNow
-            };
+            });
         }
 
         /// <summary>
         /// Detects concept drift (delegates to ConceptDriftDetector)
         /// </summary>
-        public override async Task<DriftDetectionResult> DetectConceptDriftAsync(double[] predictions, double[] actuals)
+        public override async Task<DriftDetectionResult> DetectConceptDriftAsync(Vector<T> predictions, Vector<T> actuals)
         {
-            return new DriftDetectionResult
+            return Task.FromResult(new DriftDetectionResult
             {
                 IsDriftDetected = false,
                 DriftScore = 0,
                 DriftType = "ConceptDrift",
                 Details = "Use ConceptDriftDetector for concept drift detection",
                 DetectionTimestamp = DateTime.UtcNow
-            };
+            });
         }
 
         /// <summary>
@@ -400,126 +406,126 @@ namespace AiDotNet.ProductionMonitoring
         private async Task<double> EvaluatePerformanceHealthAsync(Dictionary<string, object> details)
         {
             var metrics = await GetPerformanceMetricsAsync(DateTime.UtcNow.AddHours(-1), DateTime.UtcNow);
-            
+
             if (metrics.PredictionCount == 0) return 1.0;
-            
+
             details["Accuracy"] = metrics.Accuracy;
             details["F1Score"] = metrics.F1Score;
             details["MAE"] = metrics.MAE;
-            
+
             // Combine multiple metrics
             var accuracyScore = metrics.Accuracy;
             var f1Score = metrics.F1Score;
             var errorScore = Math.Max(0, 1.0 - metrics.MAE);
-            
-            return (accuracyScore * 0.4 + f1Score * 0.4 + errorScore * 0.2);
+
+            return await Task.FromResult(accuracyScore * 0.4 + f1Score * 0.4 + errorScore * 0.2);
         }
 
-        private async Task<double> EvaluateDataQualityHealthAsync(Dictionary<string, object> details)
+        private Task<double> EvaluateDataQualityHealthAsync(Dictionary<string, object> details)
         {
             lock (_lockObject)
             {
-                if (!_predictionHistory.Any()) return 1.0;
-                
+                if (!_predictionHistory.Any()) return Task.FromResult(1.0);
+
                 var recent = _predictionHistory.TakeLast(100).ToList();
-                
+
                 // Check for data quality issues
                 var missingValues = recent.Count(p => p.Features.Any(f => double.IsNaN(f) || double.IsInfinity(f)));
                 var outliers = recent.Count(p => p.Features.Any(f => Math.Abs(f) > 10));
                 var duplicates = recent.Count() - recent.Distinct().Count();
-                
+
                 details["MissingValues"] = missingValues;
                 details["Outliers"] = outliers;
                 details["Duplicates"] = duplicates;
-                
-                var missingScore = 1.0 - (missingValues / (double)recent.Count);
-                var outlierScore = 1.0 - (outliers / (double)recent.Count);
-                var duplicateScore = 1.0 - (duplicates / (double)recent.Count);
-                
-                return (missingScore * 0.5 + outlierScore * 0.3 + duplicateScore * 0.2);
+
+                var missingScore = 1.0 - (missingValues / (double)recent.Count());
+                var outlierScore = 1.0 - (outliers / (double)recent.Count());
+                var duplicateScore = 1.0 - (duplicates / (double)recent.Count());
+
+                return Task.FromResult(missingScore * 0.5 + outlierScore * 0.3 + duplicateScore * 0.2);
             }
         }
 
-        private async Task<double> EvaluateDriftHealthAsync(Dictionary<string, object> details)
+        private Task<double> EvaluateDriftHealthAsync(Dictionary<string, object> details)
         {
             lock (_lockObject)
             {
                 var recentDrifts = _driftHistory
                     .Where(d => d.DetectionTimestamp > DateTime.UtcNow.AddHours(-24))
                     .ToList();
-                
-                if (!recentDrifts.Any()) return 1.0;
-                
+
+                if (!recentDrifts.Any()) return Task.FromResult(1.0);
+
                 var driftCount = recentDrifts.Count(d => d.IsDriftDetected);
                 var maxDriftScore = recentDrifts.Max(d => d.DriftScore);
-                
+
                 details["DriftCount"] = driftCount;
                 details["MaxDriftScore"] = maxDriftScore;
-                
+
                 var countScore = Math.Max(0, 1.0 - (driftCount / 10.0));
                 var severityScore = Math.Max(0, 1.0 - maxDriftScore);
-                
-                return (countScore * 0.6 + severityScore * 0.4);
+
+                return Task.FromResult(countScore * 0.6 + severityScore * 0.4);
             }
         }
 
-        private async Task<double> EvaluateStabilityHealthAsync(Dictionary<string, object> details)
+        private Task<double> EvaluateStabilityHealthAsync(Dictionary<string, object> details)
         {
             lock (_lockObject)
             {
-                if (_performanceHistory.Count < 5) return 1.0;
-                
+                if (_performanceHistory.Count < 5) return Task.FromResult(1.0);
+
                 var recent = _performanceHistory.TakeLast(10).ToList();
                 var accuracies = recent.Select(p => p.Accuracy).ToArray();
-                
+
                 // Calculate coefficient of variation
                 var mean = accuracies.Average();
                 var stdDev = Math.Sqrt(accuracies.Select(a => Math.Pow(a - mean, 2)).Average());
                 var cv = mean > 0 ? stdDev / mean : 0;
-                
+
                 details["CoefficientOfVariation"] = cv;
                 details["StdDev"] = stdDev;
-                
-                return Math.Max(0, 1.0 - cv * 2);
+
+                return Task.FromResult(Math.Max(0, 1.0 - cv * 2));
             }
         }
 
-        private async Task<double> EvaluateLatencyHealthAsync(Dictionary<string, object> details)
+        private Task<double> EvaluateLatencyHealthAsync(Dictionary<string, object> details)
         {
             // Simulate latency measurement
             var avgLatency = 50.0; // milliseconds
             var p95Latency = 100.0;
             var p99Latency = 200.0;
-            
+
             details["AvgLatency"] = avgLatency;
             details["P95Latency"] = p95Latency;
             details["P99Latency"] = p99Latency;
-            
+
             // Score based on latency thresholds
             var avgScore = Math.Max(0, 1.0 - (avgLatency / 200.0));
             var p95Score = Math.Max(0, 1.0 - (p95Latency / 500.0));
             var p99Score = Math.Max(0, 1.0 - (p99Latency / 1000.0));
-            
-            return (avgScore * 0.5 + p95Score * 0.3 + p99Score * 0.2);
+
+            return Task.FromResult(avgScore * 0.5 + p95Score * 0.3 + p99Score * 0.2);
         }
 
-        private async Task<double> EvaluateResourceHealthAsync(Dictionary<string, object> details)
+        private Task<double> EvaluateResourceHealthAsync(Dictionary<string, object> details)
         {
             // Simulate resource usage
             var cpuUsage = 0.3; // 30%
             var memoryUsage = 0.5; // 50%
             var diskUsage = 0.2; // 20%
-            
+
             details["CpuUsage"] = cpuUsage;
             details["MemoryUsage"] = memoryUsage;
             details["DiskUsage"] = diskUsage;
-            
+
             // Lower usage is better
             var cpuScore = 1.0 - cpuUsage;
             var memoryScore = 1.0 - memoryUsage;
             var diskScore = 1.0 - diskUsage;
-            
-            return (cpuScore * 0.4 + memoryScore * 0.4 + diskScore * 0.2);
+
+            return Task.FromResult(cpuScore * 0.4 + memoryScore * 0.4 + diskScore * 0.2);
         }
 
         private double CalculateWeightedScore(Dictionary<string, ComponentScore> scores)
@@ -758,7 +764,7 @@ namespace AiDotNet.ProductionMonitoring
             return actions;
         }
 
-        private async Task CheckHealthAlertsAsync(ComprehensiveHealthReport report)
+        private Task CheckHealthAlertsAsync(ComprehensiveHealthReport report)
         {
             // Check for critical health
             if (report.HealthStatus == "Critical")
@@ -777,10 +783,10 @@ namespace AiDotNet.ProductionMonitoring
                     }
                 });
             }
-            
+
             // Check for rapid degradation
-            if (report.TrendAnalysis != null && 
-                report.TrendAnalysis.TrendDirection == "Degrading" && 
+            if (report.TrendAnalysis != null &&
+                report.TrendAnalysis.TrendDirection == "Degrading" &&
                 report.TrendAnalysis.TrendStrength > 0.2)
             {
                 SendAlert(new MonitoringAlert
@@ -796,6 +802,8 @@ namespace AiDotNet.ProductionMonitoring
                     }
                 });
             }
+
+            return Task.CompletedTask;
         }
 
         // Helper classes
@@ -813,7 +821,7 @@ namespace AiDotNet.ProductionMonitoring
 
         private class HealthComponent
         {
-            public string Name { get; set; }
+            public string Name { get; set; } = string.Empty;
             public double Weight { get; set; }
             public bool IsCritical { get; set; }
             public double MinThreshold { get; set; }
@@ -823,41 +831,41 @@ namespace AiDotNet.ProductionMonitoring
 
         public class ComponentScore
         {
-            public string ComponentName { get; set; }
+            public string ComponentName { get; set; } = string.Empty;
             public double Score { get; set; }
-            public string Status { get; set; }
-            public Dictionary<string, object> Details { get; set; }
+            public string Status { get; set; } = string.Empty;
+            public Dictionary<string, object> Details { get; set; } = new();
             public DateTime LastChecked { get; set; }
         }
 
         public class ComprehensiveHealthReport
         {
             public double OverallHealthScore { get; set; }
-            public string HealthStatus { get; set; }
-            public Dictionary<string, ComponentScore> ComponentScores { get; set; }
-            public List<HealthIssue> Issues { get; set; }
-            public List<string> Recommendations { get; set; }
+            public string HealthStatus { get; set; } = string.Empty;
+            public Dictionary<string, ComponentScore> ComponentScores { get; set; } = new();
+            public List<HealthIssue> Issues { get; set; } = new();
+            public List<string> Recommendations { get; set; } = new();
             public DateTime Timestamp { get; set; }
-            public HealthTrendAnalysis TrendAnalysis { get; set; }
+            public HealthTrendAnalysis TrendAnalysis { get; set; } = new();
             public double PredictedHealthIn24Hours { get; set; }
-            public List<RiskFactor> RiskFactors { get; set; }
+            public List<RiskFactor> RiskFactors { get; set; } = new();
         }
 
         public class HealthIssue
         {
-            public string Component { get; set; }
-            public string Severity { get; set; }
-            public string Description { get; set; }
-            public string Impact { get; set; }
-            public Dictionary<string, object> Details { get; set; }
+            public string Component { get; set; } = string.Empty;
+            public string Severity { get; set; } = string.Empty;
+            public string Description { get; set; } = string.Empty;
+            public string Impact { get; set; } = string.Empty;
+            public Dictionary<string, object> Details { get; set; } = new();
         }
 
         public class HealthTrendAnalysis
         {
-            public string TrendDirection { get; set; }
+            public string TrendDirection { get; set; } = string.Empty;
             public double TrendStrength { get; set; }
             public double OverallTrend { get; set; }
-            public Dictionary<string, TrendInfo> ComponentTrends { get; set; }
+            public Dictionary<string, TrendInfo> ComponentTrends { get; set; } = new();
             public int AnalysisPeriod { get; set; }
             public int DataPoints { get; set; }
         }
@@ -876,17 +884,17 @@ namespace AiDotNet.ProductionMonitoring
         {
             public DateTime Timestamp { get; set; }
             public double OverallScore { get; set; }
-            public string Status { get; set; }
-            public Dictionary<string, double> ComponentScores { get; set; }
+            public string Status { get; set; } = string.Empty;
+            public Dictionary<string, double> ComponentScores { get; set; } = new();
         }
 
         public class RiskFactor
         {
-            public string Factor { get; set; }
-            public string Severity { get; set; }
+            public string Factor { get; set; } = string.Empty;
+            public string Severity { get; set; } = string.Empty;
             public double Likelihood { get; set; }
-            public string Description { get; set; }
-            public string MitigationStrategy { get; set; }
+            public string Description { get; set; } = string.Empty;
+            public string MitigationStrategy { get; set; } = string.Empty;
         }
     }
 }

@@ -28,8 +28,8 @@ public class QRDQNAgent<T> : DQNAgent<Tensor<T>, T>
     private new readonly QRDQNOptions _options; // Hide base class _options
     
     // Neural network components (quantile-specific)
-    private readonly QuantileNetwork<T> _quantileNetwork;
-    private readonly QuantileNetwork<T> _targetQuantileNetwork;
+    private readonly QuantileNetwork<T> _quantileNetwork = default!;
+    private readonly QuantileNetwork<T> _targetQuantileNetwork = default!;
     
     // Tau values for quantile regression (midpoints of quantile intervals)
     private readonly T[] _tauValues;
@@ -980,10 +980,10 @@ public class QuantileNetwork<T>
     private readonly bool _useNoisyNetworks;
     private readonly double _noiseStd;
     private readonly INumericOperations<T> NumOps;
-    private readonly Random _random;
+    private readonly Random _random = default!;
     
     // Network layers
-    private readonly NeuralNetwork<T> _network;
+    private readonly NeuralNetwork<T> _network = default!;
     private readonly T[] _tauValues;
     
     /// <summary>

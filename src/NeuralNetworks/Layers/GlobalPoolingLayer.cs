@@ -65,7 +65,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// Selecting the right pooling type depends on your specific task and data.
     /// </para>
     /// </remarks>
-    private readonly PoolingType _poolingType;
+    private readonly PoolingType _poolingType = default!;
 
     /// <summary>
     /// The input tensor from the last forward pass, saved for backpropagation.

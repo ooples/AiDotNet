@@ -30,7 +30,7 @@ public class RelativePositionalEncoding<T> : PositionalEncodingBase<T>
     /// <summary>
     /// The relative position embeddings.
     /// </summary>
-    private readonly Tensor<T> _relativeEmbeddings;
+    private readonly Tensor<T> _relativeEmbeddings = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="RelativePositionalEncoding{T}"/> class.

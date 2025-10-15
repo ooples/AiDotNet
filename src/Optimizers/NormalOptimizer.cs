@@ -33,7 +33,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// removing ingredients, and how the chef should adjust their approach based on previous results.
     /// </para>
     /// </remarks>
-    private NormalOptimizerOptions<T, TInput, TOutput> _normalOptions;
+    private NormalOptimizerOptions<T, TInput, TOutput> _normalOptions = default!;
 
     /// <summary>
     /// Initializes a new instance of the NormalOptimizer class with specific options.

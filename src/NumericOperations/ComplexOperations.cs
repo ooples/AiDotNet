@@ -39,7 +39,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// This field holds the numeric operations for type T, which are used to perform
     /// calculations on the real and imaginary components of complex numbers.
     /// </remarks>
-    private readonly INumericOperations<T> _ops;
+    private readonly INumericOperations<T> _ops = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ComplexOperations{T}"/> class.

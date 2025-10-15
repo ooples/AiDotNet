@@ -42,7 +42,7 @@ public class ThinPlateSplineRBF<T> : IRadialBasisFunction<T>
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="ThinPlateSplineRBF{T}"/> class.

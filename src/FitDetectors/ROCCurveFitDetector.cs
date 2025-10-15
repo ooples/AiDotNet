@@ -24,7 +24,7 @@ public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// <summary>
     /// Configuration options for the ROC curve fit detector.
     /// </summary>
-    private readonly ROCCurveFitDetectorOptions _options;
+    private readonly ROCCurveFitDetectorOptions _options = default!;
     
     /// <summary>
     /// The Area Under the Curve (AUC) value calculated from the ROC curve.

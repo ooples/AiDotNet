@@ -42,7 +42,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The smoothness parameter (nu) controlling the differentiability of the function.
@@ -52,7 +52,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     /// <summary>
     /// The length scale parameter controlling the width of the function.
     /// </summary>
-    private readonly T _lengthScale;
+    private readonly T _lengthScale = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaternRBF{T}"/> class with specified parameters.

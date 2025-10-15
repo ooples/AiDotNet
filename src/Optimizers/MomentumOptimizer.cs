@@ -38,7 +38,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// its previous direction (momentum), and whether these properties change automatically during the experiment.
     /// </para>
     /// </remarks>
-    private MomentumOptimizerOptions<T, TInput, TOutput> _options;
+    private MomentumOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// Stores the current velocity vector for each parameter in the model.

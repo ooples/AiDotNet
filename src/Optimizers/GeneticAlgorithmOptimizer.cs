@@ -28,22 +28,22 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     /// <summary>
     /// The options specific to the Genetic Algorithm.
     /// </summary>
-    private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _geneticOptions;
+    private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _geneticOptions = default!;
 
     /// <summary>
     /// The current crossover rate, which determines how often solutions are combined.
     /// </summary>
-    private T _currentCrossoverRate;
+    private T _currentCrossoverRate = default!;
 
     /// <summary>
     /// The current mutation rate, which determines how often random changes are made to solutions.
     /// </summary>
-    private T _currentMutationRate;
+    private T _currentMutationRate = default!;
 
     /// <summary>
     /// The genetic algorithm instance used for optimization.
     /// </summary>
-    private GeneticBase<T, TInput, TOutput> _geneticAlgorithm;
+    private GeneticBase<T, TInput, TOutput> _geneticAlgorithm = default!;
 
     /// <summary>
     /// Initializes a new instance of the GeneticAlgorithmOptimizer class.

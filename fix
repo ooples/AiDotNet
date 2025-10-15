@@ -1,0 +1,3 @@
+#!/bin/bash
+# One-line fix command - just run: ./fix
+exec "$(dirname "$0")/BuildFixAgents/autofix.sh" "$@"

@@ -26,12 +26,12 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// uncertainty, including thresholds for determining different types of model fit and parameters 
     /// for the Gaussian Process regression.
     /// </remarks>
-    private readonly GaussianProcessFitDetectorOptions _options;
+    private readonly GaussianProcessFitDetectorOptions _options = default!;
 
-    private Vector<T> _meanPrediction;
-    private Vector<T> _variancePrediction;
-    private T _averageUncertainty;
-    private T _rmse;
+    private Vector<T> _meanPrediction = default!;
+    private Vector<T> _variancePrediction = default!;
+    private T _averageUncertainty = default!;
+    private T _rmse = default!;
 
     /// <summary>
     /// Initializes a new instance of the GaussianProcessFitDetector class.

@@ -188,7 +188,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
             if (_numOps.LessThan(A[k, k], _numOps.Zero))
                 alpha = _numOps.Negate(alpha);
 
-            Vector<T> u = x.Clone();
+            Vector<T> u = (Vector<T>)x.Clone();
             u[0] = _numOps.Add(u[0], alpha);
             T beta = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Divide(_numOps.One, u.DotProduct(u)));
 
@@ -225,7 +225,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
                 if (_numOps.LessThan(A[k, k + 1], _numOps.Zero))
                     alpha = _numOps.Negate(alpha);
 
-                Vector<T> v = x.Clone();
+                Vector<T> v = (Vector<T>)x.Clone();
                 v[0] = _numOps.Add(v[0], alpha);
                 beta = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Divide(_numOps.One, v.DotProduct(v)));
 

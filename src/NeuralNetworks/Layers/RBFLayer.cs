@@ -38,7 +38,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// of a center point for one RBF neuron. These centers are the primary trainable parameters of
     /// the layer and determine where in the input space each neuron responds most strongly.
     /// </remarks>
-    private Matrix<T> _centers;
+    private Matrix<T> _centers = default!;
 
     /// <summary>
     /// Vector<double> storing the width parameters for each RBF neuron.
@@ -49,7 +49,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// width values mean the neuron responds more broadly, while smaller values make the response
     /// more focused around the center.
     /// </remarks>
-    private Vector<T> _widths;
+    private Vector<T> _widths = default!;
 
     /// <summary>
     /// The radial basis function implementation used to compute neuron activations.
@@ -60,7 +60,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// backpropagation. Common implementations include Gaussian, Multiquadric, and Inverse Quadratic
     /// functions, each providing different response patterns.
     /// </remarks>
-    private IRadialBasisFunction<T> _rbf;
+    private IRadialBasisFunction<T> _rbf = default!;
 
     /// <summary>
     /// Stores the input tensor from the most recent forward pass for use in backpropagation.

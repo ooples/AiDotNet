@@ -35,12 +35,12 @@ public class ZScoreOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInpu
     /// The threshold value for determining outliers. Points with a Z-Score exceeding this threshold
     /// (in absolute value) are considered outliers.
     /// </summary>
-    private readonly T _threshold;
+    private readonly T _threshold = default!;
     
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="ZScoreOutlierRemoval{T, TInput, TOutput}"/> class with the specified threshold.

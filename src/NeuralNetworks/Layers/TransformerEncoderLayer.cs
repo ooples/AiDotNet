@@ -114,7 +114,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>
     /// refers to "the ball" rather than "the dog" by attending strongly to the word "ball".
     /// </para>
     /// </remarks>
-    private MultiHeadAttentionLayer<T> _selfAttention;
+    private MultiHeadAttentionLayer<T> _selfAttention = default!;
 
     /// <summary>
     /// The layer normalization applied after self-attention.
@@ -135,7 +135,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>
     /// it prevents sudden spikes or drops that might disrupt the learning process.
     /// </para>
     /// </remarks>
-    private LayerNormalizationLayer<T> _norm1;
+    private LayerNormalizationLayer<T> _norm1 = default!;
 
     /// <summary>
     /// The feed-forward network for additional transformation of the sequence.
@@ -156,7 +156,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>
     /// making final decisions about what features to extract from each position.
     /// </para>
     /// </remarks>
-    private FeedForwardLayer<T> _feedForward;
+    private FeedForwardLayer<T> _feedForward = default!;
 
     /// <summary>
     /// The layer normalization applied after the feed-forward network.
@@ -177,7 +177,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>
     /// or for use by a decoder in the complete transformer model.
     /// </para>
     /// </remarks>
-    private LayerNormalizationLayer<T> _norm2;
+    private LayerNormalizationLayer<T> _norm2 = default!;
 
     /// <summary>
     /// The dropout rate applied to attention and feed-forward layers.
@@ -192,7 +192,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>
     /// <summary>
     /// The positional encoding applied to input embeddings.
     /// </summary>
-    private readonly IPositionalEncoding<T> _positionalEncoding;
+    private readonly IPositionalEncoding<T> _positionalEncoding = default!;
 
     /// <summary>
     /// Additional encoder layers when numLayers > 1.

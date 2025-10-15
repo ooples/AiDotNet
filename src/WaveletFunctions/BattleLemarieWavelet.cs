@@ -35,7 +35,7 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The order of the B-spline used to construct the wavelet.

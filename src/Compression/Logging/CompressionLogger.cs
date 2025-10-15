@@ -113,6 +113,16 @@ public class CompressionLogger
     }
 
     /// <summary>
+    /// Logs an error message.
+    /// </summary>
+    /// <param name="message">Error message.</param>
+    /// <param name="args">Additional format arguments.</param>
+    public void Error(string message, params object[] args)
+    {
+        _logger.Error(message, args);
+    }
+
+    /// <summary>
     /// Logs the completion of the compression process.
     /// </summary>
     /// <param name="compressedModelSize">Size of the compressed model in bytes.</param>

@@ -22,7 +22,7 @@ public class LearningCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
     /// <summary>
     /// Configuration options for the Learning Curve fit detector.
     /// </summary>
-    private readonly LearningCurveFitDetectorOptions _options;
+    private readonly LearningCurveFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the Learning Curve fit detector.

@@ -332,7 +332,7 @@ namespace AiDotNet.FederatedLearning.Aggregation
                 return false;
 
             var firstClient = clientUpdates.Values.First();
-            var parameterNames = firstClient.Keys.ToHashSet();
+            var parameterNames = new HashSet<string>(firstClient.Keys);
 
             // Check that all clients have the same parameter structure
             foreach (var clientUpdate in clientUpdates.Values)
@@ -396,55 +396,4 @@ namespace AiDotNet.FederatedLearning.Aggregation
         }
     }
 
-    /// <summary>
-    /// Interface for parameter aggregation strategies
-    /// </summary>
-    public interface IParameterAggregator
-    {
-        /// <summary>
-        /// Aggregation strategy type
-        /// </summary>
-        FederatedAggregationStrategy Strategy { get; }
-
-        /// <summary>
-        /// Aggregate parameters from multiple clients
-        /// </summary>
-        /// <param name="clientUpdates">Client parameter updates</param>
-        /// <param name="clientWeights">Client weights for aggregation</param>
-        /// <param name="strategy">Aggregation strategy to use</param>
-        /// <returns>Aggregated parameters</returns>
-        Dictionary<string, Vector<double>> AggregateParameters(
-            Dictionary<string, Dictionary<string, Vector<double>>> clientUpdates,
-            Dictionary<string, double> clientWeights,
-            FederatedAggregationStrategy strategy);
-
-        /// <summary>
-        /// Validate client updates for consistency
-        /// </summary>
-        /// <param name="clientUpdates">Client parameter updates</param>
-        /// <returns>True if valid</returns>
-        bool ValidateClientUpdates(Dictionary<string, Dictionary<string, Vector<double>>> clientUpdates);
-
-        /// <summary>
-        /// Calculate aggregation quality metrics
-        /// </summary>
-        /// <param name="clientUpdates">Client parameter updates</param>
-        /// <param name="aggregatedParameters">Aggregated parameters</param>
-        /// <returns>Quality metrics</returns>
-        AggregationMetrics CalculateAggregationMetrics(
-            Dictionary<string, Dictionary<string, Vector<double>>> clientUpdates,
-            Dictionary<string, Vector<double>> aggregatedParameters);
-    }
-
-    /// <summary>
-    /// Aggregation quality metrics
-    /// </summary>
-    public class AggregationMetrics
-    {
-        public double AverageParameterVariance { get; set; }
-        public int ParticipatingClients { get; set; }
-        public int ParameterCount { get; set; }
-        public double AggregationTime { get; set; }
-        public Dictionary<string, double> PerParameterVariance { get; set; } = new Dictionary<string, double>();
-    }
 }

@@ -22,22 +22,22 @@ public class PchipInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The calculated slopes at each data point.
     /// </summary>
-    private readonly Vector<T> _slopes;
+    private readonly Vector<T> _slopes = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the PCHIP interpolation with the specified data points.

@@ -1,4 +1,6 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,14 +11,15 @@ namespace AiDotNet.ProductionMonitoring
     /// <summary>
     /// Provides intelligent retraining recommendations based on comprehensive monitoring data
     /// </summary>
-    public class RetrainingRecommender : ProductionMonitorBase
+    /// <typeparam name="T">The numeric type used for calculations</typeparam>
+    public class RetrainingRecommender<T> : ProductionMonitorBase<T>
     {
-        private readonly RecommenderConfiguration _configuration;
-        private readonly List<RetrainingEvent> _retrainingHistory;
-        private readonly Dictionary<string, RetrainingStrategy> _strategies;
-        private readonly Dictionary<string, double> _featureImportances;
+        private readonly RecommenderConfiguration _configuration = default!;
+        private readonly List<RetrainingEvent> _retrainingHistory = default!;
+        private readonly Dictionary<string, RetrainingStrategy> _strategies = default!;
+        private readonly Dictionary<string, double> _featureImportances = default!;
         
-        public RetrainingRecommender(RecommenderConfiguration configuration = null)
+        public RetrainingRecommender(RecommenderConfiguration? configuration = null)
         {
             _configuration = configuration ?? new RecommenderConfiguration();
             _retrainingHistory = new List<RetrainingEvent>();
@@ -172,28 +175,28 @@ namespace AiDotNet.ProductionMonitoring
 
         // Interface implementations
 
-        public override async Task<DriftDetectionResult> DetectDataDriftAsync(double[,] productionData, double[,] referenceData = null)
+        public override Task<DriftDetectionResult> DetectDataDriftAsync(Matrix<T> productionData, Matrix<T>? referenceData = null)
         {
-            return new DriftDetectionResult
+            return Task.FromResult(new DriftDetectionResult
             {
                 IsDriftDetected = false,
                 DriftScore = 0,
                 DriftType = "DataDrift",
                 Details = "Use DataDriftDetector for data drift detection",
                 DetectionTimestamp = DateTime.UtcNow
-            };
+            });
         }
 
-        public override async Task<DriftDetectionResult> DetectConceptDriftAsync(double[] predictions, double[] actuals)
+        public override Task<DriftDetectionResult> DetectConceptDriftAsync(Vector<T> predictions, Vector<T> actuals)
         {
-            return new DriftDetectionResult
+            return Task.FromResult(new DriftDetectionResult
             {
                 IsDriftDetected = false,
                 DriftScore = 0,
                 DriftType = "ConceptDrift",
                 Details = "Use ConceptDriftDetector for concept drift detection",
                 DetectionTimestamp = DateTime.UtcNow
-            };
+            });
         }
 
         public override async Task<ModelHealthScore> GetModelHealthScoreAsync()
@@ -314,7 +317,7 @@ namespace AiDotNet.ProductionMonitoring
             };
         }
 
-        private async Task<StrategyEvaluation> EvaluateStrategyAsync(RetrainingStrategy strategy, MonitoringData data)
+        private Task<StrategyEvaluation> EvaluateStrategyAsync(RetrainingStrategy strategy, MonitoringData data)
         {
             var evaluation = new StrategyEvaluation
             {
@@ -324,20 +327,20 @@ namespace AiDotNet.ProductionMonitoring
                 RiskScore = CalculateStrategyRisk(strategy, data),
                 CostBenefitRatio = CalculateCostBenefitRatio(strategy, data)
             };
-            
+
             // Adjust for historical performance
             if (_retrainingHistory.Any(h => h.Strategy == strategy.Name))
             {
                 var historicalPerformance = _retrainingHistory
                     .Where(h => h.Strategy == strategy.Name)
                     .Average(h => h.PerformanceImprovement);
-                
+
                 evaluation.ExpectedImprovement = (evaluation.ExpectedImprovement + historicalPerformance) / 2;
             }
-            
+
             evaluation.OverallScore = CalculateStrategyScore(evaluation);
-            
-            return evaluation;
+
+            return Task.FromResult(evaluation);
         }
 
         private double CalculateStrategyApplicability(RetrainingStrategy strategy, MonitoringData data)
@@ -427,29 +430,29 @@ namespace AiDotNet.ProductionMonitoring
             return evaluations.Values.OrderByDescending(e => e.OverallScore).First();
         }
 
-        private async Task<RetrainingRecommendation> GenerateDetailedRecommendationAsync(
-            StrategyEvaluation bestStrategy, 
+        private Task<RetrainingRecommendation> GenerateDetailedRecommendationAsync(
+            StrategyEvaluation bestStrategy,
             MonitoringData monitoringData)
         {
             var reasons = new List<string>();
             var urgency = DetermineUrgency(monitoringData, bestStrategy);
-            
+
             // Add reasons based on monitoring data
             if (monitoringData.DriftInfo.DriftCount > 0)
             {
                 reasons.Add($"Detected {monitoringData.DriftInfo.DriftCount} drift events");
             }
-            
+
             if (monitoringData.CurrentPerformance.Accuracy < _configuration.MinAcceptableAccuracy)
             {
                 reasons.Add($"Performance below threshold: {monitoringData.CurrentPerformance.Accuracy:F2}");
             }
-            
+
             if (monitoringData.HealthScore < 0.6)
             {
                 reasons.Add($"Poor model health: {monitoringData.HealthScore:F2}");
             }
-            
+
             // Create suggested actions
             var suggestedActions = new Dictionary<string, object>
             {
@@ -460,8 +463,8 @@ namespace AiDotNet.ProductionMonitoring
                 ["FeatureEngineering"] = monitoringData.DriftInfo.DriftTypes.Contains("DataDrift"),
                 ["HyperparameterTuning"] = bestStrategy.Strategy.Name == "FineTune"
             };
-            
-            return new RetrainingRecommendation
+
+            return Task.FromResult(new RetrainingRecommendation
             {
                 ShouldRetrain = urgency != "None",
                 Urgency = urgency,
@@ -469,7 +472,7 @@ namespace AiDotNet.ProductionMonitoring
                 RecommendationTimestamp = DateTime.UtcNow,
                 ConfidenceScore = bestStrategy.OverallScore,
                 SuggestedActions = suggestedActions
-            };
+            });
         }
 
         private string DetermineUrgency(MonitoringData data, StrategyEvaluation strategy)
@@ -801,17 +804,17 @@ namespace AiDotNet.ProductionMonitoring
             return intervals.Average();
         }
 
-        private async Task<double> CalculateDataQualityScoreAsync()
+        private Task<double> CalculateDataQualityScoreAsync()
         {
             lock (_lockObject)
             {
-                if (!_predictionHistory.Any()) return 1.0;
-                
+                if (!_predictionHistory.Any()) return Task.FromResult(1.0);
+
                 var recent = _predictionHistory.TakeLast(1000).ToList();
-                var missingRatio = recent.Count(p => p.Features.Any(f => double.IsNaN(f))) / (double)recent.Count;
-                var duplicateRatio = (recent.Count - recent.Distinct().Count()) / (double)recent.Count;
-                
-                return 1.0 - (missingRatio * 0.5 + duplicateRatio * 0.5);
+                var missingRatio = recent.Count(p => p.Features.Any(f => double.IsNaN(f))) / (double)recent.Count();
+                var duplicateRatio = (recent.Count() - recent.Distinct().Count()) / (double)recent.Count();
+
+                return Task.FromResult(1.0 - (missingRatio * 0.5 + duplicateRatio * 0.5));
             }
         }
 
@@ -859,18 +862,18 @@ namespace AiDotNet.ProductionMonitoring
         public class RetrainingEvent
         {
             public DateTime Timestamp { get; set; }
-            public string Strategy { get; set; }
+            public string Strategy { get; set; } = string.Empty;
             public double PerformanceImprovement { get; set; }
             public TimeSpan Duration { get; set; }
             public double Cost { get; set; }
-            public string Outcome { get; set; }
-            public Dictionary<string, object> Metadata { get; set; }
+            public string Outcome { get; set; } = string.Empty;
+            public Dictionary<string, object> Metadata { get; set; } = new();
         }
 
         private class RetrainingStrategy
         {
-            public string Name { get; set; }
-            public string Description { get; set; }
+            public string Name { get; set; } = string.Empty;
+            public string Description { get; set; } = string.Empty;
             public double ApplicabilityScore { get; set; }
             public TimeSpan EstimatedDuration { get; set; }
             public double ResourceIntensity { get; set; }
@@ -879,8 +882,8 @@ namespace AiDotNet.ProductionMonitoring
 
         private class MonitoringData
         {
-            public PerformanceMetrics CurrentPerformance { get; set; }
-            public DriftInfo DriftInfo { get; set; }
+            public PerformanceMetrics CurrentPerformance { get; set; } = new();
+            public DriftInfo DriftInfo { get; set; } = new();
             public double DataQualityScore { get; set; }
             public double StabilityScore { get; set; }
             public double HealthScore { get; set; }
@@ -892,12 +895,12 @@ namespace AiDotNet.ProductionMonitoring
         {
             public int DriftCount { get; set; }
             public double MaxDriftScore { get; set; }
-            public List<string> DriftTypes { get; set; }
+            public List<string> DriftTypes { get; set; } = new();
         }
 
         private class StrategyEvaluation
         {
-            public RetrainingStrategy Strategy { get; set; }
+            public RetrainingStrategy Strategy { get; set; } = new();
             public double ApplicabilityScore { get; set; }
             public double ExpectedImprovement { get; set; }
             public double RiskScore { get; set; }
@@ -907,9 +910,9 @@ namespace AiDotNet.ProductionMonitoring
 
         public class RetrainingSchedule
         {
-            public List<ScheduledRetraining> RecommendedSchedule { get; set; }
-            public Dictionary<string, double> ExpectedBenefits { get; set; }
-            public ResourceRequirements ResourceRequirements { get; set; }
+            public List<ScheduledRetraining> RecommendedSchedule { get; set; } = new();
+            public Dictionary<string, double> ExpectedBenefits { get; set; } = new();
+            public ResourceRequirements ResourceRequirements { get; set; } = new();
             public DateTime GeneratedAt { get; set; }
             public DateTime ValidUntil { get; set; }
         }
@@ -917,10 +920,10 @@ namespace AiDotNet.ProductionMonitoring
         public class ScheduledRetraining
         {
             public DateTime ScheduledDate { get; set; }
-            public string RecommendedStrategy { get; set; }
+            public string RecommendedStrategy { get; set; } = string.Empty;
             public TimeSpan ExpectedDuration { get; set; }
-            public string Priority { get; set; }
-            public List<string> Prerequisites { get; set; }
+            public string Priority { get; set; } = string.Empty;
+            public List<string> Prerequisites { get; set; } = new();
         }
 
         public class ResourceRequirements
@@ -934,7 +937,7 @@ namespace AiDotNet.ProductionMonitoring
 
         public class RetrainingROI
         {
-            public PerformanceMetrics CurrentPerformance { get; set; }
+            public PerformanceMetrics CurrentPerformance { get; set; } = new();
             public double ExpectedPerformance { get; set; }
             public double RetrainingCost { get; set; }
             public double ExpectedBenefit { get; set; }
@@ -946,19 +949,19 @@ namespace AiDotNet.ProductionMonitoring
 
         public class DataRequirements
         {
-            public List<DataGap> DataGaps { get; set; }
-            public Dictionary<string, int> RequiredSamples { get; set; }
-            public List<string> UnderrepresentedFeatures { get; set; }
-            public List<string> CollectionStrategies { get; set; }
+            public List<DataGap> DataGaps { get; set; } = new();
+            public Dictionary<string, int> RequiredSamples { get; set; } = new();
+            public List<string> UnderrepresentedFeatures { get; set; } = new();
+            public List<string> CollectionStrategies { get; set; } = new();
             public DateTime AnalysisTimestamp { get; set; }
         }
 
         public class DataGap
         {
-            public string Type { get; set; }
-            public string Description { get; set; }
-            public string Severity { get; set; }
-            public List<string> AffectedFeatures { get; set; }
+            public string Type { get; set; } = string.Empty;
+            public string Description { get; set; } = string.Empty;
+            public string Severity { get; set; } = string.Empty;
+            public List<string> AffectedFeatures { get; set; } = new();
         }
 
         private class RetrainingPatterns
@@ -966,15 +969,15 @@ namespace AiDotNet.ProductionMonitoring
             public double AverageInterval { get; set; }
             public double IntervalStdDev { get; set; }
             public double AverageImprovement { get; set; }
-            public Dictionary<string, double> StrategyEffectiveness { get; set; }
+            public Dictionary<string, double> StrategyEffectiveness { get; set; } = new();
         }
 
         private class DataDistributionAnalysis
         {
             public int TotalSamples { get; set; }
-            public Dictionary<string, Distribution> FeatureDistributions { get; set; }
-            public Dictionary<string, double> ClassBalance { get; set; }
-            public List<string> TemporalPatterns { get; set; }
+            public Dictionary<string, Distribution> FeatureDistributions { get; set; } = new();
+            public Dictionary<string, double> ClassBalance { get; set; } = new();
+            public List<string> TemporalPatterns { get; set; } = new();
         }
 
         private class Distribution

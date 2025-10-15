@@ -10,12 +10,12 @@ namespace AiDotNet.ReinforcementLearning.Agents
     public class DistributionalDQNAgent<TState, T> : DQNAgent<TState, T> 
         where TState : Tensor<T>
     {
-        private readonly DistributionalDQNOptions<T> _distOptions;
+        private readonly DistributionalDQNOptions<T> _distOptions = default!;
         private readonly int _atomCount;
         private readonly T[] _supportValues;
-        private readonly T _vMin;
-        private readonly T _vMax;
-        private readonly T _supportDelta;
+        private readonly T _vMin = default!;
+        private readonly T _vMax = default!;
+        private readonly T _supportDelta = default!;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DistributionalDQNAgent{TState, T}"/> class.

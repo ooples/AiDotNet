@@ -15,11 +15,11 @@ namespace AiDotNet.NeuralNetworks.Layers
     {
         private readonly int _outputSize;
         private readonly int _atomCount;
-        private readonly SoftmaxActivation<T> _softmax;
-        private Tensor<T> _weights;
-        private Tensor<T> _biases;
-        private Tensor<T> _weightsGradient;
-        private Tensor<T> _biasesGradient;
+        private readonly SoftmaxActivation<T> _softmax = default!;
+        private Tensor<T> _weights = default!;
+        private Tensor<T> _biases = default!;
+        private Tensor<T> _weightsGradient = default!;
+        private Tensor<T> _biasesGradient = default!;
         private Tensor<T>? _input;
         private Tensor<T>? _output;
         private Tensor<T>? _logits;
@@ -88,7 +88,7 @@ namespace AiDotNet.NeuralNetworks.Layers
         /// <summary>
         /// Gets the number of output units (usually the action space size).
         /// </summary>
-        public int OutputSize => _outputSize;
+        public override int OutputSize => _outputSize;
 
         /// <summary>
         /// Performs the forward pass of the layer.

@@ -36,12 +36,12 @@ public class MADOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, 
     /// The threshold value for determining outliers. Points with a modified Z-score exceeding this threshold
     /// are considered outliers.
     /// </summary>
-    private readonly T _threshold;
+    private readonly T _threshold = default!;
     
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="MADOutlierRemoval{T, TInput, TOutput}"/> class with an optional threshold.

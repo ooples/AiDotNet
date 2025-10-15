@@ -1,91 +1,93 @@
+using System.Collections.Generic;
+using System.Linq;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.AutoML
 {
     using System.Collections.Generic;
     using AiDotNet.Enums;
 
     /// <summary>
-    /// Defines the search space for hyperparameter optimization in AutoML.
+    /// Defines the search space for hyperparameter optimization
     /// </summary>
     public class HyperparameterSearchSpace
     {
-        /// <summary>
-        /// Gets or sets the learning rate search range.
-        /// </summary>
-        public (double Min, double Max) LearningRateRange { get; set; } = (1e-4, 1e-1);
+        private readonly Dictionary<string, ParameterRange> parameters;
 
-        /// <summary>
-        /// Gets or sets the batch size options to try.
-        /// </summary>
-        public List<int> BatchSizes { get; set; } = new List<int> { 16, 32, 64, 128 };
-
-        /// <summary>
-        /// Gets or sets the number of layers range for neural networks.
-        /// </summary>
-        public (int Min, int Max) LayersRange { get; set; } = (1, 10);
-
-        /// <summary>
-        /// Gets or sets the number of units per layer range.
-        /// </summary>
-        public (int Min, int Max) UnitsPerLayerRange { get; set; } = (32, 512);
-
-        /// <summary>
-        /// Gets or sets the dropout rate range.
-        /// </summary>
-        public (double Min, double Max) DropoutRange { get; set; } = (0.0, 0.5);
-
-        /// <summary>
-        /// Gets or sets the activation functions to try.
-        /// </summary>
-        public List<ActivationFunction> ActivationFunctions { get; set; } = new List<ActivationFunction>
+        public HyperparameterSearchSpace()
         {
-            ActivationFunction.ReLU,
-            ActivationFunction.Tanh,
-            ActivationFunction.Sigmoid
-        };
+            parameters = new Dictionary<string, ParameterRange>();
+        }
 
         /// <summary>
-        /// Gets or sets the optimizer types to try.
+        /// Adds a continuous parameter to the search space
         /// </summary>
-        public List<OptimizerType> OptimizerTypes { get; set; } = new List<OptimizerType>
+        public HyperparameterSearchSpace AddContinuous(string name, double min, double max)
         {
-            OptimizerType.Adam,
-            OptimizerType.SGD,
-            OptimizerType.RMSProp
-        };
+            parameters[name] = new ParameterRange 
+            { 
+                MinValue = min, 
+                MaxValue = max,
+                Type = ParameterType.Continuous
+            };
+            return this;
+        }
 
         /// <summary>
-        /// Gets or sets the regularization strength range.
+        /// Adds an integer parameter to the search space
         /// </summary>
-        public (double Min, double Max) RegularizationRange { get; set; } = (1e-6, 1e-2);
+        public HyperparameterSearchSpace AddInteger(string name, int min, int max)
+        {
+            parameters[name] = new ParameterRange 
+            { 
+                MinValue = min, 
+                MaxValue = max,
+                Type = ParameterType.Integer
+            };
+            return this;
+        }
 
         /// <summary>
-        /// Gets or sets the momentum range for optimizers that support it.
+        /// Adds a categorical parameter to the search space
         /// </summary>
-        public (double Min, double Max) MomentumRange { get; set; } = (0.5, 0.99);
+        public HyperparameterSearchSpace AddCategorical(string name, string[] values)
+        {
+            parameters[name] = new ParameterRange 
+            { 
+                Type = ParameterType.Categorical,
+                CategoricalValues = values.Cast<object>().ToArray()
+            };
+            return this;
+        }
 
         /// <summary>
-        /// Gets or sets custom hyperparameter ranges.
+        /// Gets the parameter ranges
         /// </summary>
-        public Dictionary<string, object> CustomParameters { get; set; } = new Dictionary<string, object>();
+        public Dictionary<string, ParameterRange> GetParameters()
+        {
+            return new Dictionary<string, ParameterRange>(parameters);
+        }
 
         /// <summary>
-        /// Gets or sets whether to use logarithmic scale for learning rate search.
+        /// Gets the number of parameters in the search space
         /// </summary>
-        public bool UseLogScaleForLearningRate { get; set; } = true;
+        public int Count => parameters.Count;
 
         /// <summary>
-        /// Gets or sets the maximum number of epochs for training during search.
+        /// Checks if a parameter exists in the search space
         /// </summary>
-        public int MaxEpochs { get; set; } = 100;
+        public bool ContainsParameter(string name)
+        {
+            return parameters.ContainsKey(name);
+        }
 
         /// <summary>
-        /// Gets or sets whether to enable early stopping during hyperparameter search.
+        /// Gets a specific parameter range
         /// </summary>
-        public bool EnableEarlyStopping { get; set; } = true;
-
-        /// <summary>
-        /// Gets or sets the patience for early stopping.
-        /// </summary>
-        public int EarlyStoppingPatience { get; set; } = 5;
+        public ParameterRange? GetParameter(string name)
+        {
+            return parameters.TryGetValue(name, out var range) ? range : null;
+        }
     }
+
 }

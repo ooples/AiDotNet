@@ -55,4 +55,23 @@ public static class RandomExtensions
 
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
     }
+
+    /// <summary>
+    /// Generates a random number from a Gaussian (normal) distribution with specified mean and standard deviation.
+    /// </summary>
+    /// <param name="random">The Random object to extend.</param>
+    /// <param name="mean">The mean (center) of the distribution.</param>
+    /// <param name="standardDeviation">The standard deviation (spread) of the distribution.</param>
+    /// <returns>A random double value from the specified Gaussian distribution.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is a convenience overload that transforms a standard normal distribution (mean=0, stdDev=1)
+    /// to have the specified mean and standard deviation using the formula:
+    /// result = mean + standardDeviation * NextGaussian()
+    /// </para>
+    /// </remarks>
+    public static double NextGaussian(this Random random, double mean, double standardDeviation)
+    {
+        return mean + standardDeviation * NextGaussian(random);
+    }
 }

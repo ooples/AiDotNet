@@ -12,7 +12,7 @@ namespace AiDotNet.MultimodalAI
     {
         protected readonly int _outputDimension;
         protected readonly string _modalityName;
-        protected NeuralNetwork<double> _encoder;
+        protected NeuralNetwork<double> _encoder = default!;
 
         /// <summary>
         /// Gets the name of the modality this encoder handles

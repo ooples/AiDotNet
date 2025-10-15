@@ -47,7 +47,7 @@ public class LambdaLayer<T> : LayerBase<T>
     /// combines features in a special way, or applies a custom mathematical formula.
     /// </para>
     /// </remarks>
-    private readonly Func<Tensor<T>, Tensor<T>> _forwardFunction;
+    private readonly Func<Tensor<T>, Tensor<T>> _forwardFunction = default!;
 
     /// <summary>
     /// The optional user-provided function that defines the backward pass transformation.

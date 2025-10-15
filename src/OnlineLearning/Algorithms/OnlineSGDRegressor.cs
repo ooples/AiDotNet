@@ -8,6 +8,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
+using AiDotNet.Statistics;
 
 namespace AiDotNet.OnlineLearning.Algorithms;
 
@@ -16,11 +17,11 @@ namespace AiDotNet.OnlineLearning.Algorithms;
 /// </summary>
 public class OnlineSGDRegressor<T> : AdaptiveOnlineModelBase<T, Vector<T>, T>
 {
-    private Vector<T> _weights;
-    private T _bias;
+    private Vector<T> _weights = default!;
+    private T _bias = default!;
     private Vector<T>? _momentum; // For momentum-based updates
-    private readonly AdaptiveOnlineModelOptions<T> _options;
-    private FitnessCalculatorType _lossType;
+    private readonly AdaptiveOnlineModelOptions<T> _options = default!;
+    private FitnessCalculatorType _lossType = default!;
     
     /// <summary>
     /// Initializes a new instance of the OnlineSGDRegressor class.
@@ -34,7 +35,7 @@ public class OnlineSGDRegressor<T> : AdaptiveOnlineModelBase<T, Vector<T>, T>
         : base(
             options != null ? options.InitialLearningRate : MathHelper.GetNumericOperations<T>().FromDouble(0.01),
             driftMethod,
-            options != null && options.DriftSensitivity != null ? options.DriftSensitivity : MathHelper.GetNumericOperations<T>().FromDouble(0.5),
+            options != null ? options.DriftSensitivity : MathHelper.GetNumericOperations<T>().FromDouble(0.5),
             logger)
     {
         _options = options ?? new AdaptiveOnlineModelOptions<T>
@@ -226,9 +227,9 @@ public class OnlineSGDRegressor<T> : AdaptiveOnlineModelBase<T, Vector<T>, T>
     }
     
     /// <inheritdoc/>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.OnlineSGD,
             FeatureCount = _weights.Length,
@@ -524,5 +525,108 @@ public class OnlineSGDRegressor<T> : AdaptiveOnlineModelBase<T, Vector<T>, T>
     {
         // Clone already creates a deep copy
         return Clone();
+    }
+
+    
+    /// <inheritdoc/>
+    public override int InputDimensions => _weights.Length;
+    
+    /// <inheritdoc/>
+    public override int OutputDimensions => 1;
+    
+    /// <inheritdoc/>
+    public override bool IsTrained => _samplesSeen > 0;
+    
+    /// <inheritdoc/>
+    public override T[] PredictBatch(Vector<T>[] inputBatch)
+    {
+        var predictions = new T[inputBatch.Length];
+        for (int i = 0; i < inputBatch.Length; i++)
+        {
+            predictions[i] = Predict(inputBatch[i]);
+        }
+        return predictions;
+    }
+    
+    /// <inheritdoc/>
+    public override Dictionary<string, double> Evaluate(Vector<T> testData, T testLabels)
+    {
+        // This method should accept arrays, but for now return basic metrics
+        var prediction = Predict(testData);
+        var error = CalculateError(prediction, testLabels);
+        
+        return new Dictionary<string, double>
+        {
+            ["Accuracy"] = NumOps.Equals(prediction, testLabels) ? 1.0 : 0.0,
+            ["Error"] = Convert.ToDouble(error)
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void SaveModel(string filePath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filePath, data);
+    }
+    
+    /// <inheritdoc/>
+    public override double GetTrainingLoss()
+    {
+        if (_recentErrors.Count == 0)
+            return 0.0;
+            
+        var avgError = CalculateMean(_recentErrors.ToArray());
+        return Convert.ToDouble(avgError);
+    }
+    
+    /// <inheritdoc/>
+    public override double GetValidationLoss()
+    {
+        // In online learning, we don't have separate validation loss
+        return GetTrainingLoss();
+    }
+    
+    /// <inheritdoc/>
+    public override Vector<T> GetModelParameters()
+    {
+        return GetParameters();
+    }
+    
+    /// <inheritdoc/>
+    public override ModelStats<T> GetStats()
+    {
+        return new ModelStats<T>
+        {
+            SampleCount = SamplesSeen,
+            LearningRate = _learningRate,
+            TrainingLoss = NumOps.FromDouble(GetTrainingLoss()),
+            ValidationLoss = NumOps.FromDouble(GetValidationLoss()),
+            AdditionalMetrics = new Dictionary<string, T>
+            {
+                ["DriftLevel"] = _driftLevel,
+                ["LossType"] = NumOps.FromDouble((int)_lossType)
+            }
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void Save()
+    {
+        // Default implementation saves to a standard location
+        SaveModel($"online_sgd_regressor_model_{DateTime.Now:yyyyMMddHHmmss}.bin");
+    }
+    
+    /// <inheritdoc/>
+    public override void Load()
+    {
+        // Default implementation would load from a standard location
+        // For now, this is a no-op as we need a file path
+        throw new NotImplementedException("Load requires a file path. Use Deserialize instead.");
+    }
+    
+    /// <inheritdoc/>
+    public override void Dispose()
+    {
+        // Clean up any resources if needed _recentErrors?.Clear();
     }
 }

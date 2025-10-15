@@ -32,7 +32,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// Different orders capture different types of oscillatory patterns in your data.
     /// Order 0 (the default) is the most commonly used and works well for many applications.
     /// </remarks>
-    private readonly T _order;
+    private readonly T _order = default!;
     
     /// <summary>
     /// The scaling parameter that controls the width of the kernel.
@@ -42,12 +42,12 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// A smaller sigma makes the kernel more sensitive to small differences between data points,
     /// while a larger sigma makes the kernel more tolerant of differences.
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Bessel kernel with optional parameters.

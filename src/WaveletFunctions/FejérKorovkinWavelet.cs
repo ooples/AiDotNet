@@ -45,7 +45,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// without having to write separate code for each number type.
     /// </para>
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The order of the Fejér-Korovkin wavelet.
@@ -89,7 +89,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// a Fejér-Korovkin wavelet different from other types of wavelets.
     /// </para>
     /// </remarks>
-    private readonly Vector<T> _coefficients;
+    private readonly Vector<T> _coefficients = default!;
 
     /// <summary>
     /// The scaling coefficients used for signal decomposition.
@@ -111,7 +111,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// like looking at something through frosted glass where you can see outlines but not details.
     /// </para>
     /// </remarks>
-    private Vector<T> _scalingCoefficients;
+    private Vector<T> _scalingCoefficients = default!;
 
     /// <summary>
     /// The wavelet coefficients used for signal decomposition.
@@ -133,7 +133,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// like an edge detection filter that highlights boundaries and textures in an image.
     /// </para>
     /// </remarks>
-    private Vector<T> _waveletCoefficients;
+    private Vector<T> _waveletCoefficients = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FejérKorovkinWavelet{T}"/> class with the specified order.

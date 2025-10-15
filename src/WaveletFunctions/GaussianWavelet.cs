@@ -47,7 +47,7 @@ public class GaussianWavelet<T> : IWaveletFunction<T>
     /// without having to write separate code for each number type.
     /// </para>
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The standard deviation parameter that controls the width of the Gaussian wavelet.
@@ -71,7 +71,7 @@ public class GaussianWavelet<T> : IWaveletFunction<T>
     /// perfect precision in both where and what frequency.
     /// </para>
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GaussianWavelet{T}"/> class with the specified sigma.

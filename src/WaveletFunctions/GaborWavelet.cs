@@ -46,7 +46,7 @@ public class GaborWavelet<T> : IWaveletFunction<T>
     /// without having to write separate code for each number type.
     /// </para>
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The central frequency of the Gabor wavelet.
@@ -67,7 +67,7 @@ public class GaborWavelet<T> : IWaveletFunction<T>
     /// and textures, while a low omega would help identify larger structures and shapes.
     /// </para>
     /// </remarks>
-    private readonly T _omega;
+    private readonly T _omega = default!;
 
     /// <summary>
     /// The standard deviation of the Gaussian envelope.
@@ -89,7 +89,7 @@ public class GaborWavelet<T> : IWaveletFunction<T>
     /// played on a piano - the more precisely you know one, the less precisely you know the other.
     /// </para>
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
 
     /// <summary>
     /// The wavelength parameter that determines oscillation frequency.
@@ -110,7 +110,7 @@ public class GaborWavelet<T> : IWaveletFunction<T>
     /// patterns in your data. It works together with omega to define the oscillation properties.
     /// </para>
     /// </remarks>
-    private readonly T _lambda;
+    private readonly T _lambda = default!;
 
     /// <summary>
     /// The phase offset of the sinusoidal component.
@@ -132,7 +132,7 @@ public class GaborWavelet<T> : IWaveletFunction<T>
     /// of wavelets that can analyze a signal from different "perspectives."
     /// </para>
     /// </remarks>
-    private readonly T _psi;
+    private readonly T _psi = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GaborWavelet{T}"/> class with the specified parameters.

@@ -567,7 +567,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </exception>
     private int GetLSTMHiddenSize()
     {
-        var metadata = GetModelMetaData();
+        var metadata = GetModelMetadata();
         // First, try to get the hidden size from the architecture
         if (metadata.AdditionalInfo != null && 
             metadata.AdditionalInfo.TryGetValue("LSTMHiddenSize", out var hiddenSizeObj) &&
@@ -1898,7 +1898,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the LSTM model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the LSTM model.</returns>
+    /// <returns>A ModelMetadata object containing information about the LSTM model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns comprehensive metadata about the LSTM model, including its architecture,
@@ -1920,7 +1920,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// - Sharing your model with others
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Count LSTM layers and get their sizes
         int lstmLayerCount = 0;
@@ -1935,7 +1935,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
             }
         }
     
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.LSTMNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

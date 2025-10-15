@@ -1344,7 +1344,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// Gets the metadata for the model.
     /// </summary>
     /// <returns>The model metadata.</returns>
-    public abstract ModelMetaData<T> GetMetaData();
+    public abstract ModelMetadata<T> GetMetaData();
 
     /// <summary>
     /// Serializes the model to a byte array.

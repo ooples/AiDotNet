@@ -66,7 +66,7 @@ public class LpNormNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     /// the familiar straight-line distance in geometric space.
     /// </para>
     /// </remarks>
-    private readonly T _p;
+    private readonly T _p = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LpNormNormalizer{T, TInput, TOutput}"/> class with the specified p value.

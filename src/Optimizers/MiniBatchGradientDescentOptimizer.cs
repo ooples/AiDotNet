@@ -29,7 +29,7 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// how many times to repeat the process, and how to adjust your step size.
     /// </para>
     /// </remarks>
-    private MiniBatchGradientDescentOptions<T, TInput, TOutput> _options;
+    private MiniBatchGradientDescentOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the MiniBatchGradientDescentOptimizer class.

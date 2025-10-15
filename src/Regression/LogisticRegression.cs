@@ -44,7 +44,7 @@ public class LogisticRegression<T> : RegressionModelBase<T>
     /// Think of these like the knobs on a machine that you can adjust to get better results.
     /// </para>
     /// </remarks>
-    private readonly LogisticRegressionOptions<T> _options;
+    private readonly LogisticRegressionOptions<T> _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LogisticRegression{T}"/> class with optional custom options

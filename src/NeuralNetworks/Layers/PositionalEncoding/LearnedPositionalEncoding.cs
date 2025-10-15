@@ -33,7 +33,7 @@ public class LearnedPositionalEncoding<T> : PositionalEncodingBase<T>
     /// <summary>
     /// The learnable position embeddings.
     /// </summary>
-    private Tensor<T> _positionEmbeddings;
+    private Tensor<T> _positionEmbeddings = default!;
     
     /// <summary>
     /// Gradients for the position embeddings.

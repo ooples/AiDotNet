@@ -34,12 +34,12 @@ public class RotaryPositionalEncoding<T> : PositionalEncodingBase<T>
     /// <summary>
     /// The pre-computed cosine values for the rotations.
     /// </summary>
-    private readonly Tensor<T> _cos;
+    private readonly Tensor<T> _cos = default!;
     
     /// <summary>
     /// The pre-computed sine values for the rotations.
     /// </summary>
-    private readonly Tensor<T> _sin;
+    private readonly Tensor<T> _sin = default!;
     
     /// <summary>
     /// The base frequency for the rotations.

@@ -58,7 +58,7 @@ public class QuantileLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculat
     /// - 0.9 for 90th percentile
     /// - 0.1 for 10th percentile
     /// </remarks>
-    private readonly T _quantile;
+    private readonly T _quantile = default!;
 
     /// <summary>
     /// Initializes a new instance of the QuantileLossFitnessCalculator class.

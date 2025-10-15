@@ -1,4 +1,8 @@
-﻿namespace AiDotNet.Interfaces;
+﻿using System;
+using AiDotNet.AutoML;
+using AiDotNet.Enums;
+
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines a builder pattern interface for creating and configuring predictive models.
@@ -17,6 +21,7 @@
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 public interface IPredictionModelBuilder<T, TInput, TOutput>
+    where T : struct, IComparable<T>
 {
     /// <summary>
     /// Configures the feature selector component for the model.
@@ -33,6 +38,22 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="selector">The feature selector implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector);
+
+    /// <summary>
+    /// Sets the model to use for predictions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method sets the machine learning model that will be trained and used for predictions.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to specify which machine learning algorithm you want to use.
+    /// Different models are better for different types of problems.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The model to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> SetModel(IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
     /// Configures the data normalizer component for the model.
@@ -220,7 +241,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// like combining text, images, and audio. Think of it like a human who can read, see, and hear
     /// all at once to understand something better.
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> UseMultimodalModel(IMultimodalModel<T> multimodalModel);
+    IPredictionModelBuilder<T, TInput, TOutput> UseMultimodalModel(IMultimodalModel<T, TInput, TOutput> multimodalModel);
 
     /// <summary>
     /// Adds a data modality (type) to the multimodal model.
@@ -230,7 +251,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> AddModality(
         ModalityType modalityType,
-        IPipelineStep<T, object, object>? preprocessor = null);
+        IPipelineStep<T>? preprocessor = null);
 
     /// <summary>
     /// Configures how different modalities are combined.
@@ -253,7 +274,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// language, code, or other data types. They're like having an expert who already knows
     /// a lot about the world, and you're just teaching them your specific task.
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> UseFoundationModel(IFoundationModel<T> foundationModel);
+    IPredictionModelBuilder<T, TInput, TOutput> UseFoundationModel(IFoundationModel<T, TInput, TOutput> foundationModel);
 
     /// <summary>
     /// Configures fine-tuning for a foundation model.
@@ -293,7 +314,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="trialLimit">Maximum number of trials.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoMLSearch(
-        HyperparameterSearchSpace searchSpace,
+        AutoML.HyperparameterSearchSpace searchSpace,
         TimeSpan? timeLimit = null,
         int? trialLimit = null);
 
@@ -352,7 +373,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// to make sure it's still working well. It's like having a health monitor that
     /// alerts you if something goes wrong or the model needs updating.
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> WithProductionMonitoring(IProductionMonitor<T, TInput, TOutput> monitor);
+    IPredictionModelBuilder<T, TInput, TOutput> WithProductionMonitoring(IProductionMonitor<T> monitor);
 
     /// <summary>
     /// Configures drift detection for production monitoring.
@@ -390,8 +411,8 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// to do special processing that's unique to your needs.
     /// </remarks>
     IPredictionModelBuilder<T, TInput, TOutput> AddPipelineStep(
-        IPipelineStep<T, TInput, TOutput> step,
-        PipelinePosition position = PipelinePosition.BeforeNormalization);
+        IPipelineStep<T> step,
+        PipelinePosition position = PipelinePosition.Preprocessing);
 
     /// <summary>
     /// Creates a branching pipeline for A/B testing or ensemble approaches.
@@ -451,7 +472,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> EnableFederatedLearning(
         FederatedAggregationStrategy aggregationStrategy,
-        T? privacyBudget = null);
+        T? privacyBudget = default);
 
     /// <summary>
     /// Configures meta-learning for quick adaptation to new tasks.
@@ -460,7 +481,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="innerLoopSteps">Number of gradient steps in the inner loop.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(
-        MetaLearningAlgorithm metaLearningAlgorithm,
+        Enums.MetaLearningAlgorithm metaLearningAlgorithm,
         int innerLoopSteps = 5);
 
     #endregion

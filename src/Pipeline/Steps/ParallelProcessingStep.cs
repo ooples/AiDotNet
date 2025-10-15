@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -14,11 +15,11 @@ namespace AiDotNet.Pipeline.Steps
     /// </summary>
     public class ParallelProcessingStep : PipelineStepBase
     {
-        private readonly List<IPipelineStep> _wrappedSteps;
+        private readonly List<IPipelineStep<double, Tensor<double>, Tensor<double>>> _wrappedSteps = default!;
         private int _maxDegreeOfParallelism;
         private int _batchSize;
         private bool _preserveOrder;
-        private PartitioningStrategy _partitioningStrategy;
+        private PartitioningStrategy _partitioningStrategy = default!;
         private readonly object _progressLock = new object();
 
         /// <summary>
@@ -58,19 +59,19 @@ namespace AiDotNet.Pipeline.Steps
         /// <summary>
         /// Gets the wrapped pipeline steps
         /// </summary>
-        public IReadOnlyList<IPipelineStep> WrappedSteps => _wrappedSteps.AsReadOnly();
+        public IReadOnlyList<IPipelineStep<double, Tensor<double>, Tensor<double>>> WrappedSteps => _wrappedSteps.AsReadOnly();
 
         /// <summary>
         /// Initializes a new instance of the ParallelProcessingStep class
         /// </summary>
         /// <param name="stepsToParallelize">Steps to run in parallel</param>
         /// <param name="name">Optional name for this step</param>
-        public ParallelProcessingStep(IEnumerable<IPipelineStep>? stepsToParallelize = null, string? name = null) 
+        public ParallelProcessingStep(IEnumerable<IPipelineStep<double, Tensor<double>, Tensor<double>>>? stepsToParallelize = null, string? name = null)
             : base(name ?? "ParallelProcessing")
         {
             Position = PipelinePosition.Parallel;
             SupportsParallelExecution = true;
-            _wrappedSteps = new List<IPipelineStep>(stepsToParallelize ?? Enumerable.Empty<IPipelineStep>());
+            _wrappedSteps = new List<IPipelineStep<double, Tensor<double>, Tensor<double>>>(stepsToParallelize ?? Enumerable.Empty<IPipelineStep<double, Tensor<double>, Tensor<double>>>());
             _maxDegreeOfParallelism = Environment.ProcessorCount;
             _batchSize = 1000;
             _preserveOrder = true;
@@ -88,7 +89,7 @@ namespace AiDotNet.Pipeline.Steps
         /// Adds a step to be executed in parallel
         /// </summary>
         /// <param name="step">The pipeline step to add</param>
-        public void AddStep(IPipelineStep step)
+        public void AddStep(IPipelineStep<double, Tensor<double>, Tensor<double>> step)
         {
             if (step == null)
             {
@@ -121,12 +122,15 @@ namespace AiDotNet.Pipeline.Steps
             var exceptions = new ConcurrentBag<Exception>();
 
             // Fit each step in parallel using the batches
+            var inputTensor = ArrayToTensor(inputs);
+            var targetTensor = targets != null ? ArrayTo1DTensor(targets) : null;
+
             Parallel.ForEach(_wrappedSteps, new ParallelOptions { MaxDegreeOfParallelism = _maxDegreeOfParallelism }, step =>
             {
                 try
                 {
                     // For fitting, we typically use all data, not batches
-                    step.FitAsync(inputs, targets).Wait();
+                    step.FitAsync(inputTensor, targetTensor).Wait();
                     UpdateProgress(batches.Count);
                 }
                 catch (Exception ex)
@@ -181,7 +185,7 @@ namespace AiDotNet.Pipeline.Steps
         /// <summary>
         /// Processes a single step in parallel across batches
         /// </summary>
-        private double[][] ProcessStepInParallel(IPipelineStep step, double[][] inputs, List<DataBatch> batches)
+        private double[][] ProcessStepInParallel(IPipelineStep<double, Tensor<double>, Tensor<double>> step, double[][] inputs, List<DataBatch> batches)
         {
             var results = new ConcurrentDictionary<int, double[][]>();
             var exceptions = new ConcurrentBag<Exception>();
@@ -192,7 +196,9 @@ namespace AiDotNet.Pipeline.Steps
                 try
                 {
                     var batchData = ExtractBatchData(inputs, batch);
-                    var transformed = step.TransformAsync(batchData).Result;
+                    var batchTensor = ArrayToTensor(batchData);
+                    var transformedTensor = step.TransformAsync(batchTensor).Result;
+                    var transformed = TensorToArray(transformedTensor);
                     results[batch.Index] = transformed;
                     UpdateProgress(1);
                 }
@@ -335,7 +341,7 @@ namespace AiDotNet.Pipeline.Steps
             for (int i = 0; i < totalSamples; i++)
             {
                 // Simple complexity measure: variance of features
-                complexities[i] = StatisticsHelper.Variance(inputs[i]);
+                complexities[i] = StatisticsHelper<double>.Variance(inputs[i]);
             }
 
             // Sort by complexity and distribute evenly
@@ -470,7 +476,7 @@ namespace AiDotNet.Pipeline.Steps
         /// <summary>
         /// Validates that this step can process the given input
         /// </summary>
-        public override bool ValidateInput(double[][] inputs)
+        public override bool ValidateInput(Tensor<double> inputs)
         {
             if (!base.ValidateInput(inputs))
             {
@@ -505,6 +511,93 @@ namespace AiDotNet.Pipeline.Steps
             public List<int>? Indices { get; set; }
             public int Size { get; set; }
             public double TotalComplexity { get; set; }
+        }
+
+        /// <summary>
+        /// Converts a 2D double array to a Tensor
+        /// </summary>
+        private static Tensor<double> ArrayToTensor(double[][] array)
+        {
+            if (array == null || array.Length == 0)
+            {
+                throw new ArgumentException("Array cannot be null or empty", nameof(array));
+            }
+
+            var rows = array.Length;
+            var cols = array[0].Length;
+            var tensor = new Tensor<double>(new[] { rows, cols });
+
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    tensor[i, j] = array[i][j];
+                }
+            }
+
+            return tensor;
+        }
+
+        /// <summary>
+        /// Converts a 1D double array to a Tensor
+        /// </summary>
+        private static Tensor<double> ArrayTo1DTensor(double[] array)
+        {
+            if (array == null || array.Length == 0)
+            {
+                throw new ArgumentException("Array cannot be null or empty", nameof(array));
+            }
+
+            var tensor = new Tensor<double>(new[] { array.Length });
+            for (int i = 0; i < array.Length; i++)
+            {
+                tensor[i] = array[i];
+            }
+
+            return tensor;
+        }
+
+        /// <summary>
+        /// Converts a Tensor to a 2D double array
+        /// </summary>
+        private static double[][] TensorToArray(Tensor<double> tensor)
+        {
+            if (tensor == null)
+            {
+                throw new ArgumentNullException(nameof(tensor));
+            }
+
+            var shape = tensor.Shape;
+            if (shape.Length == 1)
+            {
+                // 1D tensor - convert to 2D with single column
+                var result = new double[shape[0]][];
+                for (int i = 0; i < shape[0]; i++)
+                {
+                    result[i] = new double[] { tensor[i] };
+                }
+                return result;
+            }
+            else if (shape.Length == 2)
+            {
+                // 2D tensor - direct conversion
+                var rows = shape[0];
+                var cols = shape[1];
+                var result = new double[rows][];
+                for (int i = 0; i < rows; i++)
+                {
+                    result[i] = new double[cols];
+                    for (int j = 0; j < cols; j++)
+                    {
+                        result[i][j] = tensor[i, j];
+                    }
+                }
+                return result;
+            }
+            else
+            {
+                throw new ArgumentException($"Unsupported tensor rank: {shape.Length}. Expected 1D or 2D tensor.", nameof(tensor));
+            }
         }
     }
 }

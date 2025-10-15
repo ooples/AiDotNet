@@ -17,7 +17,7 @@ public class PartialDependencePlotFitDetector<T, TInput, TOutput> : FitDetectorB
     /// <summary>
     /// Configuration options for the Partial Dependence Plot fit detector.
     /// </summary>
-    private readonly PartialDependencePlotFitDetectorOptions _options;
+    private readonly PartialDependencePlotFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PartialDependencePlotFitDetector{T}"/> class.

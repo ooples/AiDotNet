@@ -32,12 +32,12 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// <summary>
     /// The configuration options for the Extremely Randomized Trees algorithm.
     /// </summary>
-    private readonly ExtremelyRandomizedTreesRegressionOptions _options;
+    private readonly ExtremelyRandomizedTreesRegressionOptions _options = default!;
     
     /// <summary>
     /// Collection of individual decision trees that make up the ensemble.
     /// </summary>
-    private List<DecisionTreeRegression<T>> _trees;
+    private List<DecisionTreeRegression<T>> _trees = default!;
 
     /// <summary>
     /// Gets the number of trees in the ensemble model.
@@ -304,9 +304,9 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ExtremelyRandomizedTrees,
             AdditionalInfo = new Dictionary<string, object>

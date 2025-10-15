@@ -56,7 +56,7 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// which parts are important to keep or filter out (that's the gate's job).
     /// </para>
     /// </remarks>
-    private Matrix<T> _linearWeights;
+    private Matrix<T> _linearWeights = default!;
 
     /// <summary>
     /// The weight matrix for the gating path.
@@ -78,7 +78,7 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// for different types of input information.
     /// </para>
     /// </remarks>
-    private Matrix<T> _gateWeights;
+    private Matrix<T> _gateWeights = default!;
 
     /// <summary>
     /// The bias vector for the linear transformation path.
@@ -98,7 +98,7 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// Each output neuron in the linear path has its own bias value.
     /// </para>
     /// </remarks>
-    private Vector<T> _linearBias;
+    private Vector<T> _linearBias = default!;
 
     /// <summary>
     /// The bias vector for the gating path.
@@ -122,7 +122,7 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// - A bias near zero lets the gate be more responsive to the input
     /// </para>
     /// </remarks>
-    private Vector<T> _gateBias;
+    private Vector<T> _gateBias = default!;
 
     /// <summary>
     /// The input tensor from the last forward pass, saved for backpropagation.

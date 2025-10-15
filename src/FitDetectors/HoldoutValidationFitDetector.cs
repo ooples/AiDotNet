@@ -23,7 +23,7 @@ public class HoldoutValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// <summary>
     /// Configuration options for the holdout validation fit detector.
     /// </summary>
-    private readonly HoldoutValidationFitDetectorOptions _options;
+    private readonly HoldoutValidationFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HoldoutValidationFitDetector{T}"/> class.

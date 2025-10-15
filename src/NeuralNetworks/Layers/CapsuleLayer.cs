@@ -35,8 +35,8 @@ public class CapsuleLayer<T> : LayerBase<T>
     private readonly int _numCapsules;
     private readonly int _capsuleDimension;
     private readonly int _numRoutingIterations;
-    private Tensor<T> _transformationMatrix;
-    private Vector<T> _bias;
+    private Tensor<T> _transformationMatrix = default!;
+    private Vector<T> _bias = default!;
     private Tensor<T>? _transformationMatrixGradient;
     private Vector<T>? _biasGradient;
     private Tensor<T>? _lastInput;

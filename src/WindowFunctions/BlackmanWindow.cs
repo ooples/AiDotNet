@@ -34,7 +34,7 @@ public class BlackmanWindow<T> : IWindowFunction<T>
     /// trigonometric functions for the generic numeric type T. It's essential for implementing
     /// the window function's mathematical formula across different numeric types.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BlackmanWindow{T}"/> class.

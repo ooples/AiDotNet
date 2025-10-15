@@ -32,7 +32,7 @@ public class ResidualAnalysisFitDetector<T, TInput, TOutput> : FitDetectorBase<T
     /// your model. They include thresholds for acceptable error rates and other statistical measures.
     /// </para>
     /// </remarks>
-    private readonly ResidualAnalysisFitDetectorOptions _options;
+    private readonly ResidualAnalysisFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the ResidualAnalysisFitDetector class.

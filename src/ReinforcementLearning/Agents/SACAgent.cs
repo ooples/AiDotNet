@@ -37,12 +37,12 @@ namespace AiDotNet.ReinforcementLearning.Agents
     public class SACAgent<TState, T> : StochasticActorCriticAgentBase<TState, Vector<T>, T>
         where TState : Tensor<T>
     {
-        private readonly SACOptions _options;
+        private readonly SACOptions _options = default!;
         private readonly bool _updateAfterEachStep;
         private readonly int _trainingFrequency;
         private readonly int _gradientsStepsPerUpdate;
         private readonly bool _useFixedWarmUpExploration;
-        private readonly T _warmUpExplorationStdDev;
+        private readonly T _warmUpExplorationStdDev = default!;
         private T _logEntropyCoefficient;  // log alpha, used for auto-tuning
 
         /// <summary>
@@ -593,9 +593,9 @@ namespace AiDotNet.ReinforcementLearning.Agents
             /// Gets the numeric operations for type TNumeric.
             /// </summary>
             protected INumericOperations<TNumeric> NumOps => MathHelper.GetNumericOperations<TNumeric>();
-            private readonly List<LayerBase<TNumeric>> _layers;
-            private readonly TNumeric _learningRate;
-            private readonly Random _random;
+            private readonly List<LayerBase<TNumeric>> _layers = default!;
+            private readonly TNumeric _learningRate = default!;
+            private readonly Random _random = default!;
             
             /// <summary>
             /// Gets the number of actions in the action space.
@@ -1106,13 +1106,13 @@ namespace AiDotNet.ReinforcementLearning.Agents
             private readonly List<LayerBase<TNumeric>> _meanLayers; // Layers for action means
             private readonly List<LayerBase<TNumeric>> _logStdLayers; // Layers for log standard deviations
             private readonly TanhActivation<TNumeric> _finalMeanActivation; // Tanh for bounding action means
-            private readonly Random _random;
+            private readonly Random _random = default!;
             private readonly Vector<TNumeric>? _actionLowerBound;
             private readonly Vector<TNumeric>? _actionUpperBound;
             private readonly bool _learnStdDev;
-            private readonly TNumeric _fixedLogStd;
-            private readonly TNumeric _minLogStd;
-            private readonly TNumeric _maxLogStd;
+            private readonly TNumeric _fixedLogStd = default!;
+            private readonly TNumeric _minLogStd = default!;
+            private readonly TNumeric _maxLogStd = default!;
             private readonly int _stateSize;
             private readonly int _actionSize;
 

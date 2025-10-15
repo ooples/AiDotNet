@@ -43,7 +43,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// Think of it as the instruction manual that tells the model how it should be built and operate.
     /// </para>
     /// </remarks>
-    private readonly NeuralNetworkARIMAOptions<T> _nnarimaOptions;
+    private readonly NeuralNetworkARIMAOptions<T> _nnarimaOptions = default!;
 
     /// <summary>
     /// Coefficients for the Autoregressive (AR) component of the model.
@@ -63,7 +63,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// which past values are most important for making accurate predictions.
     /// </para>
     /// </remarks>
-    private Vector<T> _arParameters;
+    private Vector<T> _arParameters = default!;
 
     /// <summary>
     /// Coefficients for the Moving Average (MA) component of the model.
@@ -83,7 +83,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// the MA component might suggest adding some correction to today's prediction.
     /// </para>
     /// </remarks>
-    private Vector<T> _maParameters;
+    private Vector<T> _maParameters = default!;
 
     /// <summary>
     /// The prediction errors (residuals) for each training example.
@@ -108,7 +108,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// so you can adjust your aim next time.
     /// </para>
     /// </remarks>
-    private Vector<T> _residuals;
+    private Vector<T> _residuals = default!;
 
     /// <summary>
     /// The predicted values for the training data.
@@ -129,7 +129,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// It's like looking back at your practice test results to see which questions you got right and wrong.
     /// </para>
     /// </remarks>
-    private Vector<T> _fitted;
+    private Vector<T> _fitted = default!;
 
     /// <summary>
     /// The optimization algorithm used to find the best parameter values.
@@ -150,7 +150,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// the optimizer does this automatically and efficiently finds the best parameters.
     /// </para>
     /// </remarks>
-    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer = default!;
 
     /// <summary>
     /// The target values used during training.
@@ -170,7 +170,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// Think of it as the answer key for a test that your model is taking.
     /// </para>
     /// </remarks>
-    private Vector<T> _y;
+    private Vector<T> _y = default!;
 
     /// <summary>
     /// The neural network component of the model.
@@ -194,7 +194,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// they can solve problems neither could handle alone.
     /// </para>
     /// </remarks>
-    private readonly INeuralNetworkModel<T> _neuralNetwork;
+    private readonly INeuralNetworkModel<T> _neuralNetwork = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NeuralNetworkARIMAModel{T}"/> class.
@@ -749,7 +749,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the model, including type, parameters, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method provides information about the model's configuration and state.
@@ -767,9 +767,9 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// engine size, and features.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metaData = new ModelMetaData<T>
+        var metaData = new ModelMetadata<T>
         {
             ModelType = ModelType.NeuralNetworkARIMA,
             AdditionalInfo = new Dictionary<string, object>

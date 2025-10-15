@@ -42,7 +42,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// for one hidden neuron. These weights determine how each input feature influences each
     /// hidden neuron and are trainable parameters of the layer.
     /// </remarks>
-    private Matrix<T> _inputWeights;
+    private Matrix<T> _inputWeights = default!;
     
     /// <summary>
     /// Matrix<double> storing the weight parameters for connections between previous hidden state and current hidden state.
@@ -52,7 +52,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// for one hidden neuron. These weights determine how the previous hidden state influences the
     /// current hidden state and are what gives the recurrent layer its "memory" capability.
     /// </remarks>
-    private Matrix<T> _hiddenWeights;
+    private Matrix<T> _hiddenWeights = default!;
     
     /// <summary>
     /// Vector<double> storing the bias parameters for each hidden neuron.
@@ -62,7 +62,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// weighted sum for the corresponding hidden neuron. Biases allow the network to shift the
     /// activation function, giving it more flexibility to fit the data.
     /// </remarks>
-    private Vector<T> _biases;
+    private Vector<T> _biases = default!;
     
     /// <summary>
     /// Stores the input tensor from the most recent forward pass for use in backpropagation.

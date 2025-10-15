@@ -9,21 +9,21 @@ internal class DynamicsModel<T>
     private readonly int _stateSize;
     private readonly int _actionSize;
     private readonly bool _probabilistic;
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     // Neural network components
     private readonly FullyConnectedLayer<T>[] _stateInputLayers;
     private readonly FullyConnectedLayer<T>[] _actionInputLayers;
     private readonly FullyConnectedLayer<T>[] _hiddenLayers;
-    private readonly FullyConnectedLayer<T> _nextStateOutputLayer;
-    private readonly FullyConnectedLayer<T> _rewardOutputLayer;
-    private readonly FullyConnectedLayer<T> _terminationOutputLayer;
+    private readonly FullyConnectedLayer<T> _nextStateOutputLayer = default!;
+    private readonly FullyConnectedLayer<T> _rewardOutputLayer = default!;
+    private readonly FullyConnectedLayer<T> _terminationOutputLayer = default!;
     
     // For probabilistic models
     private readonly FullyConnectedLayer<T>? _logVarOutputLayer;
     
     // Learning rate for manual gradient updates
-    private readonly T _learningRate;
+    private readonly T _learningRate = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="DynamicsModel{T}"/> class.

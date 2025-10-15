@@ -29,20 +29,20 @@ namespace AiDotNet.ReinforcementLearning.Agents
     public class TD3Agent<TState, T> : DualCriticAgentBase<TState, Vector<T>, T, IDeterministicPolicy<TState, Vector<T>, T>>
         where TState : Tensor<T>
     {
-        private readonly TD3Options _options;
-        private readonly T _targetPolicyNoiseScale;
-        private readonly T _targetPolicyNoiseClip;
+        private readonly TD3Options _options = default!;
+        private readonly T _targetPolicyNoiseScale = default!;
+        private readonly T _targetPolicyNoiseClip = default!;
         private readonly bool _useAverageCriticForActorUpdate;
         private readonly bool _useDelayedTargetUpdate;
         private readonly int _targetUpdateFrequency;
         private readonly bool _clippedCriticValueDuringActorUpdate;
-        private readonly T _maxCriticValueDuringActorUpdate;
+        private readonly T _maxCriticValueDuringActorUpdate = default!;
         private readonly bool _useExtraWarmupNoise;
-        private readonly T _extraWarmupNoiseScale;
+        private readonly T _extraWarmupNoiseScale = default!;
         
-        private T _noiseScale;
-        private readonly T _noiseDecayRate;
-        private readonly T _minNoiseScale;
+        private T _noiseScale = default!;
+        private readonly T _noiseDecayRate = default!;
+        private readonly T _minNoiseScale = default!;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TD3Agent{TState, T}"/> class.

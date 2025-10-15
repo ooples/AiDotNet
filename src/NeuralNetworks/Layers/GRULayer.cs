@@ -49,7 +49,7 @@ public class GRULayer<T> : LayerBase<T>
     /// During training, these weights are adjusted to better recognize important patterns in your data.
     /// </para>
     /// </remarks>
-    private Matrix<T> _Wz, _Wr, _Wh;
+    private Matrix<T> _Wz, _Wr, _Wh = default!;
 
     /// <summary>
     /// The weight matrices that transform the previous hidden state.
@@ -72,7 +72,7 @@ public class GRULayer<T> : LayerBase<T>
     /// from words that appeared earlier in the sentence.
     /// </para>
     /// </remarks>
-    private Matrix<T> _Uz, _Ur, _Uh;
+    private Matrix<T> _Uz, _Ur, _Uh = default!;
 
     /// <summary>
     /// The bias vectors for the update gate (z), reset gate (r), and candidate hidden state (h).
@@ -99,7 +99,7 @@ public class GRULayer<T> : LayerBase<T>
     /// <summary>
     /// Gradients for the weight matrices during backpropagation.
     /// </summary>
-    private Tensor<T>? _dWz, _dWr, _dWh, _dUz, _dUr, _dUh;
+    private Tensor<T>? _dWz, _dWr, _dWh, _dUz, _dUr, _dUh = default!;
 
     /// <summary>
     /// Gradients for the bias vectors during backpropagation.
@@ -120,7 +120,7 @@ public class GRULayer<T> : LayerBase<T>
     /// The activation values for the update gate (z), reset gate (r), and candidate hidden state (h)
     /// from the last forward pass.
     /// </summary>
-    private Tensor<T>? _lastZ, _lastR, _lastH;
+    private Tensor<T>? _lastZ, _lastR, _lastH = default!;
 
     /// <summary>
     /// All hidden states from the last forward pass, used when returning sequences.

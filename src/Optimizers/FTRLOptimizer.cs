@@ -31,7 +31,7 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// The options specific to the FTRL algorithm.
     /// </summary>
-    private FTRLOptimizerOptions<T, TInput, TOutput> _options;
+    private FTRLOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// Auxiliary vector used in the FTRL update rule.

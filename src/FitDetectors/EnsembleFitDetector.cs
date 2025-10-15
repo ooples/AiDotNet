@@ -24,7 +24,7 @@ public class EnsembleFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// <b>For Beginners:</b> These are the different "expert opinions" that will be combined to form 
     /// the ensemble's assessment. Each detector may use different techniques to evaluate model fit.
     /// </remarks>
-    private readonly List<IFitDetector<T, TInput, TOutput>> _detectors;
+    private readonly List<IFitDetector<T, TInput, TOutput>> _detectors = default!;
     
     /// <summary>
     /// Configuration options for the ensemble fit detector.
@@ -34,7 +34,7 @@ public class EnsembleFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// detectors, including the weights assigned to each detector and the maximum number of recommendations 
     /// to return.
     /// </remarks>
-    private readonly EnsembleFitDetectorOptions _options;
+    private readonly EnsembleFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the EnsembleFitDetector class.

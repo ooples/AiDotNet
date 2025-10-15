@@ -43,7 +43,7 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The smoothness parameter controlling the order of the Wendland function.
@@ -53,7 +53,7 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
     /// <summary>
     /// The support radius beyond which the function becomes zero.
     /// </summary>
-    private readonly T _supportRadius;
+    private readonly T _supportRadius = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WendlandRBF{T}"/> class with specified parameters.

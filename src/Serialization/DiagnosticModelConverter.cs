@@ -561,7 +561,7 @@ public abstract class DiagnosticModelConverter : JsonConverter
             // Check for common properties in both model types
 
             // Common to both
-            CaptureProperty(value, props, type, "GetModelMetaData");
+            CaptureProperty(value, props, type, "GetModelMetadata");
 
             // Time series specific
             CaptureProperty(value, props, type, "IsTrained");
@@ -948,7 +948,7 @@ public abstract class DiagnosticModelConverter : JsonConverter
             InvokeMethod(model, "CalculateFeatureImportances");
 
             // For time series models
-            InvokeMethod(model, "GetModelMetaData");
+            InvokeMethod(model, "GetModelMetadata");
 
             // Check if IsTrained property exists and set it to true if the model has parameters
             PropertyInfo? isTrainedProp = modelType.GetProperty("IsTrained",
@@ -1118,7 +1118,7 @@ public abstract class DiagnosticModelConverter : JsonConverter
             // Check for common properties in both model types
 
             // Common to both
-            LogPropertyValue(model, modelType, "GetModelMetaData");
+            LogPropertyValue(model, modelType, "GetModelMetadata");
 
             // Time series specific
             LogPropertyValue(model, modelType, "IsTrained");

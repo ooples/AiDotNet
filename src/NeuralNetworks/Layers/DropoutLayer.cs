@@ -54,7 +54,7 @@ public class DropoutLayer<T> : LayerBase<T>
     /// Lower dropout rates provide milder regularization.
     /// </para>
     /// </remarks>
-    private readonly T _dropoutRate;
+    private readonly T _dropoutRate = default!;
 
     /// <summary>
     /// The scaling factor applied to active neurons during training.
@@ -81,7 +81,7 @@ public class DropoutLayer<T> : LayerBase<T>
     /// training and inference, which helps with stable learning.
     /// </para>
     /// </remarks>
-    private readonly T _scale;
+    private readonly T _scale = default!;
 
     /// <summary>
     /// The input tensor from the last forward pass, saved for backpropagation.

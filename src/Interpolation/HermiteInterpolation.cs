@@ -21,22 +21,22 @@ public class HermiteInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points (independent variable).
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points (dependent variable).
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The slopes (derivatives) at each data point.
     /// </summary>
-    private readonly Vector<T> _m;
+    private readonly Vector<T> _m = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new Hermite interpolation from the given data points and slopes.

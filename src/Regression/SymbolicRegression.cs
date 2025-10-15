@@ -56,7 +56,7 @@ public class SymbolicRegression<T> : NonLinearRegressionModelBase<T>
     /// like giving the AI more time and resources to experiment with different formulas.
     /// </para>
     /// </remarks>
-    private readonly SymbolicRegressionOptions _options;
+    private readonly SymbolicRegressionOptions _options = default!;
     
     /// <summary>
     /// The calculator used to evaluate the fitness or quality of symbolic models.
@@ -77,7 +77,7 @@ public class SymbolicRegression<T> : NonLinearRegressionModelBase<T>
     /// Higher scores mean the formula better explains your data pattern.
     /// </para>
     /// </remarks>
-    private readonly IFitnessCalculator<T, Matrix<T>, Vector<T>> _fitnessCalculator;
+    private readonly IFitnessCalculator<T, Matrix<T>, Vector<T>> _fitnessCalculator = default!;
     
     /// <summary>
     /// The component that detects when a satisfactory model has been found.
@@ -98,7 +98,7 @@ public class SymbolicRegression<T> : NonLinearRegressionModelBase<T>
     /// you've already found a formula that works well enough.
     /// </para>
     /// </remarks>
-    private readonly IFitDetector<T, Matrix<T>, Vector<T>> _fitDetector;
+    private readonly IFitDetector<T, Matrix<T>, Vector<T>> _fitDetector = default!;
     
     /// <summary>
     /// The optimizer used to evolve and improve symbolic models.
@@ -121,7 +121,7 @@ public class SymbolicRegression<T> : NonLinearRegressionModelBase<T>
     /// It mimics natural evolution, but for mathematical formulas instead of organisms.
     /// </para>
     /// </remarks>
-    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer = default!;
     
     /// <summary>
     /// The best symbolic model found during the optimization process.
@@ -164,7 +164,7 @@ public class SymbolicRegression<T> : NonLinearRegressionModelBase<T>
     /// of the variation in your data, which is typically very good.
     /// </para>
     /// </remarks>
-    private T _bestFitness;
+    private T _bestFitness = default!;
 
     /// <summary>
     /// Creates a new symbolic regression model.

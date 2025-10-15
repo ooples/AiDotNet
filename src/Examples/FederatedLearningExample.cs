@@ -232,7 +232,7 @@ namespace AiDotNet.Examples
             var aggregated = secureAggregator.AggregateParameters(
                 clientUpdates,
                 clientWeights,
-                AiDotNet.Enums.FederatedAggregationStrategy.SecureAggregation);
+                AiDotNet.FederatedLearning.FederatedAggregationStrategy.SecureAggregation);
             
             Console.WriteLine($"Securely aggregated parameters from {clientUpdates.Count} clients");
             Console.WriteLine($"Aggregated weights shape: {aggregated["weights"].Length}");

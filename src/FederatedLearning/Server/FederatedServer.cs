@@ -5,9 +5,11 @@ using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Enums;
 using AiDotNet.FederatedLearning.Aggregation;
 using AiDotNet.FederatedLearning.Privacy;
 using AiDotNet.FederatedLearning.Communication;
+using AiDotNet.FederatedLearning.Communication.Interfaces;
 
 namespace AiDotNet.FederatedLearning.Server
 {
@@ -259,7 +261,7 @@ namespace AiDotNet.FederatedLearning.Server
         private async Task<Dictionary<string, Dictionary<string, Vector<double>>>> CollectClientUpdatesAsync(List<string> selectedClients)
         {
             var clientUpdates = new Dictionary<string, Dictionary<string, Vector<double>>>();
-            var tasks = new Dictionary<string, Task<Dictionary<string, Vector<double>>>>();
+            var tasks = new Dictionary<string, Task<Dictionary<string, Vector<double>>?>>();
 
             // Start collection from all clients
             foreach (var clientId in selectedClients)
@@ -334,7 +336,9 @@ namespace AiDotNet.FederatedLearning.Server
             if (convergenceHistory.Count < 3)
                 return false;
 
-            var recent = convergenceHistory.TakeLast(3).ToList();
+            // TakeLast is not available in older .NET versions, use Skip instead
+            var count = convergenceHistory.Count;
+            var recent = convergenceHistory.Skip(Math.Max(0, count - 3)).ToList();
             return recent.All(x => x < ConvergenceThreshold);
         }
 
@@ -367,7 +371,15 @@ namespace AiDotNet.FederatedLearning.Server
             double epsilon,
             double delta)
         {
-            return DifferentialPrivacy.ApplyPrivacy(parameters, epsilon, delta, PrivacySettings);
+            // Convert FederatedLearning.PrivacySettings to Privacy.PrivacySettings if needed
+            var privacySettings = new AiDotNet.FederatedLearning.Privacy.PrivacySettings
+            {
+                UseDifferentialPrivacy = PrivacySettings.UseDifferentialPrivacy,
+                Epsilon = PrivacySettings.Epsilon,
+                Delta = PrivacySettings.Delta,
+                ClippingThreshold = PrivacySettings.ClippingThreshold
+            };
+            return DifferentialPrivacy.ApplyPrivacy(parameters, epsilon, delta, privacySettings);
         }
 
         #endregion
@@ -391,96 +403,5 @@ namespace AiDotNet.FederatedLearning.Server
                     TimeSpan.Zero
             };
         }
-    }
-
-    /// <summary>
-    /// Client information for server tracking
-    /// </summary>
-    public class ClientInfo
-    {
-        public string ClientId { get; set; }
-        public ClientConnectionStatus Status { get; set; }
-        public DateTime RegistrationTime { get; set; }
-        public DateTime LastCommunication { get; set; }
-        public int DataSize { get; set; }
-        public string ClientVersion { get; set; }
-        public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
-    }
-
-    /// <summary>
-    /// Server round information
-    /// </summary>
-    public class ServerRound
-    {
-        public int Round { get; set; }
-        public int ParticipatingClients { get; set; }
-        public double ConvergenceMetric { get; set; }
-        public TimeSpan RoundTime { get; set; }
-        public double GlobalParameterNorm { get; set; }
-    }
-
-    /// <summary>
-    /// Round execution result
-    /// </summary>
-    public class RoundResult
-    {
-        public int Round { get; set; }
-        public List<string> SelectedClients { get; set; }
-        public List<string> ParticipatingClients { get; set; }
-        public Dictionary<string, Vector<double>> AggregatedParameters { get; set; }
-        public double ConvergenceMetric { get; set; }
-        public TimeSpan RoundTime { get; set; }
-    }
-
-    /// <summary>
-    /// Federated training result
-    /// </summary>
-    public class FederatedTrainingResult
-    {
-        public int TotalRounds { get; set; }
-        public TimeSpan TrainingTime { get; set; }
-        public Dictionary<string, Vector<double>> FinalGlobalParameters { get; set; }
-        public List<double> ConvergenceHistory { get; set; }
-        public List<ServerRound> TrainingHistory { get; set; }
-    }
-
-    /// <summary>
-    /// Server statistics
-    /// </summary>
-    public class ServerStatistics
-    {
-        public string ServerId { get; set; }
-        public int CurrentRound { get; set; }
-        public int TotalConnectedClients { get; set; }
-        public int ActiveClients { get; set; }
-        public int TotalRounds { get; set; }
-        public ServerStatus Status { get; set; }
-        public TimeSpan AverageRoundTime { get; set; }
-    }
-
-    /// <summary>
-    /// Client connection status
-    /// </summary>
-    public enum ClientConnectionStatus
-    {
-        Connected,
-        Disconnected,
-        Error,
-        Training,
-        Updating
-    }
-
-    /// <summary>
-    /// Server status enumeration
-    /// </summary>
-    public enum ServerStatus
-    {
-        Initializing,
-        Ready,
-        Training,
-        Aggregating,
-        Completed,
-        Error,
-        Stopped
     }
 }

@@ -35,17 +35,17 @@ public class FocalLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// The focusing parameter that down-weights easy examples.
     /// </summary>
-    private readonly T _gamma;
+    private readonly T _gamma = default!;
     
     /// <summary>
     /// The weighting factor that balances positive vs negative examples.
     /// </summary>
-    private readonly T _alpha;
+    private readonly T _alpha = default!;
     
     /// <summary>
     /// Small value to prevent numerical instability with log(0).
     /// </summary>
-    private readonly T _epsilon;
+    private readonly T _epsilon = default!;
     
     /// <summary>
     /// Initializes a new instance of the FocalLoss class.

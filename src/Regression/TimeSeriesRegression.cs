@@ -42,7 +42,7 @@ public class TimeSeriesRegression<T> : RegressionModelBase<T>
     /// These settings shape how the model analyzes and learns from your data.
     /// </para>
     /// </remarks>
-    private readonly TimeSeriesRegressionOptions<T> _options;
+    private readonly TimeSeriesRegressionOptions<T> _options = default!;
     
     /// <summary>
     /// The underlying time series model that handles the core prediction logic.
@@ -62,7 +62,7 @@ public class TimeSeriesRegression<T> : RegressionModelBase<T>
     /// The type of engine is determined by the options you provide when creating the model.
     /// </para>
     /// </remarks>
-    private ITimeSeriesModel<T> _timeSeriesModel;
+    private ITimeSeriesModel<T> _timeSeriesModel = default!;
 
     /// <summary>
     /// The regularization strategy used to prevent overfitting.
@@ -80,7 +80,7 @@ public class TimeSeriesRegression<T> : RegressionModelBase<T>
     /// on new data because it learned the noise rather than the true patterns.
     /// </para>
     /// </remarks>
-    private readonly IRegularization<T, Matrix<T>, Vector<T>> _regularization;
+    private readonly IRegularization<T, Matrix<T>, Vector<T>> _regularization = default!;
 
     /// <summary>
     /// Initializes a new instance of the TimeSeriesRegression class with specified options and optional regularization.

@@ -22,7 +22,7 @@ public class NeuralNetworkFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
     /// <summary>
     /// Configuration options for the neural network fit detector.
     /// </summary>
-    private readonly NeuralNetworkFitDetectorOptions _options;
+    private readonly NeuralNetworkFitDetectorOptions _options = default!;
     
     /// <summary>
     /// The error measurement on the training dataset.

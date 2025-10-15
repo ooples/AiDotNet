@@ -1,0 +1,16 @@
+MSBuild version 17.8.27+3ab07f0cf for .NET
+  Determining projects to restore...
+/usr/lib/dotnet/sdk/8.0.116/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.EolTargetFrameworks.targets(32,5): warning NETSDK1138: The target framework 'net7.0' is out of support and will not receive security updates in the future. Please refer to https://aka.ms/dotnet-core-support for more information about the support policy. [/mnt/c/projects/AiDotNet/AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj::TargetFramework=net7.0]
+/usr/lib/dotnet/sdk/8.0.116/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.EolTargetFrameworks.targets(32,5): warning NETSDK1138: The target framework 'net7.0' is out of support and will not receive security updates in the future. Please refer to https://aka.ms/dotnet-core-support for more information about the support policy. [/mnt/c/projects/AiDotNet/testconsole/AiDotNetTestConsole.csproj::TargetFramework=net7.0]
+/usr/lib/dotnet/sdk/8.0.116/NuGet.targets(156,5): error : Input/output error : '/mnt/c/projects/AiDotNet/testconsole/obj/78787bd8-078c-4901-8ec3-43396a57e9f9.tmp' [/mnt/c/projects/AiDotNet/AiDotNet.sln]
+  Restored /mnt/c/projects/AiDotNet/AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj (in 1.1 sec).
+
+Build FAILED.
+
+/usr/lib/dotnet/sdk/8.0.116/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.EolTargetFrameworks.targets(32,5): warning NETSDK1138: The target framework 'net7.0' is out of support and will not receive security updates in the future. Please refer to https://aka.ms/dotnet-core-support for more information about the support policy. [/mnt/c/projects/AiDotNet/AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj::TargetFramework=net7.0]
+/usr/lib/dotnet/sdk/8.0.116/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.EolTargetFrameworks.targets(32,5): warning NETSDK1138: The target framework 'net7.0' is out of support and will not receive security updates in the future. Please refer to https://aka.ms/dotnet-core-support for more information about the support policy. [/mnt/c/projects/AiDotNet/testconsole/AiDotNetTestConsole.csproj::TargetFramework=net7.0]
+/usr/lib/dotnet/sdk/8.0.116/NuGet.targets(156,5): error : Input/output error : '/mnt/c/projects/AiDotNet/testconsole/obj/78787bd8-078c-4901-8ec3-43396a57e9f9.tmp' [/mnt/c/projects/AiDotNet/AiDotNet.sln]
+    2 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:03.71

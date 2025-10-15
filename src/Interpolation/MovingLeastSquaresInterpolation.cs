@@ -21,17 +21,17 @@ public class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The x-coordinates of the known data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the known data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The z-values (heights) of the known data points.
     /// </summary>
-    private readonly Vector<T> _z;
+    private readonly Vector<T> _z = default!;
     
     /// <summary>
     /// Controls how far the influence of each data point extends.
@@ -42,7 +42,7 @@ public class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     /// data points as closely. A smaller value creates a surface that more closely follows your
     /// data points but might be less smooth overall.
     /// </remarks>
-    private readonly T _smoothingLength;
+    private readonly T _smoothingLength = default!;
     
     /// <summary>
     /// The degree of the polynomial used for local approximation.
@@ -62,7 +62,7 @@ public class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// Optional matrix decomposition method for solving the least squares system.

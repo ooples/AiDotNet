@@ -17,27 +17,27 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Weights used to transform input into query representations.
     /// </summary>
-    private Matrix<T> _queryWeights;
+    private Matrix<T> _queryWeights = default!;
     
     /// <summary>
     /// Weights used to transform input into key representations.
     /// </summary>
-    private Matrix<T> _keyWeights;
+    private Matrix<T> _keyWeights = default!;
     
     /// <summary>
     /// Weights used to transform input into value representations.
     /// </summary>
-    private Matrix<T> _valueWeights;
+    private Matrix<T> _valueWeights = default!;
     
     /// <summary>
     /// Weights used in the final output projection.
     /// </summary>
-    private Matrix<T> _outputWeights;
+    private Matrix<T> _outputWeights = default!;
     
     /// <summary>
     /// Bias terms added to the final output.
     /// </summary>
-    private Vector<T> _outputBias;
+    private Vector<T> _outputBias = default!;
 
     /// <summary>
     /// Cached input from the forward pass for use in the backward pass.

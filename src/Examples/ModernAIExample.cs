@@ -73,9 +73,9 @@ public static class ModernAIExample
         
         // Use a pre-trained foundation model
         builder.UseFoundationModel(new BERTFoundationModel())
-               .ConfigureFineTuning(new FineTuningConfig
+               .ConfigureFineTuning(new AiDotNet.Models.Options.FineTuningOptions<double>
                {
-                   LearningRate = 2e-5,
+                   InitialLearningRate = 2e-5,
                    Epochs = 3,
                    BatchSize = 16
                })
@@ -158,7 +158,7 @@ public static class ModernAIExample
         {
             var importance = interpretableModel.GetFeatureImportance();
             Console.WriteLine("Feature importance: Age={0:F2}, Income={1:F2}, CreditScore={2:F2}",
-                importance[0], importance[1], importance[2]);
+                importance["0"], importance["1"], importance["2"]);
         }
     }
     
@@ -195,12 +195,12 @@ public static class ModernAIExample
         if (monitor != null)
         {
             // New production data (potentially drifted)
-            var newData = new Matrix<double>(new double[,]
+            var newDataArray = new double[,]
             {
                 { 5.0, 6.0 }, { 6.0, 7.0 } // Different distribution
-            });
-            
-            var driftScore = monitor.CheckDataDrift(newData);
+            };
+
+            var driftScore = monitor.CheckDataDrift(newDataArray);
             Console.WriteLine($"Data drift score: {driftScore:F3}");
             
             if (monitor.ShouldRetrain())
@@ -232,26 +232,16 @@ public static class ModernAIExample
         }
         
         // For cloud deployment
-        var cloudArchitecture = new NeuralNetworkArchitecture<double>(
-            inputShape: new[] { 10 },
-            outputShape: new[] { 1 },
-            taskType: NeuralNetworkTaskType.Regression
-        );
         var cloudBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
-        cloudBuilder.SetModel(new NeuralNetworkModel<double>(cloudArchitecture))
+        cloudBuilder.SetModel(new SimpleRegression<double>())
                     .OptimizeForCloud(CloudPlatform.AWS, OptimizationLevel.Aggressive);
 
         var cloudModel = cloudBuilder.Build(features, targets);
         Console.WriteLine("Model optimized for AWS cloud deployment");
 
         // For edge deployment
-        var edgeArchitecture = new NeuralNetworkArchitecture<double>(
-            inputShape: new[] { 10 },
-            outputShape: new[] { 1 },
-            taskType: NeuralNetworkTaskType.Regression
-        );
         var edgeBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
-        edgeBuilder.SetModel(new NeuralNetworkModel<double>(edgeArchitecture))
+        edgeBuilder.SetModel(new SimpleRegression<double>())
                    .OptimizeForEdge(
                        EdgeDevice.Mobile,
                        memoryLimit: 50, // 50MB
@@ -418,7 +408,7 @@ public class BERTFoundationModel : IFoundationModel<float, Matrix<string>, Vecto
     public Task LoadCheckpointAsync(string checkpointName) => Task.CompletedTask;
 }
 
-public class CLIPMultimodalModel<T> : IMultimodalModel<double, Dictionary<string, object>, Vector<double>>
+public class CLIPMultimodalModel<T> : IMultimodalModel<double, MultimodalInput<double>, Vector<double>>
     where T : struct, IComparable<T>
 {
     // IMultimodalModel implementation

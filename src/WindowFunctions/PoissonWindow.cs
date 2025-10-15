@@ -35,7 +35,7 @@ public class PoissonWindow<T> : IWindowFunction<T>
     /// trigonometric functions for the generic numeric type T. It's essential for implementing
     /// the window function's mathematical formula across different numeric types.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The alpha parameter that controls the shape of the Poisson window.
@@ -58,7 +58,7 @@ public class PoissonWindow<T> : IWindowFunction<T>
     /// what frequencies are present).
     /// </para>
     /// </remarks>
-    private readonly T _alpha;
+    private readonly T _alpha = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PoissonWindow{T}"/> class with the specified alpha value.

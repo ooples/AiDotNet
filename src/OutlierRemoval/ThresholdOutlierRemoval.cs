@@ -15,8 +15,8 @@
 /// </remarks>
 public class ThresholdOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, TOutput>
 {
-    private readonly T _threshold;
-    private readonly INumericOperations<T> _numOps;
+    private readonly T _threshold = default!;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new instance of the threshold-based outlier removal algorithm.

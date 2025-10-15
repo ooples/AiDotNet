@@ -10,11 +10,11 @@ namespace AiDotNet.ProductionMonitoring
     /// </summary>
     public class MonitoringMetrics
     {
-        private readonly Dictionary<string, MetricTimeSeries> _metrics;
-        private readonly MetricsConfiguration _configuration;
+        private readonly Dictionary<string, MetricTimeSeries> _metrics = default!;
+        private readonly MetricsConfiguration _configuration = default!;
         private readonly object _lockObject = new object();
 
-        public MonitoringMetrics(MetricsConfiguration configuration = null)
+        public MonitoringMetrics(MetricsConfiguration? configuration = null)
         {
             _configuration = configuration ?? new MetricsConfiguration();
             _metrics = new Dictionary<string, MetricTimeSeries>();
@@ -24,7 +24,7 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Records a metric value
         /// </summary>
-        public void RecordMetric(string metricName, double value, DateTime? timestamp = null, Dictionary<string, string> tags = null)
+        public void RecordMetric(string metricName, double value, DateTime? timestamp = null, Dictionary<string, string>? tags = null)
         {
             timestamp = timestamp ?? DateTime.UtcNow;
             
@@ -105,7 +105,7 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Gets metric correlations
         /// </summary>
-        public MetricCorrelations CalculateCorrelations(List<string> metricNames = null, DateTime? startTime = null, DateTime? endTime = null)
+        public MetricCorrelations CalculateCorrelations(List<string>? metricNames = null, DateTime? startTime = null, DateTime? endTime = null)
         {
             metricNames = metricNames ?? _metrics.Keys.ToList();
             var correlations = new MetricCorrelations();
@@ -150,7 +150,7 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Detects anomalies in metrics
         /// </summary>
-        public async Task<MetricAnomalies> DetectAnomaliesAsync(string metricName = null, DateTime? startTime = null, DateTime? endTime = null)
+        public async Task<MetricAnomalies> DetectAnomaliesAsync(string? metricName = null, DateTime? startTime = null, DateTime? endTime = null)
         {
             var anomalies = new MetricAnomalies
             {
@@ -172,7 +172,7 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Gets metric trends
         /// </summary>
-        public MetricTrends AnalyzeTrends(List<string> metricNames = null, int lookbackHours = 24)
+        public MetricTrends AnalyzeTrends(List<string>? metricNames = null, int lookbackHours = 24)
         {
             metricNames = metricNames ?? _metrics.Keys.ToList();
             var trends = new MetricTrends
@@ -199,7 +199,7 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Exports metrics data
         /// </summary>
-        public MetricsExport ExportMetrics(DateTime startTime, DateTime endTime, List<string> metricNames = null)
+        public MetricsExport ExportMetrics(DateTime startTime, DateTime endTime, List<string>? metricNames = null)
         {
             metricNames = metricNames ?? _metrics.Keys.ToList();
             
@@ -523,13 +523,13 @@ namespace AiDotNet.ProductionMonitoring
             private readonly List<MetricDataPoint> _dataPoints = new List<MetricDataPoint>();
             private readonly object _lock = new object();
             
-            public string Name { get; set; }
-            public string Unit { get; set; }
+            public string Name { get; set; } = string.Empty;
+            public string Unit { get; set; } = string.Empty;
             public MetricType Type { get; set; }
             
             public int DataPointCount => _dataPoints.Count;
             
-            public void AddValue(double value, DateTime timestamp, Dictionary<string, string> tags = null)
+            public void AddValue(double value, DateTime timestamp, Dictionary<string, string>? tags = null)
             {
                 lock (_lock)
                 {
@@ -668,12 +668,12 @@ namespace AiDotNet.ProductionMonitoring
         {
             public DateTime Timestamp { get; set; }
             public double Value { get; set; }
-            public Dictionary<string, string> Tags { get; set; }
+            public Dictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
         }
 
         public class MetricStatistics
         {
-            public string MetricName { get; set; }
+            public string MetricName { get; set; } = string.Empty;
             public int Count { get; set; }
             public double Sum { get; set; }
             public double Mean { get; set; }
@@ -685,7 +685,7 @@ namespace AiDotNet.ProductionMonitoring
             public double Percentile99 { get; set; }
             public double LastValue { get; set; }
             public double FirstValue { get; set; }
-            public string Trend { get; set; }
+            public string Trend { get; set; } = string.Empty;
         }
 
         public class AggregatedDataPoint
@@ -703,7 +703,7 @@ namespace AiDotNet.ProductionMonitoring
             public DateTime StartTime { get; set; }
             public DateTime EndTime { get; set; }
             public TimeSpan AggregationInterval { get; set; }
-            public Dictionary<string, List<AggregatedDataPoint>> Metrics { get; set; }
+            public Dictionary<string, List<AggregatedDataPoint>> Metrics { get; set; } = new Dictionary<string, List<AggregatedDataPoint>>();
         }
 
         public class MetricCorrelations
@@ -714,39 +714,39 @@ namespace AiDotNet.ProductionMonitoring
 
         public class MetricCorrelation
         {
-            public string Metric1 { get; set; }
-            public string Metric2 { get; set; }
+            public string Metric1 { get; set; } = string.Empty;
+            public string Metric2 { get; set; } = string.Empty;
             public double CorrelationCoefficient { get; set; }
-            public string Strength { get; set; }
+            public string Strength { get; set; } = string.Empty;
         }
 
         public class MetricAnomalies
         {
-            public List<MetricAnomaly> Anomalies { get; set; }
+            public List<MetricAnomaly> Anomalies { get; set; } = new List<MetricAnomaly>();
             public DateTime DetectionTimestamp { get; set; }
         }
 
         public class MetricAnomaly
         {
-            public string MetricName { get; set; }
+            public string MetricName { get; set; } = string.Empty;
             public DateTime Timestamp { get; set; }
             public double Value { get; set; }
             public double ExpectedValue { get; set; }
             public double AnomalyScore { get; set; }
-            public string Type { get; set; }
-            public string Severity { get; set; }
+            public string Type { get; set; } = string.Empty;
+            public string Severity { get; set; } = string.Empty;
         }
 
         public class MetricTrends
         {
-            public Dictionary<string, TrendAnalysis> Trends { get; set; }
+            public Dictionary<string, TrendAnalysis> Trends { get; set; } = new Dictionary<string, TrendAnalysis>();
             public DateTime AnalysisTimestamp { get; set; }
             public TimeSpan LookbackPeriod { get; set; }
         }
 
         public class TrendAnalysis
         {
-            public string Direction { get; set; }
+            public string Direction { get; set; } = string.Empty;
             public double Strength { get; set; }
             public double Slope { get; set; }
             public double StartValue { get; set; }
@@ -759,27 +759,27 @@ namespace AiDotNet.ProductionMonitoring
             public DateTime ExportTimestamp { get; set; }
             public DateTime StartTime { get; set; }
             public DateTime EndTime { get; set; }
-            public Dictionary<string, List<MetricDataPoint>> Metrics { get; set; }
+            public Dictionary<string, List<MetricDataPoint>> Metrics { get; set; } = new Dictionary<string, List<MetricDataPoint>>();
             public int TotalDataPoints { get; set; }
         }
 
         public class MetricsDashboard
         {
             public DateTime Timestamp { get; set; }
-            public List<MetricSummary> MetricSummaries { get; set; }
-            public Dictionary<string, double> HealthIndicators { get; set; }
-            public List<string> RecentAlerts { get; set; }
+            public List<MetricSummary> MetricSummaries { get; set; } = new List<MetricSummary>();
+            public Dictionary<string, double> HealthIndicators { get; set; } = new Dictionary<string, double>();
+            public List<string> RecentAlerts { get; set; } = new List<string>();
         }
 
         public class MetricSummary
         {
-            public string MetricName { get; set; }
+            public string MetricName { get; set; } = string.Empty;
             public double CurrentValue { get; set; }
             public double Average { get; set; }
             public double Min { get; set; }
             public double Max { get; set; }
-            public string Trend { get; set; }
-            public string Unit { get; set; }
+            public string Trend { get; set; } = string.Empty;
+            public string Unit { get; set; } = string.Empty;
         }
     }
 }

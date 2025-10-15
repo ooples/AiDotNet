@@ -30,6 +30,14 @@ public enum OptimizationLevel
     Basic,
 
     /// <summary>
+    /// Level 1 optimization (alias for Basic).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Same as Basic optimization - provides quick improvements.
+    /// </remarks>
+    O1 = Basic,
+
+    /// <summary>
     /// Moderate optimization balancing speed and effort.
     /// </summary>
     /// <remarks>

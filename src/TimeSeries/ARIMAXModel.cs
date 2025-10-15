@@ -38,7 +38,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Options specific to the ARIMAX model including AR order, MA order, differencing order, and exogenous variables count.
     /// </summary>
-    private ARIMAXModelOptions<T> _arimaxOptions;
+    private ARIMAXModelOptions<T> _arimaxOptions = default!;
 
     /// <summary>
     /// Coefficients for the autoregressive (AR) component of the model.
@@ -50,7 +50,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// yesterday's value and the day before's value affect today's prediction.
     /// Larger coefficients mean stronger influence from that time period.
     /// </remarks>
-    private Vector<T> _arCoefficients;
+    private Vector<T> _arCoefficients = default!;
 
     /// <summary>
     /// Coefficients for the moving average (MA) component of the model.
@@ -62,7 +62,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// model learn to adjust future predictions upward. They help the model correct systematic
     /// errors in its forecasts.
     /// </remarks>
-    private Vector<T> _maCoefficients;
+    private Vector<T> _maCoefficients = default!;
 
     /// <summary>
     /// Coefficients for the exogenous variables in the model.
@@ -74,7 +74,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// its coefficient might be negative for a workplace attendance model (fewer people come to work on holidays)
     /// or positive for a retail sales model (more people shop on holidays).
     /// </remarks>
-    private Vector<T> _exogenousCoefficients;
+    private Vector<T> _exogenousCoefficients = default!;
 
     /// <summary>
     /// Stores values needed to reverse the differencing operation during prediction.
@@ -89,7 +89,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// To convert predictions back to the original scale, we need to "undo" this differencing,
     /// and these stored values help with that process.
     /// </remarks>
-    private Vector<T> _differenced;
+    private Vector<T> _differenced = default!;
 
     /// <summary>
     /// The constant term (intercept) in the ARIMAX equation.
@@ -101,7 +101,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// 
     /// If all other factors were zero, the prediction would equal this intercept value.
     /// </remarks>
-    private T _intercept;
+    private T _intercept = default!;
 
     /// <summary>
     /// Creates a new ARIMAX model with the specified options.
@@ -691,7 +691,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the ARIMAX model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method provides important information about the ARIMAX model
@@ -706,11 +706,11 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// transferring the model's knowledge to other systems.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var arimaxOptions = (ARIMAXModelOptions<T>)Options;
     
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ARIMAXModel,
             AdditionalInfo = new Dictionary<string, object>

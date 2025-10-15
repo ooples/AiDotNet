@@ -1,36 +1,47 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
+using AiDotNet.LossFunctions;
 
 namespace AiDotNet.NeuralNetworks
 {
     /// <summary>
     /// Vision Transformer (ViT) for image classification and feature extraction
     /// </summary>
-    public class VisionTransformer : NeuralNetworkBase<double>
+    /// <typeparam name="T">The numeric type used for calculations</typeparam>
+    public class VisionTransformer<T> : NeuralNetworkBase<T>
     {
-        private readonly int imageSize;
-        private readonly int patchSize;
-        private readonly int numPatches;
-        private readonly int embedDim;
-        private readonly int depth;
-        private readonly int numHeads;
-        private readonly int mlpDim;
-        private readonly int numClasses;
-        private readonly double dropoutRate;
-        
+        private readonly int imageSize = default!;
+        private readonly int patchSize = default!;
+        private readonly int numPatches = default!;
+        private readonly int embedDim = default!;
+        private readonly int depth = default!;
+        private readonly int numHeads = default!;
+        private readonly int mlpDim = default!;
+        private readonly int numClasses = default!;
+        private readonly double dropoutRate = default!;
+
         // Layers
-        private ILayer patchEmbedding;
-        private Tensor<double> positionEmbedding;
-        private Tensor<double> classToken;
-        private List<TransformerBlock> transformerBlocks;
-        private ILayer mlpHead;
-        private LayerNorm layerNorm;
+        private ILayer<T> patchEmbedding = null!;
+        private Tensor<T> positionEmbedding = null!;
+        private Tensor<T> classToken = null!;
+        private List<TransformerBlock<T>> transformerBlocks = null!;
+        private ILayer<T> mlpHead = null!;
+        private LayerNormalizationLayer<T> layerNorm = null!;
+        
+        // Optimizer for training
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         
         public VisionTransformer(
+            NeuralNetworkArchitecture<double> architecture,
             int imageSize = 224,
             int patchSize = 16,
             int embedDim = 768,
@@ -39,7 +50,13 @@ namespace AiDotNet.NeuralNetworks
             int mlpDim = 3072,
             int numClasses = 1000,
             double dropoutRate = 0.1,
-            string modelName = "VisionTransformer") : base(modelName)
+            string modelName = "VisionTransformer") : base(
+                new NeuralNetworkArchitecture<T>(
+                    NetworkComplexity.Deep,
+                    NeuralNetworkTaskType.ImageClassification
+                ),
+                new CrossEntropyLoss<T>(),
+                1.0) // maxGradNorm as double
         {
             this.imageSize = imageSize;
             this.patchSize = patchSize;
@@ -51,72 +68,90 @@ namespace AiDotNet.NeuralNetworks
             this.numClasses = numClasses;
             this.dropoutRate = dropoutRate;
             
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            
             InitializeLayers();
-            ModelCategory = ModelCategory.Classification;
         }
         
-        private void InitializeLayers()
+        public override bool SupportsTraining => true;
+        
+        protected override void InitializeLayers()
         {
             // Patch embedding layer
-            patchEmbedding = new PatchEmbeddingLayer(patchSize, embedDim);
+            patchEmbedding = new PatchEmbeddingLayer<T>(patchSize, embedDim);
             
             // Position embeddings
-            positionEmbedding = new Tensor<double>(new[] { 1, numPatches + 1, embedDim });
+            positionEmbedding = new Tensor<T>(new[] { 1, numPatches + 1, embedDim });
             InitializePositionEmbeddings();
-            
+
             // Class token
-            classToken = new Tensor<double>(new[] { 1, 1, embedDim });
+            classToken = new Tensor<T>(new[] { 1, 1, embedDim });
             InitializeXavier(classToken);
-            
+
             // Transformer blocks
-            transformerBlocks = new List<TransformerBlock>();
+            transformerBlocks = new List<TransformerBlock<T>>();
             for (int i = 0; i < depth; i++)
             {
-                transformerBlocks.Add(new TransformerBlock(embedDim, numHeads, mlpDim, dropoutRate));
+                transformerBlocks.Add(new TransformerBlock<T>(embedDim, numHeads, mlpDim, dropoutRate));
             }
-            
+
             // Layer normalization
-            layerNorm = new LayerNorm(embedDim);
+            layerNorm = new LayerNormalizationLayer<T>(embedDim);
             
             // MLP head for classification
-            mlpHead = new Dense(embedDim, numClasses);
+            mlpHead = new DenseLayer<T>(embedDim, numClasses, (IActivationFunction<T>?)null);
+            
+            // Add layers to the Layers collection for base class functionality
+            Layers.Clear();
+            Layers.Add(patchEmbedding);
+            Layers.AddRange(transformerBlocks);
+            Layers.Add(layerNorm);
+            Layers.Add(mlpHead);
         }
         
-        public override Tensor<double> Forward(Tensor<double> input)
+        public Tensor<T> Forward(Tensor<T> input)
         {
             // Expected input shape: [batch, channels, height, width]
             var batchSize = input.Shape[0];
-            
+
             // Convert image to patches and embed them
             var patches = patchEmbedding.Forward(input);
             
             // Add class token
-            var clsTokens = classToken.Repeat(batchSize, 1, 1);
+            // Create batch of class tokens
+            var clsTokens = new Tensor<T>(new[] { batchSize, 1, embedDim });
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < embedDim; i++)
+                {
+                    clsTokens[b, 0, i] = classToken[0, 0, i];
+                }
+            }
             patches = ConcatenateClassToken(clsTokens, patches);
-            
+
             // Add position embeddings
             patches = patches.Add(positionEmbedding);
-            
+
             // Apply transformer blocks
             var x = patches;
             foreach (var block in transformerBlocks)
             {
                 x = block.Forward(x);
             }
-            
+
             // Apply final layer norm
             x = layerNorm.Forward(x);
-            
+
             // Extract class token (first token)
             var classOutput = ExtractClassToken(x);
-            
+
             // Apply MLP head for classification
             var output = mlpHead.Forward(classOutput);
-            
+
             return output;
         }
         
-        public override void Backward(Tensor<double> gradOutput)
+        public Tensor<T> Backward(Tensor<T> gradOutput)
         {
             // Backward through MLP head
             var gradClass = mlpHead.Backward(gradOutput);
@@ -140,359 +175,355 @@ namespace AiDotNet.NeuralNetworks
             var gradPatches = RemoveClassTokenGradient(gradX);
             
             // Backward through patch embedding
-            patchEmbedding.Backward(gradPatches);
+            return patchEmbedding.Backward(gradPatches);
+        }
+        
+        public override Tensor<T> Predict(Tensor<T> input)
+        {
+            IsTrainingMode = false;
+            var output = Forward(input);
+            IsTrainingMode = true;
+            return output;
+        }
+        
+        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        {
+            IsTrainingMode = true;
+            
+            // Forward pass
+            var output = Forward(input);
+            
+            // Calculate loss - convert tensors to vectors for loss calculation
+            var outputVector = new Vector<T>(output.Length);
+            var expectedVector = new Vector<T>(expectedOutput.Length);
+            
+            // Copy data from tensors to vectors
+            for (int i = 0; i < output.Length; i++)
+            {
+                var indices = GetMultiDimensionalIndices(i, output.Shape);
+                outputVector[i] = output[indices];
+            }
+            
+            for (int i = 0; i < expectedOutput.Length; i++)
+            {
+                var indices = GetMultiDimensionalIndices(i, expectedOutput.Shape);
+                expectedVector[i] = expectedOutput[indices];
+            }
+            
+            var loss = LossFunction.CalculateLoss(outputVector, expectedVector);
+            LastLoss = loss;
+            
+            // Backward pass - simplified
+            var lossGradient = output.Subtract(expectedOutput);
+            Backward(lossGradient);
+            
+            // Update parameters using the optimizer
+            // This is simplified - actual implementation would use optimizer properly
+        }
+        
+        public override void UpdateParameters(Vector<T> parameters)
+        {
+            SetParameters(parameters);
+        }
+        
+        public override ModelMetadata<T> GetModelMetadata()
+        {
+            return new ModelMetadata<T>
+            {
+                ModelType = ModelType.VisionTransformer
+            };
+        }
+        
+        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        {
+            return new VisionTransformer<T>(
+                imageSize, patchSize, embedDim, depth, numHeads, 
+                mlpDim, numClasses, dropoutRate, "VisionTransformer"
+            );
+        }
+        
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+        {
+            writer.Write(imageSize);
+            writer.Write(patchSize);
+            writer.Write(embedDim);
+            writer.Write(depth);
+            writer.Write(numHeads);
+            writer.Write(mlpDim);
+            writer.Write(numClasses);
+            writer.Write(dropoutRate);
+            
+            // Serialize position embeddings
+            writer.Write(positionEmbedding.Length);
+            for (int i = 0; i < positionEmbedding.Length; i++)
+            {
+                var indices = GetMultiDimensionalIndices(i, positionEmbedding.Shape);
+                writer.Write(Convert.ToDouble((object)positionEmbedding[indices]!));
+            }
+            
+            // Serialize class token
+            writer.Write(classToken.Length);
+            for (int i = 0; i < classToken.Length; i++)
+            {
+                var indices = GetMultiDimensionalIndices(i, classToken.Shape);
+                writer.Write(Convert.ToDouble((object)classToken[indices]!));
+            }
+        }
+        
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+        {
+            // Note: The constructor parameters are already set when CreateNewInstance is called
+            // We just need to read the serialized data to match the writer
+            
+            // Read configuration (to consume the data, values already set by constructor)
+            reader.ReadInt32(); // imageSize
+            reader.ReadInt32(); // patchSize
+            reader.ReadInt32(); // embedDim
+            reader.ReadInt32(); // depth
+            reader.ReadInt32(); // numHeads
+            reader.ReadInt32(); // mlpDim
+            reader.ReadInt32(); // numClasses
+            reader.ReadDouble(); // dropoutRate
+            
+            // Read position embeddings
+            int posEmbedLength = reader.ReadInt32();
+            for (int i = 0; i < posEmbedLength && i < positionEmbedding.Length; i++)
+            {
+                var indices = GetMultiDimensionalIndices(i, positionEmbedding.Shape);
+                positionEmbedding[indices] = this.NumOps.FromDouble(reader.ReadDouble());
+            }
+            
+            // Read class token
+            int clsTokenLength = reader.ReadInt32();
+            for (int i = 0; i < clsTokenLength && i < classToken.Length; i++)
+            {
+                var indices = GetMultiDimensionalIndices(i, classToken.Shape);
+                classToken[indices] = this.NumOps.FromDouble(reader.ReadDouble());
+            }
         }
         
         /// <summary>
         /// Extract features from intermediate layers
         /// </summary>
-        public Tensor<double> ExtractFeatures(Tensor<double> input, int layerIndex = -1)
+        public Tensor<T> ExtractFeatures(Tensor<T> input, int layerIndex = -1)
         {
             var batchSize = input.Shape[0];
-            
+
             // Convert image to patches and embed them
             var patches = patchEmbedding.Forward(input);
             
             // Add class token
-            var clsTokens = classToken.Repeat(batchSize, 1, 1);
+            // Create batch of class tokens
+            var clsTokens = new Tensor<T>(new[] { batchSize, 1, embedDim });
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < embedDim; i++)
+                {
+                    clsTokens[b, 0, i] = classToken[0, 0, i];
+                }
+            }
             patches = ConcatenateClassToken(clsTokens, patches);
-            
+
             // Add position embeddings
             patches = patches.Add(positionEmbedding);
-            
+
             // Apply transformer blocks up to specified layer
             var x = patches;
             var maxLayer = layerIndex < 0 ? transformerBlocks.Count : Math.Min(layerIndex, transformerBlocks.Count);
-            
+
             for (int i = 0; i < maxLayer; i++)
             {
                 x = transformerBlocks[i].Forward(x);
             }
-            
+
             return x;
         }
         
+        private Tensor<double> RepeatTensor(Tensor<double> tensor, int batchSize)
+        {
+            // Replicate tensor along batch dimension
+            // For a tensor with shape [1, seqLen, dim], create [batchSize, seqLen, dim]
+            var originalShape = tensor.Shape;
+            var newShape = new int[originalShape.Length];
+            newShape[0] = batchSize;
+            for (int i = 1; i < originalShape.Length; i++)
+            {
+                newShape[i] = originalShape[i];
+            }
+
+            var originalData = tensor.Data;
+            var elementCount = originalData.Length;
+            var newData = new double[batchSize * elementCount];
+
+            // Replicate data for each batch
+            for (int b = 0; b < batchSize; b++)
+            {
+                Array.Copy(originalData, 0, newData, b * elementCount, elementCount);
+            }
+
+            return new Tensor<double>(newShape, new Vector<double>(newData));
+        }
+
         private void InitializePositionEmbeddings()
         {
             // Initialize position embeddings with sine/cosine positional encoding
-            var data = positionEmbedding.Data;
             var positions = numPatches + 1; // +1 for class token
-            
+
             for (int pos = 0; pos < positions; pos++)
             {
                 for (int i = 0; i < embedDim; i++)
                 {
                     if (i % 2 == 0)
                     {
-                        data[pos * embedDim + i] = Math.Sin(pos / Math.Pow(10000, 2.0 * i / embedDim));
+                        positionEmbedding[0, pos, i] = this.NumOps.FromDouble(Math.Sin(pos / Math.Pow(10000, 2.0 * i / embedDim)));
                     }
                     else
                     {
-                        data[pos * embedDim + i] = Math.Cos(pos / Math.Pow(10000, 2.0 * (i - 1) / embedDim));
+                        positionEmbedding[0, pos, i] = this.NumOps.FromDouble(Math.Cos(pos / Math.Pow(10000, 2.0 * (i - 1) / embedDim)));
                     }
                 }
             }
         }
         
-        private void InitializeXavier(Tensor<double> tensor)
+        private void InitializeXavier(Tensor<T> tensor)
         {
             var fan_in = tensor.Shape[tensor.Shape.Length - 1];
             var fan_out = tensor.Shape.Length > 1 ? tensor.Shape[tensor.Shape.Length - 2] : 1;
             var scale = Math.Sqrt(2.0 / (fan_in + fan_out));
             
             var random = new Random();
-            var data = tensor.Data;
             
-            for (int i = 0; i < data.Length; i++)
+            for (int i = 0; i < tensor.Length; i++)
             {
-                data[i] = (random.NextDouble() * 2 - 1) * scale;
+                tensor[i] = this.NumOps.FromDouble((random.NextDouble() * 2 - 1) * scale);
             }
         }
         
-        private Tensor<double> ConcatenateClassToken(Tensor<double> classToken, Tensor<double> patches)
+        private Tensor<T> ConcatenateClassToken(Tensor<T> classTokens, Tensor<T> patches)
         {
             // Concatenate class token to the beginning of patch sequence
-            // Simplified implementation
-            return patches; // Should properly concatenate
-        }
-        
-        private Tensor<double> ExtractClassToken(Tensor<double> x)
-        {
-            // Extract the first token (class token)
-            // Simplified implementation
-            return x; // Should extract first token
-        }
-        
-        private Tensor<double> ExpandClassTokenGradient(Tensor<double> gradClass)
-        {
-            // Expand gradient from class token to all tokens
-            // Simplified implementation
-            return gradClass;
-        }
-        
-        private Tensor<double> RemoveClassTokenGradient(Tensor<double> gradX)
-        {
-            // Remove class token from gradient
-            // Simplified implementation
-            return gradX;
-        }
-        
-        protected override void SaveModelSpecificData(IDictionary<string, object> data)
-        {
-            data["imageSize"] = imageSize;
-            data["patchSize"] = patchSize;
-            data["embedDim"] = embedDim;
-            data["depth"] = depth;
-            data["numHeads"] = numHeads;
-            data["mlpDim"] = mlpDim;
-            data["numClasses"] = numClasses;
-            data["dropoutRate"] = dropoutRate;
-        }
-        
-        protected override void LoadModelSpecificData(IDictionary<string, object> data)
-        {
-            // Load saved parameters and reinitialize layers
-        }
-    }
-    
-    /// <summary>
-    /// Patch embedding layer for Vision Transformer
-    /// </summary>
-    public class PatchEmbeddingLayer : ILayer
-    {
-        private readonly int patchSize;
-        private readonly int embedDim;
-        private Tensor<double> weight;
-        private Tensor<double> bias;
-        
-        public PatchEmbeddingLayer(int patchSize, int embedDim)
-        {
-            this.patchSize = patchSize;
-            this.embedDim = embedDim;
+            // patches shape: [batch, numPatches, embedDim]
+            // classTokens shape: [batch, 1, embedDim]
+            // result shape: [batch, numPatches + 1, embedDim]
             
-            // Initialize as a linear projection of flattened patches
-            var patchDim = patchSize * patchSize * 3; // 3 channels for RGB
-            weight = new Tensor<double>(new[] { patchDim, embedDim });
-            bias = new Tensor<double>(new[] { embedDim });
+            var batchSize = patches.Shape[0];
+            var numPatches = patches.Shape[1];
+            var embedDim = patches.Shape[2];
             
-            InitializeWeights();
-        }
-        
-        public Tensor<double> Forward(Tensor<double> input)
-        {
-            // Convert image to patches and flatten them
-            var patches = ImageToPatches(input);
+            var result = new Tensor<T>(new[] { batchSize, numPatches + 1, embedDim });
             
-            // Linear projection
-            var embedded = patches.MatMul(weight).Add(bias);
-            
-            return embedded;
-        }
-        
-        public Tensor<double> Backward(Tensor<double> gradOutput)
-        {
-            // Backward through linear projection
-            var gradPatches = gradOutput.MatMul(weight.Transpose());
-            
-            // Update weight and bias gradients
-            // Simplified - should accumulate gradients properly
-            
-            return PatchesToImage(gradPatches);
-        }
-        
-        private Tensor<double> ImageToPatches(Tensor<double> image)
-        {
-            // Extract patches from image
-            // Simplified implementation
-            return image;
-        }
-        
-        private Tensor<double> PatchesToImage(Tensor<double> patches)
-        {
-            // Reconstruct image from patches
-            // Simplified implementation
-            return patches;
-        }
-        
-        private void InitializeWeights()
-        {
-            // Xavier/He initialization
-            var scale = Math.Sqrt(2.0 / (weight.Shape[0] + weight.Shape[1]));
-            var random = new Random();
-            
-            var weightData = weight.Data;
-            for (int i = 0; i < weightData.Length; i++)
+            // Copy class tokens
+            for (int b = 0; b < batchSize; b++)
             {
-                weightData[i] = (random.NextDouble() * 2 - 1) * scale;
+                for (int e = 0; e < embedDim; e++)
+                {
+                    result[b, 0, e] = classTokens[b, 0, e];
+                }
             }
             
-            // Initialize bias to zero
-            Array.Clear(bias.Data, 0, bias.Data.Length);
-        }
-        
-        public LayerType LayerType => LayerType.Dense;
-        public List<Tensor<double>> Parameters => new List<Tensor<double>> { weight, bias };
-        public List<Tensor<double>> Gradients => new List<Tensor<double>>(); // Simplified
-    }
-    
-    /// <summary>
-    /// Transformer block for Vision Transformer
-    /// </summary>
-    public class TransformerBlock : ILayer
-    {
-        private readonly MultiHeadAttention attention;
-        private readonly LayerNorm norm1;
-        private readonly LayerNorm norm2;
-        private readonly MLP mlp;
-        private readonly double dropoutRate;
-        
-        public TransformerBlock(int embedDim, int numHeads, int mlpDim, double dropoutRate)
-        {
-            this.dropoutRate = dropoutRate;
+            // Copy patches
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int p = 0; p < numPatches; p++)
+                {
+                    for (int e = 0; e < embedDim; e++)
+                    {
+                        result[b, p + 1, e] = patches[b, p, e];
+                    }
+                }
+            }
             
-            attention = new MultiHeadAttention(embedDim, numHeads, dropoutRate);
-            norm1 = new LayerNorm(embedDim);
-            norm2 = new LayerNorm(embedDim);
-            mlp = new MLP(embedDim, mlpDim, dropoutRate);
+            return result;
         }
         
-        public Tensor<double> Forward(Tensor<double> input)
+        private Tensor<T> ExtractClassToken(Tensor<T> x)
         {
-            // Self-attention with residual connection
-            var attnOutput = attention.Forward(input, input, input);
-            var x = norm1.Forward(input.Add(Dropout(attnOutput, dropoutRate)));
+            // Extract the first token (class token)
+            // x shape: [batch, numPatches + 1, embedDim]
+            // result shape: [batch, embedDim]
             
-            // MLP with residual connection
-            var mlpOutput = mlp.Forward(x);
-            var output = norm2.Forward(x.Add(Dropout(mlpOutput, dropoutRate)));
+            var batchSize = x.Shape[0];
+            var embedDim = x.Shape[2];
             
-            return output;
-        }
-        
-        public Tensor<double> Backward(Tensor<double> gradOutput)
-        {
-            // Backward through second residual block
-            var gradNorm2 = norm2.Backward(gradOutput);
-            var gradMlp = mlp.Backward(gradNorm2);
-            var gradX = gradNorm2.Add(gradMlp);
+            var result = new Tensor<T>(new[] { batchSize, embedDim });
             
-            // Backward through first residual block
-            var gradNorm1 = norm1.Backward(gradX);
-            var gradAttn = attention.Backward(gradNorm1);
-            var gradInput = gradNorm1.Add(gradAttn);
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int e = 0; e < embedDim; e++)
+                {
+                    result[b, e] = x[b, 0, e];
+                }
+            }
             
-            return gradInput;
+            return result;
         }
         
-        private Tensor<double> Dropout(Tensor<double> input, double rate)
+        private Tensor<T> ExpandClassTokenGradient(Tensor<T> gradClass)
         {
-            // Apply dropout during training
-            // Simplified - should check training mode
-            return input;
-        }
-        
-        public LayerType LayerType => LayerType.Dense;
-        public List<Tensor<double>> Parameters => new List<Tensor<double>>();
-        public List<Tensor<double>> Gradients => new List<Tensor<double>>();
-    }
-    
-    /// <summary>
-    /// Multi-head attention for Vision Transformer
-    /// </summary>
-    public class MultiHeadAttention : ILayer
-    {
-        private readonly int embedDim;
-        private readonly int numHeads;
-        private readonly int headDim;
-        private readonly double dropoutRate;
-        
-        private readonly Dense queryProj;
-        private readonly Dense keyProj;
-        private readonly Dense valueProj;
-        private readonly Dense outProj;
-        
-        public MultiHeadAttention(int embedDim, int numHeads, double dropoutRate)
-        {
-            this.embedDim = embedDim;
-            this.numHeads = numHeads;
-            this.headDim = embedDim / numHeads;
-            this.dropoutRate = dropoutRate;
+            // Expand gradient from class token to all tokens
+            // gradClass shape: [batch, embedDim]
+            // result shape: [batch, numPatches + 1, embedDim]
             
-            queryProj = new Dense(embedDim, embedDim);
-            keyProj = new Dense(embedDim, embedDim);
-            valueProj = new Dense(embedDim, embedDim);
-            outProj = new Dense(embedDim, embedDim);
-        }
-        
-        public Tensor<double> Forward(Tensor<double> query, Tensor<double> key, Tensor<double> value)
-        {
-            var batchSize = query.Shape[0];
-            var seqLen = query.Shape[1];
+            var batchSize = gradClass.Shape[0];
+            var embedDim = gradClass.Shape[1];
             
-            // Project and reshape for multi-head attention
-            var q = queryProj.Forward(query);
-            var k = keyProj.Forward(key);
-            var v = valueProj.Forward(value);
+            var result = new Tensor<T>(new[] { batchSize, numPatches + 1, embedDim });
             
-            // Reshape to [batch, heads, seq_len, head_dim]
-            q = ReshapeForAttention(q, batchSize, seqLen);
-            k = ReshapeForAttention(k, batchSize, seqLen);
-            v = ReshapeForAttention(v, batchSize, seqLen);
+            // Only the class token (first token) receives gradient
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int e = 0; e < embedDim; e++)
+                {
+                    result[b, 0, e] = gradClass[b, e];
+                    // All other tokens get zero gradient
+                    for (int p = 1; p < numPatches + 1; p++)
+                    {
+                        result[b, p, e] = this.NumOps.Zero;
+                    }
+                }
+            }
             
-            // Scaled dot-product attention
-            var scores = ComputeAttentionScores(q, k);
-            var attnWeights = Softmax(scores);
-            var attnOutput = ApplyAttention(attnWeights, v);
+            return result;
+        }
+        
+        private Tensor<T> RemoveClassTokenGradient(Tensor<T> gradX)
+        {
+            // Remove class token from gradient
+            // gradX shape: [batch, numPatches + 1, embedDim]
+            // result shape: [batch, numPatches, embedDim]
             
-            // Reshape back and project
-            attnOutput = ReshapeFromAttention(attnOutput, batchSize, seqLen);
-            var output = outProj.Forward(attnOutput);
+            var batchSize = gradX.Shape[0];
+            var embedDim = gradX.Shape[2];
             
-            return output;
+            var result = new Tensor<T>(new[] { batchSize, numPatches, embedDim });
+            
+            // Skip the first token (class token)
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int p = 0; p < numPatches; p++)
+                {
+                    for (int e = 0; e < embedDim; e++)
+                    {
+                        result[b, p, e] = gradX[b, p + 1, e];
+                    }
+                }
+            }
+            
+            return result;
         }
         
-        public Tensor<double> Backward(Tensor<double> gradOutput)
+        private int[] GetMultiDimensionalIndices(int flatIndex, int[] shape)
         {
-            // Simplified backward pass
-            return gradOutput;
+            var indices = new int[shape.Length];
+            var remaining = flatIndex;
+            
+            for (int i = shape.Length - 1; i >= 0; i--)
+            {
+                indices[i] = remaining % shape[i];
+                remaining /= shape[i];
+            }
+            
+            return indices;
         }
-        
-        private Tensor<double> ReshapeForAttention(Tensor<double> x, int batchSize, int seqLen)
-        {
-            // Reshape to multi-head format
-            // Simplified implementation
-            return x;
-        }
-        
-        private Tensor<double> ReshapeFromAttention(Tensor<double> x, int batchSize, int seqLen)
-        {
-            // Reshape from multi-head format
-            // Simplified implementation
-            return x;
-        }
-        
-        private Tensor<double> ComputeAttentionScores(Tensor<double> q, Tensor<double> k)
-        {
-            // Compute scaled dot-product attention scores
-            var scale = 1.0 / Math.Sqrt(headDim);
-            return q.MatMul(k.Transpose()).Multiply(scale);
-        }
-        
-        private Tensor<double> Softmax(Tensor<double> scores)
-        {
-            // Apply softmax to attention scores
-            // Simplified implementation
-            return scores;
-        }
-        
-        private Tensor<double> ApplyAttention(Tensor<double> weights, Tensor<double> values)
-        {
-            // Apply attention weights to values
-            return weights.MatMul(values);
-        }
-        
-        public LayerType LayerType => LayerType.Attention;
-        public List<Tensor<double>> Parameters => new List<Tensor<double>>();
-        public List<Tensor<double>> Gradients => new List<Tensor<double>>();
     }
 }

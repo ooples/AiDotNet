@@ -174,7 +174,7 @@ public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
     /// <summary>
     /// Gets metadata about the algorithm and its current state.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the algorithm.</returns>
+    /// <returns>A ModelMetadata object containing information about the algorithm.</returns>
     /// <remarks>
     /// <para>
     /// This method extends the base implementation to include steady-state-specific information
@@ -192,7 +192,7 @@ public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
     /// for future reference or comparison with other approaches.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetMetaData()
+    public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
         metadata.ModelType = ModelType.GeneticAlgorithmRegression;

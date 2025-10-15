@@ -28,11 +28,11 @@
 /// </remarks>
 public class CTCLoss<T> : ISequenceLossFunction<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     private readonly int _blankIndex;
     private readonly bool _inputsAreLogProbs;
-    private readonly T _logZero;
-    private readonly T _epsilon;
+    private readonly T _logZero = default!;
+    private readonly T _epsilon = default!;
 
     /// <summary>
     /// Initializes a new instance of the CTCLoss class.
@@ -447,7 +447,7 @@ public class CTCLoss<T> : ISequenceLossFunction<T>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class CTCLossAdapter<T> : LossFunctionBase<T>
 {
-    private readonly CTCLoss<T> _ctcLoss;
+    private readonly CTCLoss<T> _ctcLoss = default!;
     private readonly int _numClasses;
 
     /// <summary>

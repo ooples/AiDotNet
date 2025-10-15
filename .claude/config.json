@@ -1,0 +1,217 @@
+{
+    "mcpServers":  {
+                       "supabase":  {
+                                        "command":  "npx",
+                                        "args":  [
+                                                     "-y",
+                                                     "@supabase/mcp-server-supabase@latest",
+                                                     "--project-ref=ussfwziaarnghjkxbqge"
+                                                 ],
+                                        "env":  {
+                                                    "SUPABASE_ACCESS_TOKEN":  "REDACTED"
+                                                }
+                                    },
+                       "typescript-mcp":  {
+                                              "command":  "npx",
+                                              "args":  [
+                                                           "-y",
+                                                           "typescript-mcp"
+                                                       ],
+                                              "env":  {
+
+                                                      }
+                                          },
+                       "ambiance":  {
+                                        "command":  "node",
+                                        "args":  [
+                                                     "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\@jackjackstudios\\ambiance-mcp\\dist\\src\\index.js"
+                                                 ],
+                                        "env":  {
+                                                    "WORKSPACE_FOLDER":  "C:\\Users\\yolan\\source\\repos",
+                                                    "USE_LOCAL_EMBEDDINGS":  "true"
+                                                }
+                                    },
+                       "git":  {
+                                   "command":  "node",
+                                   "args":  [
+                                                "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\@cyanheads\\git-mcp-server\\dist\\index.js"
+                                            ],
+                                   "env":  {
+
+                                           }
+                               },
+                       "openapi":  {
+                                       "command":  "C:\\Users\\yolan\\source\\repos\\openapi-mcp\\bin\\openapi-mcp.exe",
+                                       "args":  [
+                                                    "C:\\Users\\yolan\\source\\repos\\CrowdTrainer\\public\\api\\openapi.json"
+                                                ],
+                                       "env":  {
+
+                                               }
+                                   },
+                       "github":  {
+                                      "command":  "node",
+                                      "args":  [
+                                                   "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\github-mcp-server\\dist\\index.js"
+                                               ],
+                                      "env":  {
+                                                  "GITHUB_PERSONAL_ACCESS_TOKEN":  "REDACTED"
+                                              }
+                                  },
+                       "console-automation":  {
+                                                  "command":  "node",
+                                                  "args":  [
+                                                               "C:\\Users\\yolan\\source\\repos\\mcp-console-automation\\dist\\mcp\\server.js"
+                                                           ],
+                                                  "env":  {
+                                                              "LOG_LEVEL":  "info",
+                                                              "NODE_ENV":  "production",
+                                                              "NODE_OPTIONS":  "--max-old-space-size=4096"
+                                                          }
+                                              },
+                       "memory":  {
+                                      "command":  "node",
+                                      "args":  [
+                                                   "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\@modelcontextprotocol\\server-memory\\dist\\index.js"
+                                               ],
+                                      "env":  {
+
+                                              }
+                                  },
+                       "sequential-thinking":  {
+                                                   "command":  "node",
+                                                   "args":  [
+                                                                "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\@modelcontextprotocol\\server-sequential-thinking\\dist\\index.js"
+                                                            ],
+                                                   "env":  {
+
+                                                           }
+                                               },
+                       "playwright":  {
+                                          "type":  "stdio",
+                                          "command":  "node",
+                                          "args":  [
+                                                       "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\@playwright\\mcp\\cli.js"
+                                                   ],
+                                          "env":  {
+
+                                                  }
+                                      },
+                       "filesystem":  {
+                                          "command":  "node",
+                                          "args":  [
+                                                       "--max-old-space-size=8192",
+                                                       "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\@modelcontextprotocol\\server-filesystem\\dist\\index.js",
+                                                       "C:\\Users\\yolan\\source\\repos\\CrowdTrainer"
+                                                   ],
+                                          "env":  {
+                                                      "NODE_OPTIONS":  "--max-old-space-size=8192"
+                                                  }
+                                      },
+                       "database-postgresql":  {
+                                                   "command":  "npx",
+                                                   "args":  [
+                                                                "-y",
+                                                                "@henkey/postgres-mcp-server",
+                                                                "--connection-string",
+                                                                "postgresql://monitoring:monitoring_password@localhost:5432/monitoring_service"
+                                                            ],
+                                                   "env":  {
+
+                                                           }
+                                               },
+                       "puppeteer":  {
+                                         "command":  "node",
+                                         "args":  [
+                                                      "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\puppeteer-mcp-server\\dist\\index.js"
+                                                  ],
+                                         "env":  {
+                                                     "PUPPETEER_HEADLESS":  "false"
+                                                 }
+                                     },
+                       "firecrawl":  {
+                                         "command":  "node",
+                                         "args":  [
+                                                      "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\firecrawl-mcp\\dist\\index.js"
+                                                  ],
+                                         "env":  {
+                                                     "FIRECRAWL_API_KEY":  "your-api-key-here"
+                                                 }
+                                     },
+                       "azure":  {
+                                     "command":  "node",
+                                     "args":  [
+                                                  "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\@azure\\mcp\\dist\\index.js"
+                                              ],
+                                     "env":  {
+                                                 "AZURE_SUBSCRIPTION_ID":  "your-subscription-id",
+                                                 "AZURE_TENANT_ID":  "your-tenant-id",
+                                                 "AZURE_CLIENT_ID":  "your-client-id",
+                                                 "AZURE_CLIENT_SECRET":  "your-client-secret"
+                                             }
+                                 },
+                       "vercel":  {
+                                      "type":  "http",
+                                      "url":  "https://mcp.vercel.com"
+                                  },
+                       "sentry":  {
+                                      "type":  "stdio",
+                                      "command":  "node",
+                                      "args":  [
+                                                   "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\@sentry\\mcp-server\\dist\\index.js",
+                                                   "--access-token=REDACTED",
+                                                   "--url=https://sentry.io"
+                                               ],
+                                      "env":  {
+
+                                              }
+                                  },
+                       "office-word":  {
+                                           "command":  "C:\\Users\\yolan\\AppData\\Roaming\\Python\\Python313\\Scripts\\word_mcp_server.exe",
+                                           "args":  [
+
+                                                    ],
+                                           "env":  {
+
+                                                   }
+                                       },
+                       "figma":  {
+                                     "command":  "node",
+                                     "args":  [
+                                                  "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\figma-developer-mcp\\dist\\index.js"
+                                              ],
+                                     "env":  {
+                                                 "FIGMA_API_TOKEN":  "your-figma-api-token-here"
+                                             }
+                                 },
+                       "claude-test":  {
+                                           "command":  "node",
+                                           "args":  [
+                                                        "C:\\Users\\yolan\\AppData\\Roaming\\npm\\node_modules\\claude-test\\bin\\claude-test.js"
+                                                    ],
+                                           "env":  {
+
+                                                   }
+                                       },
+                       "nx-mcp":  {
+                                      "command":  "npx",
+                                      "args":  [
+                                                   "-y",
+                                                   "nx-mcp@latest"
+                                               ],
+                                      "env":  {
+
+                                              }
+                                  },
+                       "eslint":  {
+                                      "command":  "npx",
+                                      "args":  [
+                                                   "-y",
+                                                   "@eslint/mcp@latest"
+                                               ],
+                                      "env":  {
+
+                                              }
+                                  }
+                   }
+}

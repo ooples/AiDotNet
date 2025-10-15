@@ -265,11 +265,21 @@ public class ErrorStats<T> : StatisticsBase<T>
     /// For Beginners:
     /// MeanSquaredLogError is useful when you care more about relative errors than absolute ones.
     /// It's calculated by applying logarithms to actual and predicted values before computing MSE.
-    /// 
+    ///
     /// MSLE penalizes underestimation (predicting too low) more heavily than overestimation.
     /// This is useful in scenarios where underestimating would be more problematic, like inventory forecasting.
     /// </remarks>
     public T MeanSquaredLogError => GetMetric(MetricType.MeanSquaredLogError);
+
+    // Backward compatibility aliases for common property names
+    public T Accuracy => GetMetric(MetricType.Accuracy);
+    public T F1Score => GetMetric(MetricType.F1Score);
+    public T Precision => GetMetric(MetricType.Precision);
+    public T Recall => GetMetric(MetricType.Recall);
+    public T AUC => GetMetric(MetricType.AUCROC);
+    public T MeanSquaredError => MSE;
+    public T RootMeanSquaredError => RMSE;
+    public T MeanAbsoluteError => MAE;
 
     #endregion
 
@@ -838,7 +848,7 @@ public class ErrorStats<T> : StatisticsBase<T>
         var result = new Dictionary<string, object>
         {
             ["ModelType"] = ModelType.ToString(),
-            ["Metrics"] = _metrics.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value),
+            ["Metrics"] = System.Linq.Enumerable.ToDictionary(_metrics, kv => kv.Key.ToString(), kv => kv.Value),
             ["ValidMetrics"] = _validMetrics.Select(m => m.ToString()).ToArray(),
             ["CalculatedMetrics"] = _calculatedMetrics.Select(m => m.ToString()).ToArray()
         };

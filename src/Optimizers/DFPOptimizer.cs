@@ -20,22 +20,22 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// <summary>
     /// The options specific to the DFP optimization algorithm.
     /// </summary>
-    private DFPOptimizerOptions<T, TInput, TOutput> _options;
+    private DFPOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// The inverse Hessian matrix approximation used in the DFP algorithm.
     /// </summary>
-    private Matrix<T> _inverseHessian;
+    private Matrix<T> _inverseHessian = default!;
 
     /// <summary>
     /// The gradient from the previous iteration.
     /// </summary>
-    private new Vector<T> _previousGradient;
+    private new Vector<T> _previousGradient = default!;
 
     /// <summary>
     /// The current adaptive learning rate.
     /// </summary>
-    private T _adaptiveLearningRate;
+    private T _adaptiveLearningRate = default!;
 
     /// <summary>
     /// Initializes a new instance of the DFPOptimizer class.

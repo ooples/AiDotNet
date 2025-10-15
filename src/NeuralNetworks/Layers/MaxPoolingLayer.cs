@@ -57,7 +57,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <b>For Beginners:</b> This keeps track of which input value was the maximum in each pooling window.
     /// We need this information during the backward pass to know where to send the gradients.
     /// </remarks>
-    private Tensor<int> _maxIndices;
+    private Tensor<int> _maxIndices = default!;
 
     /// <summary>
     /// Creates a new max pooling layer with the specified parameters.

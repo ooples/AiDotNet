@@ -32,37 +32,37 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Configuration options for the TBATS model.
     /// </summary>
-    private TBATSModelOptions<T> _tbatsOptions;
+    private TBATSModelOptions<T> _tbatsOptions = default!;
 
     /// <summary>
     /// The level component of the time series, representing the current base value.
     /// </summary>
-    private Vector<T> _level;
+    private Vector<T> _level = default!;
 
     /// <summary>
     /// The trend component of the time series, representing the rate of change.
     /// </summary>
-    private Vector<T> _trend;
+    private Vector<T> _trend = default!;
 
     /// <summary>
     /// The seasonal components of the time series, one for each seasonal period.
     /// </summary>
-    private List<Vector<T>> _seasonalComponents;
+    private List<Vector<T>> _seasonalComponents = default!;
 
     /// <summary>
     /// The autoregressive (AR) coefficients for the ARMA error model.
     /// </summary>
-    private Vector<T> _arCoefficients;
+    private Vector<T> _arCoefficients = default!;
 
     /// <summary>
     /// The moving average (MA) coefficients for the ARMA error model.
     /// </summary>
-    private Vector<T> _maCoefficients;
+    private Vector<T> _maCoefficients = default!;
 
     /// <summary>
     /// The Box-Cox transformation parameter for handling non-linearity.
     /// </summary>
-    private T _boxCoxLambda;
+    private T _boxCoxLambda = default!;
 
     /// <summary>
     /// Initializes a new instance of the TBATSModel class with optional configuration options.
@@ -1137,7 +1137,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the model, including its type, configuration, and learned parameters.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns detailed metadata about the model, including its type, configuration options,
@@ -1163,9 +1163,9 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// Think of it like getting a detailed report card for your model.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.TBATSModel,
             AdditionalInfo = new Dictionary<string, object>

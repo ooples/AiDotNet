@@ -20,37 +20,37 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points (independent variable).
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points (dependent variable).
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The constant coefficients of the cubic polynomials (equal to the y values).
     /// </summary>
-    private readonly Vector<T> _a;
+    private readonly Vector<T> _a = default!;
     
     /// <summary>
     /// The coefficients of the linear terms in the cubic polynomials.
     /// </summary>
-    private readonly Vector<T> _b;
+    private readonly Vector<T> _b = default!;
     
     /// <summary>
     /// The coefficients of the quadratic terms in the cubic polynomials.
     /// </summary>
-    private readonly Vector<T> _c;
+    private readonly Vector<T> _c = default!;
     
     /// <summary>
     /// The coefficients of the cubic terms in the cubic polynomials.
     /// </summary>
-    private readonly Vector<T> _d;
+    private readonly Vector<T> _d = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new cubic spline interpolation from the given data points.

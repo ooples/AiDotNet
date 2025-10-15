@@ -44,12 +44,12 @@ public class BSplineKernel<T> : IKernelFunction<T>
     /// A smaller spacing makes the kernel more sensitive to small differences,
     /// while a larger spacing makes it more tolerant of differences.
     /// </remarks>
-    private readonly T _knotSpacing;
+    private readonly T _knotSpacing = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the B-Spline kernel with optional parameters.

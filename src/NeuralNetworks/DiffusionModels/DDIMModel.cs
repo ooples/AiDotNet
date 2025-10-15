@@ -16,13 +16,15 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
         private readonly int samplingSteps; // Can be much less than training timesteps
         
         public DDIMModel(
+            NeuralNetworkArchitecture<double> architecture,
             int timesteps = 1000,
             int samplingSteps = 50,
             double eta = 0.0,
             double betaStart = 0.0001,
             double betaEnd = 0.02,
-            string modelName = "DDIMModel") 
-            : base(timesteps, betaStart, betaEnd, modelName)
+            ILossFunction<double>? lossFunction = null,
+            double maxGradNorm = 1.0)
+            : base(architecture, timesteps, betaStart, betaEnd, lossFunction, maxGradNorm)
         {
             this.samplingSteps = samplingSteps;
             this.eta = eta;
@@ -59,15 +61,16 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
         private Tensor<double> DDIMSampleStep(Tensor<double> x, int t, int tPrev, Random random)
         {
             // Predict noise
-            var predictedNoise = PredictNoise(x, new Tensor<double>(new[] { t }));
-            
+            var timestepTensor = new Tensor<double>(new[] { t });
+            var predictedNoise = PredictNoise(x, timestepTensor);
+
             // Get alpha values
             var alphaCumprod = alphasCumprod[t];
             var alphaCumprodPrev = tPrev > 0 ? alphasCumprod[tPrev] : 1.0;
-            
+
             // Compute x0 prediction
             var x0Pred = x.Subtract(predictedNoise.Multiply(Math.Sqrt(1 - alphaCumprod)))
-                         .Divide(Math.Sqrt(alphaCumprod));
+                         .Multiply(1.0 / Math.Sqrt(alphaCumprod));
             
             // Clip x0 prediction
             x0Pred = ClipTensor(x0Pred, -1.0, 1.0);
@@ -123,11 +126,5 @@ namespace AiDotNet.NeuralNetworks.DiffusionModels
             return clipped;
         }
         
-        protected override void SaveModelSpecificData(IDictionary<string, object> data)
-        {
-            base.SaveModelSpecificData(data);
-            data["eta"] = eta;
-            data["samplingSteps"] = samplingSteps;
-        }
     }
 }

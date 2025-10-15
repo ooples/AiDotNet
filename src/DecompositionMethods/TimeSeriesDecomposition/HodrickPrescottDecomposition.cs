@@ -203,7 +203,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> DiscreteWaveletTransform(Vector<T> data, int levels)
     {
         int n = data.Length;
-        Vector<T> coeffs = data.Clone();
+        Vector<T> coeffs = (Vector<T>)data.Clone();
 
         for (int level = 0; level < levels; level++)
         {
@@ -236,7 +236,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> InverseDiscreteWaveletTransform(Vector<T> coeffs, int levels)
     {
         int n = coeffs.Length;
-        Vector<T> data = coeffs.Clone();
+        Vector<T> data = (Vector<T>)coeffs.Clone();
 
         for (int level = levels - 1; level >= 0; level--)
         {

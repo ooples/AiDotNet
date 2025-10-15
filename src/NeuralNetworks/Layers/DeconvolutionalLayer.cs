@@ -53,7 +53,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// are what actually get updated when the network learns.
     /// </para>
     /// </remarks>
-    private Tensor<T> _kernels;
+    private Tensor<T> _kernels = default!;
 
     /// <summary>
     /// The bias values added to the deconvolution results for each output channel.
@@ -74,7 +74,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// or brightness levels.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Vector<T> _biases = default!;
 
     /// <summary>
     /// Stored input data from the most recent forward pass, used for backpropagation.

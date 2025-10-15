@@ -23,12 +23,12 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The first-order polynomial coefficients for each interval.
@@ -36,7 +36,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// <b>For Beginners:</b> These are values that help determine the slope of the curve at each point.
     /// </remarks>
-    private readonly Vector<T> _b;
+    private readonly Vector<T> _b = default!;
     
     /// <summary>
     /// The second-order polynomial coefficients for each interval.
@@ -44,7 +44,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// <b>For Beginners:</b> These values help control how the curve bends between points.
     /// </remarks>
-    private readonly Vector<T> _c;
+    private readonly Vector<T> _c = default!;
     
     /// <summary>
     /// The third-order polynomial coefficients for each interval.
@@ -52,12 +52,12 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// <b>For Beginners:</b> These values help fine-tune the shape of the curve between points.
     /// </remarks>
-    private readonly Vector<T> _d;
+    private readonly Vector<T> _d = default!;
     
     /// <summary>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the AkimaInterpolation class.

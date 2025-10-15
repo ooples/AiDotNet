@@ -37,7 +37,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Options specific to the ARIMA model, including p, d, and q parameters.
     /// </summary>
-    private ARIMAOptions<T> _arimaOptions;
+    private ARIMAOptions<T> _arimaOptions = default!;
 
     /// <summary>
     /// Coefficients for the autoregressive (AR) component of the model.
@@ -48,7 +48,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// For example, if the coefficient for yesterday's value is 0.7, it means yesterday's
     /// value has a strong influence on today's prediction.
     /// </remarks>
-    private Vector<T> _arCoefficients;
+    private Vector<T> _arCoefficients = default!;
 
     /// <summary>
     /// Coefficients for the moving average (MA) component of the model.
@@ -59,7 +59,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// They help the model learn from its mistakes. For example, if the model consistently
     /// underpredicts, these coefficients help correct that bias.
     /// </remarks>
-    private Vector<T> _maCoefficients;
+    private Vector<T> _maCoefficients = default!;
 
     /// <summary>
     /// The constant term in the ARIMA equation.
@@ -69,27 +69,27 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// This is like the "baseline" value in the prediction, before considering the effects
     /// of past values and errors. It's similar to the y-intercept in a linear equation.
     /// </remarks>
-    private T _constant;
+    private T _constant = default!;
 
     /// <summary>
     /// Last values of original time series before differencing, used for undifferencing predictions.
     /// </summary>
-    private Vector<T> _originalLastValues;
+    private Vector<T> _originalLastValues = default!;
 
     /// <summary>
     /// Last values of the differenced series, used for initializing predictions.
     /// </summary>
-    private Vector<T> _lastDiffValues;
+    private Vector<T> _lastDiffValues = default!;
 
     /// <summary>
     /// Last residuals from the AR process, used for initializing MA component.
     /// </summary>
-    private Vector<T> _lastResiduals;
+    private Vector<T> _lastResiduals = default!;
 
     /// <summary>
     /// Coefficients for exogenous variables in the model.
     /// </summary>
-    private Vector<T> _exogCoefficients;
+    private Vector<T> _exogCoefficients = default!;
 
     /// <summary>
     /// Creates a new ARIMA model with the specified options.
@@ -658,7 +658,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the model, including its type, parameters, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// For Beginners:
     /// This method provides a summary of your model's settings and what it has learned.
@@ -674,9 +674,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// - Comparing different models to see which performs best
     /// - Understanding what patterns the model has identified in your data
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ARIMAModel,
             AdditionalInfo = new Dictionary<string, object>

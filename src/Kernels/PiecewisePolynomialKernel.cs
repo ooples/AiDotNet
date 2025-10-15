@@ -53,7 +53,7 @@ public class PiecewisePolynomialKernel<T> : IKernelFunction<T>
     /// Think of it as a "neighborhood radius" - points outside this radius don't influence each other.
     /// The default value is 1.0, but you might want to adjust it based on the scale of your data.
     /// </remarks>
-    private readonly T _c;
+    private readonly T _c = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -63,7 +63,7 @@ public class PiecewisePolynomialKernel<T> : IKernelFunction<T>
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Piecewise Polynomial kernel with optional degree and cutoff parameters.

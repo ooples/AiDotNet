@@ -42,12 +42,12 @@ public class ExponentialKernel<T> : IKernelFunction<T>
     /// 
     /// Adjusting sigma lets you control how "picky" your similarity measure is about distance.
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Exponential kernel with an optional scaling parameter.

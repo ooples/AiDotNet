@@ -37,7 +37,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// These settings can be customized to make the optimizer work better for different types of problems.
     /// </para>
     /// </remarks>
-    private AdaDeltaOptimizerOptions<T, TInput, TOutput> _options;
+    private AdaDeltaOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// Stores the exponential moving average of squared gradients for each parameter.

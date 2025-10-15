@@ -36,10 +36,10 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// <typeparam name="T">The numeric type used for calculations (typically double or float).</typeparam>
     public class HRARLModel<T> : ReinforcementLearningModelBase<T>
     {
-        private readonly HRARLOptions _options;
+        private readonly HRARLOptions _options = default!;
         private HRARLAgent<Tensor<T>, T>? _agent;
         private bool _isInitialized = false;
-        private readonly T _riskAversionParameter;
+        private readonly T _riskAversionParameter = default!;
         private bool _isTrainingMode = true;
         private int _stateDimension;
 
@@ -547,9 +547,9 @@ namespace AiDotNet.ReinforcementLearning.Models
         /// Gets the metadata for this model.
         /// </summary>
         /// <returns>The model metadata.</returns>
-        public override ModelMetaData<T> GetModelMetaData()
+        public override ModelMetadata<T> GetModelMetadata()
         {
-            var metadata = base.GetModelMetaData();
+            var metadata = base.GetModelMetadata();
 
             metadata.ModelType = ModelType.HRARLModel;
             metadata.Description = "A multi-level reinforcement learning model that explicitly considers financial risk";

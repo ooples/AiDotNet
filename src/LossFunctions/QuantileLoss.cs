@@ -27,7 +27,7 @@ public class QuantileLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// The quantile value to estimate (between 0 and 1).
     /// </summary>
-    private readonly T _quantile;
+    private readonly T _quantile = default!;
     
     /// <summary>
     /// Initializes a new instance of the QuantileLoss class.

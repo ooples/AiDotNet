@@ -56,7 +56,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// a cycle component, how many seasonal periods to consider, how many iterations
     /// to run, and whether to optimize the model parameters automatically.
     /// </remarks>
-    private readonly UnobservedComponentsOptions<T, TInput, TOutput> _ucOptions;
+    private readonly UnobservedComponentsOptions<T, TInput, TOutput> _ucOptions = default!;
     
     /// <summary>
     /// The estimated trend component of the time series.
@@ -68,7 +68,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// the data is generally headed over the long run, ignoring seasonal
     /// fluctuations and short-term noise.
     /// </remarks>
-    private Vector<T> _trend;
+    private Vector<T> _trend = default!;
     
     /// <summary>
     /// The previous iteration's trend estimates, used to check for convergence.
@@ -80,7 +80,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// the model can determine if it has "settled down" enough to stop
     /// its calculations (convergence).
     /// </remarks>
-    private Vector<T> _previousTrend;
+    private Vector<T> _previousTrend = default!;
     
     /// <summary>
     /// The original time series data.
@@ -90,7 +90,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// This stores the actual data you're analyzing, like daily sales numbers
     /// or monthly temperature readings.
     /// </remarks>
-    private Vector<T> _y;
+    private Vector<T> _y = default!;
     
     /// <summary>
     /// The estimated seasonal component of the time series.
@@ -102,7 +102,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// energy usage might be higher during summer and winter months.
     /// These patterns repeat at fixed intervals (like weekly, monthly, or yearly).
     /// </remarks>
-    private Vector<T> _seasonal;
+    private Vector<T> _seasonal = default!;
     
     /// <summary>
     /// The estimated cycle component of the time series.
@@ -114,7 +114,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// in duration and intensity. Business cycles or economic booms and busts
     /// are examples of cyclical patterns.
     /// </remarks>
-    private Vector<T> _cycle;
+    private Vector<T> _cycle = default!;
     
     /// <summary>
     /// The estimated irregular component of the time series.
@@ -126,7 +126,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// These might be caused by one-time events, measurement errors, or
     /// truly random variations.
     /// </remarks>
-    private Vector<T> _irregular;
+    private Vector<T> _irregular = default!;
     
     /// <summary>
     /// Fast Fourier Transform utility for frequency analysis.
@@ -138,7 +138,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// how a prism breaks white light into different colors - the FFT helps separate
     /// your time series into different cycle lengths.
     /// </remarks>
-    private readonly FastFourierTransform<T> _fft;
+    private readonly FastFourierTransform<T> _fft = default!;
     
     /// <summary>
     /// The state transition matrix for the Kalman filter.
@@ -150,7 +150,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// rules that tell the model how each component should normally behave over time
     /// if no new information is observed.
     /// </remarks>
-    private Matrix<T> _stateTransition;
+    private Matrix<T> _stateTransition = default!;
     
     /// <summary>
     /// The observation model matrix for the Kalman filter.
@@ -162,7 +162,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// ingredients (components) to mix together and in what proportions to get the
     /// final dish (observed value).
     /// </remarks>
-    private Matrix<T> _observationModel;
+    private Matrix<T> _observationModel = default!;
     
     /// <summary>
     /// The process noise covariance matrix for the Kalman filter.
@@ -174,7 +174,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// the components, making it more responsive to new data but potentially
     /// less smooth.
     /// </remarks>
-    private Matrix<T> _processNoise;
+    private Matrix<T> _processNoise = default!;
     
     /// <summary>
     /// The observation noise variance for the Kalman filter.
@@ -186,7 +186,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// less reliable, putting more weight on its own internal understanding
     /// of how the components should behave.
     /// </remarks>
-    private T _observationNoise;
+    private T _observationNoise = default!;
     
     /// <summary>
     /// The current state vector for the Kalman filter.
@@ -198,7 +198,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// It's like a snapshot of the model's current understanding of what's
     /// happening in your time series.
     /// </remarks>
-    private Vector<T> _state;
+    private Vector<T> _state = default!;
     
     /// <summary>
     /// The current state covariance matrix for the Kalman filter.
@@ -211,7 +211,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// this uncertainty typically decreases as the model becomes more sure
     /// of its estimates.
     /// </remarks>
-    private Matrix<T> _stateCovariance;
+    private Matrix<T> _stateCovariance = default!;
     
     /// <summary>
     /// The threshold for determining when the model has converged.
@@ -222,7 +222,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// changes between consecutive iterations become smaller than this threshold,
     /// the model considers its estimates "good enough" and stops further refinement.
     /// </remarks>
-    private T _convergenceThreshold;
+    private T _convergenceThreshold = default!;
     
     /// <summary>
     /// Collection of filtered state vectors from the Kalman filter.
@@ -233,7 +233,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// using only the data available up to that point. It's like making the
     /// best guess possible at each step without peeking into the future.
     /// </remarks>
-    private List<Vector<T>> _filteredState;
+    private List<Vector<T>> _filteredState = default!;
     
     /// <summary>
     /// Collection of filtered state covariance matrices from the Kalman filter.
@@ -244,7 +244,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// at each time point. These uncertainty measures are crucial for the
     /// smoother, which will later refine these estimates using future information.
     /// </remarks>
-    private List<Matrix<T>> _filteredCovariance;
+    private List<Matrix<T>> _filteredCovariance = default!;
 
     /// <summary>
     /// Creates a new Unobserved Components Model with the specified options.
@@ -1202,7 +1202,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         // Save the original time series data
-        _y = y.Clone();
+        _y = (Vector<T>)y.Clone();
         int n = _y.Length;
     
         if (n < 2)
@@ -1220,7 +1220,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         InitializeComponents(_y);
     
         // Save initial trend estimates for convergence checking
-        _previousTrend = _trend.Clone();
+        _previousTrend = (Vector<T>)_trend.Clone();
     
         // Initialize Kalman filter parameters
         InitializeKalmanParameters();
@@ -1730,10 +1730,10 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     
         Dictionary<string, Vector<T>> components = new Dictionary<string, Vector<T>>
         {
-            ["Trend"] = _trend.Clone(),
-            ["Seasonal"] = _seasonal.Clone(),
-            ["Cycle"] = _cycle.Clone(),
-            ["Irregular"] = _irregular.Clone()
+            ["Trend"] = (Vector<T>)_trend.Clone(),
+            ["Seasonal"] = (Vector<T>)_seasonal.Clone(),
+            ["Cycle"] = (Vector<T>)_cycle.Clone(),
+            ["Irregular"] = (Vector<T>)_irregular.Clone()
         };
     
         return components;
@@ -1785,7 +1785,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// <summary>
     /// Gets metadata about the model, including its type, components, and configuration.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns detailed metadata about the Unobserved Components Model, including its type,
@@ -1809,9 +1809,9 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// - Sharing model information with others
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.UnobservedComponentsModel,
             AdditionalInfo = new Dictionary<string, object>

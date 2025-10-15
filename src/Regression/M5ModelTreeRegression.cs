@@ -47,7 +47,7 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionModelBase<T>
     /// and one that will work well on new, unseen data.
     /// </para>
     /// </remarks>
-    private readonly M5ModelTreeOptions _options;
+    private readonly M5ModelTreeOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="M5ModelTree{T}"/> class with optional custom options and regularization.
@@ -605,9 +605,9 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionModelBase<T>
     /// - Saving important details along with the model
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.M5ModelTree,
             AdditionalInfo = new Dictionary<string, object>

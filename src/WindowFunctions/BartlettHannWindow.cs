@@ -50,7 +50,7 @@ public class BartlettHannWindow<T> : IWindowFunction<T>
     /// If T is a double, the operations will have double precision.
     /// </para>
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BartlettHannWindow{T}"/> class.

@@ -35,7 +35,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The options specific to the Newton's Method optimizer.
     /// </summary>
-    private NewtonMethodOptimizerOptions<T, TInput, TOutput> _newtonOptions;
+    private NewtonMethodOptimizerOptions<T, TInput, TOutput> _newtonOptions = default!;
 
     /// <summary>
     /// The current iteration count of the optimization process.

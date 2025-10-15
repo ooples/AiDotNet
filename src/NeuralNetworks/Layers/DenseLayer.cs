@@ -31,12 +31,12 @@ public class DenseLayer<T> : LayerBase<T>
     /// <summary>
     /// The weights tensor that transforms input features to output features.
     /// </summary>
-    private Tensor<T> _weights;
+    private Tensor<T> _weights = default!;
 
     /// <summary>
     /// The bias tensor added to the weighted sum of inputs.
     /// </summary>
-    private Tensor<T> _biases;
+    private Tensor<T> _biases = default!;
 
     /// <summary>
     /// Gradient of the weights tensor during backpropagation.

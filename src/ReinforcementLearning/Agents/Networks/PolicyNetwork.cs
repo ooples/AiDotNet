@@ -25,13 +25,13 @@ public class PolicyNetwork<T> : NeuralNetworkBase<T>
     private int _stateSize;
     private int _actionSize;
     private bool _continuous;
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     // Output layer reference for easy access
     private FullyConnectedLayer<T>? _discreteOutputLayer; // For discrete actions
     
     // Optimizer for training
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="PolicyNetwork{T}"/> class.
@@ -785,9 +785,9 @@ public class PolicyNetwork<T> : NeuralNetworkBase<T>
         _optimizer.Optimize(optimizationInput);
     }
 
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.NeuralNetwork,
             FeatureCount = _stateSize,

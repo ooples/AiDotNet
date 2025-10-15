@@ -11,16 +11,18 @@ using AiDotNet.Compression.KnowledgeDistillation;
 /// in knowledge distillation.
 /// </para>
 /// <para><b>For Beginners:</b> This marks a model as able to learn from a teacher model.
-/// 
+///
 /// Models that implement this interface know how to:
 /// - Learn from a teacher model's soft targets
 /// - Update their parameters based on distillation loss
 /// - Balance soft targets with hard labels
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
-public interface IDistillableStudent<TInput, TOutput>
+public interface IDistillableStudent<T, TInput, TOutput>
+    where T : unmanaged
 {
     /// <summary>
     /// Learns from teacher outputs and optional hard targets.

@@ -26,7 +26,7 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
     /// including the number of bins used for calibration analysis and thresholds for determining 
     /// different types of model fit.
     /// </remarks>
-    private readonly CalibratedProbabilityFitDetectorOptions _options;
+    private readonly CalibratedProbabilityFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the CalibratedProbabilityFitDetector class.

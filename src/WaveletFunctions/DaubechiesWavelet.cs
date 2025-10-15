@@ -43,7 +43,7 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The order of the Daubechies wavelet.
@@ -53,12 +53,12 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// The scaling function coefficients of the Daubechies wavelet.
     /// </summary>
-    private readonly Vector<T> _scalingCoefficients;
+    private readonly Vector<T> _scalingCoefficients = default!;
     
     /// <summary>
     /// The wavelet function coefficients of the Daubechies wavelet.
     /// </summary>
-    private readonly Vector<T> _waveletCoefficients;
+    private readonly Vector<T> _waveletCoefficients = default!;
 
     /// <summary>
     /// Initializes a new instance of the DaubechiesWavelet class with the specified order.

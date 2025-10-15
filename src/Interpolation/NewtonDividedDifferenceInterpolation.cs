@@ -23,17 +23,17 @@ public class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the known data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The coefficients of the Newton polynomial, calculated from the input data.
     /// </summary>
-    private readonly Vector<T> _coefficients;
+    private readonly Vector<T> _coefficients = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with generic type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NewtonDividedDifferenceInterpolation{T}"/> class.

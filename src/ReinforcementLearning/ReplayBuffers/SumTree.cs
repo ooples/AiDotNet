@@ -16,7 +16,7 @@ namespace AiDotNet.ReinforcementLearning.ReplayBuffers
     {
         private readonly T[] _tree;
         private readonly int _capacity;
-        private readonly INumericOperations<T> _numOps;
+        private readonly INumericOperations<T> _numOps = default!;
 
         /// <summary>
         /// Gets the total sum of all priorities in the tree.

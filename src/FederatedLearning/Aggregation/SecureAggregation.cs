@@ -20,22 +20,22 @@ namespace AiDotNet.FederatedLearning.Aggregation
         /// <summary>
         /// Secure aggregation parameters
         /// </summary>
-        public SecureAggregationParams Parameters { get; set; }
+        public SecureAggregationParams Parameters { get; set; } = new();
 
         /// <summary>
         /// Client public keys for encryption
         /// </summary>
-        private Dictionary<string, byte[]> ClientPublicKeys { get; set; }
+        private Dictionary<string, byte[]> ClientPublicKeys { get; set; } = new();
 
         /// <summary>
         /// Shared secrets between clients
         /// </summary>
-        private Dictionary<string, Dictionary<string, byte[]>> SharedSecrets { get; set; }
+        private Dictionary<string, Dictionary<string, byte[]>> SharedSecrets { get; set; } = new();
 
         /// <summary>
         /// Random number generator for cryptographic operations
         /// </summary>
-        private readonly RandomNumberGenerator _rng;
+        private readonly RandomNumberGenerator _rng = default!;
 
         /// <summary>
         /// Initialize secure aggregation
@@ -445,8 +445,8 @@ namespace AiDotNet.FederatedLearning.Aggregation
     /// </summary>
     public class KeyPair
     {
-        public byte[] PrivateKey { get; set; }
-        public byte[] PublicKey { get; set; }
+        public byte[] PrivateKey { get; set; } = Array.Empty<byte>();
+        public byte[] PublicKey { get; set; } = Array.Empty<byte>();
     }
 
     /// <summary>

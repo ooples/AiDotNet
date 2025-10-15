@@ -28,9 +28,9 @@ namespace AiDotNet.ReinforcementLearning.Policies
         
         private readonly int _stateSize;
         private readonly int _actionSize;
-        private readonly List<LayerBase<T>> _layers;
-        private readonly SoftmaxActivation<T> _softmax;
-        private readonly Random _random;
+        private readonly List<LayerBase<T>> _layers = default!;
+        private readonly SoftmaxActivation<T> _softmax = default!;
+        private readonly Random _random = default!;
 
         /// <summary>
         /// Gets a value indicating whether the policy is stochastic.

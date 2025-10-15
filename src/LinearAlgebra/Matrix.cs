@@ -174,6 +174,18 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Creates a deep copy of this matrix.
+    /// </summary>
+    /// <returns>A new matrix that is a copy of this matrix.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is an alias for Clone() that creates an exact duplicate of the matrix.</para>
+    /// </remarks>
+    public Matrix<T> DeepCopy()
+    {
+        return Clone();
+    }
+
+    /// <summary>
     /// Adds another matrix to this matrix.
     /// </summary>
     /// <param name="other">The matrix to add to this matrix.</param>

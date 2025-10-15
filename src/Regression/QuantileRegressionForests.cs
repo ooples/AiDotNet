@@ -32,7 +32,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionModelBase
     /// <value>
     /// Contains settings like number of trees, maximum depth, minimum samples to split, and maximum features.
     /// </value>
-    private readonly QuantileRegressionForestsOptions _options;
+    private readonly QuantileRegressionForestsOptions _options = default!;
 
     /// <summary>
     /// The collection of decision trees that make up the forest.
@@ -40,7 +40,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionModelBase
     /// <value>
     /// A list of decision tree regression models.
     /// </value>
-    private List<DecisionTreeRegression<T>> _trees;
+    private List<DecisionTreeRegression<T>> _trees = default!;
 
     /// <summary>
     /// Gets the number of trees in the forest.
@@ -276,9 +276,9 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionModelBase
     /// variables are most influential in making predictions.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.QuantileRegressionForests,
             AdditionalInfo = new Dictionary<string, object>

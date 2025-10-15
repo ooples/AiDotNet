@@ -40,7 +40,7 @@ public class KaiserWindow<T> : IWindowFunction<T>
     /// trigonometric functions for the generic numeric type T. It's essential for implementing
     /// the window function's mathematical formula across different numeric types.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The beta parameter that controls the shape of the Kaiser window.
@@ -66,7 +66,7 @@ public class KaiserWindow<T> : IWindowFunction<T>
     /// The default value of 5.0 works well for many applications, offering a good balance.
     /// </para>
     /// </remarks>
-    private readonly T _beta;
+    private readonly T _beta = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="KaiserWindow{T}"/> class with the specified beta value.

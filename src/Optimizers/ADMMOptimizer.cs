@@ -29,7 +29,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// The options specific to the ADMM optimizer.
     /// </summary>
-    private ADMMOptimizerOptions<T, TInput, TOutput> _admmOptions;
+    private ADMMOptimizerOptions<T, TInput, TOutput> _admmOptions = default!;
 
     /// <summary>
     /// The current iteration count.
@@ -39,17 +39,17 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// The regularization method used in the optimization.
     /// </summary>
-    private IRegularization<T, TInput, TOutput> _regularization;
+    private IRegularization<T, TInput, TOutput> _regularization = default!;
 
     /// <summary>
     /// The auxiliary variable in ADMM algorithm.
     /// </summary>
-    private Vector<T> _z;
+    private Vector<T> _z = default!;
 
     /// <summary>
     /// The dual variable in ADMM algorithm.
     /// </summary>
-    private Vector<T> _u;
+    private Vector<T> _u = default!;
 
     /// <summary>
     /// Initializes a new instance of the ADMMOptimizer class.

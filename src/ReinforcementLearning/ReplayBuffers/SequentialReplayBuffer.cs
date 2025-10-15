@@ -37,8 +37,8 @@ namespace AiDotNet.ReinforcementLearning.ReplayBuffers
     {
         private readonly int _capacity;
         private readonly int _maxTrajectoryLength;
-        private readonly Random _random;
-        private readonly INumericOperations<T> _numOps;
+        private readonly Random _random = default!;
+        private readonly INumericOperations<T> _numOps = default!;
         
         // Lists to store experiences by episode
         private readonly List<List<(TState state, TAction action, T reward, TState nextState, bool done)>> _episodes;

@@ -34,17 +34,17 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionModelBase<T>
     /// <summary>
     /// Configuration options for the K-Nearest Neighbors algorithm.
     /// </summary>
-    private readonly KNearestNeighborsOptions _options;
+    private readonly KNearestNeighborsOptions _options = default!;
     
     /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>
-    private Matrix<T> _xTrain;
+    private Matrix<T> _xTrain = default!;
     
     /// <summary>
     /// Vector containing the target values of the training samples.
     /// </summary>
-    private Vector<T> _yTrain;
+    private Vector<T> _yTrain = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="KNearestNeighborsRegression{T}"/> class.
@@ -207,9 +207,9 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionModelBase<T>
             .ToList();
 
         T sum = NumOps.Zero;
-        foreach (var (index, distance) in nearestNeighbors)
+        foreach (var neighbor in nearestNeighbors)
         {
-            sum = NumOps.Add(sum, _yTrain[index]);
+            sum = NumOps.Add(sum, _yTrain[neighbor.Item1]);
         }
 
         return NumOps.Divide(sum, NumOps.FromDouble(_options.K));

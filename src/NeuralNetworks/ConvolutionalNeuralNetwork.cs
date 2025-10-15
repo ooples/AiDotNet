@@ -34,7 +34,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// how far off its predictions are from the correct answers.
     /// </para>
     /// </remarks>
-    private ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction = default!;
 
     /// <summary>
     /// The optimization algorithm used to update the network's parameters during training.
@@ -48,7 +48,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// the network's settings to improve its performance over time.
     /// </para>
     /// </remarks>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer = default!;
 
     /// <summary>
     /// Initializes a new instance of the ConvolutionalNeuralNetwork class.
@@ -322,7 +322,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Retrieves metadata about the convolutional neural network model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the network.</returns>
+    /// <returns>A ModelMetadata object containing information about the network.</returns>
     /// <remarks>
     /// <para>
     /// This method collects and returns various pieces of information about the network's structure and configuration.
@@ -333,9 +333,9 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// the network is set up.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.ConvolutionalNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

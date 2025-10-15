@@ -15,15 +15,15 @@ namespace AiDotNet.Pipeline.Steps
     /// </summary>
     public class CachingStep : PipelineStepBase
     {
-        private readonly Dictionary<string, CacheEntry> _memoryCache;
+        private readonly Dictionary<string, CacheEntry> _memoryCache = default!;
         private readonly string _cacheDirectory;
         private readonly object _cacheLock = new object();
-        private TimeSpan _cacheExpiration;
+        private TimeSpan _cacheExpiration = default!;
         private long _maxMemoryCacheSizeBytes;
         private long _currentMemoryUsage;
         private bool _enableDiskCache;
         private bool _enableMemoryCache;
-        private CacheEvictionPolicy _evictionPolicy;
+        private CacheEvictionPolicy _evictionPolicy = default!;
 
         /// <summary>
         /// Enum for cache eviction policies
@@ -350,7 +350,7 @@ namespace AiDotNet.Pipeline.Steps
                 Directory.CreateDirectory(directory);
             }
 
-            var json = JsonSerializer.Serialize(data);
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(data);
             File.WriteAllText(path, json);
         }
 
@@ -360,7 +360,7 @@ namespace AiDotNet.Pipeline.Steps
         private double[][] LoadFromDisk(string path)
         {
             var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<double[][]>(json) ?? throw new InvalidOperationException("Failed to deserialize cache data");
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<double[][]>(json) ?? throw new InvalidOperationException("Failed to deserialize cache data");
         }
 
         /// <summary>

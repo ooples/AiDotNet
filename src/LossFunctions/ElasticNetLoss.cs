@@ -37,12 +37,12 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// The mixing parameter between L1 and L2 regularization.
     /// </summary>
-    private readonly T _l1Ratio;
+    private readonly T _l1Ratio = default!;
     
     /// <summary>
     /// The regularization strength parameter.
     /// </summary>
-    private readonly T _alpha;
+    private readonly T _alpha = default!;
     
     /// <summary>
     /// Initializes a new instance of the ElasticNetLoss class.

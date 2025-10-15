@@ -24,12 +24,12 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <summary>
     /// Options specific to the Gradient Descent optimizer.
     /// </summary>
-    private GradientDescentOptimizerOptions<T, TInput, TOutput> _gdOptions;
+    private GradientDescentOptimizerOptions<T, TInput, TOutput> _gdOptions = default!;
 
     /// <summary>
     /// The regularization technique used to prevent overfitting.
     /// </summary>
-    private readonly IRegularization<T, TInput, TOutput> _regularization;
+    private readonly IRegularization<T, TInput, TOutput> _regularization = default!;
 
     /// <summary>
     /// Initializes a new instance of the GradientDescentOptimizer class.

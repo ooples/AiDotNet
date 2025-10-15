@@ -15,7 +15,7 @@ namespace AiDotNet.ReinforcementLearning.Environments.Trading.Rewards
         /// </summary>
         protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
         private readonly bool _useLogReturn;
-        private readonly T _scalingFactor;
+        private readonly T _scalingFactor = default!;
         private readonly bool _punishDrawdown;
         
         /// <summary>

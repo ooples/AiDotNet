@@ -64,7 +64,7 @@ public class OptimizationIterationInfo<T>
     /// <remarks>
     /// This private field stores the fitness value and is accessed through the Fitness property.
     /// </remarks>
-    private T _fitness;
+    private T _fitness = default!;
     
     /// <summary>
     /// Gets or sets the fitness value at this iteration.

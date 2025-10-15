@@ -2,13 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.Models.Results;
 
 namespace AiDotNet.Interfaces
 {
     /// <summary>
-    /// Interface for foundation/large language models
+    /// Interface for foundation/large language models.
+    /// Extends IFullModel to provide complete model functionality with foundation model-specific features.
     /// </summary>
-    public interface IFoundationModel
+    /// <typeparam name="T">The numeric type used for calculations</typeparam>
+    public interface IFoundationModel<T> : IFullModel<T, string, string>
     {
         /// <summary>
         /// Gets the model architecture type
@@ -51,7 +56,7 @@ namespace AiDotNet.Interfaces
         /// </summary>
         /// <param name="text">Input text</param>
         /// <returns>Embedding vector</returns>
-        Task<double[]> GetEmbeddingAsync(string text);
+        Task<T[]> GetEmbeddingAsync(string text);
 
         /// <summary>
         /// Tokenizes input text
@@ -76,7 +81,7 @@ namespace AiDotNet.Interfaces
         /// <param name="progressCallback">Progress callback</param>
         /// <param name="cancellationToken">Cancellation token</param>
         /// <returns>Fine-tuned model</returns>
-        Task<IFoundationModel> FineTuneAsync(
+        Task<IFoundationModel<T, TInput, TOutput>> FineTuneAsync(
             List<TrainingExample> trainingData,
             List<TrainingExample> validationData,
             FineTuningConfig config,
@@ -124,7 +129,7 @@ namespace AiDotNet.Interfaces
         /// Applies a model adapter (LoRA, etc.)
         /// </summary>
         /// <param name="adapter">Adapter to apply</param>
-        void ApplyAdapter(IModelAdapter adapter);
+        void ApplyAdapter(IModelAdapter<T, TInput, TOutput> adapter);
 
         /// <summary>
         /// Gets available model checkpoints

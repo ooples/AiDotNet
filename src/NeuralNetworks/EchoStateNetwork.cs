@@ -124,7 +124,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// it's what allows the network to "remember" past inputs when processing new ones.
     /// </para>
     /// </remarks>
-    private Vector<T> _reservoirState;
+    private Vector<T> _reservoirState = default!;
 
     /// <summary>
     /// Gets or sets the vector activation function applied to the input-to-reservoir connections.
@@ -317,32 +317,32 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The weight matrix for input-to-reservoir connections.
     /// </summary>
-    private Matrix<T> _inputWeights;
+    private Matrix<T> _inputWeights = default!;
         
     /// <summary>
     /// The weight matrix for reservoir-to-reservoir connections.
     /// </summary>
-    private Matrix<T> _reservoirWeights;
+    private Matrix<T> _reservoirWeights = default!;
         
     /// <summary>
     /// The weight matrix for reservoir-to-output connections.
     /// </summary>
-    private Matrix<T> _outputWeights;
+    private Matrix<T> _outputWeights = default!;
         
     /// <summary>
     /// The bias vector for the reservoir.
     /// </summary>
-    private Vector<T> _reservoirBias;
+    private Vector<T> _reservoirBias = default!;
         
     /// <summary>
     /// The bias vector for the output layer.
     /// </summary>
-    private Vector<T> _outputBias;
+    private Vector<T> _outputBias = default!;
         
     /// <summary>
     /// The current state of the reservoir.
     /// </summary>
-    private Vector<T> _currentState;
+    private Vector<T> _currentState = default!;
         
     /// <summary>
     /// Indicates whether the network is being trained.
@@ -353,12 +353,12 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// Leaking rate for controlling the update speed of reservoir neurons.
     /// Value between 0 and 1, default is 1.0 (no leaking).
     /// </summary>
-    private T _leakingRate;
+    private T _leakingRate = default!;
         
     /// <summary>
     /// Regularization parameter for ridge regression during training.
     /// </summary>
-    private T _regularization;
+    private T _regularization = default!;
         
     /// <summary>
     /// Random number generator for initialization.
@@ -378,19 +378,19 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Collected states during training for regression.
     /// </summary>
-    private List<Vector<T>> _collectedStates;
+    private List<Vector<T>> _collectedStates = default!;
         
     /// <summary>
     /// Collected targets during training for regression.
     /// </summary>
-    private List<Vector<T>> _collectedTargets;
+    private List<Vector<T>> _collectedTargets = default!;
         
     /// <summary>
     /// Warmup period for discarding initial transient reservoir states during training.
     /// </summary>
     private int _warmupPeriod;
 
-    private ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EchoStateNetwork{T}"/> class with vector activation functions.
@@ -1407,7 +1407,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the Echo State Network model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns metadata about the Echo State Network, including its model type,
@@ -1426,9 +1426,9 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// and for saving/loading models for later use.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.EchoStateNetwork,
             AdditionalInfo = new Dictionary<string, object>

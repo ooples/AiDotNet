@@ -25,7 +25,7 @@ public class CookDistanceFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TI
     /// <b>For Beginners:</b> These settings control how the detector interprets Cook's distances, 
     /// including thresholds for determining influential points and different types of model fit.
     /// </remarks>
-    private readonly CookDistanceFitDetectorOptions _options;
+    private readonly CookDistanceFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the CookDistanceFitDetector class.

@@ -47,7 +47,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// These settings shape how the model learns from your data and makes predictions.
     /// </para>
     /// </remarks>
-    private readonly ConditionalInferenceTreeOptions _options;
+    private readonly ConditionalInferenceTreeOptions _options = default!;
 
     /// <summary>
     /// The root node of the decision tree.
@@ -505,7 +505,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// <summary>
     /// Gets metadata about the regression model.
     /// </summary>
-    /// <returns>A <see cref="ModelMetaData{T}"/> object containing model information.</returns>
+    /// <returns>A <see cref="ModelMetadata{T}"/> object containing model information.</returns>
     /// <remarks>
     /// <para>
     /// This method returns metadata about the regression model, including its type, hyperparameters,
@@ -528,9 +528,9 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// - Generating reports about the model's performance
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ConditionalInferenceTree,
             AdditionalInfo = new Dictionary<string, object>

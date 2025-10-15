@@ -20,15 +20,15 @@ internal class ValueNetwork<T>
     private readonly int _stateSize;
     private readonly int _actionSize;
     private readonly bool _continuous;
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     private readonly int _inputSize;
     
     // Neural network components
     private readonly FullyConnectedLayer<T>[] _hiddenLayers;
-    private readonly FullyConnectedLayer<T> _outputLayer;
+    private readonly FullyConnectedLayer<T> _outputLayer = default!;
     
     // Optimizer for training
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="ValueNetwork{T}"/> class.

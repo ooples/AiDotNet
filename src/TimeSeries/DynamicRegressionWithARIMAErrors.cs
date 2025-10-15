@@ -52,7 +52,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// - Which regularization method to use (to prevent overfitting)
     /// - Which matrix decomposition to use for solving linear systems
     /// </remarks>
-    private DynamicRegressionWithARIMAErrorsOptions<T> _arimaOptions;
+    private DynamicRegressionWithARIMAErrorsOptions<T> _arimaOptions = default!;
     
     /// <summary>
     /// Regularization method to prevent overfitting in the regression component.
@@ -68,7 +68,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// - L2 (Ridge): Shrinks all coefficients toward zero, but rarely makes them exactly zero
     /// - ElasticNet: A combination of L1 and L2 regularization
     /// </remarks>
-    private IRegularization<T, Matrix<T>, Vector<T>> _regularization;
+    private IRegularization<T, Matrix<T>, Vector<T>> _regularization = default!;
     
     /// <summary>
     /// Coefficients for the regression component, representing the impact of external variables.
@@ -84,7 +84,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// The model learns these coefficients from your historical data to quantify relationships
     /// between external factors and what you're predicting.
     /// </remarks>
-    private Vector<T> _regressionCoefficients;
+    private Vector<T> _regressionCoefficients = default!;
     
     /// <summary>
     /// Coefficients for the autoregressive (AR) component of the model.
@@ -99,7 +99,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// 
     /// These coefficients are applied to the regression residuals (errors), not to the original time series.
     /// </remarks>
-    private Vector<T> _arCoefficients;
+    private Vector<T> _arCoefficients = default!;
     
     /// <summary>
     /// Coefficients for the moving average (MA) component of the model.
@@ -113,7 +113,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// 
     /// This helps the model correct for systematic errors in its predictions.
     /// </remarks>
-    private Vector<T> _maCoefficients;
+    private Vector<T> _maCoefficients = default!;
     
     /// <summary>
     /// Values needed to reverse differencing when making predictions.
@@ -128,7 +128,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// 
     /// This field stores the original values needed to convert predictions back to the original scale.
     /// </remarks>
-    private Vector<T> _differenced;
+    private Vector<T> _differenced = default!;
     
     /// <summary>
     /// The constant term (intercept) in the regression equation.
@@ -142,7 +142,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// For example, if you're predicting ice cream sales, the intercept might represent
     /// the baseline daily sales you'd expect regardless of temperature, promotions, etc.
     /// </remarks>
-    private T _intercept;
+    private T _intercept = default!;
 
     /// <summary>
     /// Creates a new Dynamic Regression with ARIMA Errors model with the specified options.
@@ -1436,7 +1436,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the trained model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method provides comprehensive information about the model, including its type, parameters, and configuration.
@@ -1457,10 +1457,10 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// - Comparing different models to choose the best one
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var options = (DynamicRegressionWithARIMAErrorsOptions<T>)Options;
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.DynamicRegressionWithARIMAErrors,
             AdditionalInfo = new Dictionary<string, object>

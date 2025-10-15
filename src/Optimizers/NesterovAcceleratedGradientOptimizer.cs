@@ -29,7 +29,7 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <summary>
     /// The options specific to the Nesterov Accelerated Gradient optimizer.
     /// </summary>
-    private NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> _nagOptions;
+    private NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> _nagOptions = default!;
 
     /// <summary>
     /// The velocity vector used in the NAG algorithm.

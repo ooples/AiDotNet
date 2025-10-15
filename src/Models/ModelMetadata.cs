@@ -31,7 +31,7 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class ModelMetaData<T>
+public class ModelMetadata<T>
 {
     /// <summary>
     /// Gets or sets the type of the model.
@@ -223,26 +223,64 @@ public class ModelMetaData<T>
     /// <value>A dictionary mapping feature names to their importance values.</value>
     /// <remarks>
     /// <para>
-    /// This property stores the importance of each feature used by the model. Feature importance indicates how much each input 
-    /// variable contributes to the model's predictions. The exact meaning and scale of importance values can vary depending on 
-    /// the model type and the method used to calculate importance. This information is crucial for understanding which features 
+    /// This property stores the importance of each feature used by the model. Feature importance indicates how much each input
+    /// variable contributes to the model's predictions. The exact meaning and scale of importance values can vary depending on
+    /// the model type and the method used to calculate importance. This information is crucial for understanding which features
     /// have the most significant impact on the model's output and can be used for feature selection or model interpretation.
     /// </para>
     /// <para><b>For Beginners:</b> This shows how important each input variable is to the model's predictions.
-    /// 
+    ///
     /// The feature importance dictionary:
     /// - Maps each feature (input variable) name to a number representing its importance
     /// - Higher values typically indicate more important features
     /// - The exact meaning of the values depends on the type of model and how importance was calculated
-    /// 
+    ///
     /// This is useful for:
     /// - Understanding which inputs have the biggest impact on predictions
     /// - Identifying irrelevant or less important features
     /// - Simplifying the model by focusing on the most important features
-    /// 
-    /// For example, in a house price prediction model, you might see that 'location' has a high importance value, 
+    ///
+    /// For example, in a house price prediction model, you might see that 'location' has a high importance value,
     /// while 'roof color' has a low value, indicating that location strongly influences the prediction but roof color doesn't.
     /// </para>
     /// </remarks>
     public Dictionary<string, T> FeatureImportance { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the hyperparameters used to configure the model.
+    /// </summary>
+    /// <value>A dictionary mapping hyperparameter names to their values.</value>
+    /// <remarks>
+    /// <para>
+    /// This property stores the hyperparameters that were used to configure the model. Hyperparameters are parameters whose 
+    /// values are set before the learning process begins, as opposed to model parameters which are learned during training. 
+    /// Examples include learning rate, regularization strength, number of layers in a neural network, or the depth of a 
+    /// decision tree. Storing hyperparameters is essential for model reproducibility and for understanding how the model 
+    /// was configured.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the configuration settings used when creating the model.
+    /// 
+    /// Hyperparameters are settings that control how the model learns:
+    /// - They are set before training begins
+    /// - They affect how the model learns from data
+    /// - They are different from model parameters, which are learned during training
+    /// 
+    /// Common hyperparameters include:
+    /// - Learning rate: How quickly the model adjusts during training
+    /// - Number of layers: How deep a neural network is
+    /// - Tree depth: How complex a decision tree can be
+    /// - Regularization strength: How much to prevent overfitting
+    /// 
+    /// This information is important for:
+    /// - Reproducing the model (creating an identical model later)
+    /// - Understanding why the model performs the way it does
+    /// - Tuning the model to improve performance
+    /// - Comparing different model configurations
+    /// 
+    /// For example, you might see that a neural network was trained with
+    /// a learning rate of 0.01 and 3 hidden layers, which helps explain
+    /// its behavior and performance characteristics.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, object> Hyperparameters { get; set; } = [];
 }

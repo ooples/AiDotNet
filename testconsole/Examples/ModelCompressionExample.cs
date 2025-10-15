@@ -59,7 +59,7 @@ namespace AiDotNet.Examples
             
             // Step 3: Create a quantization compressor
             Console.WriteLine("\n3. Creating quantization compressor...");
-            var compressor = new QuantizationCompressor<FeedForwardNeuralNetwork<double>, Tensor<double>, Tensor<double>>();
+            var compressor = new QuantizationCompressor<double, FeedForwardNeuralNetwork<double>, Tensor<double>, Tensor<double>>();
             
             // Step 4: Configure compression options
             Console.WriteLine("\n4. Configuring compression options...");

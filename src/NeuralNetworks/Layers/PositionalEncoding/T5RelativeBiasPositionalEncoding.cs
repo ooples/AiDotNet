@@ -47,7 +47,7 @@ public class T5RelativeBiasPositionalEncoding<T> : PositionalEncodingBase<T>
     /// <summary>
     /// The learnable relative position embeddings.
     /// </summary>
-    private Vector<T> _relativeBias;
+    private Vector<T> _relativeBias = default!;
     
     
     /// <summary>

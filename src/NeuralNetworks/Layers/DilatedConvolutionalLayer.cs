@@ -187,7 +187,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// weights on one side and negative weights on the other.
     /// </para>
     /// </remarks>
-    private Tensor<T> _kernels;
+    private Tensor<T> _kernels = default!;
 
     /// <summary>
     /// The bias values for each output channel.
@@ -207,7 +207,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// Think of biases like adjusting the baseline sensitivity of each pattern detector.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Vector<T> _biases = default!;
 
     /// <summary>
     /// The input tensor from the last forward pass, saved for backpropagation.

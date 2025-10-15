@@ -38,7 +38,7 @@ public class BiorthogonalWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The order of the wavelet used for decomposition.
@@ -53,12 +53,12 @@ public class BiorthogonalWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// Coefficients used for the decomposition process.
     /// </summary>
-    private readonly Vector<T> _decompositionCoefficients;
+    private readonly Vector<T> _decompositionCoefficients = default!;
     
     /// <summary>
     /// Coefficients used for the reconstruction process.
     /// </summary>
-    private readonly Vector<T> _reconstructionCoefficients;
+    private readonly Vector<T> _reconstructionCoefficients = default!;
 
     /// <summary>
     /// Initializes a new instance of the BiorthogonalWavelet class with the specified decomposition and reconstruction orders.

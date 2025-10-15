@@ -95,7 +95,7 @@ public class NSGAII<T, TInput, TOutput> :
     /// to find solutions that represent different trade-offs between the objectives.
     /// </para>
     /// </remarks>
-    private readonly List<IFitnessCalculator<T, TInput, TOutput>> _objectives;
+    private readonly List<IFitnessCalculator<T, TInput, TOutput>> _objectives = default!;
 
     /// <summary>
     /// Initializes a new instance of the NSGA-II algorithm with the specified model factory, objectives, and evaluator.
@@ -604,7 +604,7 @@ public class NSGAII<T, TInput, TOutput> :
         var model = IndividualToModel(individual);
 
         // Store objective values in the model's metadata for quick access
-        var metadata = model.GetModelMetaData();
+        var metadata = model.GetModelMetadata();
 
         if (metadata.AdditionalInfo.TryGetValue($"Objective_{objectiveIndex}", out object? objValue))
         {
@@ -670,7 +670,7 @@ public class NSGAII<T, TInput, TOutput> :
             FitnessCalculator = tempCalculator;
 
             // Store the objective value in the model's metadata
-            var metadata = model.GetModelMetaData();
+            var metadata = model.GetModelMetadata();
             metadata.AdditionalInfo[$"Objective_{i}"] = Convert.ToDouble(fitness);
         }
 
@@ -681,7 +681,7 @@ public class NSGAII<T, TInput, TOutput> :
     /// <summary>
     /// Gets metadata about the algorithm and its current state.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the algorithm.</returns>
+    /// <returns>A ModelMetadata object containing information about the algorithm.</returns>
     /// <remarks>
     /// <para>
     /// This method extends the base implementation to include NSGA-II-specific information
@@ -699,7 +699,7 @@ public class NSGAII<T, TInput, TOutput> :
     /// especially when comparing different algorithms or configurations.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetMetaData()
+    public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
         metadata.ModelType = ModelType.GeneticAlgorithmRegression;

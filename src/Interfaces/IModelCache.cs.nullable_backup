@@ -1,0 +1,145 @@
+namespace AiDotNet.Interfaces;
+
+/// <summary>
+/// Defines a caching mechanism for storing and retrieving optimization step data during model training.
+/// </summary>
+/// <remarks>
+/// This interface provides methods to store, retrieve, and clear intermediate calculation results
+/// during the training process of machine learning models. Caching these results can significantly
+/// improve performance by avoiding redundant calculations.
+/// 
+/// <b>For Beginners:</b> Think of model caching like saving your progress in a video game.
+/// 
+/// When training machine learning models, the computer performs many calculations in steps:
+/// - These calculations can be time-consuming and resource-intensive
+/// - By saving (caching) the results of each step, we avoid having to redo calculations
+/// - This makes the training process much faster, especially when:
+///   * You're experimenting with different model settings
+///   * You need to pause and resume training
+///   * You want to analyze intermediate results
+/// 
+/// For example, imagine you're baking a complex cake that requires multiple stages:
+/// - Instead of starting from scratch each time you make a mistake
+/// - You could save the batter at different stages
+/// - If something goes wrong, you can go back to a saved point rather than starting over
+/// 
+/// This interface provides the methods needed to implement this "save progress" functionality
+/// for machine learning models.
+/// </remarks>
+/// <typeparam name="T">The numeric data type used in the optimization calculations (e.g., float, double).</typeparam>
+public interface IModelCache<T, TInput, TOutput>
+{
+    /// <summary>
+    /// Retrieves previously cached optimization step data associated with the specified key.
+    /// </summary>
+    /// <remarks>
+    /// This method looks up and returns cached calculation results from a previous optimization step.
+    /// If no data exists for the given key, it returns null.
+    /// 
+    /// <b>For Beginners:</b> This is like opening a saved file from your computer.
+    /// 
+    /// When training a machine learning model:
+    /// - The model goes through many steps of calculations
+    /// - Each step's results can be saved with a unique name (the key)
+    /// - This method lets you retrieve those saved results using that name
+    /// 
+    /// For example:
+    /// - You might save the model's state after every 100 training iterations
+    /// - Later, you can retrieve the state from iteration 500 by using its key
+    /// - If you request data that hasn't been saved, you'll get null (nothing)
+    /// 
+    /// This is useful when you want to:
+    /// - Compare the model's performance at different stages
+    /// - Resume training from a specific point
+    /// - Analyze how the model evolved during training
+    /// </remarks>
+    /// <param name="key">A unique identifier for the cached data you want to retrieve.</param>
+    /// <returns>The cached optimization step data if found; otherwise, null.</returns>
+    OptimizationStepData<T, TInput, TOutput>? GetCachedStepData(string key);
+
+    /// <summary>
+    /// Stores optimization step data in the cache with the specified key.
+    /// </summary>
+    /// <remarks>
+    /// This method saves the current state and calculations from an optimization step
+    /// so they can be retrieved later, avoiding the need to recalculate them.
+    /// 
+    /// <b>For Beginners:</b> This is like saving your work to a file on your computer.
+    /// 
+    /// During model training:
+    /// - The model performs complex calculations at each step
+    /// - This method lets you save those calculations with a name (the key)
+    /// - Later, you can retrieve these saved calculations using that name
+    /// 
+    /// For example:
+    /// - You might save the model's state after processing each batch of data
+    /// - You could use keys like "batch_1", "batch_2", etc.
+    /// - If you save with a key that already exists, the new data typically replaces the old data
+    /// 
+    /// This is useful for:
+    /// - Checkpointing: saving progress so you can resume if something crashes
+    /// - Efficiency: avoiding repeating expensive calculations
+    /// - Analysis: keeping track of how your model changes during training
+    /// </remarks>
+    /// <param name="key">A unique identifier to associate with this cached data.</param>
+    /// <param name="stepData">The optimization step data to cache.</param>
+    void CacheStepData(string key, OptimizationStepData<T, TInput, TOutput> stepData);
+
+    /// <summary>
+    /// Removes all cached optimization step data.
+    /// </summary>
+    /// <remarks>
+    /// This method deletes all previously cached optimization data, freeing up memory
+    /// and ensuring that future retrievals will start fresh.
+    /// 
+    /// <b>For Beginners:</b> This is like emptying your recycle bin or clearing your browser cache.
+    /// 
+    /// Sometimes you need to start fresh:
+    /// - When you've made significant changes to your model
+    /// - When cached data is no longer relevant
+    /// - When you need to free up memory
+    /// 
+    /// For example:
+    /// - After completing a full training run, you might clear the cache
+    /// - Before starting training with a new dataset, you'd clear old cached results
+    /// - If you change your model's structure, old cached calculations become invalid
+    /// 
+    /// Clearing the cache:
+    /// - Frees up memory that was being used to store cached data
+    /// - Ensures you don't accidentally use outdated calculations
+    /// - Gives you a clean slate for a new training session
+    /// </remarks>
+    void ClearCache();
+
+    /// <summary>
+    /// Generates a unique cache key based on the model and input data characteristics.
+    /// </summary>
+    /// <remarks>
+    /// This method creates a unique identifier that represents both the model's current state
+    /// and the characteristics of the input data being processed.
+    /// 
+    /// <b>For Beginners:</b> This is like creating a unique filename that describes both what you're saving and when.
+    /// 
+    /// The cache key is important because:
+    /// - It ensures we only retrieve cached results that match our current situation
+    /// - It prevents mixing up results from different models or datasets
+    /// - It allows the system to identify when previous calculations can be reused
+    /// 
+    /// For example:
+    /// - If you train the same model on two different datasets, each gets a different key
+    /// - If you modify your model's parameters, it gets a new key
+    /// - This ensures you never accidentally use calculations from the wrong context
+    /// 
+    /// The key typically combines:
+    /// - Information about the model's structure and parameters
+    /// - Characteristics of the dataset (size, features, etc.)
+    /// - Sometimes, information about the specific training phase
+    /// 
+    /// This automatic key generation makes the caching system more reliable and easier to use
+    /// than if you had to manually create unique identifiers yourself.
+    /// </remarks>
+    /// <param name="model">The machine learning model being trained or evaluated.</param>
+    /// <param name="inputData">The data being used for training or evaluation.</param>
+    /// <returns>A unique string identifier that represents this specific model-data combination.</returns>
+    string GenerateCacheKey(IFullModel<T, TInput, TOutput> model, OptimizationInputData<T, TInput, TOutput> inputData);
+}

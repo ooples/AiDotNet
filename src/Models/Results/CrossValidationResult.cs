@@ -54,7 +54,7 @@ public class CrossValidationResult<T>
     /// </summary>
     public TimeSpan TotalTime { get; }
 
-    private readonly ModelType _modelType;
+    private readonly ModelType _modelType = default!;
 
     /// <summary>
     /// Creates a new instance of the CrossValidationResult class.

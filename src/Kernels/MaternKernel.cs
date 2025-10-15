@@ -54,7 +54,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// The default value is 1.5, which provides a good balance between flexibility and smoothness
     /// for many applications.
     /// </remarks>
-    private readonly T _nu;
+    private readonly T _nu = default!;
     
     /// <summary>
     /// Controls how quickly the similarity decreases with distance between points.
@@ -71,12 +71,12 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// You might want to increase this if your data points are spread far apart, or decrease it
     /// if your data points are densely packed and local patterns are important.
     /// </remarks>
-    private readonly T _length;
+    private readonly T _length = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Matérn kernel with optional parameters.

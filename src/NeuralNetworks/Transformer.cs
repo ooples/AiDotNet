@@ -55,7 +55,7 @@ public class Transformer<T> : NeuralNetworkBase<T>
     /// defines the structure of our Transformer neural network.
     /// </para>
     /// </remarks>
-    private readonly TransformerArchitecture<T> _transformerArchitecture;
+    private readonly TransformerArchitecture<T> _transformerArchitecture = default!;
 
     /// <summary>
     /// Gets or sets the attention mask used in the Transformer.
@@ -84,7 +84,7 @@ public class Transformer<T> : NeuralNetworkBase<T>
     /// The choice of optimizer can significantly affect how well and how quickly the Transformer learns.
     /// </para>
     /// </remarks>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer = default!;
 
     /// <summary>
     /// Creates a new Transformer neural network with the specified architecture.
@@ -370,7 +370,7 @@ public class Transformer<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Retrieves metadata about the Transformer model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the Transformer.</returns>
+    /// <returns>A ModelMetadata object containing information about the Transformer.</returns>
     /// <remarks>
     /// <para>
     /// This method collects and returns various pieces of information about the Transformer,
@@ -388,9 +388,9 @@ public class Transformer<T> : NeuralNetworkBase<T>
     /// experimenting with multiple configurations.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.Transformer,
             AdditionalInfo = new Dictionary<string, object>

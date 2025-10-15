@@ -15,17 +15,17 @@ namespace AiDotNet.ReinforcementLearning.Environments.Trading
     public class TradingEnvironment<T> : EnvironmentBase<TradingEnvironmentState<T>, object, T> 
        
     {
-        private readonly IMarketDataFeed<T> _marketData;
-        private readonly Portfolio<T> _portfolio;
-        private readonly IRewardFunction<T> _rewardFunction;
+        private readonly IMarketDataFeed<T> _marketData = default!;
+        private readonly Portfolio<T> _portfolio = default!;
+        private readonly IRewardFunction<T> _rewardFunction = default!;
         private readonly int _lookbackWindow;
-        private readonly List<string> _symbols;
-        private readonly List<string> _marketFeatures;
+        private readonly List<string> _symbols = default!;
+        private readonly List<string> _marketFeatures = default!;
         private readonly bool _allowShort;
         private readonly bool _allowFractionalShares;
         private readonly int _warmupPeriod;
         private readonly List<(DateTime Timestamp, T Reward, T PortfolioValue)> _performanceHistory;
-        private readonly INumericOperations<T> _numOps;
+        private readonly INumericOperations<T> _numOps = default!;
         
         /// <summary>
         /// Gets the size of the state space.

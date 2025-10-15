@@ -24,8 +24,8 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// </remarks>
     public class RainbowDQNModel<T> : ReinforcementLearningModelBase<T>
     {
-        private readonly RainbowDQNOptions _options;
-        private readonly INumericOperations<T> _numOps;
+        private readonly RainbowDQNOptions _options = default!;
+        private readonly INumericOperations<T> _numOps = default!;
         
         /// <summary>
         /// Initializes a new instance of the <see cref="RainbowDQNModel{T}"/> class.

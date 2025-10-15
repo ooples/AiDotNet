@@ -116,7 +116,7 @@ public class NeuralNetworkExample
             // 3. Create neural network architecture for classification
             var architecture = new NeuralNetworkArchitecture<double>(
                 complexity: NetworkComplexity.Medium,
-                isMultiClass: true
+                taskType: NeuralNetworkTaskType.Classification
             );
 
             // 4. Create the model and model builder

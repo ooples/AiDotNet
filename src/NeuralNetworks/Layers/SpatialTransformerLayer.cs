@@ -46,7 +46,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
     /// would be most helpful.
     /// </para>
     /// </remarks>
-    private Matrix<T> _localizationWeights1;
+    private Matrix<T> _localizationWeights1 = default!;
 
     /// <summary>
     /// Biases for the first layer of the localization network.
@@ -62,7 +62,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
     /// They work together with the weights to determine how the network responds to different inputs.
     /// </para>
     /// </remarks>
-    private Vector<T> _localizationBias1;
+    private Vector<T> _localizationBias1 = default!;
 
     /// <summary>
     /// Weights for the second layer of the localization network.
@@ -80,7 +80,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
     /// how to scale, rotate, translate, and shear the input image.
     /// </para>
     /// </remarks>
-    private Matrix<T> _localizationWeights2;
+    private Matrix<T> _localizationWeights2 = default!;
 
     /// <summary>
     /// Biases for the second layer of the localization network.
@@ -97,7 +97,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
     /// learn more complex transformations as needed.
     /// </para>
     /// </remarks>
-    private Vector<T> _localizationBias2;
+    private Vector<T> _localizationBias2 = default!;
 
     /// <summary>
     /// Stores the input tensor from the most recent forward pass.

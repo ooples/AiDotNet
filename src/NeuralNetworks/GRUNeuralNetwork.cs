@@ -260,7 +260,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about this GRU Neural Network model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns metadata about the model, including its name, description, architecture,
@@ -276,9 +276,9 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// This information is useful for documentation, debugging, and when saving/loading models.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.GRUNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

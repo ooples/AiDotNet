@@ -74,7 +74,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// Typical values range from 0.1 to 0.0001, depending on the specific problem and model architecture.
     /// </para>
     /// </remarks>
-    private T _learningRate;
+    private T _learningRate = default!;
 
     /// <summary>
     /// The number of training epochs.
@@ -128,7 +128,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// The choice of loss function depends on the nature of your data and the specific goals of your autoencoder.
     /// </para>
     /// </remarks>
-    private readonly ILossFunction<T> _lossFunction;
+    private readonly ILossFunction<T> _lossFunction = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Autoencoder{T}"/> class.
@@ -634,15 +634,15 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the autoencoder model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// This method returns metadata about the autoencoder, including the model type, input/output dimensions,
     /// encoded size, and layer configuration. This information is useful for model management, serialization,
     /// and transfer learning.
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.Autoencoder,
             AdditionalInfo = new Dictionary<string, object>

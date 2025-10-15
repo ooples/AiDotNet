@@ -1,4 +1,6 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,13 +11,14 @@ namespace AiDotNet.ProductionMonitoring
     /// <summary>
     /// Monitors and tracks model performance metrics over time
     /// </summary>
-    public class PerformanceMonitor : ProductionMonitorBase
+    /// <typeparam name="T">The numeric type used for calculations</typeparam>
+    public class PerformanceMonitor<T> : ProductionMonitorBase<T>
     {
-        private readonly TimeSpan _aggregationInterval;
-        private readonly Dictionary<string, List<double>> _customMetrics;
-        private readonly Dictionary<DateTime, AggregatedMetrics> _aggregatedMetrics;
+        private readonly TimeSpan _aggregationInterval = default!;
+        private readonly Dictionary<string, List<double>> _customMetrics = default!;
+        private readonly Dictionary<DateTime, AggregatedMetrics> _aggregatedMetrics = default!;
         private readonly int _maxHistoryDays;
-        private DateTime _lastAggregationTime;
+        private DateTime _lastAggregationTime = default!;
 
         public PerformanceMonitor(TimeSpan? aggregationInterval = null, int maxHistoryDays = 90)
         {
@@ -60,7 +63,16 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Logs a prediction with additional metadata
         /// </summary>
-        public override async Task LogPredictionAsync(double[] features, double prediction, double? actual = null, DateTime? timestamp = null)
+        public override async Task LogPredictionAsync(Vector<T> features, T prediction, DateTime? timestamp = null)
+        {
+            await base.LogPredictionAsync(features, prediction, timestamp);
+            await CheckAggregationAsync();
+        }
+        
+        /// <summary>
+        /// Logs a prediction with actual value and additional metadata
+        /// </summary>
+        public override async Task LogPredictionAsync(Vector<T> features, T prediction, T actual, DateTime? timestamp = null)
         {
             await base.LogPredictionAsync(features, prediction, actual, timestamp);
             await CheckAggregationAsync();
@@ -160,23 +172,23 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Detects data drift
         /// </summary>
-        public override async Task<DriftDetectionResult> DetectDataDriftAsync(double[,] productionData, double[,] referenceData = null)
+        public override async Task<DriftDetectionResult> DetectDataDriftAsync(Matrix<T> productionData, Matrix<T>? referenceData = null)
         {
             // Performance monitor focuses on metrics, not data drift
-            return new DriftDetectionResult
+            return Task.FromResult(new DriftDetectionResult
             {
                 IsDriftDetected = false,
                 DriftScore = 0,
                 DriftType = "DataDrift",
                 Details = "Use DataDriftDetector for data drift detection",
                 DetectionTimestamp = DateTime.UtcNow
-            };
+            });
         }
 
         /// <summary>
         /// Detects concept drift based on performance degradation
         /// </summary>
-        public override async Task<DriftDetectionResult> DetectConceptDriftAsync(double[] predictions, double[] actuals)
+        public override async Task<DriftDetectionResult> DetectConceptDriftAsync(Vector<T> predictions, Vector<T> actuals)
         {
             // Simple performance-based concept drift detection
             var currentMetrics = CalculatePerformanceMetrics(
@@ -335,7 +347,7 @@ namespace AiDotNet.ProductionMonitoring
                 
                 if (!recentPredictions.Any()) return;
                 
-                var metrics = CalculatePerformanceMetrics(recentPredictions.Where(p => p.Actual.HasValue).ToList());
+                var metrics = CalculatePerformanceMetrics(recentPredictions.Where(p => p.HasActual).ToList());
                 
                 var aggregated = new AggregatedMetrics
                 {
@@ -347,7 +359,7 @@ namespace AiDotNet.ProductionMonitoring
                     MAE = metrics.MAE,
                     RMSE = metrics.RMSE,
                     PredictionCount = recentPredictions.Count,
-                    ActualCount = recentPredictions.Count(p => p.Actual.HasValue),
+                    ActualCount = recentPredictions.Count(p => p.HasActual),
                     CustomMetrics = new Dictionary<string, double>()
                 };
                 
@@ -478,23 +490,23 @@ namespace AiDotNet.ProductionMonitoring
             return Math.Max(0, 1.0 - trendPenalty - anomalyPenalty);
         }
 
-        private async Task<double> CalculateDataQualityScoreAsync()
+        private Task<double> CalculateDataQualityScoreAsync()
         {
             lock (_lockObject)
             {
-                if (!_predictionHistory.Any()) return 1.0;
-                
+                if (!_predictionHistory.Any()) return Task.FromResult(1.0);
+
                 var recent = _predictionHistory.TakeLast(1000).ToList();
-                
+
                 // Check for various data quality issues
                 var missingFeatures = recent.Count(p => p.Features.Any(f => double.IsNaN(f) || double.IsInfinity(f)));
                 var extremeValues = recent.Count(p => p.Features.Any(f => Math.Abs(f) > 1e6));
                 var zeroVariance = CheckZeroVarianceFeatures(recent);
-                
-                var missingRatio = missingFeatures / (double)recent.Count;
-                var extremeRatio = extremeValues / (double)recent.Count;
-                
-                return 1.0 - (missingRatio * 0.4 + extremeRatio * 0.3 + zeroVariance * 0.3);
+
+                var missingRatio = missingFeatures / (double)recent.Count();
+                var extremeRatio = extremeValues / (double)recent.Count();
+
+                return Task.FromResult(1.0 - (missingRatio * 0.4 + extremeRatio * 0.3 + zeroVariance * 0.3));
             }
         }
 
@@ -541,28 +553,28 @@ namespace AiDotNet.ProductionMonitoring
             public double RMSE { get; set; }
             public int PredictionCount { get; set; }
             public int ActualCount { get; set; }
-            public Dictionary<string, double> CustomMetrics { get; set; }
+            public Dictionary<string, double> CustomMetrics { get; set; } = new();
         }
 
         public class PerformanceTrends
         {
-            public string TrendDirection { get; set; }
+            public string TrendDirection { get; set; } = string.Empty;
             public double TrendStrength { get; set; }
             public double AccuracyTrend { get; set; }
             public double F1ScoreTrend { get; set; }
             public double MAETrend { get; set; }
-            public List<PerformanceAnomaly> Anomalies { get; set; }
+            public List<PerformanceAnomaly> Anomalies { get; set; } = new();
             public DateTime AnalysisTimestamp { get; set; }
         }
 
         public class PerformanceAnomaly
         {
             public DateTime Timestamp { get; set; }
-            public string MetricName { get; set; }
+            public string MetricName { get; set; } = string.Empty;
             public double Value { get; set; }
             public double ExpectedValue { get; set; }
             public double AnomalyScore { get; set; }
-            public string Type { get; set; }
+            public string Type { get; set; } = string.Empty;
         }
     }
 

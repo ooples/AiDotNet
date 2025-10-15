@@ -27,7 +27,23 @@ namespace AiDotNet.Interfaces;
 /// - Loaded quickly when needed to make predictions
 /// - Possibly updated with new data periodically
 /// </remarks>
-public interface IFullModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetaData<T>>, 
+public interface IFullModel<T, TInput, TOutput> : IInterpretableModel<T, TInput, TOutput>, 
     IModelSerializer, IParameterizable<T, TInput, TOutput>, IFeatureAware, ICloneable<IFullModel<T, TInput, TOutput>>
 {
+    /// <summary>
+    /// Gets the total number of parameters in the model.
+    /// </summary>
+    int ParameterCount { get; }
+
+    /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model should be saved.</param>
+    void SaveModel(string filePath);
+
+    /// <summary>
+    /// Gets the feature importance scores for the model.
+    /// </summary>
+    /// <returns>A dictionary mapping feature indices/names to their importance scores.</returns>
+    Dictionary<string, T> GetFeatureImportance();
 }

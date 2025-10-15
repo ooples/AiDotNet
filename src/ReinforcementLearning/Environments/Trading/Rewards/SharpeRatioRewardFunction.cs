@@ -14,11 +14,11 @@ namespace AiDotNet.ReinforcementLearning.Environments.Trading.Rewards
         /// Gets the numeric operations for type T.
         /// </summary>
         protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
-        private readonly Queue<T> _returns;
+        private readonly Queue<T> _returns = default!;
         private readonly int _windowSize;
-        private readonly T _riskFreeRate;
-        private readonly T _scalingFactor;
-        private readonly T _annualizationFactor;
+        private readonly T _riskFreeRate = default!;
+        private readonly T _scalingFactor = default!;
+        private readonly T _annualizationFactor = default!;
         
         /// <summary>
         /// Initializes a new instance of the <see cref="SharpeRatioRewardFunction{T}"/> class.

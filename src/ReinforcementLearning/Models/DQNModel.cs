@@ -43,7 +43,7 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// </remarks>
     public class DQNModel<T> : ReinforcementLearningModelBase<T>
     {
-        private readonly DQNOptions _options;
+        private readonly DQNOptions _options = default!;
         private DQNAgent<Tensor<T>, T> _agent = null!;
         private readonly int _batchSize;
 

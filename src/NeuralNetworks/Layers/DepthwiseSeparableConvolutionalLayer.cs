@@ -46,7 +46,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// Each filter looks for specific patterns within its own channel, like edges or textures.
     /// </para>
     /// </remarks>
-    private Tensor<T> _depthwiseKernels;
+    private Tensor<T> _depthwiseKernels = default!;
 
     /// <summary>
     /// The filter kernels used for the pointwise convolution step.
@@ -67,7 +67,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// Think of it like a recipe that determines how much of each filtered ingredient to use.
     /// </para>
     /// </remarks>
-    private Tensor<T> _pointwiseKernels;
+    private Tensor<T> _pointwiseKernels = default!;
 
     /// <summary>
     /// The bias values added to each output channel.
@@ -88,7 +88,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// triggering more easily even with weaker input signals.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Vector<T> _biases = default!;
 
     /// <summary>
     /// Stored input data from the most recent forward pass, used for backpropagation.

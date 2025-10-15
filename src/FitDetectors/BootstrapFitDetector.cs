@@ -26,7 +26,7 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     /// interprets the results, including the number of bootstrap samples and thresholds for determining 
     /// different types of model fit.
     /// </remarks>
-    private readonly BootstrapFitDetectorOptions _options;
+    private readonly BootstrapFitDetectorOptions _options = default!;
     
     /// <summary>
     /// Random number generator used for bootstrap resampling.
@@ -35,7 +35,7 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     /// <b>For Beginners:</b> This is used to introduce randomness when creating bootstrap samples, 
     /// simulating the process of randomly drawing data points with replacement.
     /// </remarks>
-    private readonly Random _random;
+    private readonly Random _random = default!;
 
     /// <summary>
     /// Initializes a new instance of the BootstrapFitDetector class.

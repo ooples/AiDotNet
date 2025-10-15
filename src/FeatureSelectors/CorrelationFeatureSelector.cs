@@ -26,7 +26,7 @@ public class CorrelationFeatureSelector<T, TInput> : IFeatureSelector<T, TInput>
     /// removed. A higher threshold means features need to be more similar to be considered redundant.
     /// The default value is 0.5.
     /// </remarks>
-    private readonly T _threshold;
+    private readonly T _threshold = default!;
     
     /// <summary>
     /// Provides operations for numeric calculations with type T.
@@ -35,7 +35,7 @@ public class CorrelationFeatureSelector<T, TInput> : IFeatureSelector<T, TInput>
     /// <b>For Beginners:</b> This is a helper object that knows how to perform math operations 
     /// on the specific number type you're using (like float or double).
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The strategy to use for extracting features from higher-dimensional tensors.

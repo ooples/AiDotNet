@@ -35,7 +35,7 @@ public class RecursiveFeatureElimination<T, TInput, TOutput> : IFeatureSelector<
     /// <b>For Beginners:</b> This model helps determine which features are most important by examining 
     /// the coefficients (weights) it assigns to each feature during training.
     /// </remarks>
-    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly IFullModel<T, TInput, TOutput> _model = default!;
     
     /// <summary>
     /// Provides operations for numeric calculations with type T.
@@ -44,7 +44,7 @@ public class RecursiveFeatureElimination<T, TInput, TOutput> : IFeatureSelector<
     /// <b>For Beginners:</b> This is a helper object that knows how to perform math operations 
     /// on the specific number type you're using (like float or double).
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// The strategy to use for extracting features from higher-dimensional tensors.
@@ -73,7 +73,7 @@ public class RecursiveFeatureElimination<T, TInput, TOutput> : IFeatureSelector<
     /// <b>For Beginners:</b> This function helps create placeholder output values when we need
     /// to train the model just to see which features are important, not to make actual predictions.
     /// </remarks>
-    private readonly Func<int, TOutput> _createDummyTarget;
+    private readonly Func<int, TOutput> _createDummyTarget = default!;
 
     /// <summary>
     /// Initializes a new instance of the RecursiveFeatureElimination class.

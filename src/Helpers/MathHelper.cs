@@ -16,6 +16,22 @@
 public static class MathHelper
 {
     /// <summary>
+    /// Gets a value indicating whether hardware acceleration (SIMD) is available for vector operations.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if hardware acceleration is available; otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hardware acceleration uses special CPU instructions to perform 
+    /// multiple calculations at once, making vector and matrix operations much faster.
+    /// 
+    /// This property checks if your computer's processor supports these special instructions
+    /// (called SIMD - Single Instruction, Multiple Data).
+    /// </para>
+    /// </remarks>
+    public static bool IsHardwareAccelerated { get; } = System.Numerics.Vector.IsHardwareAccelerated;
+    /// <summary>
     /// Gets the appropriate numeric operations implementation for the specified type.
     /// </summary>
     /// <typeparam name="T">The numeric type to get operations for.</typeparam>

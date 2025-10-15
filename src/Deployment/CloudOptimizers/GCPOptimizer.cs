@@ -21,6 +21,7 @@ namespace AiDotNet.Deployment.CloudOptimizers
 
         public GCPOptimizer()
         {
+            _serviceConfigs = new Dictionary<string, GCPServiceConfig>();
             InitializeServiceConfigs();
             ConfigureForGCP();
         }
@@ -35,31 +36,30 @@ namespace AiDotNet.Deployment.CloudOptimizers
                     MaxModelSize = double.MaxValue,
                     SupportedFormats = new[] { "Tensor<double>Flow", "PyTorch", "XGBoost", "Scikit-learn", "ONNX" },
                     MachineTypes = new[] { "n1-standard-4", "n1-highmem-8", "a2-highgpu-1g", "c2-standard-16" }
-                },
-                ["CloudFunctions"] = new GCPServiceConfig
+                };
+            _serviceConfigs["CloudFunctions"] = new GCPServiceConfig
                 {
                     ServiceName = "Cloud Functions",
                     MaxModelSize = 512, // 512 MB
                     MaxMemory = 8192, // 8 GB
                     MaxTimeout = 540, // 9 minutes
                     SupportedFormats = new[] { "Tensor<double>Flow Lite", "ONNX" }
-                },
-                ["CloudRun"] = new GCPServiceConfig
+                };
+            _serviceConfigs["CloudRun"] = new GCPServiceConfig
                 {
                     ServiceName = "Cloud Run",
                     MaxModelSize = 10000, // 10 GB container size
                     MaxMemory = 32768, // 32 GB
                     MaxTimeout = 3600, // 60 minutes
                     SupportedFormats = new[] { "Any" }
-                },
-                ["AIOptimizedVMs"] = new GCPServiceConfig
+                };
+            _serviceConfigs["AIOptimizedVMs"] = new GCPServiceConfig
                 {
                     ServiceName = "AI-Optimized VMs",
                     MaxModelSize = double.MaxValue,
                     SupportedFormats = new[] { "Any" },
                     Accelerators = new[] { "nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-tesla-a100", "tpu-v3" }
-                }
-            };
+                };
         }
 
         private void ConfigureForGCP()
@@ -559,13 +559,13 @@ CMD [""python"", ""prediction_service.py""]
 
         private class GCPServiceConfig
         {
-            public string ServiceName { get; set; } = default!;
+            public string ServiceName { get; set; } = string.Empty;
             public double MaxModelSize { get; set; }
             public double MaxMemory { get; set; }
             public double MaxTimeout { get; set; }
-            public string[] SupportedFormats { get; set; } = default!;
-            public string[] MachineTypes { get; set; } = default!;
-            public string[] Accelerators { get; set; } = default!;
+            public string[] SupportedFormats { get; set; } = new string[0];
+            public string[] MachineTypes { get; set; } = new string[0];
+            public string[] Accelerators { get; set; } = new string[0];
         }
     }
 }

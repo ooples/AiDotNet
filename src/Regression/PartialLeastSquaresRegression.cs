@@ -31,7 +31,7 @@ public class PartialLeastSquaresRegression<T> : RegressionModelBase<T>
     /// <value>
     /// Contains settings like the number of components to extract.
     /// </value>
-    private readonly PartialLeastSquaresRegressionOptions<T> _options;
+    private readonly PartialLeastSquaresRegressionOptions<T> _options = default!;
 
     /// <summary>
     /// The loadings matrix (P) that represents how the original variables load onto the components.
@@ -39,7 +39,7 @@ public class PartialLeastSquaresRegression<T> : RegressionModelBase<T>
     /// <value>
     /// A matrix where each column represents the loadings for a component.
     /// </value>
-    private Matrix<T> _loadings;
+    private Matrix<T> _loadings = default!;
 
     /// <summary>
     /// The scores matrix (T) that represents the projection of the original data onto the components.
@@ -47,7 +47,7 @@ public class PartialLeastSquaresRegression<T> : RegressionModelBase<T>
     /// <value>
     /// A matrix where each column represents the scores for a component.
     /// </value>
-    private Matrix<T> _scores;
+    private Matrix<T> _scores = default!;
 
     /// <summary>
     /// The weights matrix (W) used to transform the original variables into components.
@@ -55,7 +55,7 @@ public class PartialLeastSquaresRegression<T> : RegressionModelBase<T>
     /// <value>
     /// A matrix where each column represents the weights for a component.
     /// </value>
-    private Matrix<T> _weights;
+    private Matrix<T> _weights = default!;
 
     /// <summary>
     /// The mean of the target variable used for centering.
@@ -63,7 +63,7 @@ public class PartialLeastSquaresRegression<T> : RegressionModelBase<T>
     /// <value>
     /// A vector containing the mean value of the target variable.
     /// </value>
-    private Vector<T> _yMean;
+    private Vector<T> _yMean = default!;
 
     /// <summary>
     /// The means of the predictor variables used for centering.
@@ -71,7 +71,7 @@ public class PartialLeastSquaresRegression<T> : RegressionModelBase<T>
     /// <value>
     /// A vector containing the mean value of each predictor variable.
     /// </value>
-    private Vector<T> _xMean;
+    private Vector<T> _xMean = default!;
 
     /// <summary>
     /// The standard deviation of the target variable used for scaling.
@@ -79,7 +79,7 @@ public class PartialLeastSquaresRegression<T> : RegressionModelBase<T>
     /// <value>
     /// The standard deviation value of the target variable.
     /// </value>
-    private T _yStd;
+    private T _yStd = default!;
 
     /// <summary>
     /// The standard deviations of the predictor variables used for scaling.
@@ -87,7 +87,7 @@ public class PartialLeastSquaresRegression<T> : RegressionModelBase<T>
     /// <value>
     /// A vector containing the standard deviation of each predictor variable.
     /// </value>
-    private Vector<T> _xStd;
+    private Vector<T> _xStd = default!;
 
     /// <summary>
     /// Initializes a new instance of the PartialLeastSquaresRegression class with the specified options and regularization.
@@ -285,9 +285,9 @@ public class PartialLeastSquaresRegression<T> : RegressionModelBase<T>
     /// variables are most influential in making predictions.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>

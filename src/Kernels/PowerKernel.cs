@@ -51,7 +51,7 @@ public class PowerKernel<T> : IKernelFunction<T>
     /// Higher values amplify the differences between points that are far apart,
     /// while lower values reduce this effect.
     /// </remarks>
-    private readonly T _degree;
+    private readonly T _degree = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -61,7 +61,7 @@ public class PowerKernel<T> : IKernelFunction<T>
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Power kernel with an optional degree parameter.

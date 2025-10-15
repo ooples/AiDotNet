@@ -34,22 +34,22 @@ namespace AiDotNet.ReinforcementLearning.Agents
     public class AdvantageActorCriticAgent<TState, TAction, T> : AgentBase<TState, TAction, T>
         where TState : Tensor<T>
     {
-        private readonly IPolicy<TState, TAction, T> _actor;
-        private readonly IValueFunction<TState, T> _critic;
+        private readonly IPolicy<TState, TAction, T> _actor = default!;
+        private readonly IValueFunction<TState, T> _critic = default!;
         private readonly IValueFunction<TState, T>? _criticTarget;
-        private readonly T _actorLearningRate;
-        private readonly T _criticLearningRate;
-        private readonly T _entropyCoefficient;
-        private readonly T _valueLossCoefficient;
+        private readonly T _actorLearningRate = default!;
+        private readonly T _criticLearningRate = default!;
+        private readonly T _entropyCoefficient = default!;
+        private readonly T _valueLossCoefficient = default!;
         private readonly bool _useGAE;
-        private readonly T _gaeParameter;
+        private readonly T _gaeParameter = default!;
         private readonly bool _normalizeAdvantages;
         private readonly bool _standardizeRewards;
         private readonly bool _useCriticTargetNetwork;
         private readonly int _stepsPerUpdate;
         private readonly bool _useNStepReturns;
         private readonly int _nSteps;
-        private readonly T _maxGradientNorm;
+        private readonly T _maxGradientNorm = default!;
 
         // Buffer to store experiences until it's time to update
         private readonly List<(TState state, TAction action, T reward, TState nextState, bool done)> _experienceBuffer;
@@ -812,9 +812,9 @@ namespace AiDotNet.ReinforcementLearning.Agents
             /// </summary>
             protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
             
-            private readonly List<LayerBase<T>> _layers;
-            private readonly T _learningRate;
-            private readonly Random _random;
+            private readonly List<LayerBase<T>> _layers = default!;
+            private readonly T _learningRate = default!;
+            private readonly Random _random = default!;
 
             public ValueNetwork(int stateSize, int[] hiddenSizes, IActivationFunction<T> activation, int? seed = null)
             {

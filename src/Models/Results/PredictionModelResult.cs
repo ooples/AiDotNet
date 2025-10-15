@@ -159,7 +159,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// based on features like "square_footage", "num_bedrooms", and "location_score".
     /// </para>
     /// </remarks>
-    public ModelMetaData<T> ModelMetadata { get; private set; } = new();
+    public ModelMetadata<T> ModelMetadata { get; private set; } = new();
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
@@ -197,7 +197,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
-        ModelMetadata = Model?.GetModelMetaData() ?? new();
+        ModelMetadata = Model?.GetModelMetadata() ?? new();
     }
 
     /// <summary>
@@ -256,7 +256,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// so you can ensure your input data has the correct columns.
     /// </para>
     /// </remarks>
-    public ModelMetaData<T> GetModelMetadata()
+    public ModelMetadata<T> GetModelMetadata()
     {
         return ModelMetadata;
     }
@@ -517,7 +517,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </remarks>
     public static PredictionModelResult<T, TInput, TOutput> LoadModel(
         string filePath,
-        Func<ModelMetaData<T>, IFullModel<T, TInput, TOutput>> modelFactory)
+        Func<ModelMetadata<T>, IFullModel<T, TInput, TOutput>> modelFactory)
     {
         // First, we need to read the file
         byte[] data = File.ReadAllBytes(filePath);
@@ -557,7 +557,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// This lets us determine what type of model we need to create before fully loading the data.
     /// </para>
     /// </remarks>
-    private static ModelMetaData<T> ExtractMetadataFromSerializedData(byte[] data)
+    private static ModelMetadata<T> ExtractMetadataFromSerializedData(byte[] data)
     {
         try
         {
@@ -582,7 +582,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
             var modelMetadataJson = Encoding.UTF8.GetString(modelMetadataBytes);
 
             // Deserialize metadata
-            return JsonConvert.DeserializeObject<ModelMetaData<T>>(modelMetadataJson) ?? new ModelMetaData<T>();
+            return JsonConvert.DeserializeObject<ModelMetadata<T>>(modelMetadataJson) ?? new ModelMetadata<T>();
         }
         catch (Exception ex)
         {

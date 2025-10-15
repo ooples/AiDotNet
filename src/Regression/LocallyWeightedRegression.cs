@@ -34,17 +34,17 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionModelBase<T>
     /// <summary>
     /// Configuration options for the Locally Weighted Regression algorithm.
     /// </summary>
-    private readonly LocallyWeightedRegressionOptions _options;
+    private readonly LocallyWeightedRegressionOptions _options = default!;
     
     /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>
-    private Matrix<T> _xTrain;
+    private Matrix<T> _xTrain = default!;
     
     /// <summary>
     /// Vector containing the target values of the training samples.
     /// </summary>
-    private Vector<T> _yTrain;
+    private Vector<T> _yTrain = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LocallyWeightedRegression{T}"/> class.

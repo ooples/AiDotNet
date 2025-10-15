@@ -18,8 +18,8 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class DDPGModel<T> : ReinforcementLearningModelBase<T>
     {
-        private readonly DDPGOptions _options;
-        private readonly DDPGAgent<Tensor<T>, T> _agent;
+        private readonly DDPGOptions _options = default!;
+        private readonly DDPGAgent<Tensor<T>, T> _agent = default!;
         private readonly int _batchSize;
 
         /// <summary>
@@ -181,9 +181,9 @@ namespace AiDotNet.ReinforcementLearning.Models
         /// Gets the metadata for this model.
         /// </summary>
         /// <returns>The model metadata.</returns>
-        public override ModelMetaData<T> GetModelMetaData()
+        public override ModelMetadata<T> GetModelMetadata()
         {
-            var metadata = base.GetModelMetaData();
+            var metadata = base.GetModelMetadata();
             
             metadata.ModelType = ModelType.NeuralNetwork; // ReinforcementLearning models use neural networks
             metadata.Description = "Actor-critic reinforcement learning algorithm for continuous control";

@@ -97,7 +97,7 @@ public class SimpleRegression<T> : RegressionModelBase<T>
     /// 4. Once found, this line gives you the formula to predict new values
     /// 
     /// For example, after training on house data, the model might learn that:
-    /// price = $100,000 + ($100 × square_footage)
+    /// price = $100,000 + ($100 ï¿½ square_footage)
     /// This means a house has a base price of $100,000 plus $100 for each square foot.
     /// </para>
     /// </remarks>
@@ -178,5 +178,88 @@ public class SimpleRegression<T> : RegressionModelBase<T>
     protected override ModelType GetModelType()
     {
         return ModelType.SimpleRegression;
+    }
+    
+    /// <summary>
+    /// Evaluates the model performance on the given test data.
+    /// </summary>
+    /// <param name="xTest">The test input features.</param>
+    /// <param name="yTest">The true target values.</param>
+    /// <returns>A dictionary containing evaluation metrics such as R-squared, MSE, etc.</returns>
+    public Dictionary<string, double> Evaluate(Matrix<T> xTest, Vector<T> yTest)
+    {
+        var predictions = Predict(xTest);
+        var mse = CalculateMSE(predictions, yTest);
+        var r2 = CalculateRSquared(predictions, yTest);
+        
+        return new Dictionary<string, double>
+        {
+            ["MSE"] = Convert.ToDouble(mse),
+            ["RMSE"] = Math.Sqrt(Convert.ToDouble(mse)),
+            ["R2"] = Convert.ToDouble(r2),
+            ["MAE"] = Convert.ToDouble(CalculateMAE(predictions, yTest))
+        };
+    }
+    
+    private T CalculateMSE(Vector<T> predictions, Vector<T> actual)
+    {
+        var n = predictions.Length;
+        var sum = NumOps.Zero;
+        
+        for (int i = 0; i < n; i++)
+        {
+            var diff = NumOps.Subtract(predictions[i], actual[i]);
+            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
+        }
+        
+        return NumOps.Divide(sum, NumOps.FromDouble(n));
+    }
+    
+    private T CalculateMAE(Vector<T> predictions, Vector<T> actual)
+    {
+        var n = predictions.Length;
+        var sum = NumOps.Zero;
+        
+        for (int i = 0; i < n; i++)
+        {
+            var diff = NumOps.Subtract(predictions[i], actual[i]);
+            sum = NumOps.Add(sum, NumOps.Abs(diff));
+        }
+        
+        return NumOps.Divide(sum, NumOps.FromDouble(n));
+    }
+    
+    private T CalculateRSquared(Vector<T> predictions, Vector<T> actual)
+    {
+        var n = actual.Length;
+        var meanActual = NumOps.Zero;
+        
+        // Calculate mean of actual values
+        for (int i = 0; i < n; i++)
+        {
+            meanActual = NumOps.Add(meanActual, actual[i]);
+        }
+        meanActual = NumOps.Divide(meanActual, NumOps.FromDouble(n));
+        
+        // Calculate SS_tot and SS_res
+        var ssTot = NumOps.Zero;
+        var ssRes = NumOps.Zero;
+        
+        for (int i = 0; i < n; i++)
+        {
+            var diffFromMean = NumOps.Subtract(actual[i], meanActual);
+            ssTot = NumOps.Add(ssTot, NumOps.Multiply(diffFromMean, diffFromMean));
+            
+            var residual = NumOps.Subtract(actual[i], predictions[i]);
+            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
+        }
+        
+        // RÂ² = 1 - (SS_res / SS_tot)
+        if (NumOps.LessThanOrEquals(NumOps.Abs(ssTot), NumOps.FromDouble(1e-10)))
+        {
+            return NumOps.Zero;
+        }
+        
+        return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
     }
 }

@@ -31,7 +31,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// The margin that enforces separation between dissimilar pairs.
     /// </summary>
-    private readonly T _margin;
+    private readonly T _margin = default!;
     
     /// <summary>
     /// Initializes a new instance of the ContrastiveLoss class.

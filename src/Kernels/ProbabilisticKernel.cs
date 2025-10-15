@@ -52,7 +52,7 @@ public class ProbabilisticKernel<T> : IKernelFunction<T>
     /// If your data points vary greatly in magnitude and you want the kernel to be less affected by this,
     /// you might want to use a larger sigma value.
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -62,7 +62,7 @@ public class ProbabilisticKernel<T> : IKernelFunction<T>
     /// operations regardless of what numeric type (like double, float, decimal) you're using.
     /// You don't need to interact with this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Probabilistic kernel with an optional sigma parameter.

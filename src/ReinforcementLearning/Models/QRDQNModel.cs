@@ -30,7 +30,7 @@ namespace AiDotNet.ReinforcementLearning.Models;
 /// </remarks>
 public class QRDQNModel<T> : ReinforcementLearningModelBase<T>
 {
-    private readonly QRDQNOptions _options;
+    private readonly QRDQNOptions _options = default!;
     private QRDQNAgent<T> _agent = null!;
     private DiscreteActionAdapter<T> _adapter = null!;
     
@@ -352,9 +352,9 @@ public class QRDQNModel<T> : ReinforcementLearningModelBase<T>
     /// Gets the metadata for this model.
     /// </summary>
     /// <returns>The model metadata.</returns>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = base.GetModelMetaData();
+        var metadata = base.GetModelMetadata();
         
         metadata.ModelType = ModelType.QRDQNModel; // QR-DQN uses neural networks
         metadata.Description = "Distributional reinforcement learning for risk-sensitive decision making";
@@ -606,9 +606,9 @@ public class QRDQNModel<T> : ReinforcementLearningModelBase<T>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     internal class DiscreteActionAdapter<TNumeric> : IAgent<Tensor<TNumeric>, Vector<TNumeric>, TNumeric>
     {
-        private readonly IAgent<Tensor<TNumeric>, int, TNumeric> _discreteAgent;
+        private readonly IAgent<Tensor<TNumeric>, int, TNumeric> _discreteAgent = default!;
         private readonly int _actionSize;
-        private readonly INumericOperations<TNumeric> _numOps;
+        private readonly INumericOperations<TNumeric> _numOps = default!;
         
         public DiscreteActionAdapter(IAgent<Tensor<TNumeric>, int, TNumeric> discreteAgent, int actionSize)
         {

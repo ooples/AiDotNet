@@ -87,7 +87,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// This is part of the "squeeze" operation that compresses information.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights1;
+    private Matrix<T> _weights1 = default!;
 
     /// <summary>
     /// The bias values for the first fully connected layer.
@@ -108,7 +108,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// means it starts with some activation even before the input is considered.
     /// </para>
     /// </remarks>
-    private Vector<T> _bias1;
+    private Vector<T> _bias1 = default!;
 
     /// <summary>
     /// The weights for the second fully connected layer.
@@ -128,7 +128,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// This is part of the "excitation" operation that decides which features to emphasize.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights2;
+    private Matrix<T> _weights2 = default!;
 
     /// <summary>
     /// The bias values for the second fully connected layer.
@@ -149,7 +149,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// so it receives attention even when the specific input doesn't strongly suggest it.
     /// </para>
     /// </remarks>
-    private Vector<T> _bias2;
+    private Vector<T> _bias2 = default!;
 
     /// <summary>
     /// The input tensor from the most recent forward pass.

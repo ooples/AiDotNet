@@ -20,7 +20,7 @@ public class JackknifeFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     /// <summary>
     /// Configuration options for the jackknife fit detector.
     /// </summary>
-    private readonly JackknifeFitDetectorOptions _options;
+    private readonly JackknifeFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the JackknifeFitDetector class.

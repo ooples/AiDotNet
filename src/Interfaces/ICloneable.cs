@@ -4,7 +4,7 @@ namespace AiDotNet.Interfaces;
 /// Interface for objects that can be cloned or copied.
 /// </summary>
 /// <typeparam name="T">The type of the object being cloned.</typeparam>
-public interface ICloneable<T> where T : class
+public interface ICloneable<T>
 {
     /// <summary>
     /// Creates a deep copy of this object.

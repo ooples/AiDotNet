@@ -128,10 +128,10 @@ namespace AiDotNet.NeuralNetworks
             var meanCoef1 = posteriorMeanCoef1[t];
             var meanCoef2 = posteriorMeanCoef2[t];
             var sqrtOneMinusAlpha = sqrtOneMinusAlphasCumprod[t];
-            var sqrtAlpha = sqrtAlphasCumprod[t];
-            
+            var sqrtAlpha = Math.Sqrt(alphasCumprod[t]);
+
             var mean = noisyData.Subtract(predictedNoise.Multiply(sqrtOneMinusAlpha))
-                               .Divide(sqrtAlpha);
+                               .Multiply(1.0 / sqrtAlpha);
             
             return mean;
         }
@@ -192,7 +192,7 @@ namespace AiDotNet.NeuralNetworks
                 var t = random.Next(timesteps);
                 
                 // Get single sample
-                var sample = data.GetSlice(new[] { i });
+                var sample = data.GetSlice(i);
                 
                 // Add noise
                 var (noisyData, noise) = ForwardDiffusion(sample, t, random);
@@ -209,7 +209,7 @@ namespace AiDotNet.NeuralNetworks
                 if (noisePredictor is NeuralNetworkBase<double> nn)
                 {
                     nn.Backpropagate(predictedNoise.Subtract(noise));
-                    optimizer.Step(nn.GetParameters(), nn.GetGradients());
+                    optimizer.Step();
                 }
             }
             

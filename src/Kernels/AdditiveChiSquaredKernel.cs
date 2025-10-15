@@ -30,7 +30,7 @@ public class AdditiveChiSquaredKernel<T> : IKernelFunction<T>
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Additive Chi-Squared kernel.

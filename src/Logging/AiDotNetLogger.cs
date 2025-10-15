@@ -15,13 +15,13 @@ namespace AiDotNet.Logging;
 /// </remarks>
 public class AiDotNetLogger : ILogging
 {
-    private readonly Serilog.ILogger _logger;
+    private readonly ILogging _logger;
 
     /// <summary>
     /// Initializes a new instance of the AiDotNetLogger class with a Serilog logger.
     /// </summary>
     /// <param name="logger">The Serilog logger to use.</param>
-    public AiDotNetLogger(Serilog.ILogger logger)
+    public AiDotNetLogger(ILogging logger)
     {
         _logger = logger;
     }
@@ -29,7 +29,7 @@ public class AiDotNetLogger : ILogging
     /// <inheritdoc/>
     public void Trace(string message, params object[] args)
     {
-        _logger.Verbose(message, args);
+        _logger.Trace(message, args);
     }
 
     /// <inheritdoc/>
@@ -65,19 +65,19 @@ public class AiDotNetLogger : ILogging
     /// <inheritdoc/>
     public void Critical(string message, params object[] args)
     {
-        _logger.Fatal(message, args);
+        _logger.Critical(message, args);
     }
 
     /// <inheritdoc/>
     public void Critical(Exception exception, string message, params object[] args)
     {
-        _logger.Fatal(exception, message, args);
+        _logger.Critical(exception, message, args);
     }
 
     /// <inheritdoc/>
     public bool IsEnabled(LoggingLevel level)
     {
-        return _logger.IsEnabled(ConvertLogLevel(level));
+        return _logger.IsEnabled(level);
     }
 
     /// <inheritdoc/>
@@ -96,19 +96,5 @@ public class AiDotNetLogger : ILogging
     public ILogging ForContext(Type type)
     {
         return new AiDotNetLogger(_logger.ForContext(type));
-    }
-
-    private static Serilog.Events.LogEventLevel ConvertLogLevel(LoggingLevel level)
-    {
-        return level switch
-        {
-            LoggingLevel.Trace => Serilog.Events.LogEventLevel.Verbose,
-            LoggingLevel.Debug => Serilog.Events.LogEventLevel.Debug,
-            LoggingLevel.Information => Serilog.Events.LogEventLevel.Information,
-            LoggingLevel.Warning => Serilog.Events.LogEventLevel.Warning,
-            LoggingLevel.Error => Serilog.Events.LogEventLevel.Error,
-            LoggingLevel.Critical => Serilog.Events.LogEventLevel.Fatal,
-            _ => Serilog.Events.LogEventLevel.Information
-        };
     }
 }

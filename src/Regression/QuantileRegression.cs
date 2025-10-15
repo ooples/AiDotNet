@@ -31,7 +31,7 @@ public class QuantileRegression<T> : RegressionModelBase<T>
     /// <value>
     /// Contains settings like the quantile to estimate, learning rate, and maximum iterations.
     /// </value>
-    private readonly QuantileRegressionOptions<T> _options;
+    private readonly QuantileRegressionOptions<T> _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the QuantileRegression class with the specified options and regularization.
@@ -184,9 +184,9 @@ public class QuantileRegression<T> : RegressionModelBase<T>
     /// This information can be useful for understanding and comparing different models.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = base.GetModelMetaData();
+        var metadata = base.GetModelMetadata();
         metadata.AdditionalInfo["Quantile"] = _options.Quantile;
 
         return metadata;

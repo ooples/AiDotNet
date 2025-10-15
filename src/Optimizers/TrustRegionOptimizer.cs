@@ -1,3 +1,15 @@
+using System;
+using System.IO;
+using System.Linq;
+using AiDotNet.Extensions;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.Models.Results;
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -29,7 +41,7 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// It includes parameters such as initial trust region radius, expansion and contraction factors,
     /// and thresholds for determining the success of each optimization step.
     /// </remarks>
-    private TrustRegionOptimizerOptions<T, TInput, TOutput> _options;
+    private TrustRegionOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// The current radius of the trust region.
@@ -39,7 +51,7 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// during the optimization process. The trust region is a neighborhood around the current point
     /// where the quadratic approximation of the objective function is considered reliable.
     /// </remarks>
-    private T _trustRegionRadius;
+    private T _trustRegionRadius = default!;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -183,10 +195,10 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
                 var perturbed3 = currentSolution.Clone();
                 var perturbed4 = currentSolution.Clone();
 
-                var coeffs1 = coefficients.Clone();
-                var coeffs2 = coefficients.Clone();
-                var coeffs3 = coefficients.Clone();
-                var coeffs4 = coefficients.Clone();
+                var coeffs1 = (Vector<T>)coefficients.Clone();
+                var coeffs2 = (Vector<T>)coefficients.Clone();
+                var coeffs3 = (Vector<T>)coefficients.Clone();
+                var coeffs4 = (Vector<T>)coefficients.Clone();
 
                 coeffs1[i] = NumOps.Add(coeffs1[i], epsilon);
                 coeffs1[j] = NumOps.Add(coeffs1[j], epsilon);
@@ -273,29 +285,29 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         {
             d[i] = NumOps.Negate(d[i]);
         }
-        var g0 = gradient.DotProduct(gradient);
+        var g0 = ((Vector<T>)gradient).DotProduct((Vector<T>)gradient);
 
         for (int i = 0; i < _options.MaxCGIterations; i++)
         {
             var Hd = hessian.Multiply(d);
-            var dHd = d.DotProduct(Hd);
+            var dHd = ((Vector<T>)d).DotProduct((Vector<T>)Hd);
 
             if (NumOps.LessThanOrEquals(dHd, NumOps.Zero))
             {
                 return ComputeBoundaryStep(z, d);
             }
 
-            var alpha = NumOps.Divide(r.DotProduct(r), dHd);
+            var alpha = NumOps.Divide(((Vector<T>)r).DotProduct((Vector<T>)r), dHd);
             var zNext = z.Add(d.Multiply(alpha));
 
-            if (NumOps.GreaterThan(zNext.Norm(), _trustRegionRadius))
+            if (NumOps.GreaterThan(((Vector<T>)zNext).Norm(), _trustRegionRadius))
             {
                 return ComputeBoundaryStep(z, d);
             }
 
             z = zNext;
             var rNext = r.Add(Hd.Multiply(alpha));
-            var beta = NumOps.Divide(rNext.DotProduct(rNext), r.DotProduct(r));
+            var beta = NumOps.Divide(((Vector<T>)rNext).DotProduct((Vector<T>)rNext), ((Vector<T>)r).DotProduct((Vector<T>)r));
 
             var dNext = rNext.Clone();
             for (int j = 0; j < dNext.Length; j++)
@@ -306,7 +318,7 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
 
             r = rNext;
 
-            if (NumOps.LessThan(r.Norm(), NumOps.Multiply(NumOps.FromDouble(_options.CGTolerance), g0)))
+            if (NumOps.LessThan(((Vector<T>)r).Norm(), NumOps.Multiply(NumOps.FromDouble(_options.CGTolerance), g0)))
             {
                 break;
             }
@@ -333,9 +345,9 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// </remarks>
     private Vector<T> ComputeBoundaryStep(Vector<T> z, Vector<T> d)
     {
-        var a = d.DotProduct(d);
-        var b = NumOps.Multiply(NumOps.FromDouble(2), z.DotProduct(d));
-        var c = NumOps.Subtract(z.DotProduct(z), NumOps.Multiply(_trustRegionRadius, _trustRegionRadius));
+        var a = ((Vector<T>)d).DotProduct((Vector<T>)d);
+        var b = NumOps.Multiply(NumOps.FromDouble(2), ((Vector<T>)z).DotProduct((Vector<T>)d));
+        var c = NumOps.Subtract(((Vector<T>)z).DotProduct((Vector<T>)z), NumOps.Multiply(_trustRegionRadius, _trustRegionRadius));
         var tau = SolveQuadratic(a, b, c);
 
         return z.Add(d.Multiply(tau));
@@ -387,8 +399,8 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// </remarks>
     private T CalculatePredictedReduction(Vector<T> gradient, Matrix<T> hessian, Vector<T> stepDirection)
     {
-        var linearTerm = gradient.DotProduct(stepDirection);
-        var quadraticTerm = stepDirection.DotProduct(hessian.Multiply(stepDirection));
+        var linearTerm = ((Vector<T>)gradient).DotProduct((Vector<T>)stepDirection);
+        var quadraticTerm = ((Vector<T>)stepDirection).DotProduct((Vector<T>)hessian.Multiply(stepDirection));
 
         return NumOps.Add(linearTerm, NumOps.Multiply(NumOps.FromDouble(0.5), quadraticTerm));
     }

@@ -23,13 +23,13 @@ namespace AiDotNet.ReinforcementLearning.Exploration
         /// </summary>
         protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
         
-        private readonly T _theta;
-        private readonly T _sigma;
-        private readonly T _decayRate;
+        private readonly T _theta = default!;
+        private readonly T _sigma = default!;
+        private readonly T _decayRate = default!;
         private readonly long _decaySteps;
-        private readonly Random _random;
-        private Vector<T> _state;
-        private Vector<T> _mu;
+        private readonly Random _random = default!;
+        private Vector<T> _state = default!;
+        private Vector<T> _mu = default!;
         private readonly int _actionDim;
 
         /// <summary>

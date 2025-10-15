@@ -25,7 +25,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <summary>
     /// The options specific to the Levenberg-Marquardt algorithm.
     /// </summary>
-    private LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> _lmOptions;
+    private LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> _lmOptions = default!;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -35,7 +35,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <summary>
     /// The damping factor used in the Levenberg-Marquardt algorithm to balance between gradient descent and Gauss-Newton steps.
     /// </summary>
-    private T _dampingFactor;
+    private T _dampingFactor = default!;
 
     /// <summary>
     /// Initializes a new instance of the LevenbergMarquardtOptimizer class.

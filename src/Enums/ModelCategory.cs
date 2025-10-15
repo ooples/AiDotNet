@@ -180,15 +180,16 @@ public enum ModelCategory
     AutoML,
 
     /// <summary>
-    /// Models that generate new data samples, such as images, text, or audio.
+    /// Models that create new data samples similar to their training data.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Generative models learn to create new, realistic data that resembles the training data.
-    /// Unlike discriminative models that classify or predict, generative models can produce entirely new content.
-    /// Examples include GANs (Generative Adversarial Networks) that create realistic images, language models
-    /// that generate coherent text, and diffusion models that can create art from text descriptions.
-    /// These models have applications in creative tasks, data augmentation, and synthetic data generation.
+    /// <b>For Beginners:</b> Generative models learn to create new data that resembles their training data.
+    /// Instead of just analyzing or classifying existing data, these models can generate entirely new examples.
+    /// For instance, they can create realistic images, write text, compose music, or generate synthetic data
+    /// for testing. Examples include Generative Adversarial Networks (GANs), Variational Autoencoders (VAEs),
+    /// Diffusion Models, and Large Language Models (LLMs) like GPT. These models learn the underlying patterns
+    /// and distributions in their training data, then use that knowledge to produce novel outputs.
     /// </para>
     /// </remarks>
     Generative,

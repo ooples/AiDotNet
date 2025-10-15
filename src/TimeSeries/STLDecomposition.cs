@@ -29,22 +29,22 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Configuration options for the STL decomposition.
     /// </summary>
-    private STLDecompositionOptions<T> _stlOptions;
+    private STLDecompositionOptions<T> _stlOptions = default!;
 
     /// <summary>
     /// The trend component of the time series.
     /// </summary>
-    private Vector<T> _trend;
+    private Vector<T> _trend = default!;
 
     /// <summary>
     /// The seasonal component of the time series.
     /// </summary>
-    private Vector<T> _seasonal;
+    private Vector<T> _seasonal = default!;
 
     /// <summary>
     /// The residual component of the time series.
     /// </summary>
-    private Vector<T> _residual;
+    private Vector<T> _residual = default!;
 
     /// <summary>
     /// Initializes a new instance of the STLDecomposition class with optional configuration options.
@@ -1029,7 +1029,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the model, including its type, configuration, and information about the decomposed components.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     /// <remarks>
     /// <para>
     /// This method returns detailed metadata about the model, including its type, configuration options,
@@ -1055,9 +1055,9 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// Think of it like getting a detailed report card for your decomposition analysis.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.STLDecomposition,
             AdditionalInfo = new Dictionary<string, object>

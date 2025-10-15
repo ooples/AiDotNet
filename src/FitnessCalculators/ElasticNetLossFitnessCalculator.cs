@@ -40,7 +40,7 @@ public class ElasticNetLossFitnessCalculator<T, TInput, TOutput> : FitnessCalcul
     /// The default value of 0.5 provides a balanced approach between these two strategies.
     /// </para>
     /// </remarks>
-    private readonly T _l1Ratio;
+    private readonly T _l1Ratio = default!;
 
     /// <summary>
     /// The strength of the regularization penalty applied to the model.
@@ -54,7 +54,7 @@ public class ElasticNetLossFitnessCalculator<T, TInput, TOutput> : FitnessCalcul
     /// The default value of 1.0 provides a moderate level of regularization.
     /// </para>
     /// </remarks>
-    private readonly T _alpha;
+    private readonly T _alpha = default!;
 
     /// <summary>
     /// Initializes a new instance of the ElasticNetLossFitnessCalculator class.

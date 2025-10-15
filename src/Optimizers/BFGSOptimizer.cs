@@ -33,7 +33,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// The options specific to the BFGS optimization algorithm.
     /// </summary>
-    private BFGSOptimizerOptions<T, TInput, TOutput> _bfgsOptions;
+    private BFGSOptimizerOptions<T, TInput, TOutput> _bfgsOptions = default!;
 
     /// <summary>
     /// The approximation of the inverse Hessian matrix.

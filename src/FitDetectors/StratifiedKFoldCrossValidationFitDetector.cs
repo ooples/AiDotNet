@@ -24,7 +24,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T, TInput, TOutput> : Fit
     /// <summary>
     /// Configuration options for the Stratified K-Fold Cross-Validation fit detector.
     /// </summary>
-    private readonly StratifiedKFoldCrossValidationFitDetectorOptions _options;
+    private readonly StratifiedKFoldCrossValidationFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the StratifiedKFoldCrossValidationFitDetector class.

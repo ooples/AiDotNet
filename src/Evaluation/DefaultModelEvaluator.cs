@@ -92,7 +92,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
         var inputSize = InputHelper<T, TInput>.GetInputSize(X);
         var actual = ConversionsHelper.ConvertToVector<T, TOutput>(y);
-        var metaData = model.GetModelMetaData();
+        var metaData = model.GetModelMetadata();
 
         return new DataSetStats<T, TInput, TOutput>(metaData.ModelType)
         {
@@ -199,7 +199,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             XMatrix = xTrain,
             FeatureCount = InputHelper<T, TInput>.GetInputSize(xTrain),
             Model = predictionModelResult?.Model
-        }, modelType: model?.GetModelMetaData().ModelType ?? ModelType.None);
+        }, modelType: model?.GetModelMetadata().ModelType ?? ModelType.None);
     }
 
     /// <summary>
@@ -239,7 +239,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         Vector<T> y,
         ICrossValidator<T>? crossValidator = null)
     {
-        crossValidator ??= new StandardCrossValidator<T>(model.GetModelMetaData().ModelType);
+        crossValidator ??= new StandardCrossValidator<T>(model.GetModelMetadata().ModelType);
 
         return crossValidator.Validate(model, X, y);
     }

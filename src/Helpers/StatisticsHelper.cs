@@ -10332,4 +10332,76 @@ public static class StatisticsHelper<T>
 
         return new Vector<T>(pacf);
     }
+
+    /// <summary>
+    /// Calculates the mean (average) of a collection of values.
+    /// </summary>
+    /// <param name="values">The collection of values.</param>
+    /// <returns>The mean value.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The mean is the sum of all values divided by the count of values.
+    /// It represents the central tendency of the data.
+    /// </para>
+    /// </remarks>
+    public static T Mean(IEnumerable<T> values)
+    {
+        var valuesList = values.ToList();
+        if (valuesList.Count == 0)
+            throw new ArgumentException("Cannot calculate mean of empty collection.");
+
+        var sum = _numOps.Zero;
+        foreach (var value in valuesList)
+        {
+            sum = _numOps.Add(sum, value);
+        }
+
+        return _numOps.Divide(sum, _numOps.FromDouble(valuesList.Count));
+    }
+
+    /// <summary>
+    /// Calculates the standard deviation of a collection of values.
+    /// </summary>
+    /// <param name="values">The collection of values.</param>
+    /// <returns>The standard deviation.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Standard deviation measures how spread out the values are from the mean.
+    /// A low standard deviation means values are close to the mean; a high one means they're spread out.
+    /// </para>
+    /// </remarks>
+    public static T StandardDeviation(IEnumerable<T> values)
+    {
+        var variance = Variance(values);
+        return _numOps.Sqrt(variance);
+    }
+
+    /// <summary>
+    /// Calculates the variance of a collection of values.
+    /// </summary>
+    /// <param name="values">The collection of values.</param>
+    /// <returns>The variance.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Variance measures the average squared deviation from the mean.
+    /// It quantifies how much the values differ from the average value.
+    /// </para>
+    /// </remarks>
+    public static T Variance(IEnumerable<T> values)
+    {
+        var valuesList = values.ToList();
+        if (valuesList.Count == 0)
+            throw new ArgumentException("Cannot calculate variance of empty collection.");
+
+        var mean = Mean(valuesList);
+        var sumSquaredDiff = _numOps.Zero;
+
+        foreach (var value in valuesList)
+        {
+            var diff = _numOps.Subtract(value, mean);
+            sumSquaredDiff = _numOps.Add(sumSquaredDiff, _numOps.Multiply(diff, diff));
+        }
+
+        return _numOps.Divide(sumSquaredDiff, _numOps.FromDouble(valuesList.Count));
+    }
 }

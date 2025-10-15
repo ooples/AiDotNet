@@ -33,12 +33,12 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// <summary>
     /// The shape parameter (epsilon) controlling the width of the function.
     /// </summary>
-    private readonly T _epsilon;
+    private readonly T _epsilon = default!;
     
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// Initializes a new instance of the <see cref="InverseMultiquadricRBF{T}"/> class with a specified shape parameter.

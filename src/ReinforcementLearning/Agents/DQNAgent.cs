@@ -10,6 +10,8 @@ using AiDotNet.ReinforcementLearning.Models.Options;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Models;
 using AiDotNet.Enums;
+using AiDotNet.Interpretability;
+using System.Threading.Tasks;
 
 namespace AiDotNet.ReinforcementLearning.Agents;
 
@@ -25,7 +27,7 @@ public class DQNAgent<TState, T> : AgentBase<TState, int, T>
     protected readonly IReplayBuffer<TState, int, T> _replayBuffer;
     protected IQNetwork<T, Tensor<T>> _qNetwork = null!;
     protected IQNetwork<T, Tensor<T>> _targetQNetwork = null!;
-    private readonly OptimizerType _optimizerType;
+    private readonly OptimizerType _optimizerType = default!;
     protected readonly int _updateFrequency;
     protected readonly bool _useSoftUpdate;
     protected readonly T _tau;
@@ -651,7 +653,7 @@ public class DQNAgent<TState, T> : AgentBase<TState, int, T>
     /// </summary>
     public class QNetwork : IQNetwork<T, Tensor<T>>
     {
-        private NeuralNetwork<T> _network;
+        private NeuralNetwork<T> _network = default!;
         
         /// <summary>
         /// Gets the numeric operations for type T.
@@ -673,7 +675,7 @@ public class DQNAgent<TState, T> : AgentBase<TState, int, T>
         /// </summary>
         public bool IsDueling { get; }
         
-        private Vector<T> _lastActionValues;
+        private Vector<T> _lastActionValues = default!;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="QNetwork"/> class.
@@ -916,9 +918,9 @@ public class DQNAgent<TState, T> : AgentBase<TState, int, T>
             _network.Deserialize(data);
         }
 
-        public ModelMetaData<T> ComputeMetaData()
+        public ModelMetadata<T> ComputeMetaData()
         {
-            return new ModelMetaData<T>
+            return new ModelMetadata<T>
             {
                 ModelType = ModelType.NeuralNetwork,
                 Description = $"Q-Network with {StateSize} states and {ActionSize} actions",
@@ -963,7 +965,7 @@ public class DQNAgent<TState, T> : AgentBase<TState, int, T>
             return Clone();
         }
 
-        public ModelMetaData<T> GetModelMetaData()
+        public ModelMetadata<T> GetModelMetadata()
         {
             return ComputeMetaData();
         }
@@ -1009,5 +1011,131 @@ public class DQNAgent<TState, T> : AgentBase<TState, int, T>
         {
             _network.SetActiveFeatureIndices(featureIndices);
         }
+
+        #region IInterpretableModel Implementation
+
+        protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
+        protected Vector<int> _sensitiveFeatures;
+        protected readonly List<FairnessMetric> _fairnessMetrics = new();
+        protected IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>> _baseModel;
+
+        /// <summary>
+        /// Gets the global feature importance across all predictions.
+        /// </summary>
+        public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
+        {
+            return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync(this, _enabledMethods);
+        }
+
+        /// <summary>
+        /// Gets the local feature importance for a specific input.
+        /// </summary>
+        public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Tensor<T> input)
+        {
+            return await InterpretableModelHelper.GetLocalFeatureImportanceAsync(this, _enabledMethods, input);
+        }
+
+        /// <summary>
+        /// Gets SHAP values for the given inputs.
+        /// </summary>
+        public virtual async Task<Matrix<T>> GetShapValuesAsync(Tensor<T> inputs)
+        {
+            return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods);
+        }
+
+        /// <summary>
+        /// Gets LIME explanation for a specific input.
+        /// </summary>
+        public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Tensor<T> input, int numFeatures = 10)
+        {
+            return await InterpretableModelHelper.GetLimeExplanationAsync<T>(_enabledMethods, numFeatures);
+        }
+
+        /// <summary>
+        /// Gets partial dependence data for specified features.
+        /// </summary>
+        public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
+        {
+            return await InterpretableModelHelper.GetPartialDependenceAsync<T>(_enabledMethods, featureIndices, gridResolution);
+        }
+
+        /// <summary>
+        /// Gets counterfactual explanation for a given input and desired output.
+        /// </summary>
+        public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Tensor<T> input, Tensor<T> desiredOutput, int maxChanges = 5)
+        {
+            return await InterpretableModelHelper.GetCounterfactualAsync<T>(_enabledMethods, maxChanges);
+        }
+
+        /// <summary>
+        /// Gets model-specific interpretability information.
+        /// </summary>
+        public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
+        {
+            return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync(this);
+        }
+
+        /// <summary>
+        /// Generates a text explanation for a prediction.
+        /// </summary>
+        public virtual async Task<string> GenerateTextExplanationAsync(Tensor<T> input, Tensor<T> prediction)
+        {
+            return await InterpretableModelHelper.GenerateTextExplanationAsync(this, input, prediction);
+        }
+
+        /// <summary>
+        /// Gets feature interaction effects between two features.
+        /// </summary>
+        public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
+        {
+            return await InterpretableModelHelper.GetFeatureInteractionAsync<T>(_enabledMethods, feature1Index, feature2Index);
+        }
+
+        /// <summary>
+        /// Validates fairness metrics for the given inputs.
+        /// </summary>
+        public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
+        {
+            return await InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
+        }
+
+        /// <summary>
+        /// Gets anchor explanation for a given input.
+        /// </summary>
+        public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Tensor<T> input, T threshold)
+        {
+            return await InterpretableModelHelper.GetAnchorExplanationAsync(_enabledMethods, threshold);
+        }
+
+        /// <summary>
+        /// Sets the base model for interpretability analysis.
+        /// </summary>
+        public virtual void SetBaseModel(IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>> model)
+        {
+            _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+        }
+
+        /// <summary>
+        /// Enables specific interpretation methods.
+        /// </summary>
+        public virtual void EnableMethod(params InterpretationMethod[] methods)
+        {
+            foreach (var method in methods)
+            {
+                _enabledMethods.Add(method);
+            }
+        }
+
+        /// <summary>
+        /// Configures fairness evaluation settings.
+        /// </summary>
+        public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
+        {
+            _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
+            _fairnessMetrics.Clear();
+            _fairnessMetrics.AddRange(fairnessMetrics);
+        }
+
+        #endregion
     }
 }

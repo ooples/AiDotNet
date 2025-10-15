@@ -25,7 +25,7 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// <b>For Beginners:</b> This detector looks at the pattern of errors your model makes to determine 
     /// if it's underfitting or overfitting.
     /// </remarks>
-    private readonly ResidualAnalysisFitDetector<T, TInput, TOutput> _residualAnalyzer;
+    private readonly ResidualAnalysisFitDetector<T, TInput, TOutput> _residualAnalyzer = default!;
     
     /// <summary>
     /// A detector that analyzes learning curves to determine fit.
@@ -34,7 +34,7 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// <b>For Beginners:</b> This detector examines how your model's performance changes as it sees 
     /// more training data to determine if it's underfitting or overfitting.
     /// </remarks>
-    private readonly LearningCurveFitDetector<T, TInput, TOutput> _learningCurveDetector;
+    private readonly LearningCurveFitDetector<T, TInput, TOutput> _learningCurveDetector = default!;
     
     /// <summary>
     /// A detector that combines multiple detection methods.
@@ -43,7 +43,7 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// <b>For Beginners:</b> This detector uses multiple approaches together to get a more comprehensive 
     /// assessment of your model's fit.
     /// </remarks>
-    private readonly HybridFitDetector<T, TInput, TOutput> _hybridDetector;
+    private readonly HybridFitDetector<T, TInput, TOutput> _hybridDetector = default!;
     
     /// <summary>
     /// Configuration options for the adaptive fit detector.
@@ -52,7 +52,7 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// <b>For Beginners:</b> These settings control how the detector behaves, including thresholds 
     /// for determining data complexity and model performance.
     /// </remarks>
-    private readonly AdaptiveFitDetectorOptions _options;
+    private readonly AdaptiveFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the AdaptiveFitDetector class.

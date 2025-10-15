@@ -17,7 +17,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
         public override string Name => "Mobile Optimizer";
         public override DeploymentTarget Target => DeploymentTarget.Mobile;
 
-        private Dictionary<string, MobilePlatformConfig> PlatformConfigs { get; set; } = default!;
+        private Dictionary<string, MobilePlatformConfig> _platformConfigs = new Dictionary<string, MobilePlatformConfig>();
 
         public MobileOptimizer()
         {
@@ -216,6 +216,10 @@ namespace AiDotNet.Deployment.EdgeOptimizers
                 Directory.CreateDirectory(iosDir);
                 await CreateIOSPackageAsync(model, iosDir, modelsDir);
                 package.Artifacts["iOS"] = iosDir;
+                if (string.IsNullOrEmpty(package.ModelPath))
+                {
+                    package.ModelPath = Path.Combine(modelsDir, "model.mlmodel");
+                }
             }
 
             if (targetPlatform == "Android" || targetPlatform == "CrossPlatform")
@@ -223,6 +227,10 @@ namespace AiDotNet.Deployment.EdgeOptimizers
                 Directory.CreateDirectory(androidDir);
                 await CreateAndroidPackageAsync(model, androidDir, modelsDir);
                 package.Artifacts["Android"] = androidDir;
+                if (string.IsNullOrEmpty(package.ModelPath))
+                {
+                    package.ModelPath = Path.Combine(modelsDir, "model.tflite");
+                }
             }
 
             Directory.CreateDirectory(docsDir);
@@ -725,11 +733,11 @@ See the provided example files for complete implementation.
 
         private class MobilePlatformConfig
         {
-            public string PlatformName { get; set; } = default!;
+            public string PlatformName { get; set; } = string.Empty;
             public double MaxModelSize { get; set; }
-            public string[] SupportedFormats { get; set; } = default!;
-            public string MinOSVersion { get; set; } = default!;
-            public string[] HardwareAccelerators { get; set; } = default!;
+            public string[] SupportedFormats { get; set; } = new string[0];
+            public string MinOSVersion { get; set; } = string.Empty;
+            public string[] HardwareAccelerators { get; set; } = new string[0];
         }
     }
 }

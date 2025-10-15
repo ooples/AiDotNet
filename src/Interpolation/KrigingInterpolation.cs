@@ -19,27 +19,27 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The x-coordinates of the known data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the known data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The z-values (heights) of the known data points.
     /// </summary>
-    private readonly Vector<T> _z;
+    private readonly Vector<T> _z = default!;
     
     /// <summary>
     /// The calculated weights used in the Kriging interpolation.
     /// </summary>
-    private Vector<T> _weights;
+    private Vector<T> _weights = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The matrix decomposition method used for solving linear systems.
@@ -49,7 +49,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The kernel function that determines how the influence of points decreases with distance.
     /// </summary>
-    private readonly IKernelFunction<T> _kernel;
+    private readonly IKernelFunction<T> _kernel = default!;
     
     /// <summary>
     /// The nugget parameter of the variogram model, representing measurement error or micro-scale variation.
@@ -58,7 +58,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// <b>For Beginners:</b> The nugget represents the "noise" in your data - small variations that occur
     /// even when measuring the same location multiple times.
     /// </remarks>
-    private T _nugget;
+    private T _nugget = default!;
     
     /// <summary>
     /// The sill parameter of the variogram model, representing the maximum variance between points.
@@ -67,7 +67,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// <b>For Beginners:</b> The sill is like the "ceiling" of difference between any two points in your data,
     /// no matter how far apart they are.
     /// </remarks>
-    private T _sill;
+    private T _sill = default!;
     
     /// <summary>
     /// The range parameter of the variogram model, representing the distance at which points become uncorrelated.
@@ -76,7 +76,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// <b>For Beginners:</b> The range tells you how far apart two points can be before they stop influencing each other.
     /// Beyond this distance, knowing the value at one point doesn't help predict the value at the other.
     /// </remarks>
-    private T _range;
+    private T _range = default!;
 
     /// <summary>
     /// Creates a new instance of the Kriging interpolation algorithm.

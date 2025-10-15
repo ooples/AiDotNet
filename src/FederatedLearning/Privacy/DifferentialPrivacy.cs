@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.FederatedLearning.Privacy
 {
@@ -14,7 +15,7 @@ namespace AiDotNet.FederatedLearning.Privacy
         /// <summary>
         /// Random number generator for noise generation
         /// </summary>
-        private readonly Random _random;
+        private readonly Random _random = default!;
 
         /// <summary>
         /// Privacy accountant for tracking privacy budget
@@ -387,52 +388,77 @@ namespace AiDotNet.FederatedLearning.Privacy
                 PrivacyGuarantees = PrivacyAccountant.GetPrivacyGuarantees()
             };
         }
-    }
-
-    /// <summary>
-    /// Interface for differential privacy mechanisms
-    /// </summary>
-    public interface IDifferentialPrivacy
-    {
         /// <summary>
-        /// Apply differential privacy to parameters
+        /// Calculates the noise scale for a given privacy budget.
         /// </summary>
-        /// <param name="parameters">Parameters to privatize</param>
-        /// <param name="epsilon">Privacy parameter</param>
-        /// <param name="delta">Privacy parameter</param>
-        /// <param name="privacySettings">Privacy settings</param>
-        /// <returns>Privatized parameters</returns>
-        Dictionary<string, Vector<double>> ApplyPrivacy(
-            Dictionary<string, Vector<double>> parameters,
-            double epsilon,
-            double delta,
-            PrivacySettings privacySettings);
+        /// <param name="epsilon">Privacy budget parameter.</param>
+        /// <param name="delta">Privacy failure probability.</param>
+        /// <param name="sensitivity">Sensitivity of the function.</param>
+        /// <returns>The noise scale to apply.</returns>
+        public double CalculateNoiseScale(double epsilon, double delta, double sensitivity)
+        {
+            if (epsilon <= 0)
+                throw new ArgumentException("Epsilon must be positive");
+            
+            if (delta < 0 || delta >= 1)
+                throw new ArgumentException("Delta must be in [0, 1)");
+                
+            if (sensitivity < 0)
+                throw new ArgumentException("Sensitivity must be non-negative");
 
-        /// <summary>
-        /// Calculate privacy cost for composition
-        /// </summary>
-        /// <param name="epsilons">List of epsilon values</param>
-        /// <param name="deltas">List of delta values</param>
-        /// <param name="compositionType">Type of composition</param>
-        /// <returns>Total privacy cost</returns>
-        (double epsilon, double delta) CalculatePrivacyCost(
-            List<double> epsilons,
-            List<double> deltas,
-            CompositionType compositionType);
+            // For Gaussian mechanism
+            var c = Math.Sqrt(2 * Math.Log(1.25 / delta));
+            return c * sensitivity / epsilon;
+        }
 
         /// <summary>
-        /// Validate privacy parameters
+        /// Clips gradients to ensure bounded sensitivity.
         /// </summary>
-        /// <param name="epsilon">Privacy parameter</param>
-        /// <param name="delta">Privacy parameter</param>
-        /// <returns>True if valid</returns>
-        bool ValidatePrivacyParameters(double epsilon, double delta);
+        /// <param name="gradients">The gradients to clip.</param>
+        /// <param name="maxNorm">Maximum allowed norm.</param>
+        /// <returns>Clipped gradients.</returns>
+        public Dictionary<string, Vector<double>> ClipGradients(
+            Dictionary<string, Vector<double>> gradients,
+            double maxNorm)
+        {
+            if (gradients == null || gradients.Count == 0)
+                throw new ArgumentException("Gradients cannot be null or empty");
+                
+            if (maxNorm <= 0)
+                throw new ArgumentException("Max norm must be positive");
 
-        /// <summary>
-        /// Get privacy analysis report
-        /// </summary>
-        /// <returns>Privacy analysis report</returns>
-        PrivacyAnalysisReport GetPrivacyAnalysis();
+            var clippedGradients = new Dictionary<string, Vector<double>>();
+
+            // Calculate total norm
+            var totalNormSquared = 0.0;
+            foreach (var kvp in gradients)
+            {
+                var gradient = kvp.Value;
+                for (int i = 0; i < gradient.Length; i++)
+                {
+                    totalNormSquared += gradient[i] * gradient[i];
+                }
+            }
+
+            var totalNorm = Math.Sqrt(totalNormSquared);
+            var scaleFactor = Math.Min(1.0, maxNorm / totalNorm);
+
+            // Apply clipping
+            foreach (var kvp in gradients)
+            {
+                var gradient = kvp.Value;
+                var clippedValues = new double[gradient.Length];
+                
+                for (int i = 0; i < gradient.Length; i++)
+                {
+                    clippedValues[i] = gradient[i] * scaleFactor;
+                }
+                
+                clippedGradients[kvp.Key] = new Vector<double>(clippedValues);
+            }
+
+            return clippedGradients;
+        }
     }
 
     /// <summary>
@@ -490,7 +516,7 @@ namespace AiDotNet.FederatedLearning.Privacy
         public double TotalDelta { get; set; }
         public double RemainingBudget { get; set; }
         public int NumberOfQueries { get; set; }
-        public List<string> PrivacyGuarantees { get; set; }
+        public List<string> PrivacyGuarantees { get; set; } = new List<string>();
     }
 
     /// <summary>

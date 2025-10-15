@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
+using AiDotNet.Statistics;
 
 namespace AiDotNet.OnlineLearning.Algorithms;
 
@@ -15,9 +16,9 @@ namespace AiDotNet.OnlineLearning.Algorithms;
 /// </summary>
 public class OnlinePerceptron<T> : OnlineModelBase<T, Vector<T>, T>
 {
-    private Vector<T> _weights;
-    private T _bias;
-    private readonly OnlineModelOptions<T> _options;
+    private Vector<T> _weights = default!;
+    private T _bias = default!;
+    private readonly OnlineModelOptions<T> _options = default!;
     
     /// <summary>
     /// Initializes a new instance of the OnlinePerceptron class.
@@ -75,7 +76,15 @@ public class OnlinePerceptron<T> : OnlineModelBase<T, Vector<T>, T>
             if (!NumOps.Equals(_options.RegularizationParameter, NumOps.Zero))
             {
                 var regularization = NumOps.Multiply(_options.RegularizationParameter, learningRate);
-                _weights = new Vector<T>(_weights.Select(w => NumOps.Multiply(w, NumOps.Subtract(NumOps.One, regularization))).ToArray());
+                var scaleFactor = NumOps.Subtract(NumOps.One, regularization);
+                
+                // Create a new vector with scaled values
+                var scaledWeights = new Vector<T>(_weights.Length);
+                for (int i = 0; i < _weights.Length; i++)
+                {
+                    scaledWeights[i] = NumOps.Multiply(_weights[i], scaleFactor);
+                }
+                _weights = scaledWeights;
             }
             
             // Update ModelParameters to reflect the new weights and bias
@@ -107,9 +116,9 @@ public class OnlinePerceptron<T> : OnlineModelBase<T, Vector<T>, T>
     }
     
     /// <inheritdoc/>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.OnlinePerceptron,
             FeatureCount = _weights.Length,
@@ -297,5 +306,105 @@ public class OnlinePerceptron<T> : OnlineModelBase<T, Vector<T>, T>
     {
         // Perceptron uses all features, so this is a no-op
         // Could implement feature masking if needed
+    }
+    
+    // IFullModel implementation
+    
+    /// <inheritdoc/>
+    public override int InputDimensions => _weights.Length;
+    
+    /// <inheritdoc/>
+    public override int OutputDimensions => 1;
+    
+    /// <inheritdoc/>
+    public override bool IsTrained => _samplesSeen > 0;
+    
+    /// <inheritdoc/>
+    public override T[] PredictBatch(Vector<T>[] inputBatch)
+    {
+        return inputBatch.Select(input => Predict(input)).ToArray();
+    }
+    
+    /// <inheritdoc/>
+    public override Dictionary<string, double> Evaluate(Vector<T> testData, T testLabels)
+    {
+        // For perceptron, we expect testData to be a single sample
+        var prediction = Predict(testData);
+        var correct = NumOps.Equals(prediction, testLabels) ? 1.0 : 0.0;
+        
+        return new Dictionary<string, double>
+        {
+            ["Accuracy"] = correct,
+            ["Samples"] = 1.0
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void SaveModel(string filePath)
+    {
+        var data = Serialize();
+        File.WriteAllBytes(filePath, data);
+    }
+    
+    /// <inheritdoc/>
+    public override double GetTrainingLoss()
+    {
+        // Online learning doesn't track training loss in the traditional sense
+        // Return 0 or track recent errors if needed
+        return 0.0;
+    }
+    
+    /// <inheritdoc/>
+    public override double GetValidationLoss()
+    {
+        // Online learning doesn't have a separate validation phase
+        return 0.0;
+    }
+    
+    /// <inheritdoc/>
+    public override Vector<T> GetModelParameters()
+    {
+        return GetParameters();
+    }
+    
+    /// <inheritdoc/>
+    public override ModelStats<T> GetStats()
+    {
+        return new ModelStats<T>
+        {
+            ModelType = ModelType.OnlinePerceptron,
+            ParameterCount = _weights.Length + 1,
+            TrainingSamples = _samplesSeen,
+            TrainingLoss = GetTrainingLoss(),
+            ValidationLoss = GetValidationLoss(),
+            LearningRate = _learningRate,
+            AdditionalMetrics = new Dictionary<string, double>
+            {
+                ["WeightNorm"] = Convert.ToDouble(_weights.Select(w => NumOps.Multiply(w, w))
+                    .Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val))),
+                ["BiasValue"] = Convert.ToDouble(_bias)
+            }
+        };
+    }
+    
+    /// <inheritdoc/>
+    public override void Save()
+    {
+        // Default save to a standard location or throw NotImplementedException
+        throw new NotImplementedException("Save requires a file path. Use SaveModel(filePath) instead.");
+    }
+    
+    /// <inheritdoc/>
+    public override void Load()
+    {
+        // Default load from a standard location or throw NotImplementedException
+        throw new NotImplementedException("Load requires a file path. Use Deserialize with loaded data instead.");
+    }
+    
+    /// <inheritdoc/>
+    public override void Dispose()
+    {
+        // Clean up any resources if needed
+        // For perceptron, there's nothing to dispose
     }
 }

@@ -34,9 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 {
-    private Matrix<T> _transitionMatrix;
-    private Vector<T> _startScores;
-    private Vector<T> _endScores;
+    private Matrix<T> _transitionMatrix = default!;
+    private Vector<T> _startScores = default!;
+    private Vector<T> _endScores = default!;
 
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;

@@ -34,7 +34,7 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// and how it balances new information with what it already knows.
     /// </para>
     /// </remarks>
-    private AdaMaxOptimizerOptions<T, TInput, TOutput> _options;
+    private AdaMaxOptimizerOptions<T, TInput, TOutput> _options = default!;
 
     /// <summary>
     /// The first moment vector that tracks the exponentially weighted moving average of gradients.

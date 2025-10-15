@@ -17,8 +17,8 @@ namespace AiDotNet.ReinforcementLearning.Agents
         where T : unmanaged, IComparable<T>
     {
         private readonly int _numAtoms;
-        private readonly T _vMin;
-        private readonly T _vMax;
+        private readonly T _vMin = default!;
+        private readonly T _vMax = default!;
         private readonly T[] _support;
         private readonly int _multiStepN;
         private readonly bool _useDistributional;

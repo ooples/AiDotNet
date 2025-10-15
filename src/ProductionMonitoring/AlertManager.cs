@@ -12,14 +12,14 @@ namespace AiDotNet.ProductionMonitoring
     /// </summary>
     public class AlertManager
     {
-        private readonly List<IAlertChannel> _alertChannels;
-        private readonly Dictionary<string, AlertRule> _alertRules;
-        private readonly Dictionary<string, AlertState> _alertStates;
-        private readonly ActionBlock<MonitoringAlert> _alertProcessor;
-        private readonly AlertConfiguration _configuration;
+        private readonly List<IAlertChannel> _alertChannels = default!;
+        private readonly Dictionary<string, AlertRule> _alertRules = default!;
+        private readonly Dictionary<string, AlertState> _alertStates = default!;
+        private readonly ActionBlock<MonitoringAlert> _alertProcessor = default!;
+        private readonly AlertConfiguration _configuration = default!;
         private readonly object _lockObject = new object();
 
-        public AlertManager(AlertConfiguration configuration = null)
+        public AlertManager(AlertConfiguration? configuration = null)
         {
             _configuration = configuration ?? new AlertConfiguration();
             _alertChannels = new List<IAlertChannel>();
@@ -98,7 +98,7 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Gets alert history
         /// </summary>
-        public List<AlertHistoryEntry> GetAlertHistory(DateTime? startDate = null, DateTime? endDate = null, string severity = null)
+        public List<AlertHistoryEntry> GetAlertHistory(DateTime? startDate = null, DateTime? endDate = null, string? severity = null)
         {
             lock (_lockObject)
             {
@@ -128,8 +128,9 @@ namespace AiDotNet.ProductionMonitoring
                     .ToDictionary(g => g.Key, g => g.Count()),
                 AlertsByType = history.GroupBy(h => h.AlertType)
                     .ToDictionary(g => g.Key, g => g.Count()),
-                AverageResponseTime = history.Where(h => h.ResponseTime.HasValue)
-                    .Select(h => h.ResponseTime.Value.TotalSeconds)
+                AverageResponseTime = history
+                    .Where(h => h.ResponseTime.HasValue)
+                    .Select(h => h.ResponseTime!.Value.TotalSeconds)
                     .DefaultIfEmpty(0)
                     .Average(),
                 TopAlertingRules = history.Where(h => !string.IsNullOrEmpty(h.RuleId))
@@ -146,7 +147,7 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Acknowledges an alert
         /// </summary>
-        public async Task AcknowledgeAlertAsync(string alertId, string acknowledgedBy, string notes = null)
+        public async Task AcknowledgeAlertAsync(string alertId, string acknowledgedBy, string? notes = null)
         {
             lock (_lockObject)
             {
@@ -171,7 +172,7 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Mutes alerts for a specific rule or type
         /// </summary>
-        public void MuteAlerts(string ruleIdOrType, TimeSpan duration, string reason = null)
+        public void MuteAlerts(string ruleIdOrType, TimeSpan duration, string? reason = null)
         {
             var muteUntil = DateTime.UtcNow.Add(duration);
             
@@ -322,16 +323,16 @@ namespace AiDotNet.ProductionMonitoring
             };
         }
 
-        private async Task<bool> EvaluateRuleAsync(AlertRule rule, Dictionary<string, double> metrics)
+        private Task<bool> EvaluateRuleAsync(AlertRule rule, Dictionary<string, double> metrics)
         {
             if (!metrics.ContainsKey(rule.MetricName))
             {
-                return false;
+                return Task.FromResult(false);
             }
 
             var value = metrics[rule.MetricName];
             var threshold = rule.Threshold;
-            
+
             bool conditionMet = rule.Operator switch
             {
                 ">" => value > threshold,
@@ -349,9 +350,9 @@ namespace AiDotNet.ProductionMonitoring
                 {
                     var state = _alertStates[rule.RuleId];
                     state.ConsecutiveMatches++;
-                    
+
                     // Check if we've met the required consecutive matches
-                    return state.ConsecutiveMatches >= rule.ConsecutiveMatches;
+                    return Task.FromResult(state.ConsecutiveMatches >= rule.ConsecutiveMatches);
                 }
             }
             else
@@ -362,7 +363,7 @@ namespace AiDotNet.ProductionMonitoring
                 }
             }
 
-            return false;
+            return Task.FromResult(false);
         }
 
         private MonitoringAlert CreateAlertFromRule(AlertRule rule, Dictionary<string, double> metrics)
@@ -384,7 +385,7 @@ namespace AiDotNet.ProductionMonitoring
             };
         }
 
-        private string GetRuleIdForAlert(MonitoringAlert alert)
+        private string? GetRuleIdForAlert(MonitoringAlert alert)
         {
             if (alert.Context != null && alert.Context.ContainsKey("RuleId"))
             {
@@ -444,54 +445,54 @@ namespace AiDotNet.ProductionMonitoring
 
         public class AlertRule
         {
-            public string RuleId { get; set; }
-            public string Name { get; set; }
-            public string Description { get; set; }
-            public string MetricName { get; set; }
-            public string Operator { get; set; } // >, >=, <, <=, ==, !=
+            public string RuleId { get; set; } = string.Empty;
+            public string Name { get; set; } = string.Empty;
+            public string Description { get; set; } = string.Empty;
+            public string MetricName { get; set; } = string.Empty;
+            public string Operator { get; set; } = string.Empty; // >, >=, <, <=, ==, !=
             public double Threshold { get; set; }
             public int ConsecutiveMatches { get; set; } = 1;
-            public string AlertType { get; set; }
-            public string Severity { get; set; }
-            public string MessageTemplate { get; set; }
+            public string AlertType { get; set; } = string.Empty;
+            public string Severity { get; set; } = string.Empty;
+            public string MessageTemplate { get; set; } = string.Empty;
             public bool IsEnabled { get; set; } = true;
-            public Dictionary<string, object> Metadata { get; set; }
+            public Dictionary<string, object> Metadata { get; set; } = new();
         }
 
         public class AlertState
         {
-            public string RuleId { get; set; }
+            public string RuleId { get; set; } = string.Empty;
             public int ConsecutiveMatches { get; set; }
             public DateTime? LastAlertTime { get; set; }
             public DateTime? MutedUntil { get; set; }
-            public string MuteReason { get; set; }
+            public string? MuteReason { get; set; }
             public Dictionary<string, DateTime> TypeMutes { get; set; } = new Dictionary<string, DateTime>();
             public List<AlertHistoryEntry> History { get; set; } = new List<AlertHistoryEntry>();
         }
 
         public class AlertHistoryEntry
         {
-            public string AlertId { get; set; }
+            public string AlertId { get; set; } = string.Empty;
             public DateTime Timestamp { get; set; }
-            public string AlertType { get; set; }
-            public string Severity { get; set; }
-            public string Message { get; set; }
-            public Dictionary<string, object> Context { get; set; }
-            public string RuleId { get; set; }
+            public string AlertType { get; set; } = string.Empty;
+            public string Severity { get; set; } = string.Empty;
+            public string Message { get; set; } = string.Empty;
+            public Dictionary<string, object> Context { get; set; } = new();
+            public string? RuleId { get; set; }
             public bool IsAcknowledged { get; set; }
-            public string AcknowledgedBy { get; set; }
+            public string? AcknowledgedBy { get; set; }
             public DateTime? AcknowledgedAt { get; set; }
             public TimeSpan? ResponseTime { get; set; }
-            public string Notes { get; set; }
+            public string? Notes { get; set; }
         }
 
         public class AlertStatistics
         {
             public int TotalAlerts { get; set; }
-            public Dictionary<string, int> AlertsBySeverity { get; set; }
-            public Dictionary<string, int> AlertsByType { get; set; }
+            public Dictionary<string, int> AlertsBySeverity { get; set; } = new();
+            public Dictionary<string, int> AlertsByType { get; set; } = new();
             public double AverageResponseTime { get; set; }
-            public Dictionary<string, int> TopAlertingRules { get; set; }
+            public Dictionary<string, int> TopAlertingRules { get; set; } = new();
             public DateTime StartDate { get; set; }
             public DateTime EndDate { get; set; }
         }

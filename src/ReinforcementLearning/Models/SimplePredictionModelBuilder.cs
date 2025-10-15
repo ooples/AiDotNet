@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
@@ -25,8 +26,9 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// </para>
     /// </remarks>
     public class PredictionModelBuilder<T>
+        where T : struct, IComparable<T>
     {
-        private readonly PredictionModelBuilder<T, Tensor<T>, Tensor<T>> _innerBuilder;
+        private readonly PredictionModelBuilder<T, Tensor<T>, Tensor<T>> _innerBuilder = default!;
 
         /// <summary>
         /// Initializes a new instance of the PredictionModelBuilder class.

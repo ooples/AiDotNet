@@ -28,12 +28,12 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// The weights to apply to each sample.
     /// </summary>
-    private readonly Vector<T> _weights;
+    private readonly Vector<T> _weights = default!;
     
     /// <summary>
     /// Small value to prevent numerical instability with log(0).
     /// </summary>
-    private readonly T _epsilon;
+    private readonly T _epsilon = default!;
     
     /// <summary>
     /// Initializes a new instance of the WeightedCrossEntropyLoss class.

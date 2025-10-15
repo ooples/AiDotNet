@@ -21,12 +21,12 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The x-coordinates of the grid points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the grid points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The z-values (data values) at each grid point, organized as a matrix.
@@ -36,7 +36,7 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// If you're thinking of a temperature map, these would be the temperature readings
     /// at each measured location.
     /// </remarks>
-    private readonly Matrix<T> _z;
+    private readonly Matrix<T> _z = default!;
     
     /// <summary>
     /// Helper object for performing numeric operations on generic type T.
@@ -46,7 +46,7 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// and multiplication) on different types of numbers. You don't need to interact with
     /// this directly.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the BilinearInterpolation class.

@@ -349,7 +349,7 @@ namespace AiDotNet.Examples
             private readonly double _tradingFee;
             private readonly int _episodeLength;
             private readonly bool _includesTechnicalIndicators;
-            private readonly Random _random;
+            private readonly Random _random = default!;
             
             private double[] _currentPrices;
             private double _balance;

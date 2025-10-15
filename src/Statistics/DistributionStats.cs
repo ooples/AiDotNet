@@ -34,7 +34,7 @@ public class DistributionStats<T> : StatisticsBase<T>
     /// <summary>
     /// Gets the number of values in the dataset.
     /// </summary>
-    public int Count => Values?.Length ?? 0;
+    public int Count => Values is null ? 0 : Values.Length;
 
     /// <summary>
     /// Gets the arithmetic mean (average) of the values.

@@ -28,32 +28,32 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// <summary>
     /// The kernel function that determines how similarity between data points is calculated.
     /// </summary>
-    private IKernelFunction<T> _kernel;
+    private IKernelFunction<T> _kernel = default!;
     
     /// <summary>
     /// The matrix of input features from the training data.
     /// </summary>
-    private Matrix<T> _X;
+    private Matrix<T> _X = default!;
     
     /// <summary>
     /// The vector of target values from the training data.
     /// </summary>
-    private Vector<T> _y;
+    private Vector<T> _y = default!;
     
     /// <summary>
     /// The kernel matrix calculated from the training data.
     /// </summary>
-    private Matrix<T> _K;
+    private Matrix<T> _K = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with the generic type T.
     /// </summary>
-    private INumericOperations<T> _numOps;
+    private INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The method used to decompose matrices for solving linear systems.
     /// </summary>
-    private readonly MatrixDecompositionType _decompositionType;
+    private readonly MatrixDecompositionType _decompositionType = default!;
 
     /// <summary>
     /// Initializes a new instance of the StandardGaussianProcess class.

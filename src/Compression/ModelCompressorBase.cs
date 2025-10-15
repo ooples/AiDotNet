@@ -12,18 +12,19 @@ namespace AiDotNet.Compression;
 /// <summary>
 /// Base class for all model compressors providing common functionality.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
 /// <typeparam name="TModel">The type of model to compress.</typeparam>
 /// <typeparam name="TInput">The input type for the model.</typeparam>
 /// <typeparam name="TOutput">The output type for the model.</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> This is the foundation class for all model compression techniques. 
-/// It handles common tasks like measuring model size, tracking compression progress, 
+/// <b>For Beginners:</b> This is the foundation class for all model compression techniques.
+/// It handles common tasks like measuring model size, tracking compression progress,
 /// evaluating accuracy impact, and logging important information throughout the process.
 /// </para>
 /// </remarks>
-public abstract class ModelCompressorBase<TModel, TInput, TOutput> : IModelCompressor<TModel, TInput, TOutput>
-    where TModel : class, IFullModel<double, TInput, TOutput>
+public abstract class ModelCompressorBase<T, TModel, TInput, TOutput> : IModelCompressor<TModel, TInput, TOutput>
+    where TModel : class, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets the compression options that configure the compression behavior.

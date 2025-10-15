@@ -412,7 +412,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// This field stores an instance of INumericOperations&lt;T&gt; that provides mathematical operations for the generic 
     /// type T. It allows the class to perform numeric operations regardless of the specific numeric type used.
     /// </remarks>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the OptimizationResult class with default values.

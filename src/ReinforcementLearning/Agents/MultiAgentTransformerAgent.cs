@@ -18,23 +18,23 @@ public class MultiAgentTransformerAgent<T> : AgentBase<Tensor<T>, Vector<T>, T>
     private int _numHeads;
     private int _numLayers;
     private int _sequenceLength;
-    private PositionalEncodingType _posEncodingType;
+    private PositionalEncodingType _posEncodingType = default!;
     private int _communicationMode;
     private bool _useCentralizedTraining;
-    private T _learningRate;
-    private T _entropyCoef;
+    private T _learningRate = default!;
+    private T _entropyCoef = default!;
     private bool _useSelfPlay;
-    private T _riskAversion;
+    private T _riskAversion = default!;
     private bool _useCausalMask;
     private bool _modelMarketImpact;
     
     // Neural network components
-    private Transformer<T> _mainTransformer;
-    private TransformerArchitecture<T> _transformerArchitecture;
-    private List<NeuralNetwork<T>> _policyNetworks;
-    private List<NeuralNetwork<T>> _valueNetworks;
+    private Transformer<T> _mainTransformer = default!;
+    private TransformerArchitecture<T> _transformerArchitecture = default!;
+    private List<NeuralNetwork<T>> _policyNetworks = default!;
+    private List<NeuralNetwork<T>> _valueNetworks = default!;
     private NeuralNetwork<T>? _marketImpactNetwork;
-    private NeuralNetwork<T> _marketDynamicsNetwork;
+    private NeuralNetwork<T> _marketDynamicsNetwork = default!;
     
     // Optimizers
     private readonly AdamOptimizer<T, Tensor<T>, Tensor<T>>? _policyOptimizer;

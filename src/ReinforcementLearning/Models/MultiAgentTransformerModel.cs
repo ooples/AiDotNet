@@ -36,9 +36,9 @@ namespace AiDotNet.ReinforcementLearning.Models;
 /// <typeparam name="T">The numeric type used for calculations (typically double or float).</typeparam>
 public class MultiAgentTransformerModel<T> : ReinforcementLearningModelBase<T>
 {
-    private readonly MultiAgentTransformerOptions _options;
+    private readonly MultiAgentTransformerOptions _options = default!;
     private MultiAgentTransformerAgent<T>? _agent;
-    private readonly SequentialReplayBuffer<Tensor<T>, Vector<T>, T> _replayBuffer;
+    private readonly SequentialReplayBuffer<Tensor<T>, Vector<T>, T> _replayBuffer = default!;
     private bool _isInitialized = false;
 
     /// <summary>

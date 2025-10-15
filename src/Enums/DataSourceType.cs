@@ -31,6 +31,11 @@ namespace AiDotNet.Enums
         SQL,
         
         /// <summary>
+        /// Generic database connection
+        /// </summary>
+        Database,
+        
+        /// <summary>
         /// HDF5 format
         /// </summary>
         HDF5,

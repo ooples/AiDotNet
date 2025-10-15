@@ -1,0 +1,11 @@
+- Keep all classes and interfaces generic as much as possible
+- Documentation should follow XML documentation comment style with comprehensive summaries:
+  - Include a clear, concise summary of the class/method purpose
+  - Add type parameter descriptions when using generics
+  - Provide beginner-friendly explanations in remarks section
+  - Explain the context, purpose, and practical implications of the code
+  - Use paragraphs and formatting to improve readability
+  - Include examples or comparisons to help understanding
+  - Cover key concepts, common use cases, and important nuances
+- All classes and interfaces need to be made generic
+- The base model of any higher model must be IFullModel and not IModel

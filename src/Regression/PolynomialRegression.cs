@@ -14,7 +14,7 @@
 /// </remarks>
 public class PolynomialRegression<T> : RegressionModelBase<T>
 {
-    private readonly PolynomialRegressionOptions<T> _polyOptions;
+    private readonly PolynomialRegressionOptions<T> _polyOptions = default!;
 
     /// <summary>
     /// Creates a new instance of the polynomial regression model.

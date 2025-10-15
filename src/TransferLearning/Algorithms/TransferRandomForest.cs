@@ -17,10 +17,10 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// </summary>
 public class TransferRandomForest<T> : TransferLearningModelBase<T, Matrix<T>, Vector<T>>
 {
-    private readonly RandomForestRegression<T> _baseForest;
-    private readonly RandomForestRegressionOptions _options;
+    private readonly RandomForestRegression<T> _baseForest = default!;
+    private readonly RandomForestRegressionOptions _options = default!;
     private readonly List<int> _frozenTreeIndices = new();
-    private T _currentLearningRate;
+    private T _currentLearningRate = default!;
     
     /// <summary>
     /// Initializes a new instance of the TransferRandomForest class.
@@ -212,9 +212,9 @@ public class TransferRandomForest<T> : TransferLearningModelBase<T, Matrix<T>, V
         return _baseForest.Predict(input);
     }
     
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var baseMetadata = _baseForest.GetModelMetaData();
+        var baseMetadata = _baseForest.GetModelMetadata();
         baseMetadata.AdditionalInfo["TransferInfo"] = GetTransferInfo();
         baseMetadata.AdditionalInfo["FrozenTrees"] = _frozenTreeIndices.Count;
         return baseMetadata;

@@ -22,17 +22,17 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The z-values (heights) at each data point.
     /// </summary>
-    private readonly Vector<T> _z;
+    private readonly Vector<T> _z = default!;
     
     /// <summary>
     /// The power parameter that controls how quickly the influence of points decreases with distance.
@@ -40,12 +40,12 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// Higher values make distant points have less influence on the interpolated value.
     /// </remarks>
-    private readonly T _power;
+    private readonly T _power = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of Shepard's Method interpolation with the specified data points.

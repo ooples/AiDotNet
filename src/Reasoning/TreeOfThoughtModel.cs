@@ -33,11 +33,11 @@ namespace AiDotNet.Reasoning;
 /// </remarks>
 public class TreeOfThoughtModel<T> : ReasoningModelBase<T>
 {
-    private readonly NeuralNetwork<T> _thoughtGenerator;
-    private readonly NeuralNetwork<T> _stateEvaluator;
-    private readonly NeuralNetwork<T> _thoughtSelector;
-    private readonly TreeOfThoughtOptions<T> _totOptions;
-    private readonly Dictionary<string, TreeNode<T>> _nodeCache;
+    private readonly NeuralNetwork<T> _thoughtGenerator = default!;
+    private readonly NeuralNetwork<T> _stateEvaluator = default!;
+    private readonly NeuralNetwork<T> _thoughtSelector = default!;
+    private readonly TreeOfThoughtOptions<T> _totOptions = default!;
+    private readonly Dictionary<string, TreeNode<T>> _nodeCache = default!;
 
     /// <summary>
     /// Represents a node in the reasoning tree.
@@ -476,7 +476,7 @@ public class TreeOfThoughtModel<T> : ReasoningModelBase<T>
 
     private class NodeComparer : IComparer<TreeNode<T>>
     {
-        private readonly INumericOperations<T> _numOps;
+        private readonly INumericOperations<T> _numOps = default!;
         
         public NodeComparer(INumericOperations<T> numOps)
         {

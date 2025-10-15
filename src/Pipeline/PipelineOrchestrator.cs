@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -10,651 +11,606 @@ using System.Threading.Tasks;
 namespace AiDotNet.Pipeline
 {
     /// <summary>
-    /// Orchestrates the execution of complex machine learning pipelines
+    /// Orchestrates complex pipeline workflows with branching, parallelism, and conditional execution
     /// </summary>
-    public class PipelineOrchestrator
+    /// <typeparam name="T">The numeric type for computations</typeparam>
+    public class PipelineOrchestrator<T>
     {
-        private readonly List<IPipelineStep> _steps;
-        private readonly List<PipelineBranch> _branches;
-        private readonly Dictionary<string, object> _globalParameters;
-        private readonly List<PipelineCheckpoint> _checkpoints;
-        private CancellationTokenSource? _cancellationTokenSource;
+        private readonly List<IPipelineStep<T>> _mainPipeline;
+        private readonly Dictionary<string, PipelineBranch<T>> _branches;
+        private readonly Dictionary<string, object> _metadata;
+        private readonly object _lock = new object();
+        private readonly SemaphoreSlim _semaphore;
 
         /// <summary>
-        /// Gets or sets the name of this pipeline
+        /// Gets the name of this orchestrator
         /// </summary>
-        public string Name { get; set; }
+        public string Name { get; }
 
         /// <summary>
-        /// Gets the pipeline steps
+        /// Gets the unique identifier for this orchestrator
         /// </summary>
-        public IReadOnlyList<IPipelineStep> Steps => _steps.AsReadOnly();
+        public string Id { get; }
 
         /// <summary>
-        /// Gets the pipeline branches
+        /// Gets the main pipeline steps
         /// </summary>
-        public IReadOnlyList<PipelineBranch> Branches => _branches.AsReadOnly();
+        public IReadOnlyList<IPipelineStep<T>> MainPipeline => _mainPipeline.AsReadOnly();
 
         /// <summary>
-        /// Gets or sets whether to enable checkpointing
+        /// Gets all branches
         /// </summary>
-        public bool EnableCheckpointing { get; set; }
+        public IReadOnlyDictionary<string, PipelineBranch<T>> Branches => _branches;
 
         /// <summary>
-        /// Gets or sets whether to continue on step failure
+        /// Gets or sets the maximum degree of parallelism
         /// </summary>
-        public bool ContinueOnFailure { get; set; }
+        public int MaxDegreeOfParallelism { get; set; }
 
         /// <summary>
-        /// Gets or sets the maximum retry attempts for failed steps
+        /// Gets or sets whether to continue on branch failures
         /// </summary>
-        public int MaxRetryAttempts { get; set; }
+        public bool ContinueOnBranchFailure { get; set; }
 
         /// <summary>
-        /// Gets the execution history
+        /// Gets execution statistics
         /// </summary>
-        public PipelineExecutionHistory History { get; }
+        public OrchestratorStatistics Statistics { get; }
 
         /// <summary>
-        /// Event raised when a step starts execution
+        /// Orchestrator execution statistics
         /// </summary>
-        public event EventHandler<StepExecutionEventArgs>? StepStarted;
-
-        /// <summary>
-        /// Event raised when a step completes execution
-        /// </summary>
-        public event EventHandler<StepExecutionEventArgs>? StepCompleted;
-
-        /// <summary>
-        /// Event raised when a step fails
-        /// </summary>
-        public event EventHandler<StepExecutionEventArgs>? StepFailed;
-
-        /// <summary>
-        /// Event raised when the pipeline completes
-        /// </summary>
-        public event EventHandler<PipelineCompletedEventArgs>? PipelineCompleted;
-
-        /// <summary>
-        /// Represents a pipeline checkpoint
-        /// </summary>
-        private class PipelineCheckpoint
+        public class OrchestratorStatistics
         {
-            public string StepName { get; set; } = string.Empty;
-            public int StepIndex { get; set; }
-            public double[][] Data { get; set; } = Array.Empty<double[]>();
-            public DateTime Timestamp { get; set; }
-        }
-
-        /// <summary>
-        /// Pipeline execution history
-        /// </summary>
-        public class PipelineExecutionHistory
-        {
-            private readonly List<ExecutionRecord> _records = new List<ExecutionRecord>();
-
-            public IReadOnlyList<ExecutionRecord> Records => _records.AsReadOnly();
-
-            public void AddRecord(ExecutionRecord record)
-            {
-                _records.Add(record);
-            }
-
-            public ExecutionRecord? GetLastSuccessfulExecution()
-            {
-                return _records.LastOrDefault(r => r.IsSuccessful);
-            }
-
-            public class ExecutionRecord
-            {
-                public string PipelineId { get; set; } = string.Empty;
-                public DateTime StartTime { get; set; }
-                public DateTime EndTime { get; set; }
-                public TimeSpan Duration => EndTime - StartTime;
-                public bool IsSuccessful { get; set; }
-                public List<StepExecutionInfo> StepExecutions { get; set; } = new List<StepExecutionInfo>();
-                public string? ErrorMessage { get; set; }
-            }
-
-            public class StepExecutionInfo
-            {
-                public string StepName { get; set; } = string.Empty;
-                public TimeSpan Duration { get; set; }
-                public bool IsSuccessful { get; set; }
-                public string? ErrorMessage { get; set; }
-            }
-        }
-
-        /// <summary>
-        /// Step execution event arguments
-        /// </summary>
-        public class StepExecutionEventArgs : EventArgs
-        {
-            public string StepName { get; set; } = string.Empty;
-            public int StepIndex { get; set; }
-            public int TotalSteps { get; set; }
-            public TimeSpan? Duration { get; set; }
-            public Exception? Exception { get; set; }
-        }
-
-        /// <summary>
-        /// Pipeline completed event arguments
-        /// </summary>
-        public class PipelineCompletedEventArgs : EventArgs
-        {
-            public bool IsSuccessful { get; set; }
-            public TimeSpan TotalDuration { get; set; }
-            public PipelineResult? Result { get; set; }
-            public Exception? Exception { get; set; }
+            public int TotalExecutions { get; set; }
+            public int SuccessfulExecutions { get; set; }
+            public int FailedExecutions { get; set; }
+            public TimeSpan TotalExecutionTime { get; set; }
+            public TimeSpan AverageExecutionTime => TotalExecutions > 0
+                ? TimeSpan.FromMilliseconds(TotalExecutionTime.TotalMilliseconds / TotalExecutions)
+                : TimeSpan.Zero;
+            public Dictionary<string, int> BranchExecutionCounts { get; } = new Dictionary<string, int>();
+            public DateTime? LastExecutedAt { get; set; }
         }
 
         /// <summary>
         /// Initializes a new instance of the PipelineOrchestrator class
         /// </summary>
-        /// <param name="name">Name of the pipeline</param>
+        /// <param name="name">Name of the orchestrator</param>
         public PipelineOrchestrator(string name)
         {
             Name = name;
-            _steps = new List<IPipelineStep>();
-            _branches = new List<PipelineBranch>();
-            _globalParameters = new Dictionary<string, object>();
-            _checkpoints = new List<PipelineCheckpoint>();
-            History = new PipelineExecutionHistory();
-            EnableCheckpointing = false;
-            ContinueOnFailure = false;
-            MaxRetryAttempts = 3;
+            Id = Guid.NewGuid().ToString();
+            _mainPipeline = new List<IPipelineStep<T>>();
+            _branches = new Dictionary<string, PipelineBranch<T>>();
+            _metadata = new Dictionary<string, object>();
+            MaxDegreeOfParallelism = Environment.ProcessorCount;
+            ContinueOnBranchFailure = true;
+            Statistics = new OrchestratorStatistics();
+            _semaphore = new SemaphoreSlim(MaxDegreeOfParallelism, MaxDegreeOfParallelism);
         }
 
         /// <summary>
-        /// Adds a step to the pipeline
+        /// Adds a step to the main pipeline
         /// </summary>
         /// <param name="step">The pipeline step to add</param>
-        public void AddStep(IPipelineStep step)
+        public void AddMainStep(IPipelineStep<T> step)
         {
             if (step == null)
             {
                 throw new ArgumentNullException(nameof(step));
             }
 
-            _steps.Add(step);
+            lock (_lock)
+            {
+                _mainPipeline.Add(step);
+            }
         }
 
         /// <summary>
-        /// Adds a branch to the pipeline
+        /// Adds a branch to the orchestrator
         /// </summary>
-        /// <param name="branch">The pipeline branch to add</param>
-        public void AddBranch(PipelineBranch branch)
+        /// <param name="branch">The branch to add</param>
+        public void AddBranch(PipelineBranch<T> branch)
         {
             if (branch == null)
             {
                 throw new ArgumentNullException(nameof(branch));
             }
 
-            _branches.Add(branch);
+            lock (_lock)
+            {
+                _branches[branch.Id] = branch;
+            }
         }
 
         /// <summary>
-        /// Sets a global parameter that will be available to all steps
+        /// Removes a branch from the orchestrator
         /// </summary>
-        /// <param name="name">Parameter name</param>
-        /// <param name="value">Parameter value</param>
-        public void SetGlobalParameter(string name, object value)
+        /// <param name="branchId">ID of the branch to remove</param>
+        /// <returns>True if removed, false otherwise</returns>
+        public bool RemoveBranch(string branchId)
         {
-            _globalParameters[name] = value;
+            lock (_lock)
+            {
+                return _branches.Remove(branchId);
+            }
         }
 
         /// <summary>
-        /// Executes the pipeline
+        /// Executes the orchestrated pipeline
         /// </summary>
         /// <param name="inputs">Input data</param>
-        /// <param name="targets">Optional target data</param>
+        /// <param name="targets">Target data (optional)</param>
         /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>Pipeline execution result</returns>
-        public async Task<PipelineResult> ExecuteAsync(double[][] inputs, double[]? targets = null, 
+        /// <returns>Result of the pipeline execution</returns>
+        public async Task<PipelineResult<T>> ExecuteAsync(
+            Matrix<T> inputs, 
+            Vector<T>? targets = null,
             CancellationToken cancellationToken = default)
         {
-            var executionId = Guid.NewGuid().ToString();
             var startTime = DateTime.UtcNow;
-            var executionRecord = new PipelineExecutionHistory.ExecutionRecord
+            var result = new PipelineResult<T>
             {
-                PipelineId = executionId,
-                StartTime = startTime,
-                IsSuccessful = false
+                Id = Guid.NewGuid().ToString(),
+                OrchestratorId = Id,
+                StartTime = startTime
             };
 
-            _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var result = new PipelineResult
-            {
-                PipelineId = executionId,
-                PipelineName = Name,
-                StartTime = startTime,
-                InputShape = new[] { inputs.Length, inputs[0].Length }
-            };
+            Statistics.TotalExecutions++;
 
             try
             {
-                // Apply global parameters to all steps
-                ApplyGlobalParameters();
+                // Execute main pipeline
+                var mainData = await ExecuteMainPipelineAsync(inputs, targets, cancellationToken);
+                result.MainPipelineOutput = mainData;
 
-                // Execute main pipeline steps
-                var currentData = inputs;
-                foreach (var (step, index) in _steps.Select((s, i) => (s, i)))
-                {
-                    if (_cancellationTokenSource.Token.IsCancellationRequested)
-                    {
-                        throw new OperationCanceledException("Pipeline execution was cancelled");
-                    }
+                // Execute branches
+                var branchResults = await ExecuteBranchesAsync(mainData, targets, cancellationToken);
+                result.BranchOutputs = branchResults;
 
-                    currentData = await ExecuteStepAsync(step, currentData, targets, index, _steps.Count, 
-                        executionRecord, result);
-                }
+                // Merge results if needed
+                var finalOutput = await MergeBranchResultsAsync(mainData, branchResults, cancellationToken);
+                result.FinalOutput = finalOutput;
 
-                // Execute branches if any
-                if (_branches.Count > 0)
-                {
-                    currentData = await ExecuteBranchesAsync(currentData, targets, executionRecord, result);
-                }
-
-                // Finalize result
-                result.OutputData = currentData;
-                result.OutputShape = new[] { currentData.Length, currentData[0].Length };
                 result.EndTime = DateTime.UtcNow;
-                result.IsSuccessful = true;
-
-                executionRecord.IsSuccessful = true;
-                executionRecord.EndTime = result.EndTime;
-
-                PipelineCompleted?.Invoke(this, new PipelineCompletedEventArgs
-                {
-                    IsSuccessful = true,
-                    TotalDuration = result.Duration,
-                    Result = result
-                });
+                result.Success = true;
+                Statistics.SuccessfulExecutions++;
             }
             catch (Exception ex)
             {
                 result.EndTime = DateTime.UtcNow;
-                result.IsSuccessful = false;
-                result.ErrorMessage = ex.Message;
-                result.FailedStep = result.StepResults.LastOrDefault()?.StepName;
-
-                executionRecord.IsSuccessful = false;
-                executionRecord.EndTime = result.EndTime;
-                executionRecord.ErrorMessage = ex.Message;
-
-                PipelineCompleted?.Invoke(this, new PipelineCompletedEventArgs
-                {
-                    IsSuccessful = false,
-                    TotalDuration = result.Duration,
-                    Result = result,
-                    Exception = ex
-                });
-
+                result.Success = false;
+                result.Error = ex.Message;
+                Statistics.FailedExecutions++;
                 throw;
             }
             finally
             {
-                History.AddRecord(executionRecord);
-                _cancellationTokenSource?.Dispose();
-                _cancellationTokenSource = null;
+                var executionTime = DateTime.UtcNow - startTime;
+                Statistics.TotalExecutionTime = Statistics.TotalExecutionTime.Add(executionTime);
+                Statistics.LastExecutedAt = DateTime.UtcNow;
             }
 
             return result;
         }
 
         /// <summary>
-        /// Executes a single step with retry logic
+        /// Executes the main pipeline
         /// </summary>
-        private async Task<double[][]> ExecuteStepAsync(IPipelineStep step, double[][] inputs, 
-            double[]? targets, int stepIndex, int totalSteps, 
-            PipelineExecutionHistory.ExecutionRecord executionRecord, PipelineResult result)
+        private async Task<Matrix<T>> ExecuteMainPipelineAsync(
+            Matrix<T> inputs,
+            Vector<T>? targets,
+            CancellationToken cancellationToken)
         {
-            var stepStartTime = DateTime.UtcNow;
-            var stepInfo = new PipelineExecutionHistory.StepExecutionInfo
-            {
-                StepName = step.Name
-            };
-
-            StepStarted?.Invoke(this, new StepExecutionEventArgs
-            {
-                StepName = step.Name,
-                StepIndex = stepIndex,
-                TotalSteps = totalSteps
-            });
-
-            Exception? lastException = null;
-            for (int attempt = 0; attempt <= MaxRetryAttempts; attempt++)
-            {
-                try
-                {
-                    // Fit if necessary
-                    if (!step.IsFitted && targets != null)
-                    {
-                        await step.FitAsync(inputs, targets).ConfigureAwait(false);
-                    }
-
-                    // Transform
-                    var transformed = await step.TransformAsync(inputs).ConfigureAwait(false);
-
-                    // Create checkpoint if enabled
-                    if (EnableCheckpointing)
-                    {
-                        CreateCheckpoint(step.Name, stepIndex, transformed);
-                    }
-
-                    // Record success
-                    var duration = DateTime.UtcNow - stepStartTime;
-                    stepInfo.Duration = duration;
-                    stepInfo.IsSuccessful = true;
-                    executionRecord.StepExecutions.Add(stepInfo);
-
-                    result.StepResults.Add(new PipelineResult.StepResult
-                    {
-                        StepName = step.Name,
-                        Duration = duration,
-                        IsSuccessful = true,
-                        OutputShape = new[] { transformed.Length, transformed[0].Length }
-                    });
-
-                    StepCompleted?.Invoke(this, new StepExecutionEventArgs
-                    {
-                        StepName = step.Name,
-                        StepIndex = stepIndex,
-                        TotalSteps = totalSteps,
-                        Duration = duration
-                    });
-
-                    return transformed;
-                }
-                catch (Exception ex)
-                {
-                    lastException = ex;
-                    
-                    if (attempt < MaxRetryAttempts)
-                    {
-                        await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt))); // Exponential backoff
-                    }
-                }
-            }
-
-            // All retries failed
-            var failDuration = DateTime.UtcNow - stepStartTime;
-            stepInfo.Duration = failDuration;
-            stepInfo.IsSuccessful = false;
-            stepInfo.ErrorMessage = lastException?.Message;
-            executionRecord.StepExecutions.Add(stepInfo);
-
-            result.StepResults.Add(new PipelineResult.StepResult
-            {
-                StepName = step.Name,
-                Duration = failDuration,
-                IsSuccessful = false,
-                ErrorMessage = lastException?.Message
-            });
-
-            StepFailed?.Invoke(this, new StepExecutionEventArgs
-            {
-                StepName = step.Name,
-                StepIndex = stepIndex,
-                TotalSteps = totalSteps,
-                Duration = failDuration,
-                Exception = lastException
-            });
-
-            if (ContinueOnFailure)
-            {
-                return inputs; // Return original data and continue
-            }
-
-            throw lastException!;
-        }
-
-        /// <summary>
-        /// Executes branches based on their configuration
-        /// </summary>
-        private async Task<double[][]> ExecuteBranchesAsync(double[][] inputs, double[]? targets,
-            PipelineExecutionHistory.ExecutionRecord executionRecord, PipelineResult result)
-        {
-            // Group branches by parallel execution preference
-            var parallelBranches = _branches.Where(b => b.ExecuteInParallel).OrderByDescending(b => b.Priority).ToList();
-            var sequentialBranches = _branches.Where(b => !b.ExecuteInParallel).OrderByDescending(b => b.Priority).ToList();
-
-            var branchResults = new List<(PipelineBranch branch, double[][] data)>();
-
-            // Execute sequential branches first
             var currentData = inputs;
-            foreach (var branch in sequentialBranches)
+
+            foreach (var step in _mainPipeline)
             {
-                var branchResult = await branch.ExecuteAsync(currentData, targets).ConfigureAwait(false);
-                
-                if (branch.ShouldExecute(currentData))
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!step.IsFitted)
                 {
-                    branchResults.Add((branch, branchResult));
-                    currentData = branchResult;
+                    await step.FitAsync(currentData, targets);
                 }
-
-                result.BranchResults.Add(new PipelineResult.BranchResult
-                {
-                    BranchName = branch.Name,
-                    WasExecuted = branch.ShouldExecute(inputs),
-                    Duration = branch.Statistics.AverageExecutionTime
-                });
-            }
-
-            // Execute parallel branches
-            if (parallelBranches.Count > 0)
-            {
-                var parallelTasks = parallelBranches.Select(async branch =>
-                {
-                    if (branch.ShouldExecute(currentData))
-                    {
-                        var branchResult = await branch.ExecuteAsync(currentData, targets).ConfigureAwait(false);
-                        return (branch, branchResult, executed: true);
-                    }
-                    return (branch, currentData, executed: false);
-                });
-
-                var parallelResults = await Task.WhenAll(parallelTasks).ConfigureAwait(false);
-
-                foreach (var (branch, data, executed) in parallelResults)
-                {
-                    if (executed)
-                    {
-                        branchResults.Add((branch, data));
-                    }
-
-                    result.BranchResults.Add(new PipelineResult.BranchResult
-                    {
-                        BranchName = branch.Name,
-                        WasExecuted = executed,
-                        Duration = branch.Statistics.AverageExecutionTime
-                    });
-                }
-            }
-
-            // Merge branch results if any were executed
-            if (branchResults.Count > 0)
-            {
-                return PipelineBranch.MergeBranchResults(branchResults);
+                currentData = await step.TransformAsync(currentData);
             }
 
             return currentData;
         }
 
         /// <summary>
-        /// Applies global parameters to all steps
+        /// Executes all branches
         /// </summary>
-        private void ApplyGlobalParameters()
+        private async Task<Dictionary<string, Matrix<T>>> ExecuteBranchesAsync(
+            Matrix<T> inputs,
+            Vector<T>? targets,
+            CancellationToken cancellationToken)
         {
-            foreach (var step in _steps)
+            var results = new Dictionary<string, Matrix<T>>();
+            var orderedBranches = _branches.Values.OrderByDescending(b => b.Priority).ToList();
+
+            // Group branches by parallel execution
+            var parallelGroups = orderedBranches.GroupBy(b => b.ExecuteInParallel);
+
+            foreach (var group in parallelGroups)
             {
-                foreach (var param in _globalParameters)
+                if (group.Key) // Execute in parallel
                 {
-                    var stepParams = step.GetParameters();
-                    if (!stepParams.ContainsKey(param.Key))
+                    var tasks = group.Select(branch => ExecuteBranchWithSemaphoreAsync(
+                        branch, inputs, targets, cancellationToken));
+                    
+                    var branchResults = await Task.WhenAll(tasks);
+                    
+                    foreach (var (branch, output) in branchResults)
                     {
-                        stepParams[param.Key] = param.Value;
-                        step.SetParameters(stepParams);
+                        if (output != null)
+                        {
+                            results[branch.Id] = output;
+                        }
                     }
                 }
-            }
-
-            // Apply to branch steps as well
-            foreach (var branch in _branches)
-            {
-                foreach (var step in branch.Steps)
+                else // Execute sequentially
                 {
-                    foreach (var param in _globalParameters)
+                    foreach (var branch in group)
                     {
-                        var stepParams = step.GetParameters();
-                        if (!stepParams.ContainsKey(param.Key))
+                        var output = await ExecuteBranchAsync(branch, inputs, targets, cancellationToken);
+                        if (output != null)
                         {
-                            stepParams[param.Key] = param.Value;
-                            step.SetParameters(stepParams);
+                            results[branch.Id] = output;
                         }
                     }
                 }
             }
+
+            return results;
         }
 
         /// <summary>
-        /// Creates a checkpoint of the current data
+        /// Executes a branch with semaphore control
         /// </summary>
-        private void CreateCheckpoint(string stepName, int stepIndex, double[][] data)
+        private async Task<(PipelineBranch<T> branch, Matrix<T>? output)> ExecuteBranchWithSemaphoreAsync(
+            PipelineBranch<T> branch,
+            Matrix<T> inputs,
+            Vector<T>? targets,
+            CancellationToken cancellationToken)
         {
-            var checkpoint = new PipelineCheckpoint
+            await _semaphore.WaitAsync(cancellationToken);
+            try
             {
-                StepName = stepName,
-                StepIndex = stepIndex,
-                Data = CloneData(data),
-                Timestamp = DateTime.UtcNow
-            };
-
-            _checkpoints.Add(checkpoint);
-
-            // Keep only last N checkpoints to avoid memory issues
-            const int maxCheckpoints = 10;
-            if (_checkpoints.Count > maxCheckpoints)
+                var output = await ExecuteBranchAsync(branch, inputs, targets, cancellationToken);
+                return (branch, output);
+            }
+            finally
             {
-                _checkpoints.RemoveRange(0, _checkpoints.Count - maxCheckpoints);
+                _semaphore.Release();
             }
         }
 
         /// <summary>
-        /// Restores from a checkpoint
+        /// Executes a single branch
         /// </summary>
-        /// <param name="stepIndex">The step index to restore from</param>
-        /// <returns>The checkpoint data if found, null otherwise</returns>
-        public double[][]? RestoreFromCheckpoint(int stepIndex)
+        private async Task<Matrix<T>?> ExecuteBranchAsync(
+            PipelineBranch<T> branch,
+            Matrix<T> inputs,
+            Vector<T>? targets,
+            CancellationToken cancellationToken)
         {
-            var checkpoint = _checkpoints.LastOrDefault(c => c.StepIndex == stepIndex);
-            return checkpoint?.Data != null ? CloneData(checkpoint.Data) : null;
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                
+                var output = await branch.ExecuteAsync(inputs, targets);
+                
+                lock (_lock)
+                {
+                    if (!Statistics.BranchExecutionCounts.ContainsKey(branch.Id))
+                    {
+                        Statistics.BranchExecutionCounts[branch.Id] = 0;
+                    }
+                    Statistics.BranchExecutionCounts[branch.Id]++;
+                }
+                
+                return output;
+            }
+            catch (Exception ex)
+            {
+                if (!ContinueOnBranchFailure)
+                {
+                    throw;
+                }
+                
+                // Log error and continue
+                Console.WriteLine($"Branch '{branch.Name}' failed: {ex.Message}");
+                return null;
+            }
         }
 
         /// <summary>
-        /// Validates the pipeline configuration
+        /// Merges branch results based on their merge strategies
         /// </summary>
-        /// <returns>List of validation errors</returns>
-        public List<string> Validate()
+        private async Task<Matrix<T>> MergeBranchResultsAsync(
+            Matrix<T> mainOutput,
+            Dictionary<string, Matrix<T>> branchOutputs,
+            CancellationToken cancellationToken)
+        {
+            if (branchOutputs.Count == 0)
+            {
+                return mainOutput;
+            }
+
+            var result = mainOutput;
+
+            foreach (var (branchId, branchOutput) in branchOutputs)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var branch = _branches[branchId];
+                result = MergeBranchOutput(result, branchOutput, branch.MergeStrategy, branch.GetMergeParameters());
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Merges two outputs based on the specified strategy
+        /// </summary>
+        private Matrix<T> MergeBranchOutput(
+            Matrix<T> current,
+            Matrix<T> branchOutput,
+            BranchMergeStrategy strategy,
+            Dictionary<string, object> parameters)
+        {
+            switch (strategy)
+            {
+                case BranchMergeStrategy.Replace:
+                    return branchOutput;
+                    
+                case BranchMergeStrategy.Concatenate:
+                    return ConcatenateMatrices(current, branchOutput, parameters);
+                    
+                case BranchMergeStrategy.Average:
+                    return AverageMatrices(current, branchOutput);
+                    
+                case BranchMergeStrategy.WeightedAverage:
+                    return WeightedAverageMatrices(current, branchOutput, parameters);
+                    
+                case BranchMergeStrategy.Custom:
+                    if (parameters.TryGetValue("MergeFunction", out var mergeFunc) && 
+                        mergeFunc is Func<Matrix<T>, Matrix<T>, Matrix<T>> customMerge)
+                    {
+                        return customMerge(current, branchOutput);
+                    }
+                    return current;
+                    
+                default:
+                    return current;
+            }
+        }
+
+        /// <summary>
+        /// Concatenates two matrices
+        /// </summary>
+        private Matrix<T> ConcatenateMatrices(Matrix<T> a, Matrix<T> b, Dictionary<string, object> parameters)
+        {
+            var axis = parameters.TryGetValue("Axis", out var axisObj) && axisObj is int axisValue ? axisValue : 1;
+            
+            if (axis == 0) // Concatenate rows
+            {
+                if (a.Columns != b.Columns)
+                {
+                    throw new InvalidOperationException("Cannot concatenate matrices with different column counts");
+                }
+                
+                var result = new Matrix<T>(a.Rows + b.Rows, a.Columns);
+                for (int i = 0; i < a.Rows; i++)
+                {
+                    for (int j = 0; j < a.Columns; j++)
+                    {
+                        result[i, j] = a[i, j];
+                    }
+                }
+                for (int i = 0; i < b.Rows; i++)
+                {
+                    for (int j = 0; j < b.Columns; j++)
+                    {
+                        result[a.Rows + i, j] = b[i, j];
+                    }
+                }
+                return result;
+            }
+            else // Concatenate columns
+            {
+                if (a.Rows != b.Rows)
+                {
+                    throw new InvalidOperationException("Cannot concatenate matrices with different row counts");
+                }
+                
+                var result = new Matrix<T>(a.Rows, a.Columns + b.Columns);
+                for (int i = 0; i < a.Rows; i++)
+                {
+                    for (int j = 0; j < a.Columns; j++)
+                    {
+                        result[i, j] = a[i, j];
+                    }
+                    for (int j = 0; j < b.Columns; j++)
+                    {
+                        result[i, a.Columns + j] = b[i, j];
+                    }
+                }
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Averages two matrices element-wise
+        /// </summary>
+        private Matrix<T> AverageMatrices(Matrix<T> a, Matrix<T> b)
+        {
+            if (a.Rows != b.Rows || a.Columns != b.Columns)
+            {
+                throw new InvalidOperationException("Cannot average matrices with different dimensions");
+            }
+            
+            var result = new Matrix<T>(a.Rows, a.Columns);
+            for (int i = 0; i < a.Rows; i++)
+            {
+                for (int j = 0; j < a.Columns; j++)
+                {
+                    var sum = Convert.ToDouble(a[i, j]) + Convert.ToDouble(b[i, j]);
+                    result[i, j] = (T)Convert.ChangeType(sum / 2.0, typeof(T));
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Performs weighted average of two matrices
+        /// </summary>
+        private Matrix<T> WeightedAverageMatrices(Matrix<T> a, Matrix<T> b, Dictionary<string, object> parameters)
+        {
+            if (a.Rows != b.Rows || a.Columns != b.Columns)
+            {
+                throw new InvalidOperationException("Cannot average matrices with different dimensions");
+            }
+            
+            var weightA = parameters.TryGetValue("WeightA", out var wa) && wa is double wad ? wad : 0.5;
+            var weightB = parameters.TryGetValue("WeightB", out var wb) && wb is double wbd ? wbd : 0.5;
+            
+            // Normalize weights
+            var totalWeight = weightA + weightB;
+            weightA /= totalWeight;
+            weightB /= totalWeight;
+            
+            var result = new Matrix<T>(a.Rows, a.Columns);
+            for (int i = 0; i < a.Rows; i++)
+            {
+                for (int j = 0; j < a.Columns; j++)
+                {
+                    var value = Convert.ToDouble(a[i, j]) * weightA + Convert.ToDouble(b[i, j]) * weightB;
+                    result[i, j] = (T)Convert.ChangeType(value, typeof(T));
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Validates the orchestrator configuration
+        /// </summary>
+        public (bool IsValid, List<string> Errors) Validate()
         {
             var errors = new List<string>();
 
-            if (_steps.Count == 0 && _branches.Count == 0)
+            if (_mainPipeline.Count == 0 && _branches.Count == 0)
             {
-                errors.Add("Pipeline must contain at least one step or branch");
+                errors.Add("Orchestrator must have at least one main step or branch");
             }
 
-            // Check for duplicate step names
-            var stepNames = _steps.Select(s => s.Name)
-                .Concat(_branches.SelectMany(b => b.Steps.Select(s => s.Name)))
-                .ToList();
-
-            var duplicates = stepNames.GroupBy(n => n)
-                .Where(g => g.Count() > 1)
-                .Select(g => g.Key);
-
-            foreach (var duplicate in duplicates)
+            foreach (var branch in _branches.Values)
             {
-                errors.Add($"Duplicate step name found: {duplicate}");
-            }
-
-            // Validate branch configurations
-            foreach (var branch in _branches)
-            {
-                if (branch.Steps.Count == 0)
+                var (isValid, error) = branch.Validate();
+                if (!isValid && error != null)
                 {
-                    errors.Add($"Branch '{branch.Name}' contains no steps");
+                    errors.Add($"Branch '{branch.Name}': {error}");
                 }
             }
 
-            return errors;
+            return (errors.Count == 0, errors);
         }
 
         /// <summary>
-        /// Cancels the pipeline execution
+        /// Disposes of resources
         /// </summary>
-        public void Cancel()
+        public void Dispose()
         {
-            _cancellationTokenSource?.Cancel();
+            _semaphore?.Dispose();
         }
 
         /// <summary>
-        /// Clones data to avoid reference issues
+        /// Converts a 2D double array to a Tensor
         /// </summary>
-        private static double[][] CloneData(double[][] data)
+        private static Tensor<double> ArrayToTensor(double[][] array)
         {
-            var clone = new double[data.Length][];
-            for (int i = 0; i < data.Length; i++)
+            if (array == null || array.Length == 0)
             {
-                clone[i] = new double[data[i].Length];
-                Array.Copy(data[i], clone[i], data[i].Length);
+                throw new ArgumentException("Array cannot be null or empty", nameof(array));
             }
-            return clone;
+
+            var rows = array.Length;
+            var cols = array[0].Length;
+            var tensor = new Tensor<double>(new[] { rows, cols });
+
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    tensor[i, j] = array[i][j];
+                }
+            }
+
+            return tensor;
         }
 
         /// <summary>
-        /// Creates a visual representation of the pipeline
+        /// Converts a 1D double array to a Tensor
         /// </summary>
-        /// <returns>String representation of the pipeline structure</returns>
-        public string Visualize()
+        private static Tensor<double> ArrayTo1DTensor(double[] array)
         {
-            var visualization = new System.Text.StringBuilder();
-            visualization.AppendLine($"Pipeline: {Name}");
-            visualization.AppendLine(new string('=', 50));
-
-            if (_steps.Count > 0)
+            if (array == null || array.Length == 0)
             {
-                visualization.AppendLine("\nMain Pipeline:");
-                for (int i = 0; i < _steps.Count; i++)
+                throw new ArgumentException("Array cannot be null or empty", nameof(array));
+            }
+
+            var tensor = new Tensor<double>(new[] { array.Length });
+            for (int i = 0; i < array.Length; i++)
+            {
+                tensor[i] = array[i];
+            }
+
+            return tensor;
+        }
+
+        /// <summary>
+        /// Converts a Tensor to a 2D double array
+        /// </summary>
+        private static double[][] TensorToArray(Tensor<double> tensor)
+        {
+            if (tensor == null)
+            {
+                throw new ArgumentNullException(nameof(tensor));
+            }
+
+            var shape = tensor.Shape;
+            if (shape.Length == 1)
+            {
+                // 1D tensor - convert to 2D with single column
+                var result = new double[shape[0]][];
+                for (int i = 0; i < shape[0]; i++)
                 {
-                    visualization.AppendLine($"  [{i + 1}] {_steps[i].Name}");
-                    if (i < _steps.Count - 1)
+                    result[i] = new double[] { tensor[i] };
+                }
+                return result;
+            }
+            else if (shape.Length == 2)
+            {
+                // 2D tensor - direct conversion
+                var rows = shape[0];
+                var cols = shape[1];
+                var result = new double[rows][];
+                for (int i = 0; i < rows; i++)
+                {
+                    result[i] = new double[cols];
+                    for (int j = 0; j < cols; j++)
                     {
-                        visualization.AppendLine("   ↓");
+                        result[i][j] = tensor[i, j];
                     }
                 }
+                return result;
             }
-
-            if (_branches.Count > 0)
+            else
             {
-                visualization.AppendLine("\nBranches:");
-                foreach (var branch in _branches)
-                {
-                    visualization.AppendLine($"\n  Branch: {branch.Name}");
-                    visualization.AppendLine($"  Type: {(branch.IsConditional ? "Conditional" : "Unconditional")}");
-                    visualization.AppendLine($"  Parallel: {branch.ExecuteInParallel}");
-                    visualization.AppendLine($"  Merge Strategy: {branch.MergeStrategy}");
-                    visualization.AppendLine("  Steps:");
-                    
-                    foreach (var step in branch.Steps)
-                    {
-                        visualization.AppendLine($"    - {step.Name}");
-                    }
-                }
+                throw new ArgumentException($"Unsupported tensor rank: {shape.Length}. Expected 1D or 2D tensor.", nameof(tensor));
             }
-
-            visualization.AppendLine(new string('=', 50));
-            return visualization.ToString();
         }
     }
 }

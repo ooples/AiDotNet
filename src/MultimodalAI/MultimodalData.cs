@@ -9,9 +9,9 @@ namespace AiDotNet.MultimodalAI
     /// </summary>
     public class MultimodalData
     {
-        private readonly Dictionary<string, object> _modalityData;
-        private readonly Dictionary<string, Type> _modalityTypes;
-        private readonly Dictionary<string, object> _metadata;
+        private readonly Dictionary<string, object> _modalityData = default!;
+        private readonly Dictionary<string, Type> _modalityTypes = default!;
+        private readonly Dictionary<string, object> _metadata = default!;
 
         /// <summary>
         /// Gets the modality data
@@ -106,7 +106,7 @@ namespace AiDotNet.MultimodalAI
         /// </summary>
         /// <param name="modalityName">Name of the modality</param>
         /// <returns>The type of the modality data</returns>
-        public Type GetModalityType(string modalityName)
+        public Type? GetModalityType(string modalityName)
         {
             return _modalityTypes.ContainsKey(modalityName) ? _modalityTypes[modalityName] : null;
         }

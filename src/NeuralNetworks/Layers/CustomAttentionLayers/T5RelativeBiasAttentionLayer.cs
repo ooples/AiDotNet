@@ -45,7 +45,7 @@ public class T5RelativeBiasAttentionLayer<T> : MultiHeadAttentionLayer<T>
     /// <summary>
     /// The learned relative position biases.
     /// </summary>
-    private Vector<T> _relativeBias;
+    private Vector<T> _relativeBias = default!;
     
     /// <summary>
     /// The gradients for the relative position biases.

@@ -37,12 +37,12 @@ public class KernelRidgeRegression<T> : NonLinearRegressionModelBase<T>
     /// <summary>
     /// The Gram matrix (kernel matrix) that represents pairwise similarities between all training points.
     /// </summary>
-    private Matrix<T> _gramMatrix;
+    private Matrix<T> _gramMatrix = default!;
     
     /// <summary>
     /// The dual coefficients used for making predictions.
     /// </summary>
-    private Vector<T> _dualCoefficients;
+    private Vector<T> _dualCoefficients = default!;
     
     /// <summary>
     /// Gets the configuration options specific to Kernel Ridge Regression.
@@ -223,9 +223,9 @@ public class KernelRidgeRegression<T> : NonLinearRegressionModelBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = base.GetModelMetaData();
+        var metadata = base.GetModelMetadata();
         metadata.AdditionalInfo["LambdaKRR"] = Options.LambdaKRR;
         metadata.AdditionalInfo["RegularizationType"] = Regularization.GetType().Name;
 

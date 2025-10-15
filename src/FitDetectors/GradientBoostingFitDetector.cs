@@ -19,7 +19,7 @@ public class GradientBoostingFitDetector<T, TInput, TOutput> : FitDetectorBase<T
     /// <summary>
     /// Configuration options that control how the detector evaluates model fit.
     /// </summary>
-    private readonly GradientBoostingFitDetectorOptions _options;
+    private readonly GradientBoostingFitDetectorOptions _options = default!;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GradientBoostingFitDetector{T}"/> class.

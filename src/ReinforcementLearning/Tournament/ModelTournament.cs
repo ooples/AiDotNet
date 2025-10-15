@@ -21,11 +21,11 @@ namespace AiDotNet.ReinforcementLearning.Tournament
         /// </summary>
         protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
         
-        private readonly List<TournamentEntry<TState, TAction, T>> _entries;
-        private readonly IEnvironment<TState, TAction, T> _environment;
-        private readonly List<IEvaluationMetric<T>> _metrics;
+        private readonly List<TournamentEntry<TState, TAction, T>> _entries = default!;
+        private readonly IEnvironment<TState, TAction, T> _environment = default!;
+        private readonly List<IEvaluationMetric<T>> _metrics = default!;
         private readonly int _numEpisodes;
-        private readonly Random _random;
+        private readonly Random _random = default!;
         
         /// <summary>
         /// Gets the list of model entries in the tournament.

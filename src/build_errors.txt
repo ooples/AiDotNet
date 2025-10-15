@@ -1,0 +1,3 @@
+MSBuild version 17.8.27+3ab07f0cf for .NET
+  Determining projects to restore...
+/usr/lib/dotnet/sdk/8.0.116/NuGet.targets(156,5): error : Input/output error : '/mnt/c/projects/AiDotNet/src/obj/e6e115ee-3352-4816-a743-8fafe4a17dcf.tmp' [/mnt/c/projects/AiDotNet/src/AiDotNet.csproj]

@@ -45,12 +45,12 @@ public class GeneralizedHistogramIntersectionKernel<T> : IKernelFunction<T>
     /// Adjusting beta lets you control how different overlapping values contribute to the
     /// overall similarity measure.
     /// </remarks>
-    private readonly T _beta;
+    private readonly T _beta = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Generalized Histogram Intersection kernel with an optional beta parameter.

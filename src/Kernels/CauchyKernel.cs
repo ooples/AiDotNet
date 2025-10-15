@@ -36,12 +36,12 @@ public class CauchyKernel<T> : IKernelFunction<T>
     /// considered close to each other. With a large sigma, even somewhat different data points
     /// will be considered relatively similar.
     /// </remarks>
-    private readonly T _sigma;
+    private readonly T _sigma = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the Cauchy kernel with an optional scaling parameter.

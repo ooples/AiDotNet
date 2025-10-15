@@ -21,12 +21,12 @@ public class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The barycentric weights used in the interpolation formula.
@@ -36,12 +36,12 @@ public class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// values between points. They're calculated once when you create the interpolation object and then
     /// used for all interpolation calculations.
     /// </remarks>
-    private readonly Vector<T> _weights;
+    private readonly Vector<T> _weights = default!;
     
     /// <summary>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the BarycentricRationalInterpolation class.

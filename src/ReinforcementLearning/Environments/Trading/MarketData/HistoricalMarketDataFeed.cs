@@ -9,8 +9,8 @@ namespace AiDotNet.ReinforcementLearning.Environments.Trading.MarketData
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class HistoricalMarketDataFeed<T> : IMarketDataFeed<T>
     {
-        private readonly List<MarketDataPoint<T>> _data;
-        private readonly Random _random;
+        private readonly List<MarketDataPoint<T>> _data = default!;
+        private readonly Random _random = default!;
         private readonly int _warmupPeriod;
 
         /// <summary>

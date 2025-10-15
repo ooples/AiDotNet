@@ -21,32 +21,32 @@ public class KochanekBartelsSplineInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points (independent variable).
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points (dependent variable).
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// Controls how "tight" the curve is. Higher values create tighter curves.
     /// </summary>
-    private readonly T _tension;
+    private readonly T _tension = default!;
     
     /// <summary>
     /// Controls whether the curve tends to overshoot (negative values) or undershoot (positive values).
     /// </summary>
-    private readonly T _bias;
+    private readonly T _bias = default!;
     
     /// <summary>
     /// Controls the smoothness of transitions between curve segments.
     /// </summary>
-    private readonly T _continuity;
+    private readonly T _continuity = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new Kochanek-Bartels spline interpolation from the given data points and parameters.

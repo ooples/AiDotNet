@@ -13,11 +13,11 @@ namespace AiDotNet.ReinforcementLearning.Environments.Trading.Portfolio
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class Portfolio<T>
     {
-        private readonly Dictionary<string, Position<T>> _positions;
-        private T _cash;
-        private T _initialCash;
-        private readonly List<Transaction<T>> _transactions;
-        private readonly T _tradingFeeRate;
+        private readonly Dictionary<string, Position<T>> _positions = default!;
+        private T _cash = default!;
+        private T _initialCash = default!;
+        private readonly List<Transaction<T>> _transactions = default!;
+        private readonly T _tradingFeeRate = default!;
         /// <summary>
         /// Gets the numeric operations for type T.
         /// </summary>

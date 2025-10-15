@@ -37,12 +37,12 @@ public class GaussianProcessRegression<T> : NonLinearRegressionModelBase<T>
     /// <summary>
     /// The kernel matrix (also known as the covariance matrix) that represents the similarity between all training points.
     /// </summary>
-    private Matrix<T> _kernelMatrix;
+    private Matrix<T> _kernelMatrix = default!;
     
     /// <summary>
     /// The vector of coefficients used for making predictions.
     /// </summary>
-    private Vector<T> _alpha;
+    private Vector<T> _alpha = default!;
     
     /// <summary>
     /// Gets the configuration options specific to Gaussian Process Regression.
@@ -384,9 +384,9 @@ public class GaussianProcessRegression<T> : NonLinearRegressionModelBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = base.GetModelMetaData();
+        var metadata = base.GetModelMetadata();
         metadata.AdditionalInfo["NoiseLevel"] = Options.NoiseLevel;
         metadata.AdditionalInfo["OptimizeHyperparameters"] = Options.OptimizeHyperparameters;
         metadata.AdditionalInfo["MaxIterations"] = Options.MaxIterations;

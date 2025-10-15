@@ -21,6 +21,12 @@ namespace AiDotNet.Enums;
 public enum ModelType
 {
     /// <summary>
+    /// Unknown or unspecified model type.
+    /// </summary>
+    [ModelInfo(ModelCategory.None, new[] { MetricGroups.General }, "Unknown model type")]
+    Unknown,
+    
+    /// <summary>
     /// Represents no model selection.
     /// </summary>
     [ModelInfo(ModelCategory.None, new[] { MetricGroups.General }, "No model selection")]
@@ -2501,96 +2507,166 @@ public enum ModelType
     AutoML,
 
     //
-    // Vision and Generative Models
+    // Vision Models
     //
 
     /// <summary>
-    /// Vision Transformer model for image processing using attention mechanisms.
+    /// Vision Transformer (ViT) for image classification and feature extraction.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Vision Transformers (ViT) apply transformer architecture (originally designed for text)
-    /// to images by splitting them into patches and processing them like words in a sentence. This approach has
-    /// achieved state-of-the-art results in image classification and recognition tasks.
+    /// <b>For Beginners:</b> Vision Transformer applies the transformer architecture (originally designed for text)
+    /// to images. It works by dividing an image into small patches (like 16x16 pixels), treating each patch as
+    /// a "word" in a sentence. These patches are then processed using self-attention mechanisms that allow the
+    /// model to understand relationships between different parts of the image. ViT has shown that pure transformer
+    /// architectures can match or exceed traditional convolutional neural networks on image tasks, especially when
+    /// trained on large datasets.
     /// </para>
     /// </remarks>
     [ModelInfo(ModelCategory.NeuralNetwork,
               new[] { MetricGroups.MulticlassClassification, MetricGroups.General },
-              "Vision transformer model for image processing")]
+              "Transformer-based model for image classification")]
     VisionTransformer,
 
+    //
+    // Generative Models
+    //
+
     /// <summary>
-    /// Diffusion Model for generating high-quality images through iterative denoising.
+    /// Diffusion Model for high-quality image generation through iterative denoising.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Diffusion Models learn to generate images by reversing a process that gradually
-    /// adds noise to images. They're behind many modern image generation systems and can create highly
-    /// realistic and detailed images from text descriptions.
+    /// <b>For Beginners:</b> Diffusion models generate images by learning to reverse a gradual noising process.
+    /// Imagine taking a clear image and slowly adding static until it becomes pure noise. Diffusion models learn
+    /// to reverse this process - starting from random noise and gradually removing it to create a clear image.
+    /// This approach has proven incredibly effective for generating high-quality, diverse images and is the
+    /// foundation of many modern AI art generators like DALL-E 2 and Stable Diffusion.
     /// </para>
     /// </remarks>
     [ModelInfo(ModelCategory.NeuralNetwork,
               new[] { MetricGroups.General },
-              "Diffusion model for image generation")]
+              "Generative model using iterative denoising process")]
     DiffusionModel,
 
     /// <summary>
-    /// Score-Based Stochastic Differential Equation (SDE) model for generative modeling.
+    /// Denoising Diffusion Implicit Models (DDIM) for faster sampling in diffusion models.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Score-Based SDE models use mathematical concepts from physics to generate
-    /// high-quality data. They learn to model the "score" (gradient) of the data distribution and use
-    /// this to generate new samples through a continuous-time process.
+    /// <b>For Beginners:</b> DDIM is an improved version of diffusion models that can generate images much faster.
+    /// While standard diffusion models might need 1000 steps to generate an image, DDIM can produce similar quality
+    /// with just 50-100 steps. It achieves this by using a deterministic sampling process instead of the random
+    /// process used in standard diffusion models, making generation 10-50x faster while maintaining quality.
     /// </para>
     /// </remarks>
     [ModelInfo(ModelCategory.NeuralNetwork,
               new[] { MetricGroups.General },
-              "Score-based SDE model for generative tasks")]
-    ScoreBasedSDE,
+              "Fast deterministic sampling for diffusion models")]
+    DDIMModel,
 
     /// <summary>
-    /// Flow Matching Model for efficient generative modeling with continuous normalizing flows.
+    /// Latent Diffusion Model that operates in a compressed latent space for efficiency.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Flow Matching Models learn to transform simple distributions (like random noise)
-    /// into complex data distributions through continuous transformations. They provide fast and efficient
-    /// generation while maintaining high quality.
+    /// <b>For Beginners:</b> Latent Diffusion Models work in a compressed representation of images rather than
+    /// directly on pixels. First, an encoder compresses the image into a smaller "latent" representation (like
+    /// a compressed file). The diffusion process then happens in this compressed space, which is much more
+    /// efficient. Finally, a decoder expands the result back to a full image. This approach, used in Stable
+    /// Diffusion, makes it possible to generate high-resolution images on consumer hardware.
     /// </para>
     /// </remarks>
     [ModelInfo(ModelCategory.NeuralNetwork,
               new[] { MetricGroups.General },
-              "Flow matching model for efficient generation")]
-    FlowMatchingModel,
+              "Efficient diffusion model operating in latent space")]
+    LatentDiffusionModel,
 
     /// <summary>
-    /// Consistency Model for fast, high-quality image generation with fewer steps.
+    /// Score-based Stochastic Differential Equation model for continuous-time diffusion.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Consistency Models are designed to generate high-quality outputs much faster than
-    /// traditional diffusion models by learning to map noise directly to data in fewer steps. They maintain
-    /// quality while dramatically improving generation speed.
+    /// <b>For Beginners:</b> Score-based SDEs provide a mathematical framework for diffusion models using
+    /// continuous-time processes. Instead of discrete steps, they model the noising/denoising process as a
+    /// smooth, continuous flow. This theoretical foundation enables more flexible sampling strategies and
+    /// better understanding of how diffusion models work. While more complex mathematically, they offer
+    /// advantages in terms of flexibility and theoretical guarantees.
     /// </para>
     /// </remarks>
     [ModelInfo(ModelCategory.NeuralNetwork,
               new[] { MetricGroups.General },
-              "Consistency model for fast generation")]
+              "Continuous-time diffusion using stochastic differential equations")]
+    ScoreSDE,
+
+    /// <summary>
+    /// Consistency Model for single-step generation with consistency constraints.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Consistency Models are designed to generate high-quality images in just one or
+    /// very few steps, unlike diffusion models that need many steps. They achieve this by learning to map
+    /// any noisy image directly to the clean image it would become after full denoising. This makes them
+    /// extremely fast - potentially real-time generation - while maintaining quality comparable to diffusion
+    /// models. They represent a significant advancement in making AI image generation practical for
+    /// real-time applications.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Fast single-step generation with consistency constraints")]
     ConsistencyModel,
 
     /// <summary>
-    /// Conditional UNet model for image-to-image translation and generation tasks.
+    /// Flow Matching Model using optimal transport for generative modeling.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Conditional UNet is a neural network architecture that can generate or modify
-    /// images based on input conditions. It's commonly used in medical image segmentation, style transfer,
-    /// and conditional image generation where the output depends on specific input features or requirements.
+    /// <b>For Beginners:</b> Flow Matching models generate data by learning smooth transformations from simple
+    /// distributions (like Gaussian noise) to complex data distributions (like images). They use concepts from
+    /// optimal transport theory to find the most efficient path between noise and data. Think of it as finding
+    /// the smoothest way to morph random noise into meaningful images. This approach can be more stable to
+    /// train than GANs and more efficient than standard diffusion models.
     /// </para>
     /// </remarks>
     [ModelInfo(ModelCategory.NeuralNetwork,
               new[] { MetricGroups.General },
-              "Conditional UNet for image generation and translation")]
-    ConditionalUNet
+              "Generative model using optimal transport flow matching")]
+    FlowMatchingModel,
+
+    /// <summary>
+    /// Foundation Model - large pre-trained language or multimodal model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Foundation Models are large AI models pre-trained on vast amounts of data that can be
+    /// adapted for many different tasks. Examples include GPT, BERT, and CLIP. These models have learned general
+    /// knowledge and can be fine-tuned for specific applications like classification, regression, or generation.
+    /// They represent a paradigm shift in AI where instead of training models from scratch for each task, we start
+    /// with a powerful pre-trained model and adapt it. This approach often achieves better results with less data
+    /// and training time.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General, MetricGroups.NeuralNetwork },
+              "Large pre-trained model adaptable to various tasks")]
+    FoundationModel,
+
+    /// <summary>
+    /// Interpretable Model Wrapper - adds interpretability and explainability features to any model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Interpretable Model Wrappers add transparency to AI models by providing explanations
+    /// for their predictions. They implement techniques like SHAP (which shows how each input feature contributes
+    /// to the prediction), LIME (which explains individual predictions), and feature importance analysis. This is
+    /// crucial when you need to understand why a model made a specific decision - for example, why a loan was
+    /// approved or denied, or which factors most influenced a medical diagnosis. The wrapper doesn't change how
+    /// the underlying model works; it adds tools to peek inside and understand the model's reasoning.
+    /// </para>
+    /// </remarks>
+    [ModelInfo(ModelCategory.NeuralNetwork,
+              new[] { MetricGroups.General },
+              "Wrapper that adds interpretability features to any model")]
+    InterpretableWrapper
 }

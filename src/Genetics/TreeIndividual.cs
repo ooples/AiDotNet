@@ -46,7 +46,7 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
     /// When you evaluate or modify the tree, you always start from this root node.
     /// </para>
     /// </remarks>
-    private NodeGene _rootNode;
+    private NodeGene _rootNode = default!;
 
     /// <summary>
     /// The fitness score that indicates how well this individual solves the problem.
@@ -91,7 +91,7 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
     /// This controlled randomness is essential for effective exploration of the solution space.
     /// </para>
     /// </remarks>
-    private readonly Random _random;
+    private readonly Random _random = default!;
 
     /// <summary>
     /// The list of available function symbols that can be used in the expression tree.

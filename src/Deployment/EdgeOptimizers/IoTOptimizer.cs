@@ -17,7 +17,7 @@ namespace AiDotNet.Deployment.EdgeOptimizers
         public override string Name => "IoT Optimizer";
         public override DeploymentTarget Target => DeploymentTarget.IoT;
 
-        private Dictionary<string, IoTDeviceProfile> DeviceProfiles { get; set; } = default!;
+        private readonly Dictionary<string, IoTDeviceProfile> _deviceProfiles = new Dictionary<string, IoTDeviceProfile>();
 
         public IoTOptimizer()
         {
@@ -80,6 +80,11 @@ namespace AiDotNet.Deployment.EdgeOptimizers
                     Accelerators = new[] { "Edge TPU Coprocessor" }
                 }
             };
+            
+            foreach (var profile in profiles)
+            {
+                _deviceProfiles.Add(profile.Key, profile.Value);
+            }
         }
 
         private void ConfigureForIoT()
@@ -1123,7 +1128,7 @@ See `troubleshooting.md` for common issues and solutions.
 
 ## Performance Expectations
 - Model Size: Up to {profile.MaxModelSize} MB
-- Inference Latency: {EstimateLatency(null)} ms (CPU only)
+- Inference Latency: {EstimateLatency(null!)} ms (CPU only)
 - Power Consumption: 2-10W depending on workload
 
 ## Optional Components
@@ -1367,13 +1372,13 @@ sudo pip3 install --pre --extra-index-url https://developer.download.nvidia.com/
 
         private class IoTDeviceProfile
         {
-            public string DeviceName { get; set; } = default!;
-            public string CPU { get; set; } = default!;
+            public string DeviceName { get; set; } = string.Empty;
+            public string CPU { get; set; } = string.Empty;
             public double RAM { get; set; } // MB
             public double Storage { get; set; } // MB
             public double MaxModelSize { get; set; } // MB
-            public string[] SupportedFormats { get; set; } = default!;
-            public string[] Accelerators { get; set; } = default!;
+            public string[] SupportedFormats { get; set; } = new string[0];
+            public string[] Accelerators { get; set; } = new string[0];
         }
     }
 }

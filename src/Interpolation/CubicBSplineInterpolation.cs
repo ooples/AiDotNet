@@ -18,12 +18,12 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The knot vector that defines the B-spline curve.
@@ -32,17 +32,17 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// <b>For Beginners:</b> Knots are special points that help define how the curve behaves.
     /// They're like invisible control points that determine where the curve bends.
     /// </remarks>
-    private readonly Vector<T> _knots;
+    private readonly Vector<T> _knots = default!;
     
     /// <summary>
     /// The calculated coefficients that define the B-spline curve.
     /// </summary>
-    private readonly Vector<T> _coefficients;
+    private readonly Vector<T> _coefficients = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
     
     /// <summary>
     /// The degree of the B-spline curve (default is 3 for cubic).
@@ -56,7 +56,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The type of matrix decomposition used for solving the linear system.
     /// </summary>
-    private readonly MatrixDecompositionType _decompositionType;
+    private readonly MatrixDecompositionType _decompositionType = default!;
 
     /// <summary>
     /// Creates a new cubic B-spline interpolation from the given data points.

@@ -17,7 +17,7 @@ public readonly struct FastFourierTransform<T>
     /// <summary>
     /// Provides operations for the numeric type T (addition, multiplication, etc.).
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Initializes a new instance of the FastFourierTransform struct.

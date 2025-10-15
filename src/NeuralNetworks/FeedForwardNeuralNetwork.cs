@@ -32,7 +32,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// how far off its predictions are from the correct answers.
     /// </para>
     /// </remarks>
-    private ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction = default!;
 
     /// <summary>
     /// The optimization algorithm used to update the network's parameters during training.
@@ -46,7 +46,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// the network's settings to improve its performance over time.
     /// </para>
     /// </remarks>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer = default!;
 
     /// <summary>
     /// Initializes a new instance of the FeedForwardNeuralNetwork class.
@@ -281,7 +281,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Retrieves metadata about the feed-forward neural network model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the network.</returns>
+    /// <returns>A ModelMetadata object containing information about the network.</returns>
     /// <remarks>
     /// <para>
     /// This method collects and returns various pieces of information about the network's structure and configuration.
@@ -292,9 +292,9 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// the network is set up. This can be useful for documentation or debugging purposes.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.FeedForwardNetwork,
             AdditionalInfo = new Dictionary<string, object>

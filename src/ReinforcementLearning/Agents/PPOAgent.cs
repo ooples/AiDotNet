@@ -20,39 +20,39 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 public class PPOAgent<TState, TAction, T> : AgentBase<TState, TAction, T>
     where TState : Tensor<T>
 {
-    private readonly IPolicy<TState, TAction, T> _actor;
-    private readonly IValueFunction<TState, T> _critic;
-    private readonly T _actorLearningRate;
-    private readonly T _criticLearningRate;
-    private readonly T _entropyCoefficient;
-    private readonly T _valueLossCoefficient;
+    private readonly IPolicy<TState, TAction, T> _actor = default!;
+    private readonly IValueFunction<TState, T> _critic = default!;
+    private readonly T _actorLearningRate = default!;
+    private readonly T _criticLearningRate = default!;
+    private readonly T _entropyCoefficient = default!;
+    private readonly T _valueLossCoefficient = default!;
     private readonly bool _useGAE;
-    private readonly T _gaeParameter;
+    private readonly T _gaeParameter = default!;
     private readonly bool _normalizeAdvantages;
     private readonly bool _standardizeRewards;
     private readonly int _stepsPerUpdate;
     private readonly int _batchSize;
     private readonly int _minibatchSize;
     private readonly int _epochsPerBatch;
-    private readonly T _clipParameter;
+    private readonly T _clipParameter = default!;
     private readonly bool _useValueClipping;
-    private readonly T _valueClipParameter;
+    private readonly T _valueClipParameter = default!;
     private readonly bool _useKLPenalty;
-    private readonly T _targetKL;
-    private readonly T _klCoefficient;
+    private readonly T _targetKL = default!;
+    private readonly T _klCoefficient = default!;
     private readonly bool _useEarlyStoppingKL;
-    private readonly T _earlyStoppingKLThreshold;
+    private readonly T _earlyStoppingKLThreshold = default!;
     private readonly bool _useClipDecay;
-    private readonly T _finalClipParameter;
+    private readonly T _finalClipParameter = default!;
     private readonly int _clipDecayUpdates;
     private readonly bool _useAdaptiveLearningRate;
-    private readonly T _learningRateDecreaseFactor;
-    private readonly T _klLearningRateThreshold;
+    private readonly T _learningRateDecreaseFactor = default!;
+    private readonly T _klLearningRateThreshold = default!;
 
-    private T _currentClipParameter;
-    private T _currentKLCoefficient;
-    private T _currentActorLearningRate;
-    private T _currentCriticLearningRate;
+    private T _currentClipParameter = default!;
+    private T _currentKLCoefficient = default!;
+    private T _currentActorLearningRate = default!;
+    private T _currentCriticLearningRate = default!;
     private int _updateCount;
 
     // Buffer to store experiences until it's time to update
@@ -879,11 +879,11 @@ public class PPOAgent<TState, TAction, T> : AgentBase<TState, TAction, T>
         /// </summary>
         protected INumericOperations<TNumeric> NumOps => MathHelper.GetNumericOperations<TNumeric>();
         private readonly List<(TStateType state, TActionType action, TNumeric reward, TStateType nextState, bool done)> _buffer;
-        private readonly IValueFunction<TStateType, TNumeric> _critic;
+        private readonly IValueFunction<TStateType, TNumeric> _critic = default!;
         private readonly IValueFunction<TStateType, TNumeric>? _criticTarget;
         private readonly TNumeric Gamma;
         private readonly bool _useGAE;
-        private readonly TNumeric _gaeParameter;
+        private readonly TNumeric _gaeParameter = default!;
         private readonly bool _useNStepReturns;
         private readonly int _nSteps;
 

@@ -20,12 +20,12 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The x-coordinates of the known data points.
     /// </summary>
-    private readonly Vector<T> _x;
+    private readonly Vector<T> _x = default!;
     
     /// <summary>
     /// The y-coordinates (values) of the known data points.
     /// </summary>
-    private readonly Vector<T> _y;
+    private readonly Vector<T> _y = default!;
     
     /// <summary>
     /// The slopes at each data point, calculated to ensure monotonicity.
@@ -35,12 +35,12 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// at that exact point. These slopes are carefully calculated to make sure our curve remains
     /// smooth but doesn't create unwanted oscillations.
     /// </remarks>
-    private readonly Vector<T> _m;
+    private readonly Vector<T> _m = default!;
     
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> _numOps = default!;
 
     /// <summary>
     /// Creates a new instance of the monotone cubic interpolation algorithm.

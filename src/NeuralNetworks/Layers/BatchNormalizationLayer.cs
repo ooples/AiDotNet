@@ -42,7 +42,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// This prevents division by zero when normalizing features with very small variance.
     /// Typical values are around 1e-5 to 1e-3.
     /// </remarks>
-    private readonly T _epsilon;
+    private readonly T _epsilon = default!;
     
     /// <summary>
     /// The momentum for updating running statistics.
@@ -52,7 +52,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// when updating running statistics. Values closer to 1.0 give more weight to past
     /// statistics (slower updates).
     /// </remarks>
-    private readonly T _momentum;
+    private readonly T _momentum = default!;
     
     /// <summary>
     /// The scale parameter applied after normalization.
@@ -61,7 +61,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// Also known as gamma. This learnable parameter allows the network to scale
     /// each normalized feature. Initialized to ones.
     /// </remarks>
-    private Vector<T> _gamma;
+    private Vector<T> _gamma = default!;
     
     /// <summary>
     /// The shift parameter applied after normalization.
@@ -70,7 +70,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// Also known as beta. This learnable parameter allows the network to shift
     /// each normalized feature. Initialized to zeros.
     /// </remarks>
-    private Vector<T> _beta;
+    private Vector<T> _beta = default!;
     
     /// <summary>
     /// The running mean used during inference.
@@ -79,7 +79,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// This is updated during training and used for normalization during inference.
     /// Initialized to zeros.
     /// </remarks>
-    private Vector<T> _runningMean;
+    private Vector<T> _runningMean = default!;
     
     /// <summary>
     /// The running variance used during inference.
@@ -88,7 +88,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// This is updated during training and used for normalization during inference.
     /// Initialized to ones.
     /// </remarks>
-    private Vector<T> _runningVariance;
+    private Vector<T> _runningVariance = default!;
     
     /// <summary>
     /// The input from the last forward pass.

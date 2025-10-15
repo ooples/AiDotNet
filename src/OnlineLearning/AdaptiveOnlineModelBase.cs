@@ -90,7 +90,7 @@ public abstract class AdaptiveOnlineModelBase<T, TInput, TOutput> :
         // Adapt if drift detected
         if (_driftDetected)
         {
-            _logger.Warning("Drift detected at sample {SampleCount} with level {DriftLevel}", 
+            _logger?.Warning("Drift detected at sample {SampleCount} with level {DriftLevel}", 
                 _samplesSeen, Convert.ToDouble(_driftLevel));
             AdaptToDrift();
         }
