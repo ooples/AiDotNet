@@ -21,7 +21,6 @@ namespace AiDotNet.Deployment.CloudOptimizers
 
         public GCPOptimizer()
         {
-            _serviceConfigs = new Dictionary<string, GCPServiceConfig>();
             InitializeServiceConfigs();
             ConfigureForGCP();
         }
@@ -34,32 +33,33 @@ namespace AiDotNet.Deployment.CloudOptimizers
                 {
                     ServiceName = "Vertex AI",
                     MaxModelSize = double.MaxValue,
-                    SupportedFormats = new[] { "Tensor<double>Flow", "PyTorch", "XGBoost", "Scikit-learn", "ONNX" },
+                    SupportedFormats = new[] { "TensorFlow", "PyTorch", "XGBoost", "Scikit-learn", "ONNX" },
                     MachineTypes = new[] { "n1-standard-4", "n1-highmem-8", "a2-highgpu-1g", "c2-standard-16" }
-                };
-            _serviceConfigs["CloudFunctions"] = new GCPServiceConfig
+                },
+                ["CloudFunctions"] = new GCPServiceConfig
                 {
                     ServiceName = "Cloud Functions",
                     MaxModelSize = 512, // 512 MB
                     MaxMemory = 8192, // 8 GB
                     MaxTimeout = 540, // 9 minutes
-                    SupportedFormats = new[] { "Tensor<double>Flow Lite", "ONNX" }
-                };
-            _serviceConfigs["CloudRun"] = new GCPServiceConfig
+                    SupportedFormats = new[] { "TensorFlow Lite", "ONNX" }
+                },
+                ["CloudRun"] = new GCPServiceConfig
                 {
                     ServiceName = "Cloud Run",
                     MaxModelSize = 10000, // 10 GB container size
                     MaxMemory = 32768, // 32 GB
                     MaxTimeout = 3600, // 60 minutes
                     SupportedFormats = new[] { "Any" }
-                };
-            _serviceConfigs["AIOptimizedVMs"] = new GCPServiceConfig
+                },
+                ["AIOptimizedVMs"] = new GCPServiceConfig
                 {
                     ServiceName = "AI-Optimized VMs",
                     MaxModelSize = double.MaxValue,
                     SupportedFormats = new[] { "Any" },
                     Accelerators = new[] { "nvidia-tesla-t4", "nvidia-tesla-v100", "nvidia-tesla-a100", "tpu-v3" }
-                };
+                }
+            };
         }
 
         private void ConfigureForGCP()
