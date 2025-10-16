@@ -809,13 +809,13 @@ namespace AiDotNet.AutoML
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public class NeuralArchitectureSearchModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
-        private readonly INeuralNetworkModel<T> _innerModel = default!;
-        private readonly ArchitectureCandidate<T> _architecture = default!;
+        private readonly INeuralNetworkModel<T> _innerModel;
+        private readonly ArchitectureCandidate<T> _architecture;
 
         public NeuralArchitectureSearchModel(INeuralNetworkModel<T> innerModel, ArchitectureCandidate<T> architecture)
         {
-            _innerModel = innerModel;
-            _architecture = architecture;
+            _innerModel = innerModel ?? throw new ArgumentNullException(nameof(innerModel));
+            _architecture = architecture ?? throw new ArgumentNullException(nameof(architecture));
         }
 
         public ModelType Type => ModelType.NeuralNetwork;
