@@ -272,53 +272,10 @@ namespace AiDotNet.AutoML
             LogProgress("Gradient-based search not yet implemented with new optimizer API. Using random search instead.");
             RunRandomSearch(trainData, trainLabels, valData, valLabels);
 
-            // Note: The original gradient-based implementation is commented out below because it needs
-            // refactoring to work with the new optimizer API. The fallback to RandomSearch above
-            // ensures this method executes correctly. DO NOT uncomment without refactoring.
-
-            /* Original implementation - needs refactoring:
-            // Create a supernet with learnable architecture parameters
-            var supernet = new SuperNet<T>(searchSpace);
-
-            // Initialize learning rates for architecture and weight parameters
-            var ops = MathHelper.GetNumericOperations<T>();
-            var architectureLearningRate = ops.FromDouble(0.001);
-            var weightsLearningRate = ops.FromDouble(0.001);
-            var momentum = ops.FromDouble(0.9);
-
-            // Initialize momentum buffers
-            var archMomentum = new List<Tensor<T>>();
-            var weightMomentum = new List<Tensor<T>>();
-
-            for (int epoch = 0; epoch < 50; epoch++)
-            {
-                // Update architecture parameters on validation set
-                var valLoss = supernet.ComputeValidationLoss(valData, valLabels);
-                supernet.BackwardArchitecture(valLoss);
-                var archParams = supernet.GetArchitectureParameters();
-                var archGrads = supernet.GetArchitectureGradients();
-
-                // Apply gradient descent with momentum for architecture parameters
-                UpdateParametersWithMomentum(archParams, archGrads, archMomentum, architectureLearningRate, momentum);
-
-                // Update network weights on training set
-                var trainLoss = supernet.ComputeTrainingLoss(trainData, trainLabels);
-                supernet.BackwardWeights(trainLoss);
-                var weightParams = supernet.GetWeightParameters();
-                var weightGrads = supernet.GetWeightGradients();
-
-                // Apply gradient descent with momentum for weight parameters
-                UpdateParametersWithMomentum(weightParams, weightGrads, weightMomentum, weightsLearningRate, momentum);
-
-                LogProgress($"Epoch {epoch + 1}, Train loss: {trainLoss:F4}, Val loss: {valLoss:F4}");
-            }
-
-            // Derive final architecture from supernet
-            var finalArchitecture = supernet.DeriveArchitecture();
-            var candidate = CreateCandidateFromArchitecture(finalArchitecture);
-            EvaluateArchitecture(candidate, trainData, trainLabels, valData, valLabels);
-            UpdateTopArchitectures(new List<ArchitectureCandidate<T>> { candidate });
-            */
+            // TODO: Implement DARTS (Differentiable Architecture Search) using SuperNet
+            // See user story: ~/.claude/user-stories/AiDotNet/new_features/NF-001-gradient-based-nas.md
+            // Requires: SuperNet implementing IFullModel<T>, refactoring for new optimizer API
+            // Previous implementation available in commit history before optimizer API changes
         }
 
         /// <summary>
@@ -823,9 +780,9 @@ namespace AiDotNet.AutoML
         /// <param name="innerModel">The inner neural network model</param>
         /// <param name="architecture">The architecture candidate</param>
         /// <remarks>
-        /// Note: This constructor signature was updated in BUG-003 to use fully generic types.
-        /// Previous signature used INeuralNetworkModel&lt;double&gt; which limited flexibility.
-        /// This change is intentional to align with project guidelines requiring generic implementations.
+        /// Note: This constructor signature was updated to use fully generic types.
+        /// Previous signature used INeuralNetworkModel&lt;double&gt;, which limited flexibility.
+        /// This change aligns with project guidelines requiring generic implementations.
         /// </remarks>
         public NeuralArchitectureSearchModel(INeuralNetworkModel<T> innerModel, ArchitectureCandidate<T> architecture)
         {
