@@ -2,7 +2,6 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using AiDotNet.ProductionMonitoring;
 using System;
 using System.Threading.Tasks;
-using System.Linq;
 using System.Collections.Generic;
 
 namespace AiDotNet.Tests.UnitTests.ProductionMonitoring
@@ -192,7 +191,7 @@ namespace AiDotNet.Tests.UnitTests.ProductionMonitoring
             // Assert
             Assert.IsNotNull(result, "Result should not be null");
             Assert.IsTrue(result.TrendStrength >= 0, "Trend strength should be non-negative");
-            Assert.IsTrue(Math.Abs(result.OverallTrend) == result.TrendStrength,
+            Assert.AreEqual(Math.Abs(result.OverallTrend), result.TrendStrength, 1e-6,
                 "Trend strength should be absolute value of overall trend");
         }
 

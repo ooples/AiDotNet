@@ -181,7 +181,9 @@ namespace AiDotNet.ProductionMonitoring
                     {
                         TrendDirection = "Unknown",
                         TrendStrength = 0,
-                        ComponentTrends = new Dictionary<string, TrendInfo>()
+                        ComponentTrends = new Dictionary<string, TrendInfo>(),
+                        AnalysisPeriod = lookbackDays,
+                        DataPoints = 0
                     };
                 }
 
