@@ -1,275 +1,377 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using AiDotNet.Deployment.CloudOptimizers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
-namespace AiDotNetTests.UnitTests.Deployment
+namespace AiDotNet.Tests.UnitTests.Deployment
 {
     /// <summary>
-    /// Unit tests for cloud optimizer classes to verify dictionary initialization and service configuration.
-    /// Tests the fix for BUG-002: dictionary initialization syntax errors.
+    /// Comprehensive unit tests for AWS, GCP, and Azure cloud optimizers.
+    /// Tests verify dictionary initialization, service configuration, and optimization behavior.
     /// </summary>
-    [TestClass]
     public class CloudOptimizersTests
     {
         #region AWSOptimizer Tests
 
-        [TestMethod]
+        [Fact]
         public void AWSOptimizer_Constructor_InitializesServiceConfigs()
         {
             // Arrange & Act
-            var optimizer = new AWSOptimizer<double[], double[], Dictionary<string, object>>();
+            var optimizer = new AWSOptimizer<double[], double[], object>();
 
             // Assert
-            Assert.IsNotNull(optimizer);
-            Assert.AreEqual("AWS Optimizer", optimizer.Name);
-            Assert.AreEqual(DeploymentTarget.Cloud, optimizer.Target);
+            Assert.NotNull(optimizer);
+            Assert.Equal("AWS Optimizer", optimizer.Name);
+            Assert.Equal(DeploymentTarget.Cloud, optimizer.Target);
         }
 
-        [TestMethod]
-        public void AWSOptimizer_ServiceConfigs_ContainsExpectedServices()
+        [Fact]
+        public void AWSOptimizer_ServiceConfigs_ContainsAllExpectedServices()
         {
             // Arrange
-            var optimizer = new AWSOptimizer<double[], double[], Dictionary<string, object>>();
-            var expectedServices = new[] { "SageMaker", "Lambda", "EC2", "Batch" };
+            var optimizer = new AWSOptimizer<double[], double[], object>();
 
-            // Act - Access through reflection since ServiceConfigs is private
-            var serviceConfigsProperty = optimizer.GetType().GetProperty("ServiceConfigs",
+            // Act - Use reflection to access private ServiceConfigs
+            var type = optimizer.GetType();
+            var serviceConfigsProperty = type.GetProperty("ServiceConfigs",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as dynamic;
+            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as System.Collections.IDictionary;
 
             // Assert
-            Assert.IsNotNull(serviceConfigs, "ServiceConfigs should be initialized");
-
-            foreach (var service in expectedServices)
-            {
-                Assert.IsTrue(((IDictionary<string, object>)serviceConfigs).ContainsKey(service),
-                    $"ServiceConfigs should contain {service}");
-            }
+            Assert.NotNull(serviceConfigs);
+            Assert.Equal(4, serviceConfigs.Count);
+            Assert.True(serviceConfigs.Contains("SageMaker"));
+            Assert.True(serviceConfigs.Contains("Lambda"));
+            Assert.True(serviceConfigs.Contains("EC2"));
+            Assert.True(serviceConfigs.Contains("Batch"));
         }
 
-        [TestMethod]
-        public void AWSOptimizer_SageMakerConfig_HasCorrectProperties()
+        [Fact]
+        public void AWSOptimizer_SageMakerConfig_HasCorrectFormats()
         {
             // Arrange
-            var optimizer = new AWSOptimizer<double[], double[], Dictionary<string, object>>();
+            var optimizer = new AWSOptimizer<double[], double[], object>();
 
-            // Act - Access through reflection
-            var serviceConfigsProperty = optimizer.GetType().GetProperty("ServiceConfigs",
+            // Act - Access SageMaker configuration via reflection
+            var type = optimizer.GetType();
+            var serviceConfigsProperty = type.GetProperty("ServiceConfigs",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as dynamic;
-            var sageMakerConfig = ((IDictionary<string, object>)serviceConfigs)["SageMaker"];
+            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as System.Collections.IDictionary;
+            var sageMakerConfig = serviceConfigs?["SageMaker"];
 
             // Assert
-            Assert.IsNotNull(sageMakerConfig);
-            var serviceNameProp = sageMakerConfig.GetType().GetProperty("ServiceName");
-            var serviceName = serviceNameProp?.GetValue(sageMakerConfig) as string;
-            Assert.AreEqual("Amazon SageMaker", serviceName);
+            Assert.NotNull(sageMakerConfig);
+            var formatsProperty = sageMakerConfig.GetType().GetProperty("SupportedFormats");
+            var formats = formatsProperty?.GetValue(sageMakerConfig) as string[];
+
+            Assert.NotNull(formats);
+            Assert.Contains("TensorFlow", formats);
+            Assert.Contains("PyTorch", formats);
+            Assert.Contains("MXNet", formats);
+            Assert.Contains("XGBoost", formats);
+            Assert.DoesNotContain("Tensor<double>Flow", formats); // Verify bug fix
         }
 
-        [TestMethod]
-        public void AWSOptimizer_LambdaConfig_HasCorrectProperties()
+        [Fact]
+        public void AWSOptimizer_LambdaConfig_HasCorrectFormats()
         {
             // Arrange
-            var optimizer = new AWSOptimizer<double[], double[], Dictionary<string, object>>();
+            var optimizer = new AWSOptimizer<double[], double[], object>();
 
-            // Act - Access through reflection
-            var serviceConfigsProperty = optimizer.GetType().GetProperty("ServiceConfigs",
+            // Act - Access Lambda configuration via reflection
+            var type = optimizer.GetType();
+            var serviceConfigsProperty = type.GetProperty("ServiceConfigs",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as dynamic;
-            var lambdaConfig = ((IDictionary<string, object>)serviceConfigs)["Lambda"];
+            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as System.Collections.IDictionary;
+            var lambdaConfig = serviceConfigs?["Lambda"];
 
             // Assert
-            Assert.IsNotNull(lambdaConfig);
-            var serviceNameProp = lambdaConfig.GetType().GetProperty("ServiceName");
-            var serviceName = serviceNameProp?.GetValue(lambdaConfig) as string;
-            Assert.AreEqual("AWS Lambda", serviceName);
+            Assert.NotNull(lambdaConfig);
+            var formatsProperty = lambdaConfig.GetType().GetProperty("SupportedFormats");
+            var formats = formatsProperty?.GetValue(lambdaConfig) as string[];
+
+            Assert.NotNull(formats);
+            Assert.Contains("TensorFlow Lite", formats);
+            Assert.Contains("ONNX", formats);
+            Assert.DoesNotContain("Tensor<double>Flow Lite", formats); // Verify bug fix
+        }
+
+        [Fact]
+        public void AWSOptimizer_Configuration_HasCorrectDefaults()
+        {
+            // Arrange
+            var optimizer = new AWSOptimizer<double[], double[], object>();
+
+            // Act
+            var config = optimizer.Configuration;
+
+            // Assert
+            Assert.NotNull(config);
+            Assert.NotNull(config.PlatformSpecificSettings);
+            Assert.Equal("us-east-1", config.PlatformSpecificSettings["Region"]);
+            Assert.Equal(true, config.PlatformSpecificSettings["EnableElasticInference"]);
+            Assert.Equal(true, config.PlatformSpecificSettings["EnableNeuron"]);
+            Assert.Equal(false, config.PlatformSpecificSettings["EnableGraviton"]);
         }
 
         #endregion
 
         #region GCPOptimizer Tests
 
-        [TestMethod]
+        [Fact]
         public void GCPOptimizer_Constructor_InitializesServiceConfigs()
         {
             // Arrange & Act
-            var optimizer = new GCPOptimizer<double[], double[], Dictionary<string, object>>();
+            var optimizer = new GCPOptimizer<double[], double[], object>();
 
             // Assert
-            Assert.IsNotNull(optimizer);
-            Assert.AreEqual("GCP Optimizer", optimizer.Name);
-            Assert.AreEqual(DeploymentTarget.Cloud, optimizer.Target);
+            Assert.NotNull(optimizer);
+            Assert.Equal("GCP Optimizer", optimizer.Name);
+            Assert.Equal(DeploymentTarget.Cloud, optimizer.Target);
         }
 
-        [TestMethod]
-        public void GCPOptimizer_ServiceConfigs_ContainsExpectedServices()
+        [Fact]
+        public void GCPOptimizer_ServiceConfigs_ContainsAllExpectedServices()
         {
             // Arrange
-            var optimizer = new GCPOptimizer<double[], double[], Dictionary<string, object>>();
-            var expectedServices = new[] { "VertexAI", "CloudFunctions", "CloudRun", "AIOptimizedVMs" };
+            var optimizer = new GCPOptimizer<double[], double[], object>();
 
-            // Act - Access through reflection
-            var serviceConfigsProperty = optimizer.GetType().GetProperty("ServiceConfigs",
+            // Act - Use reflection to access private ServiceConfigs
+            var type = optimizer.GetType();
+            var serviceConfigsProperty = type.GetProperty("ServiceConfigs",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as dynamic;
+            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as System.Collections.IDictionary;
 
             // Assert
-            Assert.IsNotNull(serviceConfigs, "ServiceConfigs should be initialized");
-
-            foreach (var service in expectedServices)
-            {
-                Assert.IsTrue(((IDictionary<string, object>)serviceConfigs).ContainsKey(service),
-                    $"ServiceConfigs should contain {service}");
-            }
+            Assert.NotNull(serviceConfigs);
+            Assert.Equal(4, serviceConfigs.Count);
+            Assert.True(serviceConfigs.Contains("VertexAI"));
+            Assert.True(serviceConfigs.Contains("CloudFunctions"));
+            Assert.True(serviceConfigs.Contains("CloudRun"));
+            Assert.True(serviceConfigs.Contains("AIOptimizedVMs"));
         }
 
-        [TestMethod]
-        public void GCPOptimizer_VertexAIConfig_HasCorrectProperties()
+        [Fact]
+        public void GCPOptimizer_VertexAIConfig_HasCorrectFormats()
         {
             // Arrange
-            var optimizer = new GCPOptimizer<double[], double[], Dictionary<string, object>>();
+            var optimizer = new GCPOptimizer<double[], double[], object>();
 
-            // Act - Access through reflection
-            var serviceConfigsProperty = optimizer.GetType().GetProperty("ServiceConfigs",
+            // Act - Access VertexAI configuration via reflection
+            var type = optimizer.GetType();
+            var serviceConfigsProperty = type.GetProperty("ServiceConfigs",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as dynamic;
-            var vertexAIConfig = ((IDictionary<string, object>)serviceConfigs)["VertexAI"];
+            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as System.Collections.IDictionary;
+            var vertexConfig = serviceConfigs?["VertexAI"];
 
             // Assert
-            Assert.IsNotNull(vertexAIConfig);
-            var serviceNameProp = vertexAIConfig.GetType().GetProperty("ServiceName");
-            var serviceName = serviceNameProp?.GetValue(vertexAIConfig) as string;
-            Assert.AreEqual("Vertex AI", serviceName);
+            Assert.NotNull(vertexConfig);
+            var formatsProperty = vertexConfig.GetType().GetProperty("SupportedFormats");
+            var formats = formatsProperty?.GetValue(vertexConfig) as string[];
+
+            Assert.NotNull(formats);
+            Assert.Contains("TensorFlow", formats);
+            Assert.Contains("PyTorch", formats);
+            Assert.Contains("XGBoost", formats);
+            Assert.Contains("Scikit-learn", formats);
+            Assert.Contains("ONNX", formats);
+            Assert.DoesNotContain("Tensor<double>Flow", formats); // Verify bug fix
         }
 
-        [TestMethod]
-        public void GCPOptimizer_CloudFunctionsConfig_HasCorrectProperties()
+        [Fact]
+        public void GCPOptimizer_CloudFunctionsConfig_HasCorrectFormats()
         {
             // Arrange
-            var optimizer = new GCPOptimizer<double[], double[], Dictionary<string, object>>();
+            var optimizer = new GCPOptimizer<double[], double[], object>();
 
-            // Act - Access through reflection
-            var serviceConfigsProperty = optimizer.GetType().GetProperty("ServiceConfigs",
+            // Act - Access CloudFunctions configuration via reflection
+            var type = optimizer.GetType();
+            var serviceConfigsProperty = type.GetProperty("ServiceConfigs",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as dynamic;
-            var cloudFunctionsConfig = ((IDictionary<string, object>)serviceConfigs)["CloudFunctions"];
+            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as System.Collections.IDictionary;
+            var cloudFunctionsConfig = serviceConfigs?["CloudFunctions"];
 
             // Assert
-            Assert.IsNotNull(cloudFunctionsConfig);
-            var serviceNameProp = cloudFunctionsConfig.GetType().GetProperty("ServiceName");
-            var serviceName = serviceNameProp?.GetValue(cloudFunctionsConfig) as string;
-            Assert.AreEqual("Cloud Functions", serviceName);
+            Assert.NotNull(cloudFunctionsConfig);
+            var formatsProperty = cloudFunctionsConfig.GetType().GetProperty("SupportedFormats");
+            var formats = formatsProperty?.GetValue(cloudFunctionsConfig) as string[];
+
+            Assert.NotNull(formats);
+            Assert.Contains("TensorFlow Lite", formats);
+            Assert.Contains("ONNX", formats);
+            Assert.DoesNotContain("Tensor<double>Flow Lite", formats); // Verify bug fix
+        }
+
+        [Fact]
+        public void GCPOptimizer_Configuration_HasCorrectDefaults()
+        {
+            // Arrange
+            var optimizer = new GCPOptimizer<double[], double[], object>();
+
+            // Act
+            var config = optimizer.Configuration;
+
+            // Assert
+            Assert.NotNull(config);
+            Assert.NotNull(config.PlatformSpecificSettings);
+            Assert.Equal("us-central1", config.PlatformSpecificSettings["Region"]);
+            Assert.Equal("your-project-id", config.PlatformSpecificSettings["ProjectId"]);
+            Assert.Equal(true, config.PlatformSpecificSettings["EnableTPU"]);
+            Assert.Equal(true, config.PlatformSpecificSettings["EnableTensorRT"]);
+            Assert.Equal(false, config.PlatformSpecificSettings["EnableEdgeTPU"]);
         }
 
         #endregion
 
         #region AzureOptimizer Tests
 
-        [TestMethod]
+        [Fact]
         public void AzureOptimizer_Constructor_InitializesServiceConfigs()
         {
             // Arrange & Act
-            var optimizer = new AzureOptimizer<double[], double[], Dictionary<string, object>>();
+            var optimizer = new AzureOptimizer<double[], double[], object>();
 
             // Assert
-            Assert.IsNotNull(optimizer);
-            Assert.AreEqual("Azure Optimizer", optimizer.Name);
-            Assert.AreEqual(DeploymentTarget.Cloud, optimizer.Target);
+            Assert.NotNull(optimizer);
+            Assert.Equal("Azure Optimizer", optimizer.Name);
+            Assert.Equal(DeploymentTarget.Cloud, optimizer.Target);
         }
 
-        [TestMethod]
-        public void AzureOptimizer_ServiceConfigs_ContainsExpectedServices()
+        [Fact]
+        public void AzureOptimizer_ServiceConfigs_ContainsAllExpectedServices()
         {
             // Arrange
-            var optimizer = new AzureOptimizer<double[], double[], Dictionary<string, object>>();
-            var expectedServices = new[] { "MachineLearning", "Functions", "ContainerInstances", "CognitiveServices" };
+            var optimizer = new AzureOptimizer<double[], double[], object>();
 
-            // Act - Access through reflection
-            var serviceConfigsProperty = optimizer.GetType().GetProperty("ServiceConfigs",
+            // Act - Use reflection to access private ServiceConfigs
+            var type = optimizer.GetType();
+            var serviceConfigsProperty = type.GetProperty("ServiceConfigs",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as dynamic;
+            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as System.Collections.IDictionary;
 
             // Assert
-            Assert.IsNotNull(serviceConfigs, "ServiceConfigs should be initialized");
-
-            foreach (var service in expectedServices)
-            {
-                Assert.IsTrue(((IDictionary<string, object>)serviceConfigs).ContainsKey(service),
-                    $"ServiceConfigs should contain {service}");
-            }
+            Assert.NotNull(serviceConfigs);
+            Assert.Equal(4, serviceConfigs.Count);
+            Assert.True(serviceConfigs.Contains("MachineLearning"));
+            Assert.True(serviceConfigs.Contains("Functions"));
+            Assert.True(serviceConfigs.Contains("ContainerInstances"));
+            Assert.True(serviceConfigs.Contains("CognitiveServices"));
         }
 
-        [TestMethod]
-        public void AzureOptimizer_MachineLearningConfig_HasCorrectProperties()
+        [Fact]
+        public void AzureOptimizer_MachineLearningConfig_HasCorrectFormats()
         {
             // Arrange
-            var optimizer = new AzureOptimizer<double[], double[], Dictionary<string, object>>();
+            var optimizer = new AzureOptimizer<double[], double[], object>();
 
-            // Act - Access through reflection
-            var serviceConfigsProperty = optimizer.GetType().GetProperty("ServiceConfigs",
+            // Act - Access MachineLearning configuration via reflection
+            var type = optimizer.GetType();
+            var serviceConfigsProperty = type.GetProperty("ServiceConfigs",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as dynamic;
-            var mlConfig = ((IDictionary<string, object>)serviceConfigs)["MachineLearning"];
+            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as System.Collections.IDictionary;
+            var mlConfig = serviceConfigs?["MachineLearning"];
 
             // Assert
-            Assert.IsNotNull(mlConfig);
-            var serviceNameProp = mlConfig.GetType().GetProperty("ServiceName");
-            var serviceName = serviceNameProp?.GetValue(mlConfig) as string;
-            Assert.AreEqual("Azure Machine Learning", serviceName);
+            Assert.NotNull(mlConfig);
+            var formatsProperty = mlConfig.GetType().GetProperty("SupportedFormats");
+            var formats = formatsProperty?.GetValue(mlConfig) as string[];
+
+            Assert.NotNull(formats);
+            Assert.Contains("TensorFlow", formats);
+            Assert.Contains("PyTorch", formats);
+            Assert.Contains("ONNX", formats);
+            Assert.Contains("Scikit-learn", formats);
+            Assert.DoesNotContain("Tensor<double>Flow", formats); // Verify bug fix
         }
 
-        [TestMethod]
-        public void AzureOptimizer_FunctionsConfig_HasCorrectProperties()
+        [Fact]
+        public void AzureOptimizer_FunctionsConfig_HasCorrectFormats()
         {
             // Arrange
-            var optimizer = new AzureOptimizer<double[], double[], Dictionary<string, object>>();
+            var optimizer = new AzureOptimizer<double[], double[], object>();
 
-            // Act - Access through reflection
-            var serviceConfigsProperty = optimizer.GetType().GetProperty("ServiceConfigs",
+            // Act - Access Functions configuration via reflection
+            var type = optimizer.GetType();
+            var serviceConfigsProperty = type.GetProperty("ServiceConfigs",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as dynamic;
-            var functionsConfig = ((IDictionary<string, object>)serviceConfigs)["Functions"];
+            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as System.Collections.IDictionary;
+            var functionsConfig = serviceConfigs?["Functions"];
 
             // Assert
-            Assert.IsNotNull(functionsConfig);
-            var serviceNameProp = functionsConfig.GetType().GetProperty("ServiceName");
-            var serviceName = serviceNameProp?.GetValue(functionsConfig) as string;
-            Assert.AreEqual("Azure Functions", serviceName);
+            Assert.NotNull(functionsConfig);
+            var formatsProperty = functionsConfig.GetType().GetProperty("SupportedFormats");
+            var formats = formatsProperty?.GetValue(functionsConfig) as string[];
+
+            Assert.NotNull(formats);
+            Assert.Contains("ONNX", formats);
+            Assert.Contains("TensorFlow Lite", formats);
+            Assert.DoesNotContain("Tensor<double>Flow Lite", formats); // Verify bug fix
+        }
+
+        [Fact]
+        public void AzureOptimizer_Configuration_HasCorrectDefaults()
+        {
+            // Arrange
+            var optimizer = new AzureOptimizer<double[], double[], object>();
+
+            // Act
+            var config = optimizer.Configuration;
+
+            // Assert
+            Assert.NotNull(config);
+            Assert.NotNull(config.PlatformSpecificSettings);
+            Assert.Equal("eastus", config.PlatformSpecificSettings["Region"]);
+            Assert.Equal(true, config.PlatformSpecificSettings["EnableONNXRuntime"]);
+            Assert.Equal(false, config.PlatformSpecificSettings["EnableFPGA"]);
+            Assert.Equal(true, config.PlatformSpecificSettings["EnableGPU"]);
+            Assert.Equal("your-subscription-id", config.PlatformSpecificSettings["SubscriptionId"]);
+            Assert.Equal("ml-resources", config.PlatformSpecificSettings["ResourceGroup"]);
         }
 
         #endregion
 
-        #region Dictionary Initialization Tests
+        #region Cross-Platform Consistency Tests
 
-        [TestMethod]
-        public void AllOptimizers_ServiceConfigs_CountMatchesExpected()
+        [Fact]
+        public void AllOptimizers_HaveConsistentTarget()
         {
             // Arrange
-            var awsOptimizer = new AWSOptimizer<double[], double[], Dictionary<string, object>>();
-            var gcpOptimizer = new GCPOptimizer<double[], double[], Dictionary<string, object>>();
-            var azureOptimizer = new AzureOptimizer<double[], double[], Dictionary<string, object>>();
+            var awsOptimizer = new AWSOptimizer<double[], double[], object>();
+            var gcpOptimizer = new GCPOptimizer<double[], double[], object>();
+            var azureOptimizer = new AzureOptimizer<double[], double[], object>();
 
-            // Act - Access through reflection
-            var awsConfigs = GetServiceConfigsCount(awsOptimizer);
-            var gcpConfigs = GetServiceConfigsCount(gcpOptimizer);
-            var azureConfigs = GetServiceConfigsCount(azureOptimizer);
-
-            // Assert
-            Assert.AreEqual(4, awsConfigs, "AWS should have 4 service configurations");
-            Assert.AreEqual(4, gcpConfigs, "GCP should have 4 service configurations");
-            Assert.AreEqual(4, azureConfigs, "Azure should have 4 service configurations");
+            // Assert - All should target Cloud deployment
+            Assert.Equal(DeploymentTarget.Cloud, awsOptimizer.Target);
+            Assert.Equal(DeploymentTarget.Cloud, gcpOptimizer.Target);
+            Assert.Equal(DeploymentTarget.Cloud, azureOptimizer.Target);
         }
 
-        private int GetServiceConfigsCount(object optimizer)
+        [Fact]
+        public void AllOptimizers_HaveNonEmptyNames()
         {
-            var serviceConfigsProperty = optimizer.GetType().GetProperty("ServiceConfigs",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var serviceConfigs = serviceConfigsProperty?.GetValue(optimizer) as dynamic;
-            return ((IDictionary<string, object>)serviceConfigs).Count;
+            // Arrange
+            var awsOptimizer = new AWSOptimizer<double[], double[], object>();
+            var gcpOptimizer = new GCPOptimizer<double[], double[], object>();
+            var azureOptimizer = new AzureOptimizer<double[], double[], object>();
+
+            // Assert - All should have descriptive names
+            Assert.False(string.IsNullOrEmpty(awsOptimizer.Name));
+            Assert.False(string.IsNullOrEmpty(gcpOptimizer.Name));
+            Assert.False(string.IsNullOrEmpty(azureOptimizer.Name));
+        }
+
+        [Fact]
+        public void AllOptimizers_HaveConfiguredSettings()
+        {
+            // Arrange
+            var awsOptimizer = new AWSOptimizer<double[], double[], object>();
+            var gcpOptimizer = new GCPOptimizer<double[], double[], object>();
+            var azureOptimizer = new AzureOptimizer<double[], double[], object>();
+
+            // Assert - All should have platform-specific settings configured
+            Assert.NotEmpty(awsOptimizer.Configuration.PlatformSpecificSettings);
+            Assert.NotEmpty(gcpOptimizer.Configuration.PlatformSpecificSettings);
+            Assert.NotEmpty(azureOptimizer.Configuration.PlatformSpecificSettings);
         }
 
         #endregion
