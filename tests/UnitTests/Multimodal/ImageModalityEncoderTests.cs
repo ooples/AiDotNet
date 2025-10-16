@@ -149,7 +149,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
             var encoder = new ImageModalityEncoder<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => encoder.Encode(null));
+            Assert.Throws<ArgumentException>(() => encoder.Encode((Tensor<double>)null));
         }
 
         [Fact]
