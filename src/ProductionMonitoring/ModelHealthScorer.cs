@@ -133,23 +133,32 @@ namespace AiDotNet.ProductionMonitoring
         /// <summary>
         /// Analyzes health trends over a specified time period
         /// </summary>
-        /// <param name="lookbackDays">The number of days to look back in the health history (default: 7 days)</param>
-        /// <returns>A task that returns a comprehensive health trend analysis</returns>
+        /// <param name="lookbackDays">Number of days to analyze in the trend history. Default is 7 days.</param>
+        /// <returns>
+        /// A task that represents the asynchronous operation, containing a <see cref="HealthTrendAnalysis"/>
+        /// with trend direction, strength, and component-level trend information.
+        /// </returns>
         /// <remarks>
         /// <para>
-        /// This method analyzes historical health data to identify trends, patterns, and changes in model health over time.
-        /// It calculates both overall health trends and component-specific trends, providing insights into which aspects
-        /// of the model are improving or degrading.
+        /// This method performs a comprehensive analysis of model health trends by examining historical
+        /// health check data over the specified lookback period. It uses linear regression to calculate
+        /// trends for both overall health scores and individual component scores.
         /// </para>
         /// <para>
-        /// For beginners, think of this method as a time-series analysis tool. It looks at how model health has changed
-        /// over recent days and identifies whether things are getting better (improving), getting worse (degrading),
-        /// or staying about the same (stable). This information is crucial for proactive model maintenance.
+        /// The analysis includes:
+        /// - Overall trend direction (Improving, Degrading, or Stable) based on a 5% threshold
+        /// - Trend strength indicating the magnitude of change over time
+        /// - Component-level trends for each registered health component (Performance, DataQuality, etc.)
+        /// - Statistical measures including current value, average, min/max, and volatility for each component
         /// </para>
         /// <para>
-        /// The method uses simple linear regression to calculate trend slopes. A positive slope indicates improvement,
-        /// while a negative slope indicates degradation. It also calculates volatility to measure how stable or erratic
-        /// the health metrics are over time.
+        /// If there is insufficient historical data (no records in the lookback period), the method
+        /// returns an "Unknown" trend with empty component trends. This helps prevent false trend
+        /// signals when the model is newly deployed or monitoring has just started.
+        /// </para>
+        /// <para>
+        /// The method executes asynchronously on a background thread to avoid blocking the caller,
+        /// making it suitable for use in production monitoring scenarios where responsiveness is important.
         /// </para>
         /// </remarks>
         public Task<HealthTrendAnalysis> AnalyzeHealthTrendsAsync(int lookbackDays = 7)
