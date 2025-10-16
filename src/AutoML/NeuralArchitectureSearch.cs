@@ -808,10 +808,21 @@ namespace AiDotNet.AutoML
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public class NeuralArchitectureSearchModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly INeuralNetworkModel<T> _innerModel;
         private readonly ArchitectureCandidate<T> _architecture;
 
+        /// <summary>
+        /// Creates a new NeuralArchitectureSearchModel with the specified inner model and architecture.
+        /// </summary>
+        /// <param name="innerModel">The inner neural network model</param>
+        /// <param name="architecture">The architecture candidate</param>
+        /// <remarks>
+        /// Note: This constructor signature was updated in BUG-003 to use fully generic types.
+        /// Previous signature used INeuralNetworkModel&lt;double&gt; which limited flexibility.
+        /// This change is intentional to align with project guidelines requiring generic implementations.
+        /// </remarks>
         public NeuralArchitectureSearchModel(INeuralNetworkModel<T> innerModel, ArchitectureCandidate<T> architecture)
         {
             _innerModel = innerModel ?? throw new ArgumentNullException(nameof(innerModel));
