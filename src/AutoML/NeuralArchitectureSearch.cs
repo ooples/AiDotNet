@@ -272,6 +272,10 @@ namespace AiDotNet.AutoML
             LogProgress("Gradient-based search not yet implemented with new optimizer API. Using random search instead.");
             RunRandomSearch(trainData, trainLabels, valData, valLabels);
 
+            // Note: The original gradient-based implementation is commented out below because it needs
+            // refactoring to work with the new optimizer API. The fallback to RandomSearch above
+            // ensures this method executes correctly. DO NOT uncomment without refactoring.
+
             /* Original implementation - needs refactoring:
             // Create a supernet with learnable architecture parameters
             var supernet = new SuperNet<T>(searchSpace);
