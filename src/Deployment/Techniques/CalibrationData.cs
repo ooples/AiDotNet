@@ -9,7 +9,6 @@ namespace AiDotNet.Deployment.Techniques
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class CalibrationData<T>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         /// <summary>
         /// Gets or sets the minimum values per layer.

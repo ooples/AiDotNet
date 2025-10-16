@@ -28,7 +28,6 @@ namespace AiDotNet.Ensemble.Strategies
     /// <typeparam name="TInput">The input type for the models</typeparam>
     /// <typeparam name="TOutput">The output type for predictions</typeparam>
     public class BayesianAverageStrategy<T, TInput, TOutput> : CombinationStrategyBase<T, TInput, TOutput>
-        where T : struct, IComparable<T>, IEquatable<T>
         where TOutput : notnull
     {
         private readonly Dictionary<int, T> _modelPriors = default!;

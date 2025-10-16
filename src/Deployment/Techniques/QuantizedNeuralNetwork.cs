@@ -17,7 +17,6 @@ namespace AiDotNet.Deployment.Techniques
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
     public class QuantizedNeuralNetwork<T> : NeuralNetworkBase<T>, INeuralNetworkModel<T>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly NeuralNetworkArchitecture<T> _architecture;
         private readonly string _quantizationType;

@@ -32,7 +32,6 @@ public static class CombinationStrategyFactory
     public static ICombinationStrategy<T, TInput, TOutput> Create<T, TInput, TOutput>(
         EnsembleStrategy strategyType,
         Dictionary<string, object>? options = null)
-        where T : struct, IComparable<T>, IEquatable<T>
         where TOutput : notnull
     {
         options ??= new Dictionary<string, object>();
@@ -182,7 +181,6 @@ public static class CombinationStrategyFactory
     /// </summary>
     private static StackingStrategy<T, TInput, TOutput> CreateStackingStrategy<T, TInput, TOutput>(
         Dictionary<string, object> options)
-        where T : struct, IComparable<T>, IEquatable<T>
     {
         var cvFolds = GetOptionValue<int>(options, "cvFolds", 5);
         return new StackingStrategy<T, TInput, TOutput>(cvFolds);

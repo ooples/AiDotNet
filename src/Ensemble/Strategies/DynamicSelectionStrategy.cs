@@ -13,7 +13,6 @@ namespace AiDotNet.Ensemble.Strategies
     /// <typeparam name="TInput">The type of input data</typeparam>
     /// <typeparam name="TOutput">The type of output data</typeparam>
     public class DynamicSelectionStrategy<T, TInput, TOutput> : CombinationStrategyBase<T, TInput, TOutput>
-        where T : struct, IComparable<T>, IEquatable<T>
     {
         private readonly int _k;
         private readonly List<ValidationSample> _validationSet = default!;

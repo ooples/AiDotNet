@@ -43,7 +43,6 @@ using AiDotNet.Factories;
 /// </para>
 /// </remarks>
 public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
-    where T : struct, IComparable<T>
 {
     private readonly ILogging _logger = default!;
     private readonly INumericOperations<T> NumOps;

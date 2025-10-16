@@ -8,7 +8,6 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class MBPOAgent<T> : AgentBase<Tensor<T>, Vector<T>, T>
-    where T : struct
 {
     private readonly MBPOOptions _options = default!;
     

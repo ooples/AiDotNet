@@ -14,7 +14,6 @@ namespace AiDotNet.Deployment
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public abstract class EdgeOptimizer<T>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         protected readonly INumericOperations<T> ops;
         protected readonly EdgeOptimizationOptions options;

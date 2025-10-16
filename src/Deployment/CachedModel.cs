@@ -13,7 +13,6 @@ namespace AiDotNet.Deployment
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     internal class CachedModel<T> : InterpretableModelBase<T, Tensor<T>, Tensor<T>>, IFullModel<T, Tensor<T>, Tensor<T>>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly IFullModel<T, Tensor<T>, Tensor<T>> baseModel;
         private readonly Dictionary<string, Tensor<T>> cache;

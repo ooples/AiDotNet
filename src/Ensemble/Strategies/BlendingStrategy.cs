@@ -15,7 +15,6 @@ namespace AiDotNet.Ensemble.Strategies
     /// <typeparam name="TInput">The input type</typeparam>
     /// <typeparam name="TOutput">The output type</typeparam>
     public class BlendingStrategy<T, TInput, TOutput> : CombinationStrategyBase<T, TInput, TOutput>
-        where T : struct, IComparable<T>, IEquatable<T>
     {
         private Vector<T>? _blendingWeights;
         private T _blendingBias = default!;

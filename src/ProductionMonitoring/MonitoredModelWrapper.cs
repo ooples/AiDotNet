@@ -15,7 +15,6 @@ namespace AiDotNet.ProductionMonitoring
     /// <typeparam name="TInput">The input type for the model</typeparam>
     /// <typeparam name="TOutput">The output type for the model</typeparam>
     public class MonitoredModelWrapper<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly IFullModel<T, TInput, TOutput> wrappedModel;
         private readonly DefaultProductionMonitor<T> monitor;

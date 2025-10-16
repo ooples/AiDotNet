@@ -14,7 +14,6 @@ namespace AiDotNet.ReinforcementLearning.Agents
     /// <typeparam name="T">The numeric type.</typeparam>
     public class RainbowDQNAgent<TState, T> : DQNAgent<TState, T>
         where TState : Tensor<T>
-        where T : unmanaged, IComparable<T>
     {
         private readonly int _numAtoms;
         private readonly T _vMin = default!;

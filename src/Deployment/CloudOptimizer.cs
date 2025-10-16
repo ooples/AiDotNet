@@ -15,7 +15,6 @@ namespace AiDotNet.Deployment
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public abstract class CloudOptimizer<T>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         protected readonly INumericOperations<T> ops;
         protected readonly CloudOptimizationOptions options;

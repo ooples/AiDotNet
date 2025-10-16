@@ -19,7 +19,6 @@ namespace AiDotNet.AutoML
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class SimpleAutoMLModel<T> : IAutoMLModel<T, Matrix<T>, Vector<T>>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly List<TrialResult> _trialHistory = new();
         private Dictionary<string, ParameterRange> _searchSpace = new();

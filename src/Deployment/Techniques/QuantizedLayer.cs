@@ -13,7 +13,6 @@ namespace AiDotNet.Deployment.Techniques
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
     public class QuantizedLayer<T> : ILayer<T>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly ILayer<T> _originalLayer;
         private readonly List<Tensor<T>> _quantizedParameters;

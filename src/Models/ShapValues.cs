@@ -10,7 +10,7 @@ namespace AiDotNet.Models
     /// Represents SHAP (SHapley Additive exPlanations) values for model interpretation
     /// </summary>
     /// <typeparam name="T">The numeric type</typeparam>
-    public class ShapValues<T> where T : struct, IComparable<T>, IConvertible, IEquatable<T>
+    public class ShapValues<T>
     {
         private readonly INumericOperations<T> _ops;
         
@@ -81,7 +81,11 @@ namespace AiDotNet.Models
             }
             
             // Sort by absolute SHAP value (descending)
-            Array.Sort(absValues, indices, (a, b) => -_ops.Compare(a, b));
+            Array.Sort(absValues, indices, (a, b) => {
+                if (_ops.GreaterThan(a, b)) return -1;
+                if (_ops.LessThan(a, b)) return 1;
+                return 0;
+            });
             
             var result = new int[Math.Min(topK, indices.Length)];
             Array.Copy(indices, result, result.Length);

@@ -7,7 +7,6 @@ namespace AiDotNet.Models
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class MultimodalInput<T>
-        where T : struct
     {
         private readonly Dictionary<string, object> _modalityData = new();
 

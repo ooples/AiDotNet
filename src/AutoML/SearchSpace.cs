@@ -11,7 +11,6 @@ namespace AiDotNet.AutoML
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public class SearchSpace<T>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         /// <summary>
         /// Gets or sets the available layer types

@@ -14,7 +14,6 @@ namespace AiDotNet.Ensemble.Strategies
     /// <typeparam name="TInput">The type of input data</typeparam>
     /// <typeparam name="TOutput">The type of output predictions</typeparam>
     public class MinimumVarianceStrategy<T, TInput, TOutput> : CombinationStrategyBase<T, TInput, TOutput>
-        where T : struct, IComparable<T>, IEquatable<T>
         where TOutput : notnull
     {
         private Vector<T>? _trainedWeights;

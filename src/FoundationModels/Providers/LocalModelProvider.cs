@@ -385,7 +385,6 @@ namespace AiDotNet.FoundationModels.Providers
         /// Creates a model instance based on metadata
         /// </summary>
         private async Task<IFoundationModel<T>> CreateModelInstanceAsync<T>(ModelMetadata metadata, FoundationModelConfig config)
-            where T : struct, IComparable<T>, IConvertible
         {
             _logger.Information("Creating model instance: {ModelId} ({Architecture})", metadata.ModelId, metadata.Architecture);
 

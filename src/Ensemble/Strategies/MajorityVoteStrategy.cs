@@ -18,7 +18,6 @@ namespace AiDotNet.Ensemble.Strategies
     /// In case of ties, the strategy can either select randomly or use model weights to break the tie.
     /// </remarks>
     public class MajorityVoteStrategy<T, TInput, TOutput> : CombinationStrategyBase<T, TInput, TOutput>
-        where T : struct, IComparable<T>, IEquatable<T>
         where TOutput : notnull
     {
         private readonly bool _useWeights;

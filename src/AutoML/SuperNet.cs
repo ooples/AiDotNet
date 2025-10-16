@@ -10,7 +10,6 @@ namespace AiDotNet.AutoML
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public class SuperNet<T>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly SearchSpace<T> searchSpace;
         
