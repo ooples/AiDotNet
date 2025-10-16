@@ -1,146 +1,389 @@
-using AiDotNet.Enums;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using AiDotNet.Enums;
 
 namespace AiDotNetTests.UnitTests.Enums;
 
 /// <summary>
-/// Unit tests for the ModalityFusionStrategy enum to ensure all enum members are unique and properly defined.
+/// Comprehensive unit tests for the ModalityFusionStrategy enum.
+/// Tests enum values, uniqueness, conversion, and documentation coverage.
 /// </summary>
 [TestClass]
 public class ModalityFusionStrategyTests
 {
-    /// <summary>
-    /// Tests that all enum values are unique (no duplicates).
-    /// </summary>
     [TestMethod]
-    public void ModalityFusionStrategy_AllValuesAreUnique()
+    public void ModalityFusionStrategy_ShouldHaveAllExpectedValues()
     {
         // Arrange
-        var allValues = Enum.GetValues(typeof(ModalityFusionStrategy)).Cast<ModalityFusionStrategy>();
-        var distinctValues = allValues.Distinct();
+        var expectedValues = new[]
+        {
+            ModalityFusionStrategy.EarlyFusion,
+            ModalityFusionStrategy.LateFusion,
+            ModalityFusionStrategy.CrossAttention,
+            ModalityFusionStrategy.Hierarchical,
+            ModalityFusionStrategy.Transformer,
+            ModalityFusionStrategy.Gated,
+            ModalityFusionStrategy.TensorFusion,
+            ModalityFusionStrategy.BilinearPooling,
+            ModalityFusionStrategy.AttentionWeighted,
+            ModalityFusionStrategy.Concatenation
+        };
+
+        // Act
+        var actualValues = Enum.GetValues(typeof(ModalityFusionStrategy))
+            .Cast<ModalityFusionStrategy>()
+            .ToArray();
+
+        // Assert
+        Assert.AreEqual(10, actualValues.Length, "Expected exactly 10 fusion strategy values");
+        CollectionAssert.AreEquivalent(expectedValues, actualValues, "All expected values should be present");
+    }
+
+    [TestMethod]
+    public void ModalityFusionStrategy_ShouldHaveUniqueValues()
+    {
+        // Arrange & Act
+        var values = Enum.GetValues(typeof(ModalityFusionStrategy))
+            .Cast<ModalityFusionStrategy>()
+            .ToArray();
+
+        var uniqueValues = values.Distinct().ToArray();
+
+        // Assert
+        Assert.AreEqual(values.Length, uniqueValues.Length, "All enum values should be unique");
+    }
+
+    [TestMethod]
+    public void ModalityFusionStrategy_NoDuplicateHierarchical()
+    {
+        // Arrange & Act
+        var hierarchicalValues = Enum.GetValues(typeof(ModalityFusionStrategy))
+            .Cast<ModalityFusionStrategy>()
+            .Where(v => v.ToString() == "Hierarchical")
+            .ToArray();
+
+        // Assert
+        Assert.AreEqual(1, hierarchicalValues.Length, "Hierarchical should appear exactly once");
+    }
+
+    [TestMethod]
+    public void EarlyFusion_ShouldHaveCorrectValue()
+    {
+        // Arrange
+        var strategy = ModalityFusionStrategy.EarlyFusion;
 
         // Act & Assert
-        Assert.AreEqual(allValues.Count(), distinctValues.Count(),
-            "ModalityFusionStrategy enum should not contain duplicate values");
+        Assert.AreEqual("EarlyFusion", strategy.ToString());
+        Assert.AreEqual(0, (int)strategy, "EarlyFusion should have value 0 as first enum member");
     }
 
-    /// <summary>
-    /// Tests that the enum contains the expected number of members.
-    /// </summary>
     [TestMethod]
-    public void ModalityFusionStrategy_HasExpectedMemberCount()
+    public void LateFusion_ShouldHaveCorrectValue()
     {
         // Arrange
-        var expectedCount = 10; // EarlyFusion, LateFusion, CrossAttention, Hierarchical, Transformer, Gated, TensorFusion, BilinearPooling, AttentionWeighted, Concatenation
+        var strategy = ModalityFusionStrategy.LateFusion;
 
+        // Act & Assert
+        Assert.AreEqual("LateFusion", strategy.ToString());
+        Assert.AreEqual(1, (int)strategy);
+    }
+
+    [TestMethod]
+    public void CrossAttention_ShouldHaveCorrectValue()
+    {
+        // Arrange
+        var strategy = ModalityFusionStrategy.CrossAttention;
+
+        // Act & Assert
+        Assert.AreEqual("CrossAttention", strategy.ToString());
+        Assert.AreEqual(2, (int)strategy);
+    }
+
+    [TestMethod]
+    public void Hierarchical_ShouldHaveCorrectValue()
+    {
+        // Arrange
+        var strategy = ModalityFusionStrategy.Hierarchical;
+
+        // Act & Assert
+        Assert.AreEqual("Hierarchical", strategy.ToString());
+        Assert.AreEqual(3, (int)strategy);
+    }
+
+    [TestMethod]
+    public void Transformer_ShouldHaveCorrectValue()
+    {
+        // Arrange
+        var strategy = ModalityFusionStrategy.Transformer;
+
+        // Act & Assert
+        Assert.AreEqual("Transformer", strategy.ToString());
+        Assert.AreEqual(4, (int)strategy);
+    }
+
+    [TestMethod]
+    public void Gated_ShouldHaveCorrectValue()
+    {
+        // Arrange
+        var strategy = ModalityFusionStrategy.Gated;
+
+        // Act & Assert
+        Assert.AreEqual("Gated", strategy.ToString());
+        Assert.AreEqual(5, (int)strategy);
+    }
+
+    [TestMethod]
+    public void TensorFusion_ShouldHaveCorrectValue()
+    {
+        // Arrange
+        var strategy = ModalityFusionStrategy.TensorFusion;
+
+        // Act & Assert
+        Assert.AreEqual("TensorFusion", strategy.ToString());
+        Assert.AreEqual(6, (int)strategy);
+    }
+
+    [TestMethod]
+    public void BilinearPooling_ShouldHaveCorrectValue()
+    {
+        // Arrange
+        var strategy = ModalityFusionStrategy.BilinearPooling;
+
+        // Act & Assert
+        Assert.AreEqual("BilinearPooling", strategy.ToString());
+        Assert.AreEqual(7, (int)strategy);
+    }
+
+    [TestMethod]
+    public void AttentionWeighted_ShouldHaveCorrectValue()
+    {
+        // Arrange
+        var strategy = ModalityFusionStrategy.AttentionWeighted;
+
+        // Act & Assert
+        Assert.AreEqual("AttentionWeighted", strategy.ToString());
+        Assert.AreEqual(8, (int)strategy);
+    }
+
+    [TestMethod]
+    public void Concatenation_ShouldHaveCorrectValue()
+    {
+        // Arrange
+        var strategy = ModalityFusionStrategy.Concatenation;
+
+        // Act & Assert
+        Assert.AreEqual("Concatenation", strategy.ToString());
+        Assert.AreEqual(9, (int)strategy);
+    }
+
+    [TestMethod]
+    public void ParseString_EarlyFusion_ShouldSucceed()
+    {
         // Act
-        var actualCount = Enum.GetValues(typeof(ModalityFusionStrategy)).Length;
+        var parsed = Enum.Parse<ModalityFusionStrategy>("EarlyFusion");
 
         // Assert
-        Assert.AreEqual(expectedCount, actualCount,
-            $"ModalityFusionStrategy should have exactly {expectedCount} members");
+        Assert.AreEqual(ModalityFusionStrategy.EarlyFusion, parsed);
     }
 
-    /// <summary>
-    /// Tests that each expected enum member exists and is accessible.
-    /// </summary>
     [TestMethod]
-    public void ModalityFusionStrategy_AllExpectedMembersExist()
+    public void ParseString_LateFusion_ShouldSucceed()
     {
-        // Arrange & Act & Assert
-        Assert.AreEqual(ModalityFusionStrategy.EarlyFusion, ModalityFusionStrategy.EarlyFusion);
-        Assert.AreEqual(ModalityFusionStrategy.LateFusion, ModalityFusionStrategy.LateFusion);
-        Assert.AreEqual(ModalityFusionStrategy.CrossAttention, ModalityFusionStrategy.CrossAttention);
-        Assert.AreEqual(ModalityFusionStrategy.Hierarchical, ModalityFusionStrategy.Hierarchical);
-        Assert.AreEqual(ModalityFusionStrategy.Transformer, ModalityFusionStrategy.Transformer);
-        Assert.AreEqual(ModalityFusionStrategy.Gated, ModalityFusionStrategy.Gated);
-        Assert.AreEqual(ModalityFusionStrategy.TensorFusion, ModalityFusionStrategy.TensorFusion);
-        Assert.AreEqual(ModalityFusionStrategy.BilinearPooling, ModalityFusionStrategy.BilinearPooling);
-        Assert.AreEqual(ModalityFusionStrategy.AttentionWeighted, ModalityFusionStrategy.AttentionWeighted);
-        Assert.AreEqual(ModalityFusionStrategy.Concatenation, ModalityFusionStrategy.Concatenation);
-    }
-
-    /// <summary>
-    /// Tests that the Hierarchical enum member has the expected value.
-    /// This specifically validates that the duplicate was properly removed.
-    /// </summary>
-    [TestMethod]
-    public void ModalityFusionStrategy_HierarchicalHasCorrectValue()
-    {
-        // Arrange
-        var expectedValue = 3; // Fourth member (0-indexed)
-
         // Act
-        var actualValue = (int)ModalityFusionStrategy.Hierarchical;
+        var parsed = Enum.Parse<ModalityFusionStrategy>("LateFusion");
 
         // Assert
-        Assert.AreEqual(expectedValue, actualValue,
-            "Hierarchical should be the 4th enum member with value 3");
+        Assert.AreEqual(ModalityFusionStrategy.LateFusion, parsed);
     }
 
-    /// <summary>
-    /// Tests that enum can be parsed from string correctly.
-    /// </summary>
     [TestMethod]
-    public void ModalityFusionStrategy_CanParseFromString()
+    public void ParseString_CrossAttention_ShouldSucceed()
     {
-        // Arrange
-        var strategyName = "Hierarchical";
-
         // Act
-        var parsed = Enum.Parse(typeof(ModalityFusionStrategy), strategyName);
+        var parsed = Enum.Parse<ModalityFusionStrategy>("CrossAttention");
+
+        // Assert
+        Assert.AreEqual(ModalityFusionStrategy.CrossAttention, parsed);
+    }
+
+    [TestMethod]
+    public void ParseString_Hierarchical_ShouldSucceed()
+    {
+        // Act
+        var parsed = Enum.Parse<ModalityFusionStrategy>("Hierarchical");
 
         // Assert
         Assert.AreEqual(ModalityFusionStrategy.Hierarchical, parsed);
     }
 
-    /// <summary>
-    /// Tests that enum names don't have duplicates by checking GetNames.
-    /// </summary>
     [TestMethod]
-    public void ModalityFusionStrategy_NamesAreUnique()
+    public void ParseString_CaseInsensitive_ShouldSucceed()
     {
-        // Arrange
-        var allNames = Enum.GetNames(typeof(ModalityFusionStrategy));
-        var distinctNames = allNames.Distinct();
+        // Act
+        var parsed = Enum.Parse<ModalityFusionStrategy>("earlyfusion", ignoreCase: true);
 
-        // Act & Assert
-        Assert.AreEqual(allNames.Length, distinctNames.Count(),
-            "ModalityFusionStrategy enum should not contain duplicate names");
+        // Assert
+        Assert.AreEqual(ModalityFusionStrategy.EarlyFusion, parsed);
     }
 
-    /// <summary>
-    /// Tests that the enum ToString() method works correctly for all members.
-    /// </summary>
     [TestMethod]
-    public void ModalityFusionStrategy_ToStringWorksCorrectly()
+    [ExpectedException(typeof(ArgumentException))]
+    public void ParseString_InvalidValue_ShouldThrowException()
     {
-        // Arrange & Act & Assert
-        Assert.AreEqual("EarlyFusion", ModalityFusionStrategy.EarlyFusion.ToString());
-        Assert.AreEqual("LateFusion", ModalityFusionStrategy.LateFusion.ToString());
-        Assert.AreEqual("CrossAttention", ModalityFusionStrategy.CrossAttention.ToString());
-        Assert.AreEqual("Hierarchical", ModalityFusionStrategy.Hierarchical.ToString());
-        Assert.AreEqual("Transformer", ModalityFusionStrategy.Transformer.ToString());
-        Assert.AreEqual("Gated", ModalityFusionStrategy.Gated.ToString());
-        Assert.AreEqual("TensorFusion", ModalityFusionStrategy.TensorFusion.ToString());
-        Assert.AreEqual("BilinearPooling", ModalityFusionStrategy.BilinearPooling.ToString());
-        Assert.AreEqual("AttentionWeighted", ModalityFusionStrategy.AttentionWeighted.ToString());
-        Assert.AreEqual("Concatenation", ModalityFusionStrategy.Concatenation.ToString());
+        // Act
+        Enum.Parse<ModalityFusionStrategy>("InvalidStrategy");
+
+        // Assert - Expects ArgumentException
     }
 
-    /// <summary>
-    /// Tests that default enum value is the first member.
-    /// </summary>
     [TestMethod]
-    public void ModalityFusionStrategy_DefaultValueIsEarlyFusion()
+    public void TryParse_ValidValue_ShouldReturnTrue()
+    {
+        // Act
+        var success = Enum.TryParse<ModalityFusionStrategy>("Transformer", out var result);
+
+        // Assert
+        Assert.IsTrue(success);
+        Assert.AreEqual(ModalityFusionStrategy.Transformer, result);
+    }
+
+    [TestMethod]
+    public void TryParse_InvalidValue_ShouldReturnFalse()
+    {
+        // Act
+        var success = Enum.TryParse<ModalityFusionStrategy>("NonExistent", out var result);
+
+        // Assert
+        Assert.IsFalse(success);
+        Assert.AreEqual(default(ModalityFusionStrategy), result);
+    }
+
+    [TestMethod]
+    public void GetNames_ShouldReturnAllStrategyNames()
+    {
+        // Act
+        var names = Enum.GetNames(typeof(ModalityFusionStrategy));
+
+        // Assert
+        Assert.AreEqual(10, names.Length);
+        Assert.IsTrue(names.Contains("EarlyFusion"));
+        Assert.IsTrue(names.Contains("LateFusion"));
+        Assert.IsTrue(names.Contains("CrossAttention"));
+        Assert.IsTrue(names.Contains("Hierarchical"));
+        Assert.IsTrue(names.Contains("Transformer"));
+        Assert.IsTrue(names.Contains("Gated"));
+        Assert.IsTrue(names.Contains("TensorFusion"));
+        Assert.IsTrue(names.Contains("BilinearPooling"));
+        Assert.IsTrue(names.Contains("AttentionWeighted"));
+        Assert.IsTrue(names.Contains("Concatenation"));
+    }
+
+    [TestMethod]
+    public void IsDefined_ValidValue_ShouldReturnTrue()
+    {
+        // Act & Assert
+        Assert.IsTrue(Enum.IsDefined(typeof(ModalityFusionStrategy), ModalityFusionStrategy.EarlyFusion));
+        Assert.IsTrue(Enum.IsDefined(typeof(ModalityFusionStrategy), ModalityFusionStrategy.Hierarchical));
+        Assert.IsTrue(Enum.IsDefined(typeof(ModalityFusionStrategy), ModalityFusionStrategy.Concatenation));
+    }
+
+    [TestMethod]
+    public void IsDefined_InvalidNumericValue_ShouldReturnFalse()
+    {
+        // Act & Assert
+        Assert.IsFalse(Enum.IsDefined(typeof(ModalityFusionStrategy), 999));
+    }
+
+    [TestMethod]
+    public void ConvertToInt_ShouldPreserveValue()
     {
         // Arrange
-        ModalityFusionStrategy defaultValue = default;
+        var strategy = ModalityFusionStrategy.Gated;
+
+        // Act
+        var intValue = (int)strategy;
+        var backToEnum = (ModalityFusionStrategy)intValue;
+
+        // Assert
+        Assert.AreEqual(5, intValue);
+        Assert.AreEqual(strategy, backToEnum);
+    }
+
+    [TestMethod]
+    public void EqualityComparison_ShouldWork()
+    {
+        // Arrange
+        var strategy1 = ModalityFusionStrategy.TensorFusion;
+        var strategy2 = ModalityFusionStrategy.TensorFusion;
+        var strategy3 = ModalityFusionStrategy.BilinearPooling;
 
         // Act & Assert
-        Assert.AreEqual(ModalityFusionStrategy.EarlyFusion, defaultValue);
-        Assert.AreEqual(0, (int)defaultValue);
+        Assert.AreEqual(strategy1, strategy2);
+        Assert.AreNotEqual(strategy1, strategy3);
+    }
+
+    [TestMethod]
+    public void GetHashCode_SameValues_ShouldMatch()
+    {
+        // Arrange
+        var strategy1 = ModalityFusionStrategy.AttentionWeighted;
+        var strategy2 = ModalityFusionStrategy.AttentionWeighted;
+
+        // Act & Assert
+        Assert.AreEqual(strategy1.GetHashCode(), strategy2.GetHashCode());
+    }
+
+    [TestMethod]
+    public void AllValues_ShouldBeSequential()
+    {
+        // Arrange
+        var values = Enum.GetValues(typeof(ModalityFusionStrategy))
+            .Cast<int>()
+            .OrderBy(v => v)
+            .ToArray();
+
+        // Act & Assert - values should be 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+        for (int i = 0; i < values.Length; i++)
+        {
+            Assert.AreEqual(i, values[i], $"Enum value at index {i} should be {i}");
+        }
+    }
+
+    [TestMethod]
+    public void Coverage_AllStrategiesAreTested()
+    {
+        // This test ensures we have explicit tests for all enum values
+        // If a new strategy is added, this test will fail, reminding us to add tests
+
+        // Arrange
+        var allStrategies = Enum.GetValues(typeof(ModalityFusionStrategy))
+            .Cast<ModalityFusionStrategy>()
+            .ToArray();
+
+        // Act - Count how many strategies we explicitly test above
+        var testedStrategies = new[]
+        {
+            ModalityFusionStrategy.EarlyFusion,
+            ModalityFusionStrategy.LateFusion,
+            ModalityFusionStrategy.CrossAttention,
+            ModalityFusionStrategy.Hierarchical,
+            ModalityFusionStrategy.Transformer,
+            ModalityFusionStrategy.Gated,
+            ModalityFusionStrategy.TensorFusion,
+            ModalityFusionStrategy.BilinearPooling,
+            ModalityFusionStrategy.AttentionWeighted,
+            ModalityFusionStrategy.Concatenation
+        };
+
+        // Assert
+        Assert.AreEqual(allStrategies.Length, testedStrategies.Length,
+            "All enum values should have individual tests. Update this test if you add new strategies.");
+
+        foreach (var strategy in allStrategies)
+        {
+            Assert.IsTrue(testedStrategies.Contains(strategy),
+                $"Strategy {strategy} should be in the tested strategies list");
+        }
     }
 }
