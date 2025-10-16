@@ -20,7 +20,6 @@ namespace AiDotNet.Deployment.Techniques
     /// Implements various quantization techniques for model compression.
     /// </summary>
     public class ModelQuantizer<T, TInput, TOutput>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
         private readonly QuantizationConfig _config = default!;

@@ -26,7 +26,6 @@ namespace AiDotNet.ReinforcementLearning.Models
     /// </para>
     /// </remarks>
     public class PredictionModelBuilder<T>
-        where T : struct, IComparable<T>
     {
         private readonly PredictionModelBuilder<T, Tensor<T>, Tensor<T>> _innerBuilder = default!;
 

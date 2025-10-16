@@ -21,7 +21,6 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 public interface IPredictionModelBuilder<T, TInput, TOutput>
-    where T : struct, IComparable<T>
 {
     /// <summary>
     /// Configures the feature selector component for the model.

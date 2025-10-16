@@ -19,7 +19,6 @@ namespace AiDotNet.AutoML
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public class NeuralArchitectureSearch<T> : AutoMLModelBase<T, Tensor<T>, Tensor<T>>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly NeuralArchitectureSearchStrategy strategy;
         private readonly int maxLayers;

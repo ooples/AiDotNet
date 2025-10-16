@@ -28,7 +28,6 @@ namespace AiDotNet.ReinforcementLearning.Models;
 /// </para>
 /// </remarks>
 public class MBPOModel<T> : ReinforcementLearningModelBase<T>
-    where T : struct
 {
     private readonly Models.Options.MBPOOptions _options = default!;
     private MBPOAgent<T>? _agent;

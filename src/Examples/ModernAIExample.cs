@@ -409,7 +409,6 @@ public class BERTFoundationModel : IFoundationModel<float, Matrix<string>, Vecto
 }
 
 public class CLIPMultimodalModel<T> : IMultimodalModel<double, MultimodalInput<double>, Vector<double>>
-    where T : struct, IComparable<T>
 {
     // IMultimodalModel implementation
     public IReadOnlyList<string> SupportedModalities => new[] { "text", "image" };

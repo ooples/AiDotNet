@@ -19,7 +19,6 @@ namespace AiDotNet.FoundationModels
     /// </summary>
     /// <typeparam name="T">The numeric type for computations</typeparam>
     public class FoundationModelAdapter<T> : Interpretability.InterpretableModelBase<T, Matrix<T>, Vector<T>>, IFullModel<T, Matrix<T>, Vector<T>>
-        where T : struct, IConvertible, IComparable<T>
     {
         private readonly IFoundationModel<T> _foundationModel;
         private readonly ILogging _logger;

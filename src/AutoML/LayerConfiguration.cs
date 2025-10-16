@@ -10,7 +10,6 @@ namespace AiDotNet.AutoML
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public class LayerConfiguration<T>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         /// <summary>
         /// Gets or sets the type of layer

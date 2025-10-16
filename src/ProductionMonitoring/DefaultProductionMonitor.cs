@@ -13,7 +13,6 @@ namespace AiDotNet.ProductionMonitoring
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public class DefaultProductionMonitor<T> : IDisposable
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly DataDriftDetector<T> driftDetector;
         private readonly PerformanceMonitor<T> performanceMonitor;

@@ -19,7 +19,6 @@ namespace AiDotNet.Ensemble.Strategies
     /// <typeparam name="TInput">The type of input data</typeparam>
     /// <typeparam name="TOutput">The type of output predictions</typeparam>
     public class StackingStrategy<T, TInput, TOutput> : CombinationStrategyBase<T, TInput, TOutput>
-        where T : struct, IComparable<T>, IEquatable<T>
     {
         private readonly int _cvFolds;
         private bool _isTrained;

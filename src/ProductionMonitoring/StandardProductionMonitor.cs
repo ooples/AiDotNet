@@ -15,7 +15,6 @@ namespace AiDotNet.ProductionMonitoring
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class StandardProductionMonitor<T> : IProductionMonitor<T>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly List<PredictionLog<T>> _predictionLogs = new();
         private readonly List<Action<MonitoringAlert>> _alertHandlers = new();

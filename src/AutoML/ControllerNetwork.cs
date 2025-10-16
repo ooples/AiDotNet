@@ -9,7 +9,6 @@ namespace AiDotNet.AutoML
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public class ControllerNetwork<T>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly SearchSpace<T> searchSpace;
         private readonly LSTMLayer<T> controller;

@@ -13,7 +13,6 @@ namespace AiDotNet.Interfaces
     /// <typeparam name="TInput">The input type for the model.</typeparam>
     /// <typeparam name="TOutput">The output type for the model.</typeparam>
     public interface IQuantizationStrategy<T, TInput, TOutput>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         /// <summary>
         /// Gets a value indicating whether this strategy requires calibration data.

@@ -15,8 +15,7 @@ namespace AiDotNet.Deployment.Techniques
  /// <typeparam name="T">The numeric type for calculations.</typeparam>
  /// <typeparam name="TInput">The input data type.</typeparam>
  /// <typeparam name="TOutput">The output data type.</typeparam>
- public class Int8QuantizationStrategy<T, TInput, TOutput> : IQuantizationStrategy<T, TInput, TOutput>
- where T : struct, IComparable<T>, IConvertible, IEquatable<T>
+    public class Int8QuantizationStrategy<T, TInput, TOutput> : IQuantizationStrategy<T, TInput, TOutput>
  {
  private readonly INumericOperations<T> _numOps;
 

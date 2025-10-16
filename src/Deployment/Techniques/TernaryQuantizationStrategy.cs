@@ -13,7 +13,6 @@ namespace AiDotNet.Deployment.Techniques
     /// <typeparam name="TInput">The input data type.</typeparam>
     /// <typeparam name="TOutput">The output data type.</typeparam>
     public class TernaryQuantizationStrategy<T, TInput, TOutput> : IQuantizationStrategy<T, TInput, TOutput>
-        where T : struct, IComparable<T>, IConvertible, IEquatable<T>
     {
         private readonly INumericOperations<T> _numOps;
 
