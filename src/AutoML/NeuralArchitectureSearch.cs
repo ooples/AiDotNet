@@ -9,7 +9,6 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
-using AiDotNet.Models;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -30,16 +29,16 @@ namespace AiDotNet.AutoML
         private readonly T resourceBudget;
         private readonly int populationSize;
         private readonly int generations;
-        
+
         // Search space definition
         private readonly SearchSpace<T> searchSpace;
-        
+
         // Best architectures found
         private readonly List<ArchitectureCandidate<T>> topArchitectures;
-        
+
         // Random number generator
         private readonly Random random = new Random();
-        
+
         public NeuralArchitectureSearch(
             NeuralArchitectureSearchStrategy strategy = NeuralArchitectureSearchStrategy.Evolutionary,
             int maxLayers = 10,
@@ -81,52 +80,11 @@ namespace AiDotNet.AutoML
                 ActivationFunction.Swish,
                 ActivationFunction.GELU
             };
-            
+
             searchSpace = new SearchSpace<T>();
             topArchitectures = new List<ArchitectureCandidate<T>>();
-            
+
             InitializeSearchSpace();
-        }
-        
-        /// <summary>
-        /// Searches for the best neural network architecture asynchronously
-        /// </summary>
-        public override async Task<IFullModel<T, Tensor<T>, Tensor<T>>> SearchAsync(
-            Tensor<T> inputs,
-            Tensor<T> targets,
-            Tensor<T> validationInputs,
-            Tensor<T> validationTargets,
-            TimeSpan timeLimit,
-            CancellationToken cancellationToken = default)
-        {
-            Status = AutoMLStatus.Running;
-            var startTime = DateTime.UtcNow;
-            
-            try
-            {
-                await SearchAsync(inputs, targets, validationInputs, validationTargets);
-                
-                if (topArchitectures.Any())
-                {
-                    var bestCandidate = topArchitectures.First();
-                    BestModel = BuildNetworkFromCandidate(bestCandidate);
-                    var ops = MathHelper.GetNumericOperations<T>();
-                    BestScore = Convert.ToDouble(bestCandidate.Fitness);
-                }
-                
-                Status = AutoMLStatus.Completed;
-                return BestModel ?? throw new InvalidOperationException("No valid model found");
-            }
-            catch (OperationCanceledException)
-            {
-                Status = AutoMLStatus.Cancelled;
-                throw;
-            }
-            catch (Exception)
-            {
-                Status = AutoMLStatus.Failed;
-                throw;
-            }
         }
 
         /// <summary>
@@ -214,78 +172,13 @@ namespace AiDotNet.AutoML
         }
 
         /// <summary>
-        /// Suggests the next architecture configuration to try
-        /// </summary>
-        public override async Task<Dictionary<string, object>> SuggestNextTrialAsync()
-        {
-            return await Task.Run(() =>
-            {
-                var parameters = new Dictionary<string, object>();
-
-                // Select search strategy
-                parameters["strategy"] = strategy.ToString();
-
-                // Sample architecture hyperparameters based on search space
-                var numLayers = random.Next(2, maxLayers + 1);
-                parameters["num_layers"] = numLayers;
-
-                var layerConfigs = new List<Dictionary<string, object>>();
-                for (int i = 0; i < numLayers; i++)
-                {
-                    var layerType = availableLayerTypes[random.Next(availableLayerTypes.Count)];
-                    var layerConfig = new Dictionary<string, object>
-                    {
-                        ["type"] = layerType.ToString(),
-                        ["units"] = random.Next(16, maxNeuronsPerLayer + 1),
-                        ["activation"] = availableActivations[random.Next(availableActivations.Count)].ToString()
-                    };
-
-                    // Add layer-specific parameters
-                    switch (layerType)
-                    {
-                        case LayerType.Convolutional:
-                            layerConfig["filters"] = random.Next(8, 512);
-                            layerConfig["kernel_size"] = searchSpace.KernelSizes[random.Next(searchSpace.KernelSizes.Length)];
-                            layerConfig["stride"] = 1;
-                            break;
-
-                        case LayerType.Dropout:
-                            layerConfig["dropout_rate"] = searchSpace.DropoutRates[random.Next(searchSpace.DropoutRates.Length)];
-                            break;
-
-                        case LayerType.MaxPooling:
-                        case LayerType.AveragePooling:
-                            layerConfig["pool_size"] = 2;
-                            break;
-
-                        case LayerType.LSTM:
-                        case LayerType.GRU:
-                            layerConfig["return_sequences"] = i < numLayers - 1;
-                            break;
-                    }
-
-                    layerConfigs.Add(layerConfig);
-                }
-
-                parameters["layers"] = layerConfigs;
-
-                // Add optimization parameters
-                parameters["learning_rate"] = 0.001 * Math.Pow(10, random.NextDouble() * 2 - 1);
-                parameters["batch_size"] = new[] { 16, 32, 64, 128 }[random.Next(4)];
-                parameters["epochs"] = random.Next(5, 20);
-
-                return parameters;
-            });
-        }
-        
-        /// <summary>
         /// Evolutionary search strategy
         /// </summary>
         private void RunEvolutionarySearch(Tensor<T> trainData, Tensor<T> trainLabels, Tensor<T> valData, Tensor<T> valLabels)
         {
             // Initialize population
             var population = InitializePopulation(populationSize);
-            
+
             for (int gen = 0; gen < generations; gen++)
             {
                 // Evaluate fitness of each architecture
@@ -296,36 +189,36 @@ namespace AiDotNet.AutoML
                         EvaluateArchitecture(candidate, trainData, trainLabels, valData, valLabels);
                     }
                 }
-                
+
                 // Sort by fitness
                 population = population.OrderByDescending(c => c.Fitness).ToList();
-                
+
                 // Store top architectures
                 UpdateTopArchitectures(population.Take(5).ToList());
-                
+
                 // Selection
                 var parents = TournamentSelection(population, populationSize / 2);
-                
+
                 // Crossover and mutation
                 var offspring = new List<ArchitectureCandidate<T>>();
                 while (offspring.Count < populationSize)
                 {
                     var parent1 = parents[random.Next(parents.Count)];
                     var parent2 = parents[random.Next(parents.Count)];
-                    
+
                     var child = Crossover(parent1, parent2);
                     child = Mutate(child);
-                    
+
                     offspring.Add(child);
                 }
-                
+
                 // Replace population
                 population = offspring;
-                
+
                 LogProgress($"Generation {gen + 1}/{generations}, Best fitness: {topArchitectures.First().Fitness:F4}");
             }
         }
-        
+
         /// <summary>
         /// Reinforcement learning-based search
         /// </summary>
@@ -334,7 +227,7 @@ namespace AiDotNet.AutoML
             // Use a controller network to generate architectures
             var controller = new ControllerNetwork<T>(searchSpace);
             var rewardHistory = new List<double>();
-            
+
             var ops = MathHelper.GetNumericOperations<T>();
             var resourceBudgetInt = Convert.ToInt32(resourceBudget);
             for (int episode = 0; episode < resourceBudgetInt; episode++)
@@ -342,30 +235,30 @@ namespace AiDotNet.AutoML
                 // Generate architecture using controller
                 var architecture = controller.GenerateArchitecture();
                 var candidate = CreateCandidateFromArchitecture(architecture);
-                
+
                 // Evaluate architecture
                 EvaluateArchitecture(candidate, trainData, trainLabels, valData, valLabels);
-                
+
                 // Use validation accuracy as reward
                 var reward = candidate.Fitness;
                 rewardHistory.Add(Convert.ToDouble(reward));
-                
+
                 // Update controller using REINFORCE algorithm
                 controller.UpdateWithReward(reward);
-                
+
                 // Update top architectures
                 UpdateTopArchitectures(new List<ArchitectureCandidate<T>> { candidate });
-                
+
                 // Calculate average reward for the last 10 episodes
-                var recentRewards = rewardHistory.Count > 10 
-                    ? rewardHistory.Skip(rewardHistory.Count - 10).Take(10) 
+                var recentRewards = rewardHistory.Count > 10
+                    ? rewardHistory.Skip(rewardHistory.Count - 10).Take(10)
                     : rewardHistory;
                 var avgReward = recentRewards.Average();
-                
+
                 LogProgress($"Episode {episode + 1}, Reward: {reward:F4}, Avg reward: {avgReward:F4}");
             }
         }
-        
+
         /// <summary>
         /// Gradient-based search (DARTS-style)
         /// </summary>
@@ -379,116 +272,78 @@ namespace AiDotNet.AutoML
             LogProgress("Gradient-based search not yet implemented with new optimizer API. Using random search instead.");
             RunRandomSearch(trainData, trainLabels, valData, valLabels);
 
-            /* Original implementation - needs refactoring:
-            // Create a supernet with learnable architecture parameters
-            var supernet = new SuperNet<T>(searchSpace);
-            
-            // Initialize learning rates for architecture and weight parameters
-            var ops = MathHelper.GetNumericOperations<T>();
-            var architectureLearningRate = ops.FromDouble(0.001);
-            var weightsLearningRate = ops.FromDouble(0.001);
-            var momentum = ops.FromDouble(0.9);
-            
-            // Initialize momentum buffers
-            var archMomentum = new List<Tensor<T>>();
-            var weightMomentum = new List<Tensor<T>>();
-            
-            for (int epoch = 0; epoch < 50; epoch++)
-            {
-                // Update architecture parameters on validation set
-                var valLoss = supernet.ComputeValidationLoss(valData, valLabels);
-                supernet.BackwardArchitecture(valLoss);
-                var archParams = supernet.GetArchitectureParameters();
-                var archGrads = supernet.GetArchitectureGradients();
-                
-                // Apply gradient descent with momentum for architecture parameters
-                UpdateParametersWithMomentum(archParams, archGrads, archMomentum, architectureLearningRate, momentum);
-                
-                // Update network weights on training set
-                var trainLoss = supernet.ComputeTrainingLoss(trainData, trainLabels);
-                supernet.BackwardWeights(trainLoss);
-                var weightParams = supernet.GetWeightParameters();
-                var weightGrads = supernet.GetWeightGradients();
-                
-                // Apply gradient descent with momentum for weight parameters
-                UpdateParametersWithMomentum(weightParams, weightGrads, weightMomentum, weightsLearningRate, momentum);
-                
-                LogProgress($"Epoch {epoch + 1}, Train loss: {trainLoss:F4}, Val loss: {valLoss:F4}");
-            }
-
-            // Derive final architecture from supernet
-            var finalArchitecture = supernet.DeriveArchitecture();
-            var candidate = CreateCandidateFromArchitecture(finalArchitecture);
-            EvaluateArchitecture(candidate, trainData, trainLabels, valData, valLabels);
-            UpdateTopArchitectures(new List<ArchitectureCandidate<T>> { candidate });
+            // TODO: Implement DARTS (Differentiable Architecture Search) using SuperNet
+            // See user story: ~/.claude/user-stories/AiDotNet/new_features/NF-001-gradient-based-nas.md
+            // Requires: SuperNet implementing IFullModel<T>, refactoring for new optimizer API
+            // Previous implementation available in commit history before optimizer API changes
         }
-        
+
         /// <summary>
         /// Update parameters using gradient descent with momentum
         /// </summary>
-        private void UpdateParametersWithMomentum(List<Tensor<T>> parameters, List<Tensor<T>> gradients, 
+        private void UpdateParametersWithMomentum(List<Tensor<T>> parameters, List<Tensor<T>> gradients,
             List<Tensor<T>> momentumBuffers, T learningRate, T momentum)
         {
             var ops = MathHelper.GetNumericOperations<T>();
-            
+
             // Initialize momentum buffers if needed
             while (momentumBuffers.Count < parameters.Count)
             {
                 var param = parameters[momentumBuffers.Count];
                 momentumBuffers.Add(new Tensor<T>(param.Shape));
             }
-            
+
             // Update each parameter
             for (int i = 0; i < parameters.Count; i++)
             {
                 var param = parameters[i];
                 var grad = gradients[i];
                 var momentumBuffer = momentumBuffers[i];
-                
+
                 // Update momentum: m = momentum * m + (1 - momentum) * grad
                 for (int j = 0; j < param.Length; j++)
                 {
                     var currentMomentum = ops.Multiply(momentum, momentumBuffer[j]);
                     var gradContribution = ops.Multiply(ops.Subtract(ops.One, momentum), grad[j]);
                     momentumBuffer[j] = ops.Add(currentMomentum, gradContribution);
-                    
+
                     // Update parameter: param = param - learning_rate * m
                     param[j] = ops.Subtract(param[j], ops.Multiply(learningRate, momentumBuffer[j]));
                 }
             }
         }
-        
+
         /// <summary>
         /// Random search baseline
         /// </summary>
         private void RunRandomSearch(Tensor<T> trainData, Tensor<T> trainLabels, Tensor<T> valData, Tensor<T> valLabels)
         {
             var evaluations = Convert.ToInt32(resourceBudget);
-            
+
             for (int i = 0; i < evaluations; i++)
             {
                 // Generate random architecture
                 var candidate = GenerateRandomArchitecture();
-                
+
                 // Evaluate
                 EvaluateArchitecture(candidate, trainData, trainLabels, valData, valLabels);
-                
+
                 // Update top architectures
                 UpdateTopArchitectures(new List<ArchitectureCandidate<T>> { candidate });
-                
+
                 var bestFitness = topArchitectures.FirstOrDefault()?.Fitness;
                 var bestFitnessValue = bestFitness != null ? Convert.ToDouble(bestFitness) : 0.0;
                 LogProgress($"Evaluation {i + 1}/{evaluations}, Best fitness: {bestFitnessValue:F4}");
             }
         }
-        
+
         /// <summary>
         /// Bayesian optimization search
         /// </summary>
         private async Task RunBayesianOptimizationSearchAsync(Tensor<T> trainData, Tensor<T> trainLabels, Tensor<T> valData, Tensor<T> valLabels)
         {
             var bayesianOptimizer = new BayesianOptimizationAutoML<T, Tensor<T>, Tensor<T>>(numInitialPoints: 10, explorationWeight: 2.0);
-            
+
             // Define hyperparameter space for architectures
             var searchSpace = new Dictionary<string, ParameterRange>();
             searchSpace["num_layers"] = new ParameterRange
@@ -516,21 +371,21 @@ namespace AiDotNet.AutoML
                 MaxValue = 0.01,
                 LogScale = true
             };
-            
+
             bayesianOptimizer.SetSearchSpace(searchSpace);
             bayesianOptimizer.SetOptimizationMetric(MetricType.Accuracy, maximize: true);
-            
+
             // Run Bayesian optimization
             try
             {
                 var bestModel = await bayesianOptimizer.SearchAsync(
-                    trainData, 
-                    trainLabels, 
-                    valData, 
-                    valLabels, 
+                    trainData,
+                    trainLabels,
+                    valData,
+                    valLabels,
                     TimeSpan.FromHours(1)
                 );
-                
+
                 // Convert results to architecture candidates
                 var trialHistory = bayesianOptimizer.GetTrialHistory();
                 foreach (var trial in trialHistory.Where(t => t.IsSuccessful).OrderByDescending(t => t.Score).Take(10))
@@ -546,7 +401,7 @@ namespace AiDotNet.AutoML
                 LogError($"Bayesian optimization failed: {ex.Message}");
             }
         }
-        
+
         /// <summary>
         /// Evaluate a candidate architecture
         /// </summary>
@@ -567,14 +422,14 @@ namespace AiDotNet.AutoML
                     // Train one epoch
                     network.Train(trainData, trainLabels);
                 }
-                
+
                 // Evaluate on validation set
                 var valAccuracy = EvaluateAccuracy(network, valData, valLabels);
-                
+
                 // Compute efficiency metrics
                 var parameters = CountParameters(network);
                 var flops = EstimateFLOPs(network, trainData.Shape);
-                
+
                 // Combine metrics into fitness score
                 candidate.Fitness = ComputeFitnessScore(valAccuracy, parameters, flops);
                 candidate.ValidationAccuracy = valAccuracy;
@@ -591,7 +446,7 @@ namespace AiDotNet.AutoML
                 LogError($"Failed to evaluate architecture: {ex.Message}");
             }
         }
-        
+
         /// <summary>
         /// Build a neural network from architecture candidate
         /// </summary>
@@ -601,10 +456,10 @@ namespace AiDotNet.AutoML
             // In production, this would create the actual architecture from the candidate
             var ops = MathHelper.GetNumericOperations<T>();
             var learningRate = ops.FromDouble(0.001);
-            
+
             // Create architecture
             var architecture = new NeuralNetworkArchitecture<T>(NetworkComplexity.Medium);
-            
+
             // Create and return the network
             var network = new FeedForwardNeuralNetwork<T>(
                 architecture,
@@ -612,10 +467,10 @@ namespace AiDotNet.AutoML
                 null, // loss function will be set during training
                 Convert.ToDouble(learningRate)
             );
-            
+
             return network;
         }
-        
+
         /// <summary>
         /// Initialize search space
         /// </summary>
@@ -628,31 +483,31 @@ namespace AiDotNet.AutoML
             searchSpace.MaxUnitsPerLayer = maxNeuronsPerLayer;
             searchSpace.MaxFilters = 512;
             searchSpace.KernelSizes = new Vector<int>(new[] { 1, 3, 5, 7 });
-            searchSpace.DropoutRates = new Vector<T>(new[] { 
-                ops.FromDouble(0.0), 
-                ops.FromDouble(0.1), 
-                ops.FromDouble(0.2), 
-                ops.FromDouble(0.3), 
-                ops.FromDouble(0.4), 
-                ops.FromDouble(0.5) 
+            searchSpace.DropoutRates = new Vector<T>(new[] {
+                ops.FromDouble(0.0),
+                ops.FromDouble(0.1),
+                ops.FromDouble(0.2),
+                ops.FromDouble(0.3),
+                ops.FromDouble(0.4),
+                ops.FromDouble(0.5)
             });
         }
-        
+
         /// <summary>
         /// Initialize population for evolutionary search
         /// </summary>
         private List<ArchitectureCandidate<T>> InitializePopulation(int size)
         {
             var population = new List<ArchitectureCandidate<T>>();
-            
+
             for (int i = 0; i < size; i++)
             {
                 population.Add(GenerateRandomArchitecture());
             }
-            
+
             return population;
         }
-        
+
         /// <summary>
         /// Generate a random architecture
         /// </summary>
@@ -660,7 +515,7 @@ namespace AiDotNet.AutoML
         {
             var candidate = new ArchitectureCandidate<T>();
             var numLayers = random.Next(2, maxLayers + 1);
-            
+
             for (int i = 0; i < numLayers; i++)
             {
                 var layerType = availableLayerTypes[random.Next(availableLayerTypes.Count)];
@@ -676,13 +531,13 @@ namespace AiDotNet.AutoML
                     DropoutRate = searchSpace.DropoutRates[random.Next(searchSpace.DropoutRates.Length)],
                     ReturnSequences = i < numLayers - 1
                 };
-                
+
                 candidate.Layers.Add(layer);
             }
-            
+
             return candidate;
         }
-        
+
         /// <summary>
         /// Tournament selection
         /// </summary>
@@ -690,48 +545,48 @@ namespace AiDotNet.AutoML
         {
             var selected = new List<ArchitectureCandidate<T>>();
             var tournamentSize = 3;
-            
+
             while (selected.Count < numSelected)
             {
                 var tournament = new List<ArchitectureCandidate<T>>();
-                
+
                 for (int i = 0; i < tournamentSize; i++)
                 {
                     tournament.Add(population[random.Next(population.Count)]);
                 }
-                
+
                 selected.Add(tournament.OrderByDescending(c => c.Fitness).First());
             }
-            
+
             return selected;
         }
-        
+
         /// <summary>
         /// Crossover two parent architectures
         /// </summary>
         private ArchitectureCandidate<T> Crossover(ArchitectureCandidate<T> parent1, ArchitectureCandidate<T> parent2)
         {
             var child = new ArchitectureCandidate<T>();
-            
+
             // Choose crossover point
             var minLayers = Math.Min(parent1.Layers.Count, parent2.Layers.Count);
             var crossoverPoint = random.Next(1, minLayers);
-            
+
             // Take layers from parent1 up to crossover point
             for (int i = 0; i < crossoverPoint; i++)
             {
                 child.Layers.Add(parent1.Layers[i].Clone());
             }
-            
+
             // Take remaining layers from parent2
             for (int i = crossoverPoint; i < parent2.Layers.Count; i++)
             {
                 child.Layers.Add(parent2.Layers[i].Clone());
             }
-            
+
             return child;
         }
-        
+
         /// <summary>
         /// Mutate an architecture
         /// </summary>
@@ -739,7 +594,7 @@ namespace AiDotNet.AutoML
         {
             var mutated = candidate.Clone();
             var mutationRate = 0.1;
-            
+
             // Mutate layers
             foreach (var layer in mutated.Layers)
             {
@@ -748,21 +603,21 @@ namespace AiDotNet.AutoML
                     // Change layer type
                     layer.Type = availableLayerTypes[random.Next(availableLayerTypes.Count)];
                 }
-                
+
                 if (random.NextDouble() < mutationRate)
                 {
                     // Change units/filters
                     layer.Units = random.Next(16, maxNeuronsPerLayer + 1);
                     layer.Filters = random.Next(8, 512);
                 }
-                
+
                 if (random.NextDouble() < mutationRate)
                 {
                     // Change activation
                     layer.Activation = availableActivations[random.Next(availableActivations.Count)];
                 }
             }
-            
+
             // Add/remove layers
             if (random.NextDouble() < mutationRate && mutated.Layers.Count < maxLayers)
             {
@@ -770,16 +625,16 @@ namespace AiDotNet.AutoML
                 var newLayer = GenerateRandomArchitecture().Layers.First();
                 mutated.Layers.Insert(random.Next(mutated.Layers.Count), newLayer);
             }
-            
+
             if (random.NextDouble() < mutationRate && mutated.Layers.Count > 2)
             {
                 // Remove a random layer
                 mutated.Layers.RemoveAt(random.Next(mutated.Layers.Count));
             }
-            
+
             return mutated;
         }
-        
+
         /// <summary>
         /// Update top architectures list
         /// </summary>
@@ -787,14 +642,14 @@ namespace AiDotNet.AutoML
         {
             topArchitectures.AddRange(candidates.Where(c => c.IsEvaluated));
             topArchitectures.Sort((a, b) => b.Fitness.CompareTo(a.Fitness));
-            
+
             // Keep only top 10
             if (topArchitectures.Count > 10)
             {
                 topArchitectures.RemoveRange(10, topArchitectures.Count - 10);
             }
         }
-        
+
         /// <summary>
         /// Suggests the next hyperparameters to try
         /// </summary>
@@ -803,7 +658,7 @@ namespace AiDotNet.AutoML
             return await Task.Run(() =>
             {
                 var parameters = new Dictionary<string, object>();
-                
+
                 // Generate random architecture parameters
                 parameters["num_layers"] = random.Next(2, maxLayers + 1);
                 parameters["layer_types"] = availableLayerTypes[random.Next(availableLayerTypes.Count)];
@@ -811,7 +666,7 @@ namespace AiDotNet.AutoML
                 var ops = MathHelper.GetNumericOperations<T>();
                 parameters["dropout_rate"] = ops.FromDouble(random.NextDouble() * 0.5);
                 parameters["neurons_per_layer"] = random.Next(16, maxNeuronsPerLayer + 1);
-                
+
                 return parameters;
             });
         }
@@ -823,7 +678,7 @@ namespace AiDotNet.AutoML
         {
             return topArchitectures.FirstOrDefault() ?? new ArchitectureCandidate<T>();
         }
-        
+
         /// <summary>
         /// Get top N architectures
         /// </summary>
@@ -831,68 +686,68 @@ namespace AiDotNet.AutoML
         {
             return topArchitectures.Take(n).ToList();
         }
-        
+
         private T ComputeFitnessScore(T accuracy, int parameters, long flops)
         {
             // Multi-objective fitness: accuracy vs efficiency
             var ops = MathHelper.GetNumericOperations<T>();
             var accuracyWeight = ops.FromDouble(0.7);
             var efficiencyWeight = ops.FromDouble(0.3);
-            
+
             // Normalize efficiency (fewer parameters and FLOPs is better)
             var parametersLog = Math.Log10(parameters + 1);
             var flopsLog = Math.Log10(flops + 1) / 10;
             var efficiencyScore = ops.FromDouble(1.0 / (1.0 + parametersLog + flopsLog));
-            
+
             return ops.Add(
-                ops.Multiply(accuracyWeight, accuracy), 
+                ops.Multiply(accuracyWeight, accuracy),
                 ops.Multiply(efficiencyWeight, efficiencyScore)
             );
         }
-        
+
         private int CountParameters(INeuralNetworkModel<T> network)
         {
             // Count total trainable parameters
             return 1000000; // Placeholder
         }
-        
+
         private long EstimateFLOPs(INeuralNetworkModel<T> network, int[] inputShape)
         {
             // Estimate floating point operations
             return 1000000000; // Placeholder
         }
-        
+
         private T TrainEpoch(INeuralNetworkModel<T> network, Tensor<T> data, Tensor<T> labels, AdamOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
         {
             // Train one epoch and return loss
             var ops = MathHelper.GetNumericOperations<T>();
             return ops.FromDouble(0.1); // Placeholder
         }
-        
+
         private T EvaluateAccuracy(INeuralNetworkModel<T> network, Tensor<T> data, Tensor<T> labels)
         {
             // Evaluate accuracy on dataset
             var ops = MathHelper.GetNumericOperations<T>();
             return ops.FromDouble(0.9); // Placeholder
         }
-        
+
         private ArchitectureCandidate<T> CreateCandidateFromArchitecture(Architecture<T> architecture)
         {
             // Convert architecture representation to candidate
             return new ArchitectureCandidate<T>(); // Placeholder
         }
-        
+
         private ArchitectureCandidate<T> CreateCandidateFromHyperparameters(Dictionary<string, object> hyperparameters)
         {
             // Convert hyperparameters to candidate
             return new ArchitectureCandidate<T>(); // Placeholder
         }
-        
+
         private void LogProgress(string message)
         {
             Console.WriteLine($"[NAS] {message}");
         }
-        
+
         private void LogError(string message)
         {
             Console.WriteLine($"[NAS ERROR] {message}");
@@ -915,13 +770,23 @@ namespace AiDotNet.AutoML
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     public class NeuralArchitectureSearchModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
-        private readonly INeuralNetworkModel<double> _innerModel = default!;
-        private readonly ArchitectureCandidate _architecture = default!;
+        private readonly INeuralNetworkModel<T> _innerModel;
+        private readonly ArchitectureCandidate<T> _architecture;
 
-        public NeuralArchitectureSearchModel(INeuralNetworkModel<double> innerModel, ArchitectureCandidate architecture)
+        /// <summary>
+        /// Creates a new NeuralArchitectureSearchModel with the specified inner model and architecture.
+        /// </summary>
+        /// <param name="innerModel">The inner neural network model</param>
+        /// <param name="architecture">The architecture candidate</param>
+        /// <remarks>
+        /// Note: This constructor signature was updated to use fully generic types.
+        /// Previous signature used INeuralNetworkModel&lt;double&gt;, which limited flexibility.
+        /// This change aligns with project guidelines requiring generic implementations.
+        /// </remarks>
+        public NeuralArchitectureSearchModel(INeuralNetworkModel<T> innerModel, ArchitectureCandidate<T> architecture)
         {
-            _innerModel = innerModel;
-            _architecture = architecture;
+            _innerModel = innerModel ?? throw new ArgumentNullException(nameof(innerModel));
+            _architecture = architecture ?? throw new ArgumentNullException(nameof(architecture));
         }
 
         public ModelType Type => ModelType.NeuralNetwork;
