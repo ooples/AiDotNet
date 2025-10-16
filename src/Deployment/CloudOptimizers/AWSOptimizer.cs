@@ -34,31 +34,32 @@ namespace AiDotNet.Deployment.CloudOptimizers
                 {
                     ServiceName = "Amazon SageMaker",
                     MaxModelSize = 10000, // 10 GB
-                    SupportedFormats = new[] { "Tensor<double>Flow", "PyTorch", "MXNet", "XGBoost" },
+                    SupportedFormats = new[] { "TensorFlow", "PyTorch", "MXNet", "XGBoost" },
                     InstanceTypes = new[] { "ml.t2.medium", "ml.m5.xlarge", "ml.p3.2xlarge", "ml.inf1.xlarge" }
-                };
-            _serviceConfigs["Lambda"] = new AWSServiceConfig
+                },
+                ["Lambda"] = new AWSServiceConfig
                 {
                     ServiceName = "AWS Lambda",
                     MaxModelSize = 250, // 250 MB unzipped
                     MaxMemory = 10240, // 10 GB
                     MaxTimeout = 900, // 15 minutes
-                    SupportedFormats = new[] { "Tensor<double>Flow Lite", "ONNX" }
-                };
-            _serviceConfigs["EC2"] = new AWSServiceConfig
+                    SupportedFormats = new[] { "TensorFlow Lite", "ONNX" }
+                },
+                ["EC2"] = new AWSServiceConfig
                 {
                     ServiceName = "Amazon EC2",
                     MaxModelSize = double.MaxValue,
                     SupportedFormats = new[] { "Any" },
                     InstanceTypes = new[] { "t3.micro", "c5.xlarge", "g4dn.xlarge", "inf1.2xlarge" }
-                };
-            _serviceConfigs["Batch"] = new AWSServiceConfig
+                },
+                ["Batch"] = new AWSServiceConfig
                 {
                     ServiceName = "AWS Batch",
                     MaxModelSize = double.MaxValue,
                     SupportedFormats = new[] { "Any" },
                     ComputeEnvironments = new[] { "EC2", "Fargate" }
-                };
+                }
+            };
         }
 
         private void ConfigureForAWS()
