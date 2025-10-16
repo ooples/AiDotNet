@@ -131,8 +131,36 @@ namespace AiDotNet.ProductionMonitoring
         }
 
         /// <summary>
-        /// Gets health trends over time
+        /// Analyzes health trends over a specified time period
         /// </summary>
+        /// <param name="lookbackDays">Number of days to analyze in the trend history. Default is 7 days.</param>
+        /// <returns>
+        /// A task that represents the asynchronous operation, containing a <see cref="HealthTrendAnalysis"/>
+        /// with trend direction, strength, and component-level trend information.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// This method performs a comprehensive analysis of model health trends by examining historical
+        /// health check data over the specified lookback period. It uses linear regression to calculate
+        /// trends for both overall health scores and individual component scores.
+        /// </para>
+        /// <para>
+        /// The analysis includes:
+        /// - Overall trend direction (Improving, Degrading, or Stable) based on a 5% threshold
+        /// - Trend strength indicating the magnitude of change over time
+        /// - Component-level trends for each registered health component (Performance, DataQuality, etc.)
+        /// - Statistical measures including current value, average, min/max, and volatility for each component
+        /// </para>
+        /// <para>
+        /// If there is insufficient historical data (no records in the lookback period), the method
+        /// returns an "Unknown" trend with empty component trends. This helps prevent false trend
+        /// signals when the model is newly deployed or monitoring has just started.
+        /// </para>
+        /// <para>
+        /// The method executes asynchronously on a background thread to avoid blocking the caller,
+        /// making it suitable for use in production monitoring scenarios where responsiveness is important.
+        /// </para>
+        /// </remarks>
         public Task<HealthTrendAnalysis> AnalyzeHealthTrendsAsync(int lookbackDays = 7)
         {
             return Task.Run(() =>
@@ -146,53 +174,55 @@ namespace AiDotNet.ProductionMonitoring
                         .OrderBy(h => h.Timestamp)
                         .ToList();
                 }
-            
-            if (!relevantHistory.Any())
-            {
-                return Task.FromResult(new HealthTrendAnalysis
+
+                if (!relevantHistory.Any())
                 {
-                    TrendDirection = "Unknown",
-                    TrendStrength = 0,
-                    ComponentTrends = new Dictionary<string, TrendInfo>()
-                });
-            }
-
-            // Calculate overall trend
-            var overallTrend = CalculateTrend(relevantHistory.Select(h => h.OverallScore).ToList());
-
-            // Calculate component trends
-            var componentTrends = new Dictionary<string, TrendInfo>();
-            foreach (var componentName in _healthComponents.Keys)
-            {
-                var componentScores = relevantHistory
-                    .Where(h => h.ComponentScores.ContainsKey(componentName))
-                    .Select(h => h.ComponentScores[componentName])
-                    .ToList();
-
-                if (componentScores.Any())
-                {
-                    componentTrends[componentName] = new TrendInfo
+                    return new HealthTrendAnalysis
                     {
-                        Trend = CalculateTrend(componentScores),
-                        CurrentValue = componentScores.Last(),
-                        AverageValue = componentScores.Average(),
-                        MinValue = componentScores.Min(),
-                        MaxValue = componentScores.Max(),
-                        Volatility = CalculateVolatility(componentScores)
+                        TrendDirection = "Unknown",
+                        TrendStrength = 0,
+                        ComponentTrends = new Dictionary<string, TrendInfo>(),
+                        AnalysisPeriod = lookbackDays,
+                        DataPoints = 0
                     };
                 }
-            }
 
-            return Task.FromResult(new HealthTrendAnalysis
-            {
-                TrendDirection = overallTrend > 0.05 ? "Improving" :
-                                overallTrend < -0.05 ? "Degrading" : "Stable",
-                TrendStrength = Math.Abs(overallTrend),
-                OverallTrend = overallTrend,
-                ComponentTrends = componentTrends,
-                AnalysisPeriod = lookbackDays,
-                DataPoints = relevantHistory.Count
-            };
+                // Calculate overall trend
+                var overallTrend = CalculateTrend(relevantHistory.Select(h => h.OverallScore).ToList());
+
+                // Calculate component trends
+                var componentTrends = new Dictionary<string, TrendInfo>();
+                foreach (var componentName in _healthComponents.Keys)
+                {
+                    var componentScores = relevantHistory
+                        .Where(h => h.ComponentScores.ContainsKey(componentName))
+                        .Select(h => h.ComponentScores[componentName])
+                        .ToList();
+
+                    if (componentScores.Any())
+                    {
+                        componentTrends[componentName] = new TrendInfo
+                        {
+                            Trend = CalculateTrend(componentScores),
+                            CurrentValue = componentScores.Last(),
+                            AverageValue = componentScores.Average(),
+                            MinValue = componentScores.Min(),
+                            MaxValue = componentScores.Max(),
+                            Volatility = CalculateVolatility(componentScores)
+                        };
+                    }
+                }
+
+                return new HealthTrendAnalysis
+                {
+                    TrendDirection = overallTrend > 0.05 ? "Improving" :
+                                    overallTrend < -0.05 ? "Degrading" : "Stable",
+                    TrendStrength = Math.Abs(overallTrend),
+                    OverallTrend = overallTrend,
+                    ComponentTrends = componentTrends,
+                    AnalysisPeriod = lookbackDays,
+                    DataPoints = relevantHistory.Count
+                };
             });
         }
 
