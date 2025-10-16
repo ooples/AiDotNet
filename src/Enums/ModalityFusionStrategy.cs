@@ -28,7 +28,6 @@ namespace AiDotNet.Enums
         /// Uses hierarchical fusion combining multiple fusion strategies.
         /// Hierarchical fusion with multiple levels
         /// </summary>
-        Hierarchical
         Hierarchical,
 
         /// <summary>
