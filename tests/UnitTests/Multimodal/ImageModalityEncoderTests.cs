@@ -11,6 +11,89 @@ namespace AiDotNetTests.UnitTests.Multimodal
     /// </summary>
     public class ImageModalityEncoderTests
     {
+        #region Test Helpers
+
+        /// <summary>
+        /// Generates a 2D grayscale image with values computed by the provided function.
+        /// </summary>
+        /// <param name="height">Image height</param>
+        /// <param name="width">Image width</param>
+        /// <param name="valueFunc">Function that computes pixel value given (i, j) coordinates</param>
+        /// <returns>Generated 2D image array</returns>
+        private static double[,] GenerateImage(int height, int width, Func<int, int, double> valueFunc)
+        {
+            var image = new double[height, width];
+            for (int i = 0; i < height; i++)
+            {
+                for (int j = 0; j < width; j++)
+                {
+                    image[i, j] = valueFunc(i, j);
+                }
+            }
+            return image;
+        }
+
+        /// <summary>
+        /// Generates a 3D color image (RGB) with values computed by the provided function.
+        /// </summary>
+        /// <param name="channels">Number of channels (typically 3 for RGB)</param>
+        /// <param name="height">Image height</param>
+        /// <param name="width">Image width</param>
+        /// <param name="valueFunc">Function that computes pixel value given (c, i, j) coordinates</param>
+        /// <returns>Generated 3D image array</returns>
+        private static double[,,] GenerateColorImage(int channels, int height, int width, Func<int, int, int, double> valueFunc)
+        {
+            var image = new double[channels, height, width];
+            for (int c = 0; c < channels; c++)
+            {
+                for (int i = 0; i < height; i++)
+                {
+                    for (int j = 0; j < width; j++)
+                    {
+                        image[c, i, j] = valueFunc(c, i, j);
+                    }
+                }
+            }
+            return image;
+        }
+
+        /// <summary>
+        /// Generates a 2D tensor with values computed by the provided function.
+        /// </summary>
+        /// <param name="height">Tensor height</param>
+        /// <param name="width">Tensor width</param>
+        /// <param name="valueFunc">Function that computes value given linear index</param>
+        /// <returns>Generated 2D tensor</returns>
+        private static Tensor<double> GenerateTensor(int height, int width, Func<int, double> valueFunc)
+        {
+            var tensor = new Tensor<double>(new[] { height, width });
+            for (int i = 0; i < height * width; i++)
+            {
+                tensor.Data[i] = valueFunc(i);
+            }
+            return tensor;
+        }
+
+        /// <summary>
+        /// Generates a 3D tensor with values computed by the provided function.
+        /// </summary>
+        /// <param name="depth">Tensor depth</param>
+        /// <param name="height">Tensor height</param>
+        /// <param name="width">Tensor width</param>
+        /// <param name="valueFunc">Function that computes value given linear index</param>
+        /// <returns>Generated 3D tensor</returns>
+        private static Tensor<double> GenerateTensor3D(int depth, int height, int width, Func<int, double> valueFunc)
+        {
+            var tensor = new Tensor<double>(new[] { depth, height, width });
+            for (int i = 0; i < depth * height * width; i++)
+            {
+                tensor.Data[i] = valueFunc(i);
+            }
+            return tensor;
+        }
+
+        #endregion
+
         [Fact]
         public void Constructor_WithDefaultParameters_CreatesValidEncoder()
         {
@@ -43,16 +126,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
         {
             // Arrange
             var encoder = new ImageModalityEncoder<double>(outputDimension: 128);
-            var image = new double[28, 28]; // 28x28 grayscale image
-
-            // Fill with sample data
-            for (int i = 0; i < 28; i++)
-            {
-                for (int j = 0; j < 28; j++)
-                {
-                    image[i, j] = (i + j) % 256;
-                }
-            }
+            var image = GenerateImage(28, 28, (i, j) => (i + j) % 256);
 
             // Act
             var result = encoder.Encode(image);
@@ -67,19 +141,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
         {
             // Arrange
             var encoder = new ImageModalityEncoder<double>(outputDimension: 256);
-            var image = new double[3, 32, 32]; // 32x32 RGB image
-
-            // Fill with sample data
-            for (int c = 0; c < 3; c++)
-            {
-                for (int i = 0; i < 32; i++)
-                {
-                    for (int j = 0; j < 32; j++)
-                    {
-                        image[c, i, j] = (c * 85 + i + j) % 256;
-                    }
-                }
-            }
+            var image = GenerateColorImage(3, 32, 32, (c, i, j) => (c * 85 + i + j) % 256);
 
             // Act
             var result = encoder.Encode(image);
@@ -94,13 +156,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
         {
             // Arrange
             var encoder = new ImageModalityEncoder<double>(outputDimension: 128);
-            var tensor = new Tensor<double>(new[] { 28, 28 });
-
-            // Fill tensor with sample data
-            for (int i = 0; i < 28 * 28; i++)
-            {
-                tensor.Data[i] = i % 256;
-            }
+            var tensor = GenerateTensor(28, 28, i => i % 256);
 
             // Act
             var result = encoder.Encode(tensor);
@@ -115,13 +171,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
         {
             // Arrange
             var encoder = new ImageModalityEncoder<double>(outputDimension: 256);
-            var tensor = new Tensor<double>(new[] { 3, 32, 32 }); // RGB image
-
-            // Fill tensor with sample data
-            for (int i = 0; i < 3 * 32 * 32; i++)
-            {
-                tensor.Data[i] = i % 256;
-            }
+            var tensor = GenerateTensor3D(3, 32, 32, i => i % 256);
 
             // Act
             var result = encoder.Encode(tensor);
@@ -187,17 +237,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
                 useColorHistogram: false
             );
 
-            var colorImage = new double[3, 32, 32]; // RGB image
-            for (int c = 0; c < 3; c++)
-            {
-                for (int i = 0; i < 32; i++)
-                {
-                    for (int j = 0; j < 32; j++)
-                    {
-                        colorImage[c, i, j] = c * 100 + i;
-                    }
-                }
-            }
+            var colorImage = GenerateColorImage(3, 32, 32, (c, i, j) => c * 100 + i);
 
             // Act
             var resultWith = encoderWithColor.Encode(colorImage);
@@ -223,15 +263,8 @@ namespace AiDotNetTests.UnitTests.Multimodal
                 useTextureFeatures: false
             );
 
-            var image = new double[64, 64];
-            // Create an image with edges
-            for (int i = 0; i < 64; i++)
-            {
-                for (int j = 0; j < 64; j++)
-                {
-                    image[i, j] = (j < 32) ? 0 : 255; // Vertical edge in the middle
-                }
-            }
+            // Create an image with a vertical edge in the middle
+            var image = GenerateImage(64, 64, (i, j) => (j < 32) ? 0 : 255);
 
             // Act
             var resultWith = encoderWithTexture.Encode(image);
@@ -261,14 +294,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
                 patchSize: 32
             );
 
-            var image = new double[64, 64];
-            for (int i = 0; i < 64; i++)
-            {
-                for (int j = 0; j < 64; j++)
-                {
-                    image[i, j] = i * j % 256;
-                }
-            }
+            var image = GenerateImage(64, 64, (i, j) => i * j % 256);
 
             // Act
             var result8 = encoder8.Encode(image);
@@ -286,16 +312,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
         {
             // Arrange
             var encoder = new ImageModalityEncoder<double>(outputDimension: 128);
-            var image = new double[32, 32];
-
-            // Fill with various values
-            for (int i = 0; i < 32; i++)
-            {
-                for (int j = 0; j < 32; j++)
-                {
-                    image[i, j] = i * 10 + j;
-                }
-            }
+            var image = GenerateImage(32, 32, (i, j) => i * 10 + j);
 
             // Act
             var result = encoder.Encode(image);
@@ -314,15 +331,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
         {
             // Arrange
             var encoder = new ImageModalityEncoder<double>(outputDimension: 128);
-            var image = new double[32, 32];
-
-            for (int i = 0; i < 32; i++)
-            {
-                for (int j = 0; j < 32; j++)
-                {
-                    image[i, j] = (i + j) % 256;
-                }
-            }
+            var image = GenerateImage(32, 32, (i, j) => (i + j) % 256);
 
             // Act
             var result1 = encoder.Encode(image);
@@ -341,18 +350,9 @@ namespace AiDotNetTests.UnitTests.Multimodal
         {
             // Arrange
             var encoder = new ImageModalityEncoder<double>(outputDimension: 128);
-            var image1 = new double[32, 32];
-            var image2 = new double[32, 32];
-
             // Create two different images
-            for (int i = 0; i < 32; i++)
-            {
-                for (int j = 0; j < 32; j++)
-                {
-                    image1[i, j] = i * 10;
-                    image2[i, j] = j * 10;
-                }
-            }
+            var image1 = GenerateImage(32, 32, (i, j) => i * 10);
+            var image2 = GenerateImage(32, 32, (i, j) => j * 10);
 
             // Act
             var result1 = encoder.Encode(image1);
@@ -380,15 +380,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
         {
             // Arrange
             var encoder = new ImageModalityEncoder<double>(outputDimension: 128);
-            var smallImage = new double[8, 8]; // Very small image
-
-            for (int i = 0; i < 8; i++)
-            {
-                for (int j = 0; j < 8; j++)
-                {
-                    smallImage[i, j] = i + j;
-                }
-            }
+            var smallImage = GenerateImage(8, 8, (i, j) => i + j);
 
             // Act
             var result = encoder.Encode(smallImage);
@@ -403,15 +395,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
         {
             // Arrange
             var encoder = new ImageModalityEncoder<double>(outputDimension: 512);
-            var largeImage = new double[256, 256]; // Large image
-
-            for (int i = 0; i < 256; i++)
-            {
-                for (int j = 0; j < 256; j++)
-                {
-                    largeImage[i, j] = (i * 256 + j) % 256;
-                }
-            }
+            var largeImage = GenerateImage(256, 256, (i, j) => (i * 256 + j) % 256);
 
             // Act
             var result = encoder.Encode(largeImage);
@@ -431,15 +415,7 @@ namespace AiDotNetTests.UnitTests.Multimodal
         {
             // Arrange
             var encoder = new ImageModalityEncoder<double>(outputDimension: outputDim);
-            var image = new double[32, 32];
-
-            for (int i = 0; i < 32; i++)
-            {
-                for (int j = 0; j < 32; j++)
-                {
-                    image[i, j] = i + j;
-                }
-            }
+            var image = GenerateImage(32, 32, (i, j) => i + j);
 
             // Act
             var result = encoder.Encode(image);
