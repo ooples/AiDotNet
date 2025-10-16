@@ -21,7 +21,6 @@ namespace AiDotNet.Deployment.CloudOptimizers
 
         public AzureOptimizer()
         {
-            _serviceConfigs = new Dictionary<string, AzureServiceConfig>();
             InitializeServiceConfigs();
             ConfigureForAzure();
         }
@@ -34,31 +33,32 @@ namespace AiDotNet.Deployment.CloudOptimizers
                 {
                     ServiceName = "Azure Machine Learning",
                     MaxModelSize = double.MaxValue,
-                    SupportedFormats = new[] { "Tensor<double>Flow", "PyTorch", "ONNX", "Scikit-learn" },
+                    SupportedFormats = new[] { "TensorFlow", "PyTorch", "ONNX", "Scikit-learn" },
                     ComputeTargets = new[] { "AmlCompute", "ComputeInstance", "Kubernetes" }
-                };
-            _serviceConfigs["Functions"] = new AzureServiceConfig
+                },
+                ["Functions"] = new AzureServiceConfig
                 {
                     ServiceName = "Azure Functions",
                     MaxModelSize = 1000, // 1 GB for consumption plan
                     MaxMemory = 1536, // 1.5 GB
                     MaxTimeout = 600, // 10 minutes
-                    SupportedFormats = new[] { "ONNX", "Tensor<double>Flow Lite" }
-                };
-            _serviceConfigs["ContainerInstances"] = new AzureServiceConfig
+                    SupportedFormats = new[] { "ONNX", "TensorFlow Lite" }
+                },
+                ["ContainerInstances"] = new AzureServiceConfig
                 {
                     ServiceName = "Azure Container Instances",
                     MaxModelSize = 15000, // 15 GB
                     MaxMemory = 16384, // 16 GB
                     SupportedFormats = new[] { "Any" }
-                };
-            _serviceConfigs["CognitiveServices"] = new AzureServiceConfig
+                },
+                ["CognitiveServices"] = new AzureServiceConfig
                 {
                     ServiceName = "Azure Cognitive Services",
                     MaxModelSize = 4000, // 4 GB
                     SupportedFormats = new[] { "ONNX", "Custom Vision" },
                     Capabilities = new[] { "AutoScale", "MultiRegion", "EdgeDeployment" }
-                };
+                }
+            };
         }
 
         private void ConfigureForAzure()
