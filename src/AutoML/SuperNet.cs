@@ -1,0 +1,555 @@
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.NumericOperations;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace AiDotNet.AutoML
+{
+    /// <summary>
+    /// SuperNet implementation for gradient-based neural architecture search (DARTS).
+    /// Implements a differentiable architecture search by maintaining architecture parameters (alpha)
+    /// and network weights simultaneously.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for calculations</typeparam>
+    public class SuperNet<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+    {
+        private readonly INumericOperations<T> _ops;
+        private readonly SearchSpace<T> _searchSpace;
+        private readonly int _numNodes;
+        private readonly int _numOperations;
+
+        // Architecture parameters (alpha) - learnable parameters that determine operation weights
+        private readonly List<Matrix<T>> _architectureParams;
+
+        // Network weights - parameters for each operation
+        private readonly Dictionary<string, Vector<T>> _weights;
+
+        // Gradients
+        private readonly List<Matrix<T>> _architectureGradients;
+        private readonly Dictionary<string, Vector<T>> _weightGradients;
+
+        // Model metadata
+        private int _inputSize;
+        private int _outputSize;
+
+        public ModelType Type => ModelType.NeuralNetwork;
+        public string[] FeatureNames { get; set; } = Array.Empty<string>();
+        public int ParameterCount => _weights.Values.Sum(w => w.Length) +
+                                      _architectureParams.Sum(a => a.Rows * a.Columns);
+
+        /// <summary>
+        /// Initializes a new SuperNet for differentiable architecture search.
+        /// </summary>
+        /// <param name="searchSpace">The search space defining available operations</param>
+        /// <param name="numNodes">Number of nodes in the architecture</param>
+        public SuperNet(SearchSpace<T> searchSpace, int numNodes = 4)
+        {
+            _ops = MathHelper.GetNumericOperations<T>();
+            _searchSpace = searchSpace;
+            _numNodes = numNodes;
+            _numOperations = searchSpace.Operations?.Count ?? 5; // Default operations: identity, conv3x3, conv5x5, maxpool, avgpool
+
+            // Initialize architecture parameters (alpha) with small random values
+            _architectureParams = new List<Matrix<T>>();
+            _architectureGradients = new List<Matrix<T>>();
+
+            for (int i = 0; i < _numNodes; i++)
+            {
+                // Each node can receive input from all previous nodes
+                // Alpha is initialized near zero so all operations have equal weight after softmax
+                var alpha = new Matrix<T>(i + 1, _numOperations);
+                for (int j = 0; j < alpha.Rows; j++)
+                {
+                    for (int k = 0; k < alpha.Columns; k++)
+                    {
+                        // Small random initialization: range [-0.1, 0.1]
+                        alpha[j, k] = _ops.FromDouble((new Random().NextDouble() - 0.5) * 0.2);
+                    }
+                }
+                _architectureParams.Add(alpha);
+                _architectureGradients.Add(new Matrix<T>(i + 1, _numOperations));
+            }
+
+            // Initialize network weights
+            _weights = new Dictionary<string, Vector<T>>();
+            _weightGradients = new Dictionary<string, Vector<T>>();
+        }
+
+        /// <summary>
+        /// Forward pass through the SuperNet with mixed operations
+        /// </summary>
+        public Tensor<T> Predict(Tensor<T> input)
+        {
+            _inputSize = input.Shape[input.Shape.Length - 1];
+            _outputSize = _inputSize; // For simplicity, maintain same dimensions
+
+            // Store intermediate node outputs
+            var nodeOutputs = new List<Tensor<T>> { input };
+
+            // Process each node
+            for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
+            {
+                var nodeOutput = new Tensor<T>(input.Shape);
+                var alpha = _architectureParams[nodeIdx];
+
+                // Apply softmax to architecture parameters for this node
+                var softmaxWeights = ApplySoftmax(alpha);
+
+                // Mix operations from all previous nodes
+                for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
+                {
+                    var prevOutput = nodeOutputs[prevNodeIdx];
+
+                    // Apply each operation and mix with softmax weights
+                    for (int opIdx = 0; opIdx < _numOperations; opIdx++)
+                    {
+                        var opOutput = ApplyOperation(prevOutput, opIdx, $"node{nodeIdx}_from{prevNodeIdx}_op{opIdx}");
+                        var weight = softmaxWeights[prevNodeIdx, opIdx];
+
+                        // Accumulate weighted operation outputs
+                        for (int i = 0; i < Math.Min(nodeOutput.Length, opOutput.Length); i++)
+                        {
+                            var nodeIndices = GetTensorIndices(nodeOutput, i);
+                            var opIndices = GetTensorIndices(opOutput, i);
+                            nodeOutput[nodeIndices] = _ops.Add(nodeOutput[nodeIndices], _ops.Multiply(weight, opOutput[opIndices]));
+                        }
+                    }
+                }
+
+                nodeOutputs.Add(nodeOutput);
+            }
+
+            // Return the output of the final node
+            return nodeOutputs[nodeOutputs.Count - 1];
+        }
+
+        /// <summary>
+        /// Training is handled externally by alternating architecture and weight updates
+        /// </summary>
+        public void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        {
+            throw new NotSupportedException(
+                "SuperNet training is handled through alternating optimization. " +
+                "Use UpdateArchitectureParameters() and UpdateWeights() instead.");
+        }
+
+        /// <summary>
+        /// Computes validation loss for architecture parameter updates
+        /// </summary>
+        public T ComputeValidationLoss(Tensor<T> valData, Tensor<T> valLabels)
+        {
+            var predictions = Predict(valData);
+            return ComputeLoss(predictions, valLabels);
+        }
+
+        /// <summary>
+        /// Computes training loss for weight updates
+        /// </summary>
+        public T ComputeTrainingLoss(Tensor<T> trainData, Tensor<T> trainLabels)
+        {
+            var predictions = Predict(trainData);
+            return ComputeLoss(predictions, trainLabels);
+        }
+
+        /// <summary>
+        /// Computes mean squared error loss
+        /// </summary>
+        private T ComputeLoss(Tensor<T> predictions, Tensor<T> targets)
+        {
+            T sumSquaredError = _ops.Zero;
+            int count = Math.Min(predictions.Length, targets.Length);
+
+            // Access tensors using single flat index
+            for (int i = 0; i < count; i++)
+            {
+                // Convert flat index to multi-dimensional indices
+                var predIndices = GetTensorIndices(predictions, i);
+                var targIndices = GetTensorIndices(targets, i);
+
+                var diff = _ops.Subtract(predictions[predIndices], targets[targIndices]);
+                sumSquaredError = _ops.Add(sumSquaredError, _ops.Multiply(diff, diff));
+            }
+
+            return _ops.Divide(sumSquaredError, _ops.FromDouble(count));
+        }
+
+        private int[] GetTensorIndices(Tensor<T> tensor, int flatIndex)
+        {
+            var indices = new int[tensor.Rank];
+            int remainder = flatIndex;
+            for (int i = tensor.Rank - 1; i >= 0; i--)
+            {
+                indices[i] = remainder % tensor.Shape[i];
+                remainder /= tensor.Shape[i];
+            }
+            return indices;
+        }
+
+        /// <summary>
+        /// Backward pass to compute gradients for architecture parameters
+        /// </summary>
+        public void BackwardArchitecture(Tensor<T> input, Tensor<T> target)
+        {
+            // Simplified gradient computation
+            // In a full implementation, this would use automatic differentiation
+            var output = Predict(input);
+            var loss = ComputeLoss(output, target);
+
+            // Compute gradients using finite differences (simplified)
+            T epsilon = _ops.FromDouble(1e-5);
+
+            for (int nodeIdx = 0; nodeIdx < _architectureParams.Count; nodeIdx++)
+            {
+                var alpha = _architectureParams[nodeIdx];
+                var grad = _architectureGradients[nodeIdx];
+
+                for (int i = 0; i < alpha.Rows; i++)
+                {
+                    for (int j = 0; j < alpha.Columns; j++)
+                    {
+                        // Finite difference approximation
+                        T originalValue = alpha[i, j];
+
+                        alpha[i, j] = _ops.Add(originalValue, epsilon);
+                        var lossPlus = ComputeValidationLoss(input, target);
+
+                        alpha[i, j] = _ops.Subtract(originalValue, epsilon);
+                        var lossMinus = ComputeValidationLoss(input, target);
+
+                        alpha[i, j] = originalValue;
+
+                        // Gradient = (f(x+ε) - f(x-ε)) / (2ε)
+                        grad[i, j] = _ops.Divide(
+                            _ops.Subtract(lossPlus, lossMinus),
+                            _ops.Multiply(_ops.FromDouble(2), epsilon)
+                        );
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Backward pass to compute gradients for network weights
+        /// </summary>
+        public void BackwardWeights(Tensor<T> input, Tensor<T> target)
+        {
+            // Simplified gradient computation for weights
+            var output = Predict(input);
+            T epsilon = _ops.FromDouble(1e-5);
+
+            foreach (var kvp in _weights)
+            {
+                var key = kvp.Key;
+                var weight = kvp.Value;
+                var grad = _weightGradients[key];
+
+                for (int i = 0; i < weight.Length; i++)
+                {
+                    T originalValue = weight[i];
+
+                    weight[i] = _ops.Add(originalValue, epsilon);
+                    var lossPlus = ComputeTrainingLoss(input, target);
+
+                    weight[i] = _ops.Subtract(originalValue, epsilon);
+                    var lossMinus = ComputeTrainingLoss(input, target);
+
+                    weight[i] = originalValue;
+
+                    grad[i] = _ops.Divide(
+                        _ops.Subtract(lossPlus, lossMinus),
+                        _ops.Multiply(_ops.FromDouble(2), epsilon)
+                    );
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets architecture parameters for optimization
+        /// </summary>
+        public List<Matrix<T>> GetArchitectureParameters()
+        {
+            return _architectureParams;
+        }
+
+        /// <summary>
+        /// Gets architecture gradients
+        /// </summary>
+        public List<Matrix<T>> GetArchitectureGradients()
+        {
+            return _architectureGradients;
+        }
+
+        /// <summary>
+        /// Gets weight parameters for optimization
+        /// </summary>
+        public Dictionary<string, Vector<T>> GetWeightParameters()
+        {
+            return _weights;
+        }
+
+        /// <summary>
+        /// Gets weight gradients
+        /// </summary>
+        public Dictionary<string, Vector<T>> GetWeightGradients()
+        {
+            return _weightGradients;
+        }
+
+        /// <summary>
+        /// Derives discrete architecture from continuous parameters (argmax selection)
+        /// </summary>
+        public Architecture<T> DeriveArchitecture()
+        {
+            var architecture = new Architecture<T>();
+
+            for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
+            {
+                var alpha = _architectureParams[nodeIdx];
+                var softmaxWeights = ApplySoftmax(alpha);
+
+                // For each previous node connection, select operation with highest weight
+                for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
+                {
+                    int bestOpIdx = 0;
+                    T bestWeight = softmaxWeights[prevNodeIdx, 0];
+
+                    for (int opIdx = 1; opIdx < _numOperations; opIdx++)
+                    {
+                        if (_ops.GreaterThan(softmaxWeights[prevNodeIdx, opIdx], bestWeight))
+                        {
+                            bestWeight = softmaxWeights[prevNodeIdx, opIdx];
+                            bestOpIdx = opIdx;
+                        }
+                    }
+
+                    // Add selected operation to architecture
+                    var operation = GetOperationName(bestOpIdx);
+                    architecture.AddOperation(nodeIdx, prevNodeIdx, operation);
+                }
+            }
+
+            return architecture;
+        }
+
+        /// <summary>
+        /// Apply softmax to architecture parameters
+        /// </summary>
+        private Matrix<T> ApplySoftmax(Matrix<T> alpha)
+        {
+            var result = new Matrix<T>(alpha.Rows, alpha.Columns);
+
+            for (int row = 0; row < alpha.Rows; row++)
+            {
+                // Compute softmax for this row
+                T maxVal = alpha[row, 0];
+                for (int col = 1; col < alpha.Columns; col++)
+                {
+                    if (_ops.GreaterThan(alpha[row, col], maxVal))
+                        maxVal = alpha[row, col];
+                }
+
+                // Compute exp(x - max) for numerical stability
+                T sumExp = _ops.Zero;
+                var expValues = new T[alpha.Columns];
+                for (int col = 0; col < alpha.Columns; col++)
+                {
+                    expValues[col] = _ops.Exp(_ops.Subtract(alpha[row, col], maxVal));
+                    sumExp = _ops.Add(sumExp, expValues[col]);
+                }
+
+                // Normalize
+                for (int col = 0; col < alpha.Columns; col++)
+                {
+                    result[row, col] = _ops.Divide(expValues[col], sumExp);
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Apply a specific operation to input
+        /// </summary>
+        private Tensor<T> ApplyOperation(Tensor<T> input, int opIdx, string weightKey)
+        {
+            // Initialize weights if needed
+            if (!_weights.ContainsKey(weightKey))
+            {
+                _weights[weightKey] = new Vector<T>(input.Length);
+                _weightGradients[weightKey] = new Vector<T>(input.Length);
+
+                // Initialize with small random values
+                var random = new Random();
+                for (int i = 0; i < input.Length; i++)
+                {
+                    _weights[weightKey][i] = _ops.FromDouble((random.NextDouble() - 0.5) * 0.1);
+                }
+            }
+
+            var output = new Tensor<T>(input.Shape);
+            var weight = _weights[weightKey];
+
+            // Apply operation (simplified) using tensor indexing
+            switch (opIdx)
+            {
+                case 0: // Identity
+                    for (int i = 0; i < input.Length; i++)
+                    {
+                        var inIndices = GetTensorIndices(input, i);
+                        var outIndices = GetTensorIndices(output, i);
+                        output[outIndices] = input[inIndices];
+                    }
+                    break;
+
+                case 1: // 3x3 Conv (simplified as weighted pass)
+                    for (int i = 0; i < Math.Min(input.Length, weight.Length); i++)
+                    {
+                        var inIndices = GetTensorIndices(input, i);
+                        var outIndices = GetTensorIndices(output, i);
+                        output[outIndices] = _ops.Multiply(input[inIndices], _ops.Add(_ops.One, weight[i]));
+                    }
+                    break;
+
+                case 2: // 5x5 Conv (simplified)
+                    for (int i = 0; i < Math.Min(input.Length, weight.Length); i++)
+                    {
+                        var inIndices = GetTensorIndices(input, i);
+                        var outIndices = GetTensorIndices(output, i);
+                        output[outIndices] = _ops.Multiply(input[inIndices], _ops.Add(_ops.One, _ops.Multiply(_ops.FromDouble(1.5), weight[i])));
+                    }
+                    break;
+
+                case 3: // MaxPool (simplified)
+                    for (int i = 0; i < input.Length; i++)
+                    {
+                        var inIndices = GetTensorIndices(input, i);
+                        var outIndices = GetTensorIndices(output, i);
+                        output[outIndices] = _ops.Multiply(input[inIndices], _ops.FromDouble(0.9));
+                    }
+                    break;
+
+                case 4: // AvgPool (simplified)
+                    for (int i = 0; i < input.Length; i++)
+                    {
+                        var inIndices = GetTensorIndices(input, i);
+                        var outIndices = GetTensorIndices(output, i);
+                        output[outIndices] = _ops.Multiply(input[inIndices], _ops.FromDouble(0.8));
+                    }
+                    break;
+
+                default:
+                    for (int i = 0; i < input.Length; i++)
+                    {
+                        var inIndices = GetTensorIndices(input, i);
+                        var outIndices = GetTensorIndices(output, i);
+                        output[outIndices] = input[inIndices];
+                    }
+                    break;
+            }
+
+            return output;
+        }
+
+        private string GetOperationName(int opIdx)
+        {
+            return opIdx switch
+            {
+                0 => "identity",
+                1 => "conv3x3",
+                2 => "conv5x5",
+                3 => "maxpool",
+                4 => "avgpool",
+                _ => "identity"
+            };
+        }
+
+        // IFullModel implementation
+        public Vector<T> GetParameters()
+        {
+            var allParams = new List<T>();
+
+            // Add architecture parameters
+            foreach (var alpha in _architectureParams)
+            {
+                for (int i = 0; i < alpha.Rows; i++)
+                    for (int j = 0; j < alpha.Columns; j++)
+                        allParams.Add(alpha[i, j]);
+            }
+
+            // Add weights
+            foreach (var weight in _weights.Values)
+            {
+                for (int i = 0; i < weight.Length; i++)
+                    allParams.Add(weight[i]);
+            }
+
+            return new Vector<T>(allParams.ToArray());
+        }
+
+        public void SetParameters(Vector<T> parameters)
+        {
+            int idx = 0;
+
+            // Set architecture parameters
+            foreach (var alpha in _architectureParams)
+            {
+                for (int i = 0; i < alpha.Rows; i++)
+                    for (int j = 0; j < alpha.Columns; j++)
+                        alpha[i, j] = parameters[idx++];
+            }
+
+            // Set weights
+            foreach (var weight in _weights.Values)
+            {
+                for (int i = 0; i < weight.Length; i++)
+                    weight[i] = parameters[idx++];
+            }
+        }
+
+        public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+        {
+            var clone = (SuperNet<T>)Clone();
+            clone.SetParameters(parameters);
+            return clone;
+        }
+
+        public ModelMetaData<T> GetModelMetaData()
+        {
+            return new ModelMetaData<T>
+            {
+                ModelType = ModelType.NeuralNetwork,
+                Description = "Differentiable Architecture Search SuperNet",
+                FeatureCount = _inputSize,
+                Complexity = _numNodes,
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    ["NumNodes"] = _numNodes,
+                    ["NumOperations"] = _numOperations,
+                    ["ParameterCount"] = ParameterCount
+                }
+            };
+        }
+
+        public void SaveModel(string filePath) => throw new NotImplementedException();
+        public void LoadModel(string filePath) => throw new NotImplementedException();
+        public byte[] Serialize() => throw new NotImplementedException();
+        public void Deserialize(byte[] data) => throw new NotImplementedException();
+
+        public Dictionary<string, T> GetFeatureImportance() => new Dictionary<string, T>();
+        public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputSize);
+        public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _inputSize;
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
+
+        public IFullModel<T, Tensor<T>, Tensor<T>> Clone()
+        {
+            return new SuperNet<T>(_searchSpace, _numNodes);
+        }
+
+        public IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+    }
+}
