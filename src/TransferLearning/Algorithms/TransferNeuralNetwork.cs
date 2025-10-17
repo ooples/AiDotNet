@@ -21,30 +21,24 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
     /// <summary>
     /// Transfers a Neural Network model to a target domain with the same feature space.
     /// </summary>
+    /// <remarks>
+    /// NOTE: Domain adaptation without source data is not meaningful. This method skips
+    /// domain adaptation and only performs fine-tuning. For proper domain adaptation,
+    /// use the public Transfer() method that accepts source data.
+    /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> TransferSameDomain(
         IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
-        // Apply domain adaptation if available
-        Matrix<T> adaptedData = targetData;
-        if (DomainAdapter != null)
-        {
-            // Train adapter if needed
-            if (DomainAdapter.RequiresTraining)
-            {
-                DomainAdapter.Train(targetData, targetData);
-            }
-            adaptedData = DomainAdapter.AdaptSource(targetData, targetData);
-        }
-
         // Clone the source model to create a target model
         var targetModel = sourceModel.DeepCopy();
 
         // Fine-tune on target domain using batch training
+        // Note: Domain adaptation is skipped here due to lack of source data
         // In a full implementation, this would use a reduced learning rate
         // and possibly freeze early layers
-        targetModel.Train(adaptedData, targetLabels);
+        targetModel.Train(targetData, targetLabels);
 
         return targetModel;
     }
@@ -52,26 +46,60 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
     /// <summary>
     /// Transfers a Neural Network model to a target domain with a different feature space.
     /// </summary>
+    /// <remarks>
+    /// NOTE: This implementation requires source domain data to properly train the feature mapper.
+    /// The current API limitations prevent passing source data, so this method will throw
+    /// NotImplementedException. Users should use the public Transfer() method that accepts source data.
+    /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> TransferCrossDomain(
         IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
+        throw new NotImplementedException(
+            "Cross-domain transfer requires source domain data for proper feature mapping. " +
+            "The protected TransferCrossDomain method cannot access source data due to API limitations. " +
+            "Please use the public Transfer(sourceModel, sourceData, targetData, targetLabels) method instead, " +
+            "or pre-train the FeatureMapper with source data before calling this method.");
+    }
+
+    /// <summary>
+    /// Transfers a Neural Network model to a target domain with proper source data.
+    /// </summary>
+    /// <param name="sourceModel">The model trained on the source domain.</param>
+    /// <param name="sourceData">Training data from the source domain (required for cross-domain transfer).</param>
+    /// <param name="targetData">Training data from the target domain.</param>
+    /// <param name="targetLabels">Labels for the target domain data.</param>
+    /// <returns>A new model adapted to the target domain.</returns>
+    public IFullModel<T, Matrix<T>, Vector<T>> Transfer(
+        IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
+        Matrix<T> sourceData,
+        Matrix<T> targetData,
+        Vector<T> targetLabels)
+    {
+        // Determine if cross-domain transfer is needed
+        bool needsCrossDomain = RequiresCrossDomainTransfer(sourceModel, targetData);
+
+        if (!needsCrossDomain)
+        {
+            return TransferSameDomain(sourceModel, targetData, targetLabels);
+        }
+
+        // Cross-domain transfer with proper source data
         if (FeatureMapper == null)
         {
             throw new InvalidOperationException(
                 "Cross-domain transfer requires a feature mapper. Use SetFeatureMapper() before transfer.");
         }
 
-        // Step 1: Train feature mapper if not already trained
+        // Step 1: Train feature mapper with actual source and target data
         if (!FeatureMapper.IsTrained)
         {
-            FeatureMapper.Train(targetData, targetData);
+            FeatureMapper.Train(sourceData, targetData);
         }
 
         // Step 2: Get dimensions
         int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
-        int targetFeatures = targetData.Columns;
 
         // Step 3: Map target data to source feature space
         Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
@@ -83,7 +111,6 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
         Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, 0.7);
 
         // Step 6: Create and train a new model on the target domain
-        // Note: This is simplified - in practice, you'd create a compatible model type
         var targetModel = sourceModel.DeepCopy();
         targetModel.Train(targetData, combinedLabels);
 

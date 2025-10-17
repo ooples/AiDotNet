@@ -63,24 +63,58 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
     /// <summary>
     /// Transfers a Random Forest model to a target domain with a different feature space.
     /// </summary>
+    /// <remarks>
+    /// NOTE: This implementation requires source domain data to properly train the feature mapper
+    /// and domain adapter. The current API limitations prevent passing source data, so this method
+    /// will throw NotImplementedException. Users should provide source data through the feature
+    /// mapper and domain adapter before calling transfer, or use the public Transfer() method
+    /// that accepts source data.
+    /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> TransferCrossDomain(
         IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
+        throw new NotImplementedException(
+            "Cross-domain transfer requires source domain data for proper feature mapping and domain adaptation. " +
+            "The protected TransferCrossDomain method cannot access source data due to API limitations. " +
+            "Please use the public Transfer(sourceModel, sourceData, targetData, targetLabels) method instead, " +
+            "or pre-train the FeatureMapper and DomainAdapter with source data before calling this method.");
+    }
+
+    /// <summary>
+    /// Transfers a Random Forest model to a target domain with proper source data.
+    /// </summary>
+    /// <param name="sourceModel">The model trained on the source domain.</param>
+    /// <param name="sourceData">Training data from the source domain (required for cross-domain transfer).</param>
+    /// <param name="targetData">Training data from the target domain.</param>
+    /// <param name="targetLabels">Labels for the target domain data.</param>
+    /// <returns>A new model adapted to the target domain.</returns>
+    public IFullModel<T, Matrix<T>, Vector<T>> Transfer(
+        IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
+        Matrix<T> sourceData,
+        Matrix<T> targetData,
+        Vector<T> targetLabels)
+    {
+        // Determine if cross-domain transfer is needed
+        bool needsCrossDomain = RequiresCrossDomainTransfer(sourceModel, targetData);
+
+        if (!needsCrossDomain)
+        {
+            return TransferSameDomain(sourceModel, targetData, targetLabels);
+        }
+
+        // Cross-domain transfer with proper source data
         if (FeatureMapper == null)
         {
             throw new InvalidOperationException(
                 "Cross-domain transfer requires a feature mapper. Use SetFeatureMapper() before transfer.");
         }
 
-        // Step 1: Train feature mapper if not already trained
+        // Step 1: Train feature mapper with actual source and target data
         if (!FeatureMapper.IsTrained)
         {
-            // For training the mapper, we need both source and target data
-            // In practice, you'd pass source data here; for now we use target data twice
-            // This is a limitation that would be addressed in a full implementation
-            FeatureMapper.Train(targetData, targetData);
+            FeatureMapper.Train(sourceData, targetData);
         }
 
         // Step 2: Get source model's feature dimension
@@ -92,17 +126,17 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         // Step 4: Apply domain adaptation if available
         if (DomainAdapter != null && DomainAdapter.RequiresTraining)
         {
-            // Train domain adapter (would need source data in practice)
-            DomainAdapter.Train(mappedTargetData, mappedTargetData);
+            // Train domain adapter with actual source and mapped target data
+            Matrix<T> mappedSourceData = FeatureMapper.MapToSource(sourceData, sourceFeatures);
+            DomainAdapter.Train(mappedSourceData, mappedTargetData);
         }
 
         if (DomainAdapter != null)
         {
-            mappedTargetData = DomainAdapter.AdaptSource(mappedTargetData, mappedTargetData);
+            mappedTargetData = DomainAdapter.AdaptSource(mappedTargetData, targetData);
         }
 
         // Step 5: Use source model for predictions on mapped data (knowledge distillation)
-        // Use batch prediction instead of row-by-row
         Vector<T> pseudoLabels = sourceModel.Predict(mappedTargetData);
 
         // Step 6: Combine pseudo-labels with true labels (if available)
@@ -110,8 +144,6 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 
         // Step 7: Train new model on target domain with combined labels
         var targetModel = new RandomForestRegression<T>(_options, _regularization);
-
-        // Train on original target data with combined labels
         targetModel.Train(targetData, combinedLabels);
 
         // Step 8: Wrap the model to handle feature mapping at prediction time
