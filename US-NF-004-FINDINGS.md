@@ -12,7 +12,7 @@ User Story US-NF-004 requested completing the IFullModel interface implementatio
 3. `testconsole/Examples/DecisionTransformerExample.cs`
 
 ### Current Status
-- These files existed in commit `c8c5acf` but were subsequently removed
+- These files existed in [commit `c8c5acfc49994dbbf148ece6e39ed14a0982d22f`](https://github.com/ooples/AiDotNet/commit/c8c5acfc49994dbbf148ece6e39ed14a0982d22f) but were subsequently removed
 - The files depend on the following namespaces that **do not exist** in the current codebase:
   - `AiDotNet.FederatedLearning`
   - `AiDotNet.ReinforcementLearning`
@@ -23,7 +23,7 @@ User Story US-NF-004 requested completing the IFullModel interface implementatio
   - `AiDotNet.Interpretability`
 
 ### Build Verification
-- Project builds successfully with **0 errors** (only framework deprecation warnings)
+- Project builds successfully with 0 errors and 16 warnings (framework deprecations)
 - Current example files in `testconsole/Examples/`:
   - EnhancedNeuralNetworkExample.cs
   - EnhancedRegressionExample.cs
@@ -51,9 +51,11 @@ The current codebase is in a working state with functional examples that compile
 
 ## Actions Taken
 
-1. Attempted to restore the example files from commit c8c5acf
-2. Analyzed the files and discovered missing namespace dependencies
-3. Removed the incompilable example files
+> **Note:** Steps 1–3 below were performed locally for investigation and were not committed in this PR (which contains only documentation changes).
+
+1. Attempted to restore the example files from [commit `c8c5acfc49994dbbf148ece6e39ed14a0982d22f`](https://github.com/ooples/AiDotNet/commit/c8c5acfc49994dbbf148ece6e39ed14a0982d22f) locally
+2. Analyzed the files and discovered missing namespace dependencies locally
+3. Removed the temporarily restored non-compiling example files locally
 4. Verified project builds successfully with 0 errors
 5. Created this findings document
 
