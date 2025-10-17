@@ -463,19 +463,6 @@ namespace AiDotNet.AutoML
             return output;
         }
 
-        private string GetOperationName(int opIdx)
-        {
-            return opIdx switch
-            {
-                0 => "identity",
-                1 => "conv3x3",
-                2 => "conv5x5",
-                3 => "maxpool",
-                4 => "avgpool",
-                _ => "identity"
-            };
-        }
-
         // IFullModel implementation
         public Vector<T> GetParameters()
         {
@@ -560,6 +547,19 @@ namespace AiDotNet.AutoML
 
         public IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
+        private string GetOperationName(int opIdx)
+        {
+            return opIdx switch
+            {
+                0 => "identity",
+                1 => "conv3x3",
+                2 => "conv5x5",
+                3 => "maxpool",
+                4 => "avgpool",
+                _ => "identity"
+            };
+        }
+
         #region IInterpretableModel Implementation
 
         /// <summary>
@@ -577,13 +577,15 @@ namespace AiDotNet.AutoML
                 T totalImportance = _ops.Zero;
 
                 // Aggregate importance across all nodes and operations
+                // For each feature, sum the architecture parameters in the corresponding row (if it exists)
                 foreach (var alpha in _architectureParams)
                 {
-                    for (int i = 0; i < alpha.Rows; i++)
+                    // Check if this feature index exists as a row in the architecture parameters
+                    if (featureIdx < alpha.Rows)
                     {
                         for (int j = 0; j < alpha.Columns; j++)
                         {
-                            totalImportance = _ops.Add(totalImportance, _ops.Abs(alpha[i, j]));
+                            totalImportance = _ops.Add(totalImportance, _ops.Abs(alpha[featureIdx, j]));
                         }
                     }
                 }
@@ -608,14 +610,17 @@ namespace AiDotNet.AutoML
                 T totalImportance = _ops.Zero;
 
                 // Analyze softmax weights across all nodes
+                // For each feature, analyze the architecture parameters in the corresponding row
                 foreach (var alpha in _architectureParams)
                 {
                     var softmaxWeights = ApplySoftmax(alpha);
-                    for (int i = 0; i < softmaxWeights.Rows; i++)
+
+                    // Sum the softmax weights for the row corresponding to this feature
+                    if (featureIdx < softmaxWeights.Rows)
                     {
                         for (int j = 0; j < softmaxWeights.Columns; j++)
                         {
-                            totalImportance = _ops.Add(totalImportance, softmaxWeights[i, j]);
+                            totalImportance = _ops.Add(totalImportance, softmaxWeights[featureIdx, j]);
                         }
                     }
                 }
@@ -771,17 +776,27 @@ namespace AiDotNet.AutoML
                 _architectureParams.Count > 0)
             {
                 // Simple interaction measure: product of architecture parameter magnitudes
+                // for different features
                 foreach (var alpha in _architectureParams)
                 {
                     T sum1 = _ops.Zero;
                     T sum2 = _ops.Zero;
 
-                    for (int i = 0; i < alpha.Rows; i++)
+                    // Sum over the row corresponding to feature1Index for sum1
+                    if (feature1Index >= 0 && feature1Index < alpha.Rows)
                     {
                         for (int j = 0; j < alpha.Columns; j++)
                         {
-                            sum1 = _ops.Add(sum1, _ops.Abs(alpha[i, j]));
-                            sum2 = _ops.Add(sum2, _ops.Abs(alpha[i, j]));
+                            sum1 = _ops.Add(sum1, _ops.Abs(alpha[feature1Index, j]));
+                        }
+                    }
+
+                    // Sum over the row corresponding to feature2Index for sum2
+                    if (feature2Index >= 0 && feature2Index < alpha.Rows)
+                    {
+                        for (int j = 0; j < alpha.Columns; j++)
+                        {
+                            sum2 = _ops.Add(sum2, _ops.Abs(alpha[feature2Index, j]));
                         }
                     }
 
