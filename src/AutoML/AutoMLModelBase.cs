@@ -304,11 +304,8 @@ namespace AiDotNet.AutoML
                 }
                 else
                 {
-                    // Fallback to simple prediction-based evaluation
-                    var predictions = model.Predict(validationInputs);
-                    // For now, return a placeholder score
-                    // In a real implementation, this would calculate the metric based on the data types
-                    return 0.0;
+                    // No model evaluator set; cannot evaluate model without evaluator
+                    throw new InvalidOperationException("No model evaluator set; cannot evaluate model without evaluator.");
                 }
             }));
         }
@@ -358,8 +355,12 @@ namespace AiDotNet.AutoML
         }
 
         /// <summary>
-        /// Loads the model from a file
+        /// Loads the model from a file.
+        /// PRECONDITION: BestModel must be initialized to the correct concrete model type before calling this method.
+        /// The method delegates to BestModel.LoadModel, which deserializes the model from the file format specific to that model type.
         /// </summary>
+        /// <param name="filePath">Path to the file containing the serialized model</param>
+        /// <exception cref="InvalidOperationException">Thrown when BestModel is null</exception>
         public virtual void LoadModel(string filePath)
         {
             if (BestModel == null)
@@ -383,10 +384,22 @@ namespace AiDotNet.AutoML
         }
 
         /// <summary>
-        /// Deserializes the model from bytes
+        /// Deserializes the model from bytes.
+        /// PRECONDITION: BestModel must be initialized to the correct concrete model type before calling this method.
+        /// The method delegates to BestModel.Deserialize, which deserializes the model from the byte array format specific to that model type.
         /// </summary>
+        /// <param name="data">Byte array containing the serialized model</param>
+        /// <exception cref="ArgumentNullException">Thrown when data is null</exception>
+        /// <exception cref="ArgumentException">Thrown when data is empty</exception>
+        /// <exception cref="InvalidOperationException">Thrown when BestModel is null</exception>
         public virtual void Deserialize(byte[] data)
         {
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+
+            if (data.Length == 0)
+                throw new ArgumentException("Data cannot be empty.", nameof(data));
+
             if (BestModel == null)
             {
                 // This scenario requires a mechanism to determine the concrete type of BestModel
