@@ -433,9 +433,12 @@ namespace AiDotNet.AutoML
         public virtual IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
         {
             if (BestModel == null)
-                throw new InvalidOperationException("No best model found.");
+                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
 
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            // Create a deep copy and set the new parameters
+            var copy = DeepCopy();
+            copy.SetParameters(parameters);
+            return copy;
         }
 
         #endregion
@@ -496,11 +499,13 @@ namespace AiDotNet.AutoML
         #region ICloneable Implementation
 
         /// <summary>
-        /// Creates a deep copy of the AutoML model
+        /// Creates a shallow copy of the AutoML model
         /// </summary>
         public virtual IFullModel<T, TInput, TOutput> Clone()
         {
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            // Clone creates a shallow copy using MemberwiseClone
+            // For a deep copy, use DeepCopy() instead
+            return (AutoMLModelBase<T, TInput, TOutput>)MemberwiseClone();
         }
 
         /// <summary>
