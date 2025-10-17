@@ -183,14 +183,14 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <remarks>
     /// <para><b>For Beginners:</b> This method is a synchronous wrapper around the asynchronous TrainAsync method.
     /// It does the same thing as TrainAsync, but it waits for the training to complete before moving on.
-    /// 
+    ///
     /// Use this method when you want to train the model and wait for it to finish before doing anything else.
     /// It's like waiting for a cake to finish baking before you start decorating it.
     /// </para>
     /// </remarks>
     public void Train(Matrix<T> x, Vector<T> y)
     {
-        TrainAsync(x, y).GetAwaiter().GetResult();
+        Task.Run(() => TrainAsync(x, y)).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -201,14 +201,14 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <remarks>
     /// <para><b>For Beginners:</b> This method is a synchronous wrapper around the asynchronous PredictAsync method.
     /// It does the same thing as PredictAsync, but it waits for the predictions to be made before moving on.
-    /// 
+    ///
     /// Use this method when you want to get predictions immediately and wait for them to be ready.
     /// It's like asking a question and waiting for the answer before you do anything else.
     /// </para>
     /// </remarks>
     public Vector<T> Predict(Matrix<T> input)
     {
-        return PredictAsync(input).GetAwaiter().GetResult();
+        return Task.Run(() => PredictAsync(input)).GetAwaiter().GetResult();
     }
 
     /// <summary>

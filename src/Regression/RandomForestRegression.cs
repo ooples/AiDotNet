@@ -142,9 +142,9 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
             return tree;
         }));
 
-        _trees = await ParallelProcessingHelper.ProcessTasksInParallel(treeTasks);
+        _trees = await ParallelProcessingHelper.ProcessTasksInParallel(treeTasks).ConfigureAwait(false);
 
-        await CalculateFeatureImportancesAsync(x.Columns);
+        await CalculateFeatureImportancesAsync(x.Columns).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -173,7 +173,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         var regularizedInput = Regularization.Regularize(input);
         var predictionTasks = _trees.Select(tree => Task.Run(() => tree.Predict(regularizedInput)));
-        var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks);
+        var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks).ConfigureAwait(false);
 
         var result = new T[input.Rows];
         for (int i = 0; i < input.Rows; i++)
@@ -284,7 +284,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
             return treeImportances;
         }));
 
-        var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks);
+        var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks).ConfigureAwait(false);
 
         // Aggregate importances
         for (int i = 0; i < numFeatures; i++)
