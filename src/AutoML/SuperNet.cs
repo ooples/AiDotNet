@@ -22,6 +22,7 @@ namespace AiDotNet.AutoML
         private readonly SearchSpace<T> _searchSpace;
         private readonly int _numNodes;
         private readonly int _numOperations;
+        private readonly Random _random; // Shared Random instance to avoid time-based seeding issues
 
         // Architecture parameters (alpha) - learnable parameters that determine operation weights
         private readonly List<Matrix<T>> _architectureParams;
@@ -53,6 +54,7 @@ namespace AiDotNet.AutoML
             _searchSpace = searchSpace;
             _numNodes = numNodes;
             _numOperations = searchSpace.Operations?.Count ?? 5; // Default operations: identity, conv3x3, conv5x5, maxpool, avgpool
+            _random = new Random(42); // Initialize with seed for reproducibility
 
             // Initialize architecture parameters (alpha) with small random values
             _architectureParams = new List<Matrix<T>>();
@@ -68,7 +70,7 @@ namespace AiDotNet.AutoML
                     for (int k = 0; k < alpha.Columns; k++)
                     {
                         // Small random initialization: range [-0.1, 0.1]
-                        alpha[j, k] = _ops.FromDouble((new Random().NextDouble() - 0.5) * 0.2);
+                        alpha[j, k] = _ops.FromDouble((_random.NextDouble() - 0.5) * 0.2);
                     }
                 }
                 _architectureParams.Add(alpha);
@@ -384,10 +386,9 @@ namespace AiDotNet.AutoML
                 _weightGradients[weightKey] = new Vector<T>(input.Length);
 
                 // Initialize with small random values
-                var random = new Random();
                 for (int i = 0; i < input.Length; i++)
                 {
-                    _weights[weightKey][i] = _ops.FromDouble((random.NextDouble() - 0.5) * 0.1);
+                    _weights[weightKey][i] = _ops.FromDouble((_random.NextDouble() - 0.5) * 0.1);
                 }
             }
 
