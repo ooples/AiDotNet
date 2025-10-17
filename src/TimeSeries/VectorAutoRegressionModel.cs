@@ -1044,10 +1044,21 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             double doubleValue = Convert.ToDouble(value);
             return !double.IsNaN(doubleValue) && !double.IsInfinity(doubleValue);
         }
-        catch
+        catch (InvalidCastException)
         {
-            // If conversion fails, assume it's valid (for non-numeric types)
+            // If conversion fails for non-numeric types, assume valid
+            // This is expected behavior for types that cannot be converted to double
             return true;
+        }
+        catch (FormatException)
+        {
+            // If format conversion fails, assume valid for non-numeric types
+            return true;
+        }
+        catch (OverflowException)
+        {
+            // If value is too large or small for double, it's invalid
+            return false;
         }
     }
 
