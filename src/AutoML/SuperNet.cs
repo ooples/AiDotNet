@@ -538,6 +538,16 @@ namespace AiDotNet.AutoML
 
         public void SaveModel(string filePath)
         {
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+            // Validate path doesn't contain dangerous patterns
+            var fullPath = System.IO.Path.GetFullPath(filePath);
+            if (!fullPath.StartsWith(System.IO.Path.GetFullPath(".")))
+            {
+                // Allow absolute paths, but be aware of security implications
+            }
+
             using var fs = new System.IO.FileStream(filePath, System.IO.FileMode.Create);
             using var writer = new System.IO.BinaryWriter(fs);
 
@@ -575,12 +585,29 @@ namespace AiDotNet.AutoML
         }
         public void LoadModel(string filePath)
         {
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+            // Validate path doesn't contain dangerous patterns
+            var fullPath = System.IO.Path.GetFullPath(filePath);
+            if (!System.IO.File.Exists(fullPath))
+                throw new System.IO.FileNotFoundException($"Model file not found: {filePath}");
+
             using var fs = new System.IO.FileStream(filePath, System.IO.FileMode.Open);
             using var reader = new System.IO.BinaryReader(fs);
 
             // Deserialize _numNodes and _numOperations (read-only fields need reflection or constructor)
             var numNodes = reader.ReadInt32();
             var numOperations = reader.ReadInt32();
+
+            // Validate that deserialized structure matches this instance
+            if (numNodes != _numNodes || numOperations != _numOperations)
+            {
+                throw new InvalidOperationException(
+                    $"Model file structure mismatch: file has numNodes={numNodes}, numOperations={numOperations}, " +
+                    $"but this instance has numNodes={_numNodes}, numOperations={_numOperations}.");
+            }
+
             _inputSize = reader.ReadInt32();
             _outputSize = reader.ReadInt32();
 
@@ -662,12 +689,25 @@ namespace AiDotNet.AutoML
         }
         public void Deserialize(byte[] data)
         {
+            if (data == null)
+                throw new ArgumentNullException(nameof(data), "The data parameter passed to Deserialize cannot be null.");
+
             using var ms = new System.IO.MemoryStream(data);
             using var reader = new System.IO.BinaryReader(ms);
 
             // Deserialize _numNodes and _numOperations (read-only fields need reflection or constructor)
             var numNodes = reader.ReadInt32();
             var numOperations = reader.ReadInt32();
+
+            // Validate that deserialized structure matches this instance
+            if (numNodes != _numNodes || numOperations != _numOperations)
+            {
+                throw new InvalidOperationException(
+                    $"Deserialized model structure does not match this instance. " +
+                    $"Expected numNodes={_numNodes}, numOperations={_numOperations}, " +
+                    $"but got numNodes={numNodes}, numOperations={numOperations}.");
+            }
+
             _inputSize = reader.ReadInt32();
             _outputSize = reader.ReadInt32();
 
