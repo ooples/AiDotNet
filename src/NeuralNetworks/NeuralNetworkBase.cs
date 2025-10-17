@@ -162,9 +162,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </remarks>
     protected void ClipGradients(List<Tensor<T>> gradients)
     {
-        foreach (var gradient in gradients)
+        for (int i = 0; i < gradients.Count; i++)
         {
-            ClipTensorGradient(gradient, MaxGradNorm);
+            gradients[i] = ClipTensorGradient(gradients[i], MaxGradNorm);
         }
     }
 
@@ -1402,9 +1402,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     #region INeuralNetworkModel Implementation
 
     /// <summary>
-    /// Gets the intermediate activations from each layer when processing the given input.
+    /// Gets the intermediate activations from each layer when processing the given input with named keys.
     /// </summary>
-    public virtual Dictionary<string, Tensor<T>> GetLayerActivations(Tensor<T> input)
+    public virtual Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
         var activations = new Dictionary<string, Tensor<T>>();
         var current = input;
