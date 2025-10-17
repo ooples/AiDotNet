@@ -508,7 +508,36 @@ namespace AiDotNet.AutoML
         /// </summary>
         public virtual IFullModel<T, TInput, TOutput> DeepCopy()
         {
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            var copy = (AutoMLModelBase<T, TInput, TOutput>)MemberwiseClone();
+
+            // Deep copy collections
+            lock (_lock)
+            {
+                copy._trialHistory.Clear();
+                copy._trialHistory.AddRange(_trialHistory.Select(t => t.Clone()));
+
+                copy._searchSpace.Clear();
+                foreach (var kvp in _searchSpace)
+                {
+                    copy._searchSpace[kvp.Key] = kvp.Value;
+                }
+
+                copy._candidateModels.Clear();
+                copy._candidateModels.AddRange(_candidateModels);
+
+                copy._constraints.Clear();
+                copy._constraints.AddRange(_constraints);
+            }
+
+            // Deep copy the best model if it exists
+            copy.BestModel = BestModel?.DeepCopy();
+
+            // Value types are already copied by MemberwiseClone:
+            // _optimizationMetric, _maximize, _earlyStoppingPatience,
+            // _earlyStoppingMinDelta, _trialsSinceImprovement, BestScore,
+            // TimeLimit, TrialLimit, Status
+
+            return copy;
         }
 
         #endregion
