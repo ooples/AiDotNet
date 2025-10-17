@@ -1,5 +1,7 @@
 namespace AiDotNet.NeuralNetworks;
 
+using AiDotNet.Interpretability;
+
 /// <summary>
 /// Base class for all neural network implementations in AiDotNet.
 /// </summary>
@@ -11,7 +13,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
 {
     /// <summary>
     /// The collection of layers that make up this neural network.
@@ -31,7 +33,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// how many neurons are in each layer, and how they're connected. Think of it as the blueprint for your network.
     /// </remarks>
     public readonly NeuralNetworkArchitecture<T> Architecture;
-    
+
+    /// <summary>
+    /// Set of feature indices that have been explicitly marked as active.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This set contains feature indices that have been explicitly set as active through
+    /// the SetActiveFeatureIndices method, overriding the automatic determination based
+    /// on feature importance.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tracks which parts of your input data have been manually
+    /// selected as important for the neural network, regardless of what the network would
+    /// automatically determine based on weights.
+    /// </para>
+    /// </remarks>
+    private HashSet<int>? _explicitlySetActiveFeatures;
+
     /// <summary>
     /// Mathematical operations for the numeric type T.
     /// </summary>
@@ -143,62 +162,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </remarks>
     protected void ClipGradients(List<Tensor<T>> gradients)
     {
-        T totalNorm = NumOps.Zero;
-
-        // Calculate total norm
         foreach (var gradient in gradients)
         {
-            for (int i = 0; i < gradient.Length; i++)
-            {
-                totalNorm = NumOps.Add(totalNorm, NumOps.Multiply(gradient[i], gradient[i]));
-            }
-        }
-
-        totalNorm = NumOps.Sqrt(totalNorm);
-
-        // If total norm exceeds MaxGradNorm, clip each gradient tensor
-        if (NumOps.GreaterThan(totalNorm, MaxGradNorm))
-        {
-            T scalingFactor = NumOps.Divide(MaxGradNorm, totalNorm);
-            for (int i = 0; i < gradients.Count; i++)
-            {
-                gradients[i] = ClipGradient(gradients[i], scalingFactor);
-            }
+            ClipTensorGradient(gradient, MaxGradNorm);
         }
     }
 
     /// <summary>
-    /// Clips the gradient tensor by scaling it with a given factor.
+    /// Clips a single gradient tensor if its norm exceeds the specified maximum norm.
     /// </summary>
     /// <param name="gradient">The gradient tensor to be clipped.</param>
-    /// <param name="scalingFactor">The factor by which to scale the gradient.</param>
-    /// <returns>The clipped gradient tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method adjusts the gradient by multiplying each of its values by a scaling factor.
-    /// It's used as part of the gradient clipping process to prevent the gradients from becoming too large,
-    /// which can cause instability in training.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ClipGradient(Tensor<T> gradient, T scalingFactor)
-    {
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = NumOps.Multiply(gradient[i], scalingFactor);
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
-    /// Clips the gradient tensor if its norm exceeds the maximum allowed gradient norm.
-    /// </summary>
-    /// <param name="gradient">The gradient tensor to be clipped.</param>
+    /// <param name="maxNorm">The maximum allowed norm. If null, uses MaxGradNorm.</param>
     /// <returns>The clipped gradient tensor.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the total norm of the gradient and scales it down if it exceeds
-    /// the maximum allowed gradient norm (MaxGradNorm).
+    /// the specified maximum norm. This is the core gradient clipping logic used by all other
+    /// gradient clipping methods.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This is a safety mechanism to prevent the "exploding gradient" problem.
@@ -211,7 +191,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// this method slows it down to a safe speed to prevent losing control during training.
     /// </para>
     /// </remarks>
-    protected Tensor<T> ClipGradient(Tensor<T> gradient)
+    private Tensor<T> ClipTensorGradient(Tensor<T> gradient, T maxNorm)
     {
         T totalNorm = NumOps.Zero;
 
@@ -222,9 +202,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
 
         totalNorm = NumOps.Sqrt(totalNorm);
 
-        if (NumOps.GreaterThan(totalNorm, MaxGradNorm))
+        if (NumOps.GreaterThan(totalNorm, maxNorm))
         {
-            T scalingFactor = NumOps.Divide(MaxGradNorm, totalNorm);
+            T scalingFactor = NumOps.Divide(maxNorm, totalNorm);
             for (int i = 0; i < gradient.Length; i++)
             {
                 gradient[i] = NumOps.Multiply(gradient[i], scalingFactor);
@@ -235,30 +215,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     }
 
     /// <summary>
+    /// Clips the gradient tensor if its norm exceeds the maximum allowed gradient norm.
+    /// </summary>
+    /// <param name="gradient">The gradient tensor to be clipped.</param>
+    /// <returns>The clipped gradient tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method is a convenience wrapper that clips a gradient tensor using the default MaxGradNorm.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is a safety mechanism to prevent the "exploding gradient" problem.
+    /// It ensures gradients don't become too large during training, which helps keep the learning process stable.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> ClipGradient(Tensor<T> gradient)
+    {
+        return ClipTensorGradient(gradient, MaxGradNorm);
+    }
+
+    /// <summary>
     /// Clips the gradient vector if its norm exceeds the maximum allowed gradient norm.
     /// </summary>
     /// <param name="gradient">The gradient vector to be clipped.</param>
     /// <returns>The clipped gradient vector.</returns>
     /// <remarks>
     /// <para>
-    /// This method calculates the total norm of the gradient vector and scales it down if it exceeds
-    /// the maximum allowed gradient norm (MaxGradNorm). It uses the tensor-based ClipGradient method
-    /// internally, converting the vector to a tensor and back.
+    /// This method converts the vector to a tensor, applies gradient clipping, and converts back to a vector.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This is another safety mechanism to prevent the "exploding gradient" problem,
-    /// but specifically for vector inputs. If the gradient (which represents how much to change the 
-    /// network's parameters) becomes too large, it can cause the training to become unstable. 
-    /// This method checks if the gradient is too big, and if so, it scales it down to a safe level.
-    /// </para>
-    /// <para>
-    /// Think of it like having a volume control on a speaker. If the sound (gradient) gets too loud,
-    /// this method turns it down to a comfortable level to prevent distortion (instability in training).
+    /// but specifically for vector inputs. It works just like the tensor version but handles vector data.
     /// </para>
     /// </remarks>
     protected Vector<T> ClipGradient(Vector<T> gradient)
     {
-        return ClipGradient(Tensor<T>.FromVector(gradient)).ToVector();
+        return ClipTensorGradient(Tensor<T>.FromVector(gradient), MaxGradNorm).ToVector();
     }
 
     /// <summary>
@@ -273,7 +264,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </remarks>
     public virtual Vector<T> GetParameters()
     {
-        int totalParameterCount = GetParameterCount();
+        int totalParameterCount = ParameterCount;
         var parameters = new Vector<T>(totalParameterCount);
     
         int currentIndex = 0;
@@ -311,67 +302,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when the network is not in training mode or doesn't support training.</exception>
-    public virtual Vector<T> Backpropagate(Vector<T> outputGradients)
-    {
-        if (!IsTrainingMode)
-        {
-            throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
-        }
-        
-        if (!SupportsTraining)
-        {
-            throw new InvalidOperationException("This network does not support backpropagation");
-        }
-        
-        // Convert output gradients to tensor format
-        var gradientTensor = Tensor<T>.FromVector(outputGradients);
-        
-        // Backpropagate through layers in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = Layers[i].Backward(gradientTensor);
-        }
-        
-        // Convert input gradients back to vector format
-        return gradientTensor.ToVector();
-    }
-
-    /// <summary>
-    /// Performs backpropagation to compute gradients for network parameters.
-    /// </summary>
-    /// <param name="outputGradients">The gradients of the loss with respect to the network outputs.</param>
-    /// <returns>The gradients of the loss with respect to the network inputs.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. After making a prediction, the network
-    /// calculates how wrong it was (the error). Then it works backward through the layers to figure out
-    /// how each parameter contributed to that error. This method handles that backward flow of information.
-    /// </para>
-    /// <para>
-    /// The "gradients" are numbers that tell us how to adjust each parameter to reduce the error.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when the network is not in training mode or doesn't support training.</exception>
     public virtual Tensor<T> Backpropagate(Tensor<T> outputGradients)
     {
         if (!IsTrainingMode)
         {
             throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
         }
-        
+
         if (!SupportsTraining)
         {
             throw new InvalidOperationException("This network does not support backpropagation");
         }
-        
+
         // Backpropagate through layers in reverse order
+        var gradientTensor = outputGradients;
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            outputGradients = Layers[i].Backward(outputGradients);
+            gradientTensor = Layers[i].Backward(gradientTensor);
         }
-        
-        // Convert input gradients back to vector format
-        return outputGradients;
+
+        return gradientTensor;
+    }
+
+    /// <summary>
+    /// Extracts a single example from a batch tensor and formats it as a tensor with shape [1, features].
+    /// </summary>
+    /// <param name="batchTensor">The batch tensor to extract from.</param>
+    /// <param name="index">The index of the example to extract.</param>
+    /// <returns>A tensor containing a single example with shape [1, features].</returns>
+    protected Tensor<T> ExtractSingleExample(Tensor<T> batchTensor, int index)
+    {
+        // Get the vector for this example
+        Vector<T> row = batchTensor.GetRow(index);
+
+        // Create a tensor with shape [1, features]
+        return new Tensor<T>([1, row.Length], row);
     }
 
     /// <summary>
@@ -387,43 +352,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when the network doesn't support training.</exception>
-    public virtual Vector<T> ForwardWithMemory(Vector<T> input)
+    public virtual Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         if (!SupportsTraining)
         {
             throw new InvalidOperationException("This network does not support training mode");
         }
-        
-        var current = input;
-        
+
+        Tensor<T> current = input;
+
         for (int i = 0; i < Layers.Count; i++)
         {
             // Store input to each layer for backpropagation
-            _layerInputs[i] = Tensor<T>.FromVector(current);
-            
+            _layerInputs[i] = current;
+
             // Forward pass through layer
-            current = Layers[i].Forward(Tensor<T>.FromVector(current)).ToVector();
-            
+            current = Layers[i].Forward(current);
+
             // Store output from each layer for backpropagation
-            _layerOutputs[i] = Tensor<T>.FromVector(current);
+            _layerOutputs[i] = current;
         }
-        
+
         return current;
     }
 
     /// <summary>
-    /// Gets the total number of trainable parameters in the network.
+    /// Gets the total number of parameters in the model.
     /// </summary>
-    /// <returns>The total parameter count.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This tells you how many adjustable values (weights and biases) your neural network has.
     /// More complex networks typically have more parameters and can learn more complex patterns, but also
-    /// require more data to train effectively.
+    /// require more data to train effectively. This is part of the IFullModel interface for consistency with other model types.
     /// </remarks>
-    public virtual int GetParameterCount()
-    {
-        return Layers.Sum(layer => layer.ParameterCount);
-    }
+    public virtual int ParameterCount => Layers.Sum(layer => layer.ParameterCount);
 
     /// <summary>
     /// Validates that the provided layers form a valid neural network architecture.
@@ -603,51 +564,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     }
 
     /// <summary>
-    /// Performs backpropagation through the network using explicit input values.
-    /// </summary>
-    /// <param name="outputGradients">The gradients of the loss with respect to the network outputs.</param>
-    /// <param name="inputs">The input data used for the forward pass.</param>
-    /// <returns>The gradients of the loss with respect to the network inputs.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. This method takes both the network's inputs 
-    /// and the error gradients from the output, then calculates how to adjust the network's internal values to 
-    /// reduce errors. Think of it as the network figuring out which knobs to turn (and by how much) to get better results.
-    /// </para>
-    /// <para>
-    /// This version of backpropagation requires you to provide the original inputs because it needs to recalculate 
-    /// all the intermediate values in the network.
-    /// </para>
-    /// </remarks>
-    protected virtual Vector<T> Backpropagate(Vector<T> outputGradients, Vector<T> inputs)
-    {
-        // Store the original input for later use
-        var originalInput = inputs;
-    
-        // Forward pass to compute all intermediate activations
-        var activations = new List<Vector<T>> { inputs };
-        var current = inputs;
-    
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(Tensor<T>.FromVector(current)).ToVector();
-            activations.Add(current);
-        }
-    
-        // Backward pass
-        var gradient = outputGradients;
-    
-        // Go through layers in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(Tensor<T>.FromVector(gradient)).ToVector();
-        }
-    
-        // Return gradient with respect to inputs
-        return gradient;
-    }
-
-    /// <summary>
     /// Retrieves the gradients for all trainable parameters in the network.
     /// </summary>
     /// <returns>A vector containing all parameter gradients.</returns>
@@ -681,6 +597,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
         }
     
         return Vector<T>.Concatenate(allGradients.ToArray());
+    }
+
+    /// <summary>
+    /// Ensures the architecture is initialized before training begins.
+    /// </summary>
+    protected void EnsureArchitectureInitialized()
+    {
+        if (!Architecture.IsInitialized)
+        {
+            // Initialize from cached data
+            Architecture.InitializeFromCachedData<Tensor<T>, Tensor<T>>();
+
+            // Initialize network-specific layers
+            InitializeLayers();
+        }
     }
 
     /// <summary>
@@ -818,7 +749,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// <summary>
     /// Gets the metadata for this neural network model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the model.</returns>
+    /// <returns>A ModelMetadata object containing information about the model.</returns>
     public abstract ModelMetaData<T> GetModelMetaData();
 
     /// <summary>
@@ -851,6 +782,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     }
 
     /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model should be saved.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the entire neural network, including all layers and parameters,
+    /// and saves it to the specified file path.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This saves your trained neural network to a file on your computer.
+    ///
+    /// Think of it like saving a document - you can later load the model back from the file
+    /// and use it to make predictions without having to retrain it from scratch.
+    ///
+    /// This is useful when:
+    /// - You've finished training and want to save your model
+    /// - You want to use the model in a different application
+    /// - You need to share the model with others
+    /// - You want to deploy the model to production
+    /// </para>
+    /// </remarks>
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        byte[] serializedData = Serialize();
+        File.WriteAllBytes(filePath, serializedData);
+    }
+
+    /// <summary>
     /// Serializes the neural network to a byte array.
     /// </summary>
     /// <returns>A byte array representing the serialized neural network.</returns>
@@ -858,16 +822,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     {
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
-        
+
         // Write the number of layers
         writer.Write(Layers.Count);
-        
+
         // Write each layer's type and shape
         foreach (var layer in Layers)
         {
             // Write layer type
             writer.Write(layer.GetType().Name);
-            
+
             // Write input shape
             var inputShape = layer.GetInputShape();
             writer.Write(inputShape.Length);
@@ -875,7 +839,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
             {
                 writer.Write(dim);
             }
-            
+
             // Write output shape
             var outputShape = layer.GetOutputShape();
             writer.Write(outputShape.Length);
@@ -883,10 +847,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
             {
                 writer.Write(dim);
             }
-            
+
             // Write parameter count
             writer.Write(layer.ParameterCount);
-            
+
             // Write parameters if any
             if (layer.ParameterCount > 0)
             {
@@ -897,13 +861,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
                 }
             }
         }
-        
+
         // Write network-specific data
         SerializeNetworkSpecificData(writer);
-        
+
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// Deserializes the neural network from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized neural network data.</param>
     /// <summary>
     /// Deserializes the neural network from a byte array.
     /// </summary>
@@ -912,13 +880,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     {
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
-        
+
         // Clear existing layers
         Layers.Clear();
-        
+
         // Read the number of layers
         int layerCount = reader.ReadInt32();
-        
+
         // Read and recreate each layer
         for (int i = 0; i < layerCount; i++)
         {
@@ -944,21 +912,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
             // Read parameter count
             int paramCount = reader.ReadInt32();
 
-            // Read additional parameters if any
-            Dictionary<string, object>? additionalParams = null;
-            if (reader.ReadBoolean()) // Indicates presence of additional params
-            {
-                additionalParams = [];
-                int additionalParamCount = reader.ReadInt32();
-                for (int j = 0; j < additionalParamCount; j++)
-                {
-                    string key = reader.ReadString();
-                    string valueType = reader.ReadString();
-                    additionalParams[key] = Convert.ToDouble(valueType);
-                }
-            }
-
-            var layer = DeserializationHelper.CreateLayerFromType<T>(layerType, inputShape, outputShape, additionalParams);
+            // Create the layer (without checking for additional params)
+            var layer = DeserializationHelper.CreateLayerFromType<T>(layerType, inputShape, outputShape, null);
 
             // Read and set parameters if any
             if (paramCount > 0)
@@ -968,7 +923,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
                 {
                     parameters[j] = NumOps.FromDouble(reader.ReadDouble());
                 }
-
                 // Update layer parameters
                 layer.UpdateParameters(parameters);
             }
@@ -976,7 +930,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
             // Add the layer to the network
             Layers.Add(layer);
         }
-        
+
         // Read network-specific data
         DeserializeNetworkSpecificData(reader);
     }
@@ -1157,6 +1111,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </remarks>
     public virtual bool IsFeatureUsed(int featureIndex)
     {
+        // If feature index is explicitly set as active, return true immediately
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Contains(featureIndex))
+        {
+            return true;
+        }
+
+        // If explicitly set active features exist but don't include this index, it's not used
+        if (_explicitlySetActiveFeatures != null && _explicitlySetActiveFeatures.Count > 0)
+        {
+            return false;
+        }
+
         // If feature index is out of range, it's not used
         if (Layers.Count == 0 || featureIndex < 0 || featureIndex >= Layers[0].GetInputShape()[0])
             return false;
@@ -1241,4 +1207,562 @@ public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
     /// </para>
     /// </remarks>
     protected abstract IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance();
+
+    /// <summary>
+    /// Sets which input features should be considered active in the neural network.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to mark as active.</param>
+    /// <exception cref="ArgumentNullException">Thrown when featureIndices is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any feature index is negative or exceeds the input dimension.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method explicitly specifies which input features should be considered active
+    /// in the neural network, overriding the automatic determination based on weights.
+    /// Any features not included in the provided collection will be considered inactive,
+    /// regardless of their weights in the network.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method lets you manually select which parts of your input data
+    /// the neural network should pay attention to. For example, if your inputs include various
+    /// measurements or features, you can tell the network to focus only on specific ones
+    /// that you know are important based on your domain knowledge.
+    ///
+    /// This can be useful for:
+    /// - Forcing the network to use features you know are important
+    /// - Ignoring features you know are irrelevant or noisy
+    /// - Testing how the network performs with different feature subsets
+    /// - Implementing feature selection techniques
+    /// </para>
+    /// </remarks>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices), "Feature indices cannot be null.");
+        }
+
+        // Initialize the hash set if it doesn't exist
+        _explicitlySetActiveFeatures ??= [];
+
+        // Clear existing explicitly set features
+        _explicitlySetActiveFeatures.Clear();
+
+        // Get the input dimension to validate feature indices
+        int inputDimension = 0;
+        if (Layers.Count > 0)
+        {
+            inputDimension = Layers[0].GetInputShape()[0];
+        }
+
+        // Add the new feature indices
+        foreach (var index in featureIndices)
+        {
+            if (index < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {index} cannot be negative.");
+            }
+
+            if (inputDimension > 0 && index >= inputDimension)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {index} exceeds the input dimension {inputDimension}.");
+            }
+
+            _explicitlySetActiveFeatures.Add(index);
+        }
+    }
+
+    #region IInterpretableModel Implementation
+
+    protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
+    protected Vector<int> _sensitiveFeatures;
+    protected readonly List<FairnessMetric> _fairnessMetrics = new();
+    protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> _baseModel;
+
+    /// <summary>
+    /// Gets the global feature importance across all predictions.
+    /// </summary>
+    public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
+    {
+        return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync(this, _enabledMethods);
+    }
+
+    /// <summary>
+    /// Gets the local feature importance for a specific input.
+    /// </summary>
+    public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Tensor<T> input)
+    {
+        return await InterpretableModelHelper.GetLocalFeatureImportanceAsync(this, _enabledMethods, input);
+    }
+
+    /// <summary>
+    /// Gets SHAP values for the given inputs.
+    /// </summary>
+    public virtual async Task<Matrix<T>> GetShapValuesAsync(Tensor<T> inputs)
+    {
+        return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods);
+    }
+
+    /// <summary>
+    /// Gets LIME explanation for a specific input.
+    /// </summary>
+    public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Tensor<T> input, int numFeatures = 10)
+    {
+        return await InterpretableModelHelper.GetLimeExplanationAsync<T>(_enabledMethods, numFeatures);
+    }
+
+    /// <summary>
+    /// Gets partial dependence data for specified features.
+    /// </summary>
+    public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
+    {
+        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(_enabledMethods, featureIndices, gridResolution);
+    }
+
+    /// <summary>
+    /// Gets counterfactual explanation for a given input and desired output.
+    /// </summary>
+    public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Tensor<T> input, Tensor<T> desiredOutput, int maxChanges = 5)
+    {
+        return await InterpretableModelHelper.GetCounterfactualAsync<T>(_enabledMethods, maxChanges);
+    }
+
+    /// <summary>
+    /// Gets model-specific interpretability information.
+    /// </summary>
+    public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
+    {
+        return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync(this);
+    }
+
+    /// <summary>
+    /// Generates a text explanation for a prediction.
+    /// </summary>
+    public virtual async Task<string> GenerateTextExplanationAsync(Tensor<T> input, Tensor<T> prediction)
+    {
+        return await InterpretableModelHelper.GenerateTextExplanationAsync(this, input, prediction);
+    }
+
+    /// <summary>
+    /// Gets feature interaction effects between two features.
+    /// </summary>
+    public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
+    {
+        return await InterpretableModelHelper.GetFeatureInteractionAsync<T>(_enabledMethods, feature1Index, feature2Index);
+    }
+
+    /// <summary>
+    /// Validates fairness metrics for the given inputs.
+    /// </summary>
+    public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
+    {
+        return await InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
+    }
+
+    /// <summary>
+    /// Gets anchor explanation for a given input.
+    /// </summary>
+    public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Tensor<T> input, T threshold)
+    {
+        return await InterpretableModelHelper.GetAnchorExplanationAsync(_enabledMethods, threshold);
+    }
+
+    /// <summary>
+    /// Sets the base model for interpretability analysis.
+    /// </summary>
+    public virtual void SetBaseModel(IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> model)
+    {
+        _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+    }
+
+    /// <summary>
+    /// Enables specific interpretation methods.
+    /// </summary>
+    public virtual void EnableMethod(params InterpretationMethod[] methods)
+    {
+        foreach (var method in methods)
+        {
+            _enabledMethods.Add(method);
+        }
+    }
+
+    /// <summary>
+    /// Configures fairness evaluation settings.
+    /// </summary>
+    public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
+    {
+        _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
+        _fairnessMetrics.Clear();
+        _fairnessMetrics.AddRange(fairnessMetrics);
+    }
+
+    #endregion
+
+    #region INeuralNetworkModel Implementation
+
+    /// <summary>
+    /// Gets the intermediate activations from each layer when processing the given input.
+    /// </summary>
+    public virtual Dictionary<string, Tensor<T>> GetLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = input;
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <summary>
+    /// Gets the architectural structure of the neural network.
+    /// </summary>
+    public virtual NeuralNetworkArchitecture<T> GetArchitecture()
+    {
+        return Architecture;
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Gets the feature importance scores for the model.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the importance of each input feature by analyzing the weights
+    /// in the first layer of the neural network. Features with larger absolute weights are
+    /// considered more important to the model's predictions.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you which parts of your input data are most important
+    /// for the neural network's decisions.
+    ///
+    /// For example, if you're predicting house prices with features like size, location, and age,
+    /// this method might tell you that "location" has an importance of 0.8, "size" has 0.6,
+    /// and "age" has 0.2 - meaning the network relies heavily on location and size, but less on age.
+    ///
+    /// This is useful for:
+    /// - Understanding what your model pays attention to
+    /// - Explaining model decisions to others
+    /// - Identifying which features matter most
+    /// - Simplifying your model by removing unimportant features
+    /// </para>
+    /// </remarks>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        var importance = new Dictionary<string, T>();
+
+        // If the network has no layers, return an empty dictionary
+        if (Layers.Count == 0)
+            return importance;
+
+        // Get the first layer for analysis
+        var firstLayer = Layers[0];
+
+        // If the first layer is not a dense or convolutional layer, we can't easily determine importance
+        if (!(firstLayer is DenseLayer<T> || firstLayer is ConvolutionalLayer<T>))
+        {
+            // Return uniform importance for all features (conservative approach)
+            int inputSize = firstLayer.GetInputShape()[0];
+            T uniformImportance = NumOps.FromDouble(1.0 / inputSize);
+
+            for (int i = 0; i < inputSize; i++)
+            {
+                importance[$"Feature_{i}"] = uniformImportance;
+            }
+
+            return importance;
+        }
+
+        // Get the weights from the first layer
+        Vector<T> weights = firstLayer.GetParameters();
+        int featureCount = firstLayer.GetInputShape()[0];
+        int outputSize = firstLayer.GetOutputShape()[0];
+
+        // Calculate feature importance by summing absolute weights per input feature
+        var featureScores = new Dictionary<int, T>();
+
+        for (int i = 0; i < featureCount; i++)
+        {
+            T score = NumOps.Zero;
+
+            // For each neuron in the first layer, add the absolute weight for this feature
+            for (int j = 0; j < outputSize; j++)
+            {
+                // In most layers, weights are organized as [input1-neuron1, input2-neuron1, ..., input1-neuron2, ...]
+                int weightIndex = j * featureCount + i;
+
+                if (weightIndex < weights.Length)
+                {
+                    score = NumOps.Add(score, NumOps.Abs(weights[weightIndex]));
+                }
+            }
+
+            featureScores[i] = score;
+        }
+
+        // Normalize the scores to sum to 1
+        T totalScore = featureScores.Values.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
+
+        if (NumOps.GreaterThan(totalScore, NumOps.Zero))
+        {
+            foreach (var kvp in featureScores)
+            {
+                importance[$"Feature_{kvp.Key}"] = NumOps.Divide(kvp.Value, totalScore);
+            }
+        }
+        else
+        {
+            // If all scores are zero, use uniform importance
+            T uniformImportance = NumOps.FromDouble(1.0 / featureCount);
+            for (int i = 0; i < featureCount; i++)
+            {
+                importance[$"Feature_{i}"] = uniformImportance;
+            }
+        }
+
+        return importance;
+    }
+
+    /// <summary>
+    /// Sets the parameters of the neural network.
+    /// </summary>
+    /// <param name="parameters">The parameters to set.</param>
+    /// <remarks>
+    /// <para>
+    /// This method distributes the parameters to all layers in the network.
+    /// The parameters should be in the same format as returned by GetParameters.
+    /// </para>
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        int totalParameterCount = ParameterCount;
+        if (parameters.Length != totalParameterCount)
+        {
+            throw new ArgumentException($"Expected {totalParameterCount} parameters, got {parameters.Length}");
+        }
+
+        int currentIndex = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = layer.ParameterCount;
+            if (layerParameterCount > 0)
+            {
+                // Extract parameters for this layer
+                var layerParameters = new Vector<T>(layerParameterCount);
+                for (int i = 0; i < layerParameterCount; i++)
+                {
+                    layerParameters[i] = parameters[currentIndex + i];
+                }
+
+                // Set the layer's parameters
+                layer.SetParameters(layerParameters);
+                currentIndex += layerParameterCount;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adds a layer to the neural network.
+    /// </summary>
+    /// <param name="layerType">The type of layer to add.</param>
+    /// <param name="units">The number of units/neurons in the layer.</param>
+    /// <param name="activation">The activation function to use.</param>
+    public virtual void AddLayer(LayerType layerType, int units, ActivationFunction activation)
+    {
+        // Get input size from previous layer or use units as default
+        int inputSize = Layers.Count > 0 ? Layers[Layers.Count - 1].GetOutputShape()[0] : units;
+
+        // Create activation function from enum
+        var activationFunc = ActivationFunctionFactory<T>.CreateActivationFunction(activation);
+
+        ILayer<T> layer = layerType switch
+        {
+            LayerType.Dense => new DenseLayer<T>(inputSize, units, activationFunc),
+            _ => throw new NotSupportedException($"Layer type {layerType} not supported in AddLayer method")
+        };
+        Layers.Add(layer);
+    }
+
+    /// <summary>
+    /// Adds a convolutional layer to the neural network.
+    /// </summary>
+    public virtual void AddConvolutionalLayer(int filters, int kernelSize, int stride, ActivationFunction activation)
+    {
+        throw new NotImplementedException(
+            "AddConvolutionalLayer requires additional parameters that are not provided in this method signature. " +
+            "Use ConvolutionalLayer.Configure() with the full input shape, or create the layer directly with " +
+            "new ConvolutionalLayer<T>(inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation) " +
+            "and add it to Layers manually.");
+    }
+
+    /// <summary>
+    /// Adds an LSTM layer to the neural network.
+    /// </summary>
+    public virtual void AddLSTMLayer(int units, bool returnSequences = false)
+    {
+        throw new NotImplementedException(
+            "AddLSTMLayer requires additional parameters that are not provided in this method signature. " +
+            "Create the layer directly with new LSTMLayer<T>(inputSize, hiddenSize, inputShape, activation, recurrentActivation) " +
+            "and add it to Layers manually.");
+    }
+
+    /// <summary>
+    /// Adds a dropout layer to the neural network.
+    /// </summary>
+    public virtual void AddDropoutLayer(double dropoutRate)
+    {
+        var layer = new DropoutLayer<T>(dropoutRate);
+        Layers.Add(layer);
+    }
+
+    /// <summary>
+    /// Adds a batch normalization layer to the neural network.
+    /// </summary>
+    /// <param name="featureSize">The number of features to normalize.</param>
+    /// <param name="epsilon">A small constant for numerical stability (default: 1e-5).</param>
+    /// <param name="momentum">The momentum for running statistics (default: 0.9).</param>
+    public virtual void AddBatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9)
+    {
+        var layer = new BatchNormalizationLayer<T>(featureSize, epsilon, momentum);
+        Layers.Add(layer);
+    }
+
+    /// <summary>
+    /// Adds a pooling layer to the neural network.
+    /// </summary>
+    /// <param name="inputShape">The input shape (channels, height, width).</param>
+    /// <param name="poolingType">The type of pooling operation.</param>
+    /// <param name="poolSize">The size of the pooling window.</param>
+    /// <param name="strides">The step size when moving the pooling window (default: same as poolSize).</param>
+    public virtual void AddPoolingLayer(int[] inputShape, PoolingType poolingType, int poolSize, int? strides = null)
+    {
+        var layer = new MaxPoolingLayer<T>(inputShape, poolSize, strides ?? poolSize);
+        Layers.Add(layer);
+    }
+
+    /// <summary>
+    /// Gets the gradients from all layers in the neural network.
+    /// </summary>
+    /// <returns>A vector containing all gradients from all layers concatenated together.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method collects the gradients from every layer in the network and combines them
+    /// into a single vector. This is useful for optimization algorithms that need access to
+    /// all gradients at once.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> During training, each layer calculates how its parameters should change
+    /// (the gradients). This method gathers all those gradients from every layer and puts them
+    /// into one long list.
+    ///
+    /// Think of it like:
+    /// - Each layer has notes about how to improve (gradients)
+    /// - This method collects all those notes into one document
+    /// - The optimizer can then use this document to update the entire network
+    ///
+    /// This is essential for the learning process, as it tells the optimizer how to adjust
+    /// all the network's parameters to improve performance.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> GetGradients()
+    {
+        var allGradients = new List<T>();
+
+        foreach (var layer in Layers)
+        {
+            var layerGradients = layer.GetParameterGradients();
+            if (layerGradients != null && layerGradients.Length > 0)
+            {
+                for (int i = 0; i < layerGradients.Length; i++)
+                {
+                    allGradients.Add(layerGradients[i]);
+                }
+            }
+        }
+
+        return new Vector<T>(allGradients.ToArray());
+    }
+
+    /// <summary>
+    /// Gets the input shape expected by the neural network.
+    /// </summary>
+    /// <returns>An array representing the dimensions of the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the shape of input data that the network expects. For example,
+    /// if the network expects images of size 28x28 pixels, this might return [28, 28].
+    /// If it expects a vector of 100 features, it would return [100].
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you what size and shape of data the network needs as input.
+    /// Think of it like knowing what size batteries a device needs - you need to provide the right
+    /// dimensions of data for the network to work properly.
+    /// </para>
+    /// </remarks>
+    public virtual int[] GetInputShape()
+    {
+        if (Layers.Count == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        return Layers[0].GetInputShape();
+    }
+
+    /// <summary>
+    /// Gets the activations (outputs) from each layer for a given input.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>A dictionary mapping layer index to layer activation tensors.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method processes the input through the network and captures the output of each layer.
+    /// This is useful for visualizing what each layer is detecting, debugging the network, or
+    /// implementing techniques like feature extraction.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This shows you what each layer in your neural network "sees" or produces
+    /// when given an input. It's like following a signal through a circuit and measuring the output
+    /// at each component. This helps you understand what patterns each layer is detecting.
+    ///
+    /// For example, in an image recognition network:
+    /// - Early layers might detect edges and simple shapes
+    /// - Middle layers might detect parts of objects (like eyes or wheels)
+    /// - Later layers might detect whole objects
+    ///
+    /// This method lets you see all of these intermediate representations.
+    /// </para>
+    /// </remarks>
+    public virtual Dictionary<int, Tensor<T>> GetLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<int, Tensor<T>>();
+
+        if (Layers.Count == 0)
+        {
+            return activations;
+        }
+
+        var currentInput = input;
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+            var output = layer.Forward(currentInput);
+            activations[i] = output;
+            currentInput = output;
+        }
+
+        return activations;
+    }
 }
