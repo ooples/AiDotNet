@@ -536,10 +536,178 @@ namespace AiDotNet.AutoML
             };
         }
 
-        public void SaveModel(string filePath) => throw new NotImplementedException();
-        public void LoadModel(string filePath) => throw new NotImplementedException();
-        public byte[] Serialize() => throw new NotImplementedException();
-        public void Deserialize(byte[] data) => throw new NotImplementedException();
+        public void SaveModel(string filePath)
+        {
+            using var fs = new System.IO.FileStream(filePath, System.IO.FileMode.Create);
+            using var writer = new System.IO.BinaryWriter(fs);
+
+            writer.Write(_numNodes);
+            writer.Write(_numOperations);
+            writer.Write(_inputSize);
+            writer.Write(_outputSize);
+
+            // Serialize architecture parameters
+            writer.Write(_architectureParams.Count);
+            foreach (var alpha in _architectureParams)
+            {
+                writer.Write(alpha.Rows);
+                writer.Write(alpha.Columns);
+                for (int i = 0; i < alpha.Rows; i++)
+                {
+                    for (int j = 0; j < alpha.Columns; j++)
+                    {
+                        writer.Write(Convert.ToDouble(alpha[i, j]));
+                    }
+                }
+            }
+
+            // Serialize weights
+            writer.Write(_weights.Count);
+            foreach (var kvp in _weights)
+            {
+                writer.Write(kvp.Key);
+                writer.Write(kvp.Value.Length);
+                for (int i = 0; i < kvp.Value.Length; i++)
+                {
+                    writer.Write(Convert.ToDouble(kvp.Value[i]));
+                }
+            }
+        }
+        public void LoadModel(string filePath)
+        {
+            using var fs = new System.IO.FileStream(filePath, System.IO.FileMode.Open);
+            using var reader = new System.IO.BinaryReader(fs);
+
+            // Deserialize _numNodes and _numOperations (read-only fields need reflection or constructor)
+            var numNodes = reader.ReadInt32();
+            var numOperations = reader.ReadInt32();
+            _inputSize = reader.ReadInt32();
+            _outputSize = reader.ReadInt32();
+
+            // Deserialize architecture parameters
+            int alphaCount = reader.ReadInt32();
+            _architectureParams.Clear();
+            _architectureGradients.Clear();
+            for (int idx = 0; idx < alphaCount; idx++)
+            {
+                int rows = reader.ReadInt32();
+                int cols = reader.ReadInt32();
+                var alpha = new Matrix<T>(rows, cols);
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < cols; j++)
+                    {
+                        alpha[i, j] = _ops.FromDouble(reader.ReadDouble());
+                    }
+                }
+                _architectureParams.Add(alpha);
+                _architectureGradients.Add(new Matrix<T>(rows, cols));
+            }
+
+            // Deserialize weights
+            int weightCount = reader.ReadInt32();
+            _weights.Clear();
+            _weightGradients.Clear();
+            for (int idx = 0; idx < weightCount; idx++)
+            {
+                string key = reader.ReadString();
+                int length = reader.ReadInt32();
+                var weight = new Vector<T>(length);
+                for (int i = 0; i < length; i++)
+                {
+                    weight[i] = _ops.FromDouble(reader.ReadDouble());
+                }
+                _weights[key] = weight;
+                _weightGradients[key] = new Vector<T>(length);
+            }
+        }
+        public byte[] Serialize()
+        {
+            using var ms = new System.IO.MemoryStream();
+            using var writer = new System.IO.BinaryWriter(ms);
+
+            writer.Write(_numNodes);
+            writer.Write(_numOperations);
+            writer.Write(_inputSize);
+            writer.Write(_outputSize);
+
+            // Serialize architecture parameters
+            writer.Write(_architectureParams.Count);
+            foreach (var alpha in _architectureParams)
+            {
+                writer.Write(alpha.Rows);
+                writer.Write(alpha.Columns);
+                for (int i = 0; i < alpha.Rows; i++)
+                {
+                    for (int j = 0; j < alpha.Columns; j++)
+                    {
+                        writer.Write(Convert.ToDouble(alpha[i, j]));
+                    }
+                }
+            }
+
+            // Serialize weights
+            writer.Write(_weights.Count);
+            foreach (var kvp in _weights)
+            {
+                writer.Write(kvp.Key);
+                writer.Write(kvp.Value.Length);
+                for (int i = 0; i < kvp.Value.Length; i++)
+                {
+                    writer.Write(Convert.ToDouble(kvp.Value[i]));
+                }
+            }
+
+            return ms.ToArray();
+        }
+        public void Deserialize(byte[] data)
+        {
+            using var ms = new System.IO.MemoryStream(data);
+            using var reader = new System.IO.BinaryReader(ms);
+
+            // Deserialize _numNodes and _numOperations (read-only fields need reflection or constructor)
+            var numNodes = reader.ReadInt32();
+            var numOperations = reader.ReadInt32();
+            _inputSize = reader.ReadInt32();
+            _outputSize = reader.ReadInt32();
+
+            // Deserialize architecture parameters
+            int alphaCount = reader.ReadInt32();
+            _architectureParams.Clear();
+            _architectureGradients.Clear();
+            for (int idx = 0; idx < alphaCount; idx++)
+            {
+                int rows = reader.ReadInt32();
+                int cols = reader.ReadInt32();
+                var alpha = new Matrix<T>(rows, cols);
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < cols; j++)
+                    {
+                        alpha[i, j] = _ops.FromDouble(reader.ReadDouble());
+                    }
+                }
+                _architectureParams.Add(alpha);
+                _architectureGradients.Add(new Matrix<T>(rows, cols));
+            }
+
+            // Deserialize weights
+            int weightCount = reader.ReadInt32();
+            _weights.Clear();
+            _weightGradients.Clear();
+            for (int idx = 0; idx < weightCount; idx++)
+            {
+                string key = reader.ReadString();
+                int length = reader.ReadInt32();
+                var weight = new Vector<T>(length);
+                for (int i = 0; i < length; i++)
+                {
+                    weight[i] = _ops.FromDouble(reader.ReadDouble());
+                }
+                _weights[key] = weight;
+                _weightGradients[key] = new Vector<T>(length);
+            }
+        }
 
         public Dictionary<string, T> GetFeatureImportance() => new Dictionary<string, T>();
         public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputSize);
