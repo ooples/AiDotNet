@@ -26,7 +26,7 @@ namespace AiDotNet.Interfaces
         /// <param name="inputs">Input data for training</param>
         /// <param name="targets">Target data for supervised learning (optional)</param>
         /// <returns>Task representing the asynchronous operation</returns>
-        Task FitAsync(TInput inputs, TInput? targets = default);
+        Task FitAsync(TInput inputs, TOutput? targets = default);
 
         /// <summary>
         /// Transforms the input data using the fitted model
@@ -41,7 +41,7 @@ namespace AiDotNet.Interfaces
         /// <param name="inputs">Input data</param>
         /// <param name="targets">Target data (optional)</param>
         /// <returns>Transformed output data</returns>
-        Task<TOutput> FitTransformAsync(TInput inputs, TInput? targets = default);
+        Task<TOutput> FitTransformAsync(TInput inputs, TOutput? targets = default);
 
         /// <summary>
         /// Gets the parameters of this pipeline step
