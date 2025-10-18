@@ -566,7 +566,7 @@ namespace AiDotNet.AutoML
         /// Gets the global feature importance across all predictions.
         /// Not supported for SuperNet as architecture parameters do not directly map to input features.
         /// </summary>
-        public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
+        public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync(Tensor<T> inputs)
         {
             await Task.CompletedTask;
             throw new NotSupportedException(
