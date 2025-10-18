@@ -980,7 +980,9 @@ namespace AiDotNet.AutoML
             if (feature1Index < 0 || feature1Index >= _numOperations ||
                 feature2Index < 0 || feature2Index >= _numOperations)
             {
-                return _ops.Zero;
+                throw new ArgumentOutOfRangeException(
+                    $"Feature indices must be in the range [0, {_numOperations - 1}]. " +
+                    $"Received feature1Index={feature1Index}, feature2Index={feature2Index}.");
             }
 
             // Calculate correlation between two operations across all architecture parameters
@@ -1047,19 +1049,15 @@ namespace AiDotNet.AutoML
 
         /// <summary>
         /// Validates fairness metrics for the given inputs.
-        /// Not fully supported for SuperNet but returns basic metrics.
+        /// Not supported for SuperNet architecture search models.
         /// </summary>
         public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
         {
-            var metrics = new FairnessMetrics<T>
-            {
-                OverallAccuracy = _ops.Zero,
-                DisparateImpact = _ops.One,
-                EqualOpportunityDifference = _ops.Zero,
-                AverageOddsDifference = _ops.Zero,
-                GroupMetrics = new Dictionary<string, GroupMetrics<T>>()
-            };
-
+            await Task.CompletedTask;
+            throw new NotSupportedException(
+                "Fairness validation is not supported for SuperNet architecture search models. " +
+                "SuperNet focuses on architecture optimization rather than fairness evaluation.");
+        }
             return await Task.FromResult(metrics);
         }
 
