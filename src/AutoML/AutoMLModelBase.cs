@@ -513,37 +513,69 @@ namespace AiDotNet.AutoML
         /// </summary>
         public virtual IFullModel<T, TInput, TOutput> DeepCopy()
         {
-            var copy = (AutoMLModelBase<T, TInput, TOutput>)MemberwiseClone();
+            // Create a new instance using the factory method to avoid sharing readonly collections
+            var copy = CreateInstanceForCopy();
 
-            // Deep copy collections
+            // Deep copy collections under lock to ensure thread safety
             lock (_lock)
             {
-                copy._trialHistory.Clear();
-                copy._trialHistory.AddRange(_trialHistory.Select(t => t.Clone()));
-
-                copy._searchSpace.Clear();
-                foreach (var kvp in _searchSpace)
+                // Deep copy trial history
+                foreach (var t in _trialHistory)
                 {
-                    copy._searchSpace[kvp.Key] = kvp.Value;
+                    copy._trialHistory.Add(t.Clone());
                 }
 
-                copy._candidateModels.Clear();
-                copy._candidateModels.AddRange(_candidateModels);
+                // Deep copy search space parameters
+                foreach (var kvp in _searchSpace)
+                {
+                    // Deep copy each ParameterRange if it's cloneable, otherwise shallow copy
+                    // Since ParameterRange may not exist yet, we handle both scenarios
+                    copy._searchSpace[kvp.Key] = kvp.Value is ICloneable cloneable
+                        ? (ParameterRange)cloneable.Clone()
+                        : kvp.Value;
+                }
 
-                copy._constraints.Clear();
-                copy._constraints.AddRange(_constraints);
+                // Copy candidate models (ModelType is an enum, so no deep copy needed)
+                foreach (var model in _candidateModels)
+                {
+                    copy._candidateModels.Add(model);
+                }
+
+                // Deep copy constraints
+                foreach (var constraint in _constraints)
+                {
+                    // Deep copy each SearchConstraint if it's cloneable, otherwise shallow copy
+                    copy._constraints.Add(constraint is ICloneable cloneable
+                        ? (SearchConstraint)cloneable.Clone()
+                        : constraint);
+                }
             }
 
             // Deep copy the best model if it exists
             copy.BestModel = BestModel?.DeepCopy();
 
-            // Value types are already copied by MemberwiseClone:
-            // _optimizationMetric, _maximize, _earlyStoppingPatience,
-            // _earlyStoppingMinDelta, _trialsSinceImprovement, BestScore,
-            // TimeLimit, TrialLimit, Status
+            // Copy value types and other properties
+            copy._optimizationMetric = _optimizationMetric;
+            copy._maximize = _maximize;
+            copy._earlyStoppingPatience = _earlyStoppingPatience;
+            copy._earlyStoppingMinDelta = _earlyStoppingMinDelta;
+            copy._trialsSinceImprovement = _trialsSinceImprovement;
+            copy.BestScore = BestScore;
+            copy.TimeLimit = TimeLimit;
+            copy.TrialLimit = TrialLimit;
+            copy.Status = Status;
+            copy.FeatureNames = (string[])FeatureNames.Clone();
+            copy._modelEvaluator = _modelEvaluator; // Shared reference is acceptable for the evaluator
 
             return copy;
         }
+
+        /// <summary>
+        /// Factory method for creating a new instance for deep copy.
+        /// Derived classes must implement this to return a new instance of themselves.
+        /// This ensures each copy has its own collections and lock object.
+        /// </summary>
+        protected abstract AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy();
 
         #endregion
 
@@ -698,228 +730,6 @@ namespace AiDotNet.AutoML
         public virtual void SetModelsToTry(List<ModelType> modelTypes)
         {
             SetCandidateModels(modelTypes);
-        }
-
-        #endregion
-
-        #region IInterpretableModel Implementation
-
-        /// <summary>
-        /// Gets the global feature importance across all predictions.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            return await interpretableModel.GetGlobalFeatureImportanceAsync();
-        }
-
-        /// <summary>
-        /// Gets the local feature importance for a specific input.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(TInput input)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            return await interpretableModel.GetLocalFeatureImportanceAsync(input);
-        }
-
-        /// <summary>
-        /// Gets SHAP values for the given inputs.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual async Task<Matrix<T>> GetShapValuesAsync(TInput inputs)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            return await interpretableModel.GetShapValuesAsync(inputs);
-        }
-
-        /// <summary>
-        /// Gets LIME explanation for a specific input.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(TInput input, int numFeatures = 10)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            return await interpretableModel.GetLimeExplanationAsync(input, numFeatures);
-        }
-
-        /// <summary>
-        /// Gets partial dependence data for specified features.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            return await interpretableModel.GetPartialDependenceAsync(featureIndices, gridResolution);
-        }
-
-        /// <summary>
-        /// Gets counterfactual explanation for a given input and desired output.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(TInput input, TOutput desiredOutput, int maxChanges = 5)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            return await interpretableModel.GetCounterfactualAsync(input, desiredOutput, maxChanges);
-        }
-
-        /// <summary>
-        /// Gets model-specific interpretability information.
-        /// Delegates to the best model found during search and adds AutoML-specific information.
-        /// </summary>
-        public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            var info = await interpretableModel.GetModelSpecificInterpretabilityAsync();
-
-            // Add AutoML-specific information
-            info["AutoML_Status"] = Status.ToString();
-            info["AutoML_BestScore"] = BestScore;
-            info["AutoML_TrialsCompleted"] = _trialHistory.Count;
-            info["AutoML_OptimizationMetric"] = _optimizationMetric.ToString();
-
-            return info;
-        }
-
-        /// <summary>
-        /// Generates a text explanation for a prediction.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual async Task<string> GenerateTextExplanationAsync(TInput input, TOutput prediction)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            return await interpretableModel.GenerateTextExplanationAsync(input, prediction);
-        }
-
-        /// <summary>
-        /// Gets feature interaction effects between two features.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            return await interpretableModel.GetFeatureInteractionAsync(feature1Index, feature2Index);
-        }
-
-        /// <summary>
-        /// Validates fairness metrics for the given inputs.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(TInput inputs, int sensitiveFeatureIndex)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            return await interpretableModel.ValidateFairnessAsync(inputs, sensitiveFeatureIndex);
-        }
-
-        /// <summary>
-        /// Gets anchor explanation for a given input.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(TInput input, T threshold)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            return await interpretableModel.GetAnchorExplanationAsync(input, threshold);
-        }
-
-        /// <summary>
-        /// Sets the base model for interpretability analysis.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual void SetBaseModel(IModel<TInput, TOutput, ModelMetaData<T>> model)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            interpretableModel.SetBaseModel(model);
-        }
-
-        /// <summary>
-        /// Enables specific interpretation methods.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual void EnableMethod(params InterpretationMethod[] methods)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            interpretableModel.EnableMethod(methods);
-        }
-
-        /// <summary>
-        /// Configures fairness evaluation settings.
-        /// Delegates to the best model found during search.
-        /// </summary>
-        public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            if (BestModel is not IInterpretableModel<T, TInput, TOutput> interpretableModel)
-                throw new NotSupportedException($"Best model of type {BestModel.GetType().Name} does not support interpretability.");
-
-            interpretableModel.ConfigureFairness(sensitiveFeatures, fairnessMetrics);
         }
 
         #endregion
