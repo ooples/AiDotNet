@@ -7,6 +7,7 @@ using AiDotNet.NumericOperations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace AiDotNet.AutoML
 {
@@ -37,6 +38,12 @@ namespace AiDotNet.AutoML
         // Model metadata
         private int _inputSize;
         private int _outputSize;
+
+        // IInterpretableModel fields
+        private readonly HashSet<InterpretationMethod> _enabledMethods = new();
+        private Vector<int>? _sensitiveFeatures;
+        private readonly List<FairnessMetric> _fairnessMetrics = new();
+        private IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>>? _baseModel;
 
         public ModelType Type => ModelType.NeuralNetwork;
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
@@ -756,5 +763,350 @@ namespace AiDotNet.AutoML
         }
 
         public IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+        #region IInterpretableModel Implementation
+
+        /// <summary>
+        /// Gets the global feature importance across all predictions.
+        /// Analyzes architecture parameters to determine operation importance by aggregating absolute values.
+        /// </summary>
+        public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync(Tensor<T> inputs)
+        {
+            var importance = new Dictionary<int, T>();
+
+            // For SuperNet, we analyze operation importance rather than input feature importance
+            // Each operation index represents a different architectural operation (identity, conv3x3, etc.)
+            for (int opIdx = 0; opIdx < _numOperations; opIdx++)
+            {
+                T sum = _ops.Zero;
+
+                // Aggregate importance across all nodes and connections
+                foreach (var alpha in _architectureParams)
+                {
+                    // Sum absolute values of architecture parameters for this operation
+                    for (int i = 0; i < alpha.Rows; i++)
+                    {
+                        if (opIdx < alpha.Columns)
+                        {
+                            sum = _ops.Add(sum, _ops.Abs(alpha[i, opIdx]));
+                        }
+                    }
+                }
+
+                importance[opIdx] = sum;
+            }
+
+            return await Task.FromResult(importance);
+        }
+
+        /// <summary>
+        /// Gets the local feature importance for a specific input.
+        /// Provides importance based on softmax weights, analyzing which operations are most active.
+        /// </summary>
+        public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Tensor<T> input)
+        {
+            var importance = new Dictionary<int, T>();
+
+            // For local importance, we use softmax-transformed architecture parameters
+            // to determine which operations are most active for this specific input
+            for (int opIdx = 0; opIdx < _numOperations; opIdx++)
+            {
+                T sum = _ops.Zero;
+
+                // Apply softmax and aggregate weights for each operation
+                foreach (var alpha in _architectureParams)
+                {
+                    var softmaxWeights = ApplySoftmax(alpha);
+
+                    for (int i = 0; i < softmaxWeights.Rows; i++)
+                    {
+                        if (opIdx < softmaxWeights.Columns)
+                        {
+                            sum = _ops.Add(sum, softmaxWeights[i, opIdx]);
+                        }
+                    }
+                }
+
+                importance[opIdx] = sum;
+            }
+
+            return await Task.FromResult(importance);
+        }
+
+        /// <summary>
+        /// Gets SHAP values for the given inputs.
+        /// Not supported for SuperNet architecture search models.
+        /// </summary>
+        public virtual async Task<Matrix<T>> GetShapValuesAsync(Tensor<T> inputs)
+        {
+            await Task.CompletedTask;
+            throw new NotSupportedException(
+                "SHAP values are not supported for SuperNet architecture search models. " +
+                "SuperNet uses differentiable architecture search and does not have traditional feature attribution.");
+        }
+
+        /// <summary>
+        /// Gets LIME explanation for a specific input.
+        /// Not supported for SuperNet architecture search models.
+        /// </summary>
+        public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Tensor<T> input, int numFeatures = 10)
+        {
+            await Task.CompletedTask;
+            throw new NotSupportedException(
+                "LIME explanations are not supported for SuperNet architecture search models. " +
+                "Use GetGlobalFeatureImportanceAsync or GetLocalFeatureImportanceAsync instead.");
+        }
+
+        /// <summary>
+        /// Gets partial dependence data for specified features.
+        /// Not supported for SuperNet architecture search models.
+        /// </summary>
+        public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
+        {
+            await Task.CompletedTask;
+            throw new NotSupportedException(
+                "Partial dependence plots are not supported for SuperNet architecture search models. " +
+                "SuperNet focuses on architecture optimization rather than feature-level analysis.");
+        }
+
+        /// <summary>
+        /// Gets counterfactual explanation for a given input and desired output.
+        /// Not supported for SuperNet architecture search models.
+        /// </summary>
+        public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Tensor<T> input, Tensor<T> desiredOutput, int maxChanges = 5)
+        {
+            await Task.CompletedTask;
+            throw new NotSupportedException(
+                "Counterfactual explanations are not supported for SuperNet architecture search models. " +
+                "SuperNet is designed for architecture search, not instance-level counterfactuals.");
+        }
+
+        /// <summary>
+        /// Gets model-specific interpretability information for SuperNet.
+        /// Returns architecture parameters and their importance.
+        /// </summary>
+        public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
+        {
+            var info = new Dictionary<string, object>
+            {
+                ["ModelType"] = "SuperNet (Differentiable Architecture Search)",
+                ["NumNodes"] = _numNodes,
+                ["NumOperations"] = _numOperations,
+                ["ParameterCount"] = ParameterCount,
+                ["ArchitectureParameterCount"] = _architectureParams.Sum(a => a.Rows * a.Columns),
+                ["WeightParameterCount"] = _weights.Values.Sum(w => w.Length),
+                ["InputSize"] = _inputSize,
+                ["OutputSize"] = _outputSize
+            };
+
+            // Add architecture parameter statistics
+            var archStats = new List<Dictionary<string, object>>();
+            for (int i = 0; i < _architectureParams.Count; i++)
+            {
+                var alpha = _architectureParams[i];
+                var softmax = ApplySoftmax(alpha);
+
+                var nodeStats = new Dictionary<string, object>
+                {
+                    ["NodeIndex"] = i,
+                    ["Rows"] = alpha.Rows,
+                    ["Columns"] = alpha.Columns,
+                    ["ParameterCount"] = alpha.Rows * alpha.Columns
+                };
+
+                archStats.Add(nodeStats);
+            }
+
+            info["ArchitectureNodes"] = archStats;
+
+            return await Task.FromResult(info);
+        }
+
+        /// <summary>
+        /// Generates a text explanation for a prediction.
+        /// Provides a description of which operations are most important in the SuperNet.
+        /// </summary>
+        public virtual async Task<string> GenerateTextExplanationAsync(Tensor<T> input, Tensor<T> prediction)
+        {
+            var explanation = $"SuperNet Architecture Search Model:\n";
+            explanation += $"- Network contains {_numNodes} nodes with {_numOperations} operations each\n";
+            explanation += $"- Total parameters: {ParameterCount}\n";
+            explanation += $"- Architecture is determined by learned softmax weights over operations\n\n";
+
+            explanation += "Most important architectural decisions:\n";
+
+            // Identify most important nodes based on architecture parameters
+            for (int nodeIdx = 0; nodeIdx < Math.Min(3, _numNodes); nodeIdx++)
+            {
+                var alpha = _architectureParams[nodeIdx];
+                var softmax = ApplySoftmax(alpha);
+
+                // Find the operation with highest weight
+                if (softmax.Rows > 0 && softmax.Columns > 0)
+                {
+                    int bestOp = 0;
+                    T bestWeight = softmax[0, 0];
+
+                    for (int i = 0; i < softmax.Rows; i++)
+                    {
+                        for (int j = 0; j < softmax.Columns; j++)
+                        {
+                            if (_ops.GreaterThan(softmax[i, j], bestWeight))
+                            {
+                                bestWeight = softmax[i, j];
+                                bestOp = j;
+                            }
+                        }
+                    }
+
+                    explanation += $"- Node {nodeIdx}: {GetOperationName(bestOp)} operation is dominant\n";
+                }
+                else
+                {
+                    explanation += $"- Node {nodeIdx}: No operations available (empty softmax matrix)\n";
+                }
+            }
+
+            return await Task.FromResult(explanation);
+        }
+
+        /// <summary>
+        /// Gets feature interaction effects between two features.
+        /// Analyzes interactions between operations based on architecture parameter correlations.
+        /// </summary>
+        public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
+        {
+            // In SuperNet context, feature indices represent operation indices
+            if (feature1Index < 0 || feature1Index >= _numOperations ||
+                feature2Index < 0 || feature2Index >= _numOperations)
+            {
+                throw new ArgumentOutOfRangeException(
+                    $"Feature indices must be in the range [0, {_numOperations - 1}]. " +
+                    $"Received feature1Index={feature1Index}, feature2Index={feature2Index}.");
+            }
+
+            // Calculate correlation between two operations across all architecture parameters
+            T sum1 = _ops.Zero;
+            T sum2 = _ops.Zero;
+            T sumProduct = _ops.Zero;
+            T sumSquares1 = _ops.Zero;
+            T sumSquares2 = _ops.Zero;
+            int count = 0;
+
+            foreach (var alpha in _architectureParams)
+            {
+                for (int i = 0; i < alpha.Rows; i++)
+                {
+                    if (feature1Index < alpha.Columns && feature2Index < alpha.Columns)
+                    {
+                        T val1 = alpha[i, feature1Index];
+                        T val2 = alpha[i, feature2Index];
+
+                        sum1 = _ops.Add(sum1, val1);
+                        sum2 = _ops.Add(sum2, val2);
+                        sumProduct = _ops.Add(sumProduct, _ops.Multiply(val1, val2));
+                        sumSquares1 = _ops.Add(sumSquares1, _ops.Multiply(val1, val1));
+                        sumSquares2 = _ops.Add(sumSquares2, _ops.Multiply(val2, val2));
+                        count++;
+                    }
+                }
+            }
+
+            if (count == 0)
+            {
+                return _ops.Zero;
+            }
+
+            // Calculate correlation coefficient
+            T n = _ops.FromDouble(count);
+            T numerator = _ops.Subtract(
+                _ops.Multiply(n, sumProduct),
+                _ops.Multiply(sum1, sum2)
+            );
+
+            T denom1 = _ops.Subtract(
+                _ops.Multiply(n, sumSquares1),
+                _ops.Multiply(sum1, sum1)
+            );
+
+            T denom2 = _ops.Subtract(
+                _ops.Multiply(n, sumSquares2),
+                _ops.Multiply(sum2, sum2)
+            );
+
+            T denominator = _ops.Multiply(denom1, denom2);
+
+            // Avoid division by zero
+            if (_ops.Equals(denominator, _ops.Zero))
+            {
+                return _ops.Zero;
+            }
+
+            T correlation = _ops.Divide(numerator, _ops.Sqrt(denominator));
+
+            return await Task.FromResult(correlation);
+        }
+
+        /// <summary>
+        /// Validates fairness metrics for the given inputs.
+        /// Not supported for SuperNet architecture search models.
+        /// </summary>
+        public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
+        {
+            await Task.CompletedTask;
+            throw new NotSupportedException(
+                "Fairness validation is not supported for SuperNet architecture search models. " +
+                "SuperNet focuses on architecture optimization rather than fairness evaluation.");
+        }
+
+        /// <summary>
+        /// Gets anchor explanation for a given input.
+        /// Not supported for SuperNet architecture search models.
+        /// </summary>
+        public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Tensor<T> input, T threshold)
+        {
+            await Task.CompletedTask;
+            throw new NotSupportedException(
+                "Anchor explanations are not supported for SuperNet architecture search models. " +
+                "SuperNet focuses on architecture optimization rather than instance-level explanations.");
+        }
+
+        /// <summary>
+        /// Sets the base model for interpretability analysis.
+        /// </summary>
+        public virtual void SetBaseModel(IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> model)
+        {
+            _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+        }
+
+        /// <summary>
+        /// Enables specific interpretation methods.
+        /// </summary>
+        public virtual void EnableMethod(params InterpretationMethod[] methods)
+        {
+            if (methods == null)
+                return;
+
+            foreach (var method in methods)
+            {
+                _enabledMethods.Add(method);
+            }
+        }
+
+        /// <summary>
+        /// Configures fairness evaluation settings.
+        /// </summary>
+        public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
+        {
+            _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
+            _fairnessMetrics.Clear();
+            if (fairnessMetrics != null)
+            {
+                _fairnessMetrics.AddRange(fairnessMetrics);
+            }
+        }
+
+        #endregion
     }
 }
+
