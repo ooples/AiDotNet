@@ -132,6 +132,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     protected T MaxGradNorm;
 
     /// <summary>
+    /// Cached parameter count to avoid repeated Sum() calculations.
+    /// Null when invalid (layers modified).
+    /// </summary>
+    private int? _cachedParameterCount;
+
+    /// <summary>
     /// Creates a new neural network with the specified architecture.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the network.</param>
@@ -142,6 +148,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
+        _cachedParameterCount = null;
     }
 
     /// <summary>
@@ -394,11 +401,30 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// More complex networks typically have more parameters and can learn more complex patterns, but also
     /// require more data to train effectively. This is part of the IFullModel interface for consistency with other model types.
     /// <para>
-    /// <b>Performance Note:</b> This property computes the sum on each access. For performance-critical code that accesses
-    /// ParameterCount multiple times, consider caching the value in a local variable to avoid redundant calculations.
+    /// <b>Performance:</b> This property uses caching to avoid recomputing the sum on every access.
+    /// The cache is invalidated when layers are modified.
     /// </para>
     /// </remarks>
-    public virtual int ParameterCount => Layers.Sum(layer => layer.ParameterCount);
+    public virtual int ParameterCount
+    {
+        get
+        {
+            if (_cachedParameterCount == null)
+            {
+                _cachedParameterCount = Layers.Sum(layer => layer.ParameterCount);
+            }
+            return _cachedParameterCount.Value;
+        }
+    }
+
+    /// <summary>
+    /// Invalidates the parameter count cache.
+    /// Call this method whenever layers are added, removed, or modified.
+    /// </summary>
+    protected void InvalidateParameterCountCache()
+    {
+        _cachedParameterCount = null;
+    }
 
     /// <summary>
     /// Validates that the provided layers form a valid neural network architecture.
@@ -893,6 +919,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
 
         // Clear existing layers
         Layers.Clear();
+        InvalidateParameterCountCache();
 
         // Read the number of layers
         int layerCount = reader.ReadInt32();
@@ -940,6 +967,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             // Add the layer to the network
             Layers.Add(layer);
         }
+
+        // Invalidate parameter count cache after loading all layers
+        InvalidateParameterCountCache();
 
         // Read network-specific data
         DeserializeNetworkSpecificData(reader);
@@ -1602,6 +1632,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             _ => throw new NotSupportedException($"Layer type {layerType} not supported in AddLayer method")
         };
         Layers.Add(layer);
+        InvalidateParameterCountCache();
     }
 
     /// <summary>
@@ -1634,6 +1665,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     {
         var layer = new DropoutLayer<T>(dropoutRate);
         Layers.Add(layer);
+        InvalidateParameterCountCache();
     }
 
     /// <summary>
@@ -1646,6 +1678,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     {
         var layer = new BatchNormalizationLayer<T>(featureSize, epsilon, momentum);
         Layers.Add(layer);
+        InvalidateParameterCountCache();
     }
 
     /// <summary>
@@ -1659,6 +1692,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     {
         var layer = new MaxPoolingLayer<T>(inputShape, poolSize, strides ?? poolSize);
         Layers.Add(layer);
+        InvalidateParameterCountCache();
     }
 
     /// <summary>
