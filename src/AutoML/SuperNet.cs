@@ -1058,8 +1058,6 @@ namespace AiDotNet.AutoML
                 "Fairness validation is not supported for SuperNet architecture search models. " +
                 "SuperNet focuses on architecture optimization rather than fairness evaluation.");
         }
-            return await Task.FromResult(metrics);
-        }
 
         /// <summary>
         /// Gets anchor explanation for a given input.
