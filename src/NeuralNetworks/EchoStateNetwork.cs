@@ -390,7 +390,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private int _warmupPeriod;
 
-    private ILossFunction<T> _lossFunction = default!;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EchoStateNetwork{T}"/> class with vector activation functions.

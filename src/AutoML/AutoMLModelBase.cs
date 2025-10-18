@@ -362,7 +362,13 @@ namespace AiDotNet.AutoML
         /// </summary>
         public virtual void LoadModel(string filePath)
         {
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            if (BestModel == null)
+            {
+                // This scenario requires a mechanism to determine the concrete type of BestModel
+                // from the serialized data. For now, we'll assume BestModel is already set or can be inferred.
+                throw new InvalidOperationException("Cannot load model: BestModel is null. AutoML models should be recreated with SearchAsync or BestModel should be initialized before loading.");
+            }
+            BestModel.LoadModel(filePath);
         }
 
         /// <summary>
@@ -381,7 +387,13 @@ namespace AiDotNet.AutoML
         /// </summary>
         public virtual void Deserialize(byte[] data)
         {
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            if (BestModel == null)
+            {
+                // This scenario requires a mechanism to determine the concrete type of BestModel
+                // from the serialized data. For now, we'll assume BestModel is already set or can be inferred.
+                throw new InvalidOperationException("Cannot deserialize model: BestModel is null. AutoML models should be recreated with SearchAsync or BestModel should be initialized before deserializing.");
+            }
+            BestModel.Deserialize(data);
         }
 
         #endregion

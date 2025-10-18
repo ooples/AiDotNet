@@ -46,17 +46,17 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The external memory matrices used by the Neural Turing Machine, one per batch element.
     /// </summary>
-    private List<Matrix<T>> _memories = default!;
+    private List<Matrix<T>> _memories;
 
     /// <summary>
     /// The current reading weights for each batch element.
     /// </summary>
-    private List<Vector<T>> _readWeights = default!;
+    private List<Vector<T>> _readWeights;
 
     /// <summary>
     /// The current writing weights for each batch element.
     /// </summary>
-    private List<Vector<T>> _writeWeights = default!;
+    private List<Vector<T>> _writeWeights;
 
     /// <summary>
     /// Indicates whether the network is in training mode.
@@ -1154,8 +1154,8 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets metadata about the Neural Turing Machine model.
     /// </summary>
-    /// <returns>A ModelMetadata object containing information about the NTM.</returns>
-    public override ModelMetadata<T> GetModelMetadata()
+    /// <returns>A ModelMetaData object containing information about the NTM.</returns>
+    public override ModelMetaData<T> GetModelMetaData()
     {
         return new ModelMetadata<T>
         {

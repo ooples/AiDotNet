@@ -123,8 +123,11 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public HopfieldNetwork(NeuralNetworkArchitecture<T> architecture, int size, ILossFunction<T>? lossFunction = null) : base(new NeuralNetworkArchitecture<T>(
+        architecture.InputType,
         taskType: architecture.TaskType,
-        complexity: architecture.Complexity), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
+        complexity: architecture.Complexity,
+        inputSize: size,
+        outputSize: size), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _size = size;
         _weights = new Matrix<T>(size, size);

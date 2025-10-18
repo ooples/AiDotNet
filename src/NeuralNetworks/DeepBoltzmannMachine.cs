@@ -211,6 +211,8 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 
     private ILossFunction<T> _lossFunction = default!;
 
+    private ILossFunction<T> _lossFunction;
+
     /// <summary>
     /// Initializes a new instance of the DeepBoltzmannMachine class with scalar activation.
     /// </summary>

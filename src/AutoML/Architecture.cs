@@ -1,25 +1,46 @@
-using System;
 using System.Collections.Generic;
 
 namespace AiDotNet.AutoML
 {
     /// <summary>
-    /// Architecture representation for neural architecture search
+    /// Represents a neural network architecture discovered through NAS
     /// </summary>
-    /// <typeparam name="T">The numeric type used for calculations</typeparam>
+    /// <typeparam name="T">The numeric type for calculations</typeparam>
     public class Architecture<T>
     {
         /// <summary>
-        /// Gets or sets the layers in this architecture
+        /// Operations in the architecture: (to_node, from_node, operation)
         /// </summary>
-        public List<LayerConfiguration<T>> Layers { get; set; }
-        
+        public List<(int ToNode, int FromNode, string Operation)> Operations { get; set; } = new List<(int, int, string)>();
+
         /// <summary>
-        /// Initializes a new instance of the Architecture class
+        /// Number of nodes in the architecture
         /// </summary>
-        public Architecture()
+        public int NodeCount { get; set; }
+
+        /// <summary>
+        /// Adds an operation to the architecture
+        /// </summary>
+        public void AddOperation(int toNode, int fromNode, string operation)
         {
-            Layers = new List<LayerConfiguration<T>>();
+            Operations.Add((toNode, fromNode, operation));
+            NodeCount = System.Math.Max(NodeCount, System.Math.Max(toNode, fromNode) + 1);
+        }
+
+        /// <summary>
+        /// Gets a description of the architecture
+        /// </summary>
+        public string GetDescription()
+        {
+            var lines = new List<string>();
+            lines.Add($"Architecture with {NodeCount} nodes:");
+
+            foreach (var (toNode, fromNode, operation) in Operations)
+            {
+                lines.Add($"  Node {toNode} <- {operation} <- Node {fromNode}");
+            }
+
+            return string.Join("\n", lines);
         }
     }
 }

@@ -1,77 +1,38 @@
-using System;
 using System.Collections.Generic;
-using AiDotNet.Enums;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.AutoML
 {
     /// <summary>
-    /// Search space definition for neural architecture search
+    /// Defines the search space for neural architecture search
     /// </summary>
-    /// <typeparam name="T">The numeric type used for calculations</typeparam>
+    /// <typeparam name="T">The numeric type for calculations</typeparam>
     public class SearchSpace<T>
     {
         /// <summary>
-        /// Gets or sets the available layer types
+        /// Available operations for the search
         /// </summary>
-        public List<LayerType> LayerTypes { get; set; } = new List<LayerType>();
-        
-        /// <summary>
-        /// Gets or sets the available activation functions
-        /// </summary>
-        public List<ActivationFunction> ActivationFunctions { get; set; } = new List<ActivationFunction>();
-        
-        /// <summary>
-        /// Gets or sets the maximum number of layers
-        /// </summary>
-        public int MaxLayers { get; set; }
-        
-        /// <summary>
-        /// Gets or sets the maximum units per layer
-        /// </summary>
-        public int MaxUnitsPerLayer { get; set; }
-        
-        /// <summary>
-        /// Gets or sets the maximum number of filters
-        /// </summary>
-        public int MaxFilters { get; set; }
-        
-        /// <summary>
-        /// Gets or sets the available kernel sizes
-        /// </summary>
-        public Vector<int> KernelSizes { get; set; }
-        
-        /// <summary>
-        /// Gets or sets the available dropout rates
-        /// </summary>
-        public Vector<T> DropoutRates { get; set; }
-        
-        /// <summary>
-        /// Gets or sets the mutation rate for evolutionary strategies
-        /// </summary>
-        public T MutationRate { get; set; }
-        
-        /// <summary>
-        /// Gets or sets the input dimension
-        /// </summary>
-        public int InputDimension { get; set; }
-        
-        /// <summary>
-        /// Initializes a new instance of the SearchSpace class
-        /// </summary>
-        public SearchSpace()
+        public List<string> Operations { get; set; } = new List<string>
         {
-            var ops = MathHelper.GetNumericOperations<T>();
-            KernelSizes = new Vector<int>(new[] { 3, 5, 7 });
-            DropoutRates = new Vector<T>(new[] { 
-                ops.FromDouble(0.0), 
-                ops.FromDouble(0.1), 
-                ops.FromDouble(0.2), 
-                ops.FromDouble(0.3), 
-                ops.FromDouble(0.5) 
-            });
-            MutationRate = ops.FromDouble(0.1);
-        }
+            "identity",
+            "conv3x3",
+            "conv5x5",
+            "maxpool3x3",
+            "avgpool3x3"
+        };
+
+        /// <summary>
+        /// Maximum number of nodes in the architecture
+        /// </summary>
+        public int MaxNodes { get; set; } = 8;
+
+        /// <summary>
+        /// Number of input channels
+        /// </summary>
+        public int InputChannels { get; set; } = 1;
+
+        /// <summary>
+        /// Number of output channels
+        /// </summary>
+        public int OutputChannels { get; set; } = 1;
     }
 }

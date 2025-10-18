@@ -469,7 +469,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         Vector<T> gradients = LossFunction.CalculateDerivative(predictedVector, expectedVector);
 
         // Backpropagation
-        Backpropagate(Tensor<T>.FromVector(gradients, expectedOutput.Shape));
+        Backpropagate(gradients);
 
         // Update parameters with optimizer
         T learningRate = NumOps.FromDouble(0.01);
@@ -504,7 +504,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         Vector<T> gradients = LossFunction.CalculateDerivative(predictedVector, expectedVector);
 
         // Backpropagation
-        Backpropagate(Tensor<T>.FromVector(gradients, expectedOutput.Shape));
+        Backpropagate(gradients);
 
         // Update parameters with optimizer
         T learningRate = NumOps.FromDouble(0.01);

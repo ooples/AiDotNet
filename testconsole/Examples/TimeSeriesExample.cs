@@ -1,5 +1,4 @@
 ﻿using AiDotNet;
-using AiDotNet.Factories;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
@@ -38,34 +37,35 @@ public class TimeSeriesExample
                 prices[i] = trend + seasonal + noise;
             }
 
-            // Print a few sample data points
-            Console.WriteLine("Sample data points:");
-            for (int i = 0; i < 10; i++)
-            {
-                Console.WriteLine($"Day {i}: ${prices[i]:F2}");
-            }
-            Console.WriteLine("...");
-
             // Convert to Matrix/Vector format
-            var timeFeatures = new Matrix<double>([.. dates.Select(d => new[] { d })]);
+            var timeFeatures = new Matrix<double>(dates.Select(d => new[] { d }).ToArray());
             var priceVector = new Vector<double>(prices);
 
             Console.WriteLine("Data prepared. Starting model training...");
 
-            var model = TimeSeriesModelFactory<double, Matrix<double>, Vector<double>>.CreateProphetModel(timeFeatures, priceVector, 30);
+            // Create and configure the model builder
             var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
-            // Configure optimizer with appropriate settings for trend preservation
+            // Configure optimizer
             var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
             {
                 LearningRate = 0.01,
-                MaxIterations = 500,
+                MaxIterations = 1000
             };
-            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(model, adamOptions);
+            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
+
+            // Configure time series model (e.g., Prophet-like model)
+            var timeSeriesOptions = new ProphetOptions<double, Matrix<double>, Vector<double>>
+            {
+                SeasonalPeriods = [7],  // Weekly seasonality (using List<int> instead of double[])
+                ChangePointPriorScale = 0.05,           // Control flexibility of the trend (this is the correct property)
+                ForecastHorizon = 30                    // Forecast 30 days ahead
+            };
 
             // Build the time series model
-            var modelResult = modelBuilder
+            var model = modelBuilder
                 .ConfigureOptimizer(optimizer)
+                .ConfigureModel(new ProphetModel<double, Matrix<double>, Vector<double>>(timeSeriesOptions))
                 .Build(timeFeatures, priceVector);
 
             Console.WriteLine("Model trained successfully!");
@@ -75,7 +75,7 @@ public class TimeSeriesExample
             var futureFeatures = new Matrix<double>([.. futureDates.Select(d => new[] { d })]);
 
             // Make forecast
-            var forecast = modelBuilder.Predict(futureFeatures, modelResult);
+            var forecast = modelBuilder.Predict(futureFeatures, model);
 
             Console.WriteLine("\nForecast for the next 30 days:");
             for (int i = 0; i < Math.Min(10, forecast.Length); i++)
@@ -86,7 +86,7 @@ public class TimeSeriesExample
 
             // Save model for later use
             string modelPath = "stock_forecast_model.bin";
-            modelBuilder.SaveModel(modelResult, modelPath);
+            modelBuilder.SaveModel(model, modelPath);
             Console.WriteLine($"\nModel saved to {modelPath}");
 
             // Load the model back
@@ -98,25 +98,18 @@ public class TimeSeriesExample
             {
                 Console.WriteLine($"Day {futureDates[i]}: ${forecast2[i]:F2}");
             }
+
+            // Visualize components if available
+            if (model is ProphetModel<double, Matrix<double>, Vector<double>> prophetModel)
+            {
+                Console.WriteLine("\nModel Components Analysis available in ProphetModel");
+                Console.WriteLine("(Implementation would show trend, seasonality components)");
+            }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
         }
-    }
-
-    // Helper method to generate evenly spaced changepoints
-    private List<double> GetChangepoints(int count, double start, double end)
-    {
-        var changepoints = new List<double>();
-        double step = (end - start) / (count + 1);
-
-        for (int i = 1; i <= count; i++)
-        {
-            changepoints.Add(start + i * step);
-        }
-
-        return changepoints;
     }
 }

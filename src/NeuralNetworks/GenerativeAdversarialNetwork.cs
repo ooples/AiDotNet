@@ -274,7 +274,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
 
-    private ILossFunction<T> _lossFunction = default!;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GenerativeAdversarialNetwork{T}"/> class.
@@ -302,11 +302,17 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public GenerativeAdversarialNetwork(NeuralNetworkArchitecture<T> generatorArchitecture, 
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
+        InputType inputType,
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.001)
         : base(new NeuralNetworkArchitecture<T>(
-            NetworkComplexity.Medium,
-            NeuralNetworkTaskType.Generative), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
+            inputType,
+            NeuralNetworkTaskType.Generative, 
+            NetworkComplexity.Medium, 
+            generatorArchitecture.InputSize, 
+            discriminatorArchitecture.OutputSize, 
+            0, 0, 0, 
+            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         _initialLearningRate = initialLearningRate;
         _currentLearningRate = initialLearningRate;
@@ -1622,6 +1628,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         return new GenerativeAdversarialNetwork<T>(
             Generator.Architecture,
             Discriminator.Architecture,
+            Architecture.InputType,
             _lossFunction,
             _initialLearningRate);
     }

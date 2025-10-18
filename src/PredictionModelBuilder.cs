@@ -44,8 +44,6 @@ using AiDotNet.Factories;
 /// </remarks>
 public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
 {
-    private readonly ILogging _logger = default!;
-    private readonly INumericOperations<T> NumOps;
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
     private IFullModel<T, TInput, TOutput>? _model;
@@ -106,76 +104,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private int? _maxConcurrency = null;
     private List<TrainingExample>? _trainingData = null;
     private List<TrainingExample>? _validationData = null;
-
-    /// <summary>
-    /// Initializes a new instance of the PredictionModelBuilder class with a required model.
-    /// </summary>
-    /// <param name="model">The model that will be used for predictions.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> This constructor requires you to provide the machine learning model
-    /// that will be trained and used for predictions. The model is the core component that learns
-    /// patterns from your data and makes predictions based on those patterns.
-    /// 
-    /// Different types of models are better suited for different types of problems:
-    /// - Linear regression for simple numeric predictions
-    /// - Decision trees for classification tasks
-    /// - Neural networks for complex pattern recognition
-    /// 
-    /// If you're not sure which model to use, consider using the CreateWithAutoModelSelection
-    /// factory method instead, which can automatically select an appropriate model for your data.
-    /// </remarks>
-    public PredictionModelBuilder(IFullModel<T, TInput, TOutput>? model = null)
-    {
-        _model = model;
-        NumOps = MathHelper.GetNumericOperations<T>();
-        _logger = LoggingFactory.GetLogger<PredictionModelBuilder<T, TInput, TOutput>>();
-        _logger.Information("Creating new PredictionModelBuilder with model: {ModelType}",
-            model != null ? model.GetType().Name : "null");
-    }
-    
-    /// <summary>
-    /// Sets the model to use for this prediction builder.
-    /// </summary>
-    /// <param name="model">The model to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method sets the machine learning model that will be trained and used for predictions.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Use this to specify which machine learning algorithm you want to use.
-    /// Different models are better for different types of problems.
-    /// </para>
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> SetModel(IFullModel<T, TInput, TOutput> model)
-    {
-        _model = model;
-        _logger.Information("Model set to: {ModelType}", model.GetType().Name);
-        return this;
-    }
-    
-    /// <summary>
-    /// Gets the current model from the builder.
-    /// </summary>
-    /// <returns>The current model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the currently configured model.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This gives you access to the machine learning model
-    /// that has been configured in this builder.
-    /// </para>
-    /// </remarks>
-    public IFullModel<T, TInput, TOutput> GetModel()
-    {
-        if (_model == null)
-        {
-            throw new InvalidOperationException("No model has been set. Use SetModel or a configuration method that sets a model.");
-        }
-        
-        return _model;
-    }
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -1003,9 +931,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 LoggingFactory.Configure(_loggingOptions);
             }
 
-            // Validate inputs and their compatibility
-            _logger.Debug("Validating input and output dimensions");
-            InputHelper<T, TInput>.ValidateInputOutputDimensions(x, y);
+        // Use defaults for these interfaces if they aren't set
+        var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
+        var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>();
+        var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
+        var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
+        var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
 
             // Log input and output information if debug is enabled
             if (_logger.IsEnabled(LoggingLevel.Debug))

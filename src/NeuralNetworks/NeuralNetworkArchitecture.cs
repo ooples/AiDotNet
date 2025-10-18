@@ -458,119 +458,102 @@ public class NeuralNetworkArchitecture<T>
     }
 
     /// <summary>
-    /// Initializes this architecture using the current cached input data.
-    /// This should be called before training begins.
+    /// Initializes a new instance of the <see cref="NeuralNetworkArchitecture{T}"/> class for regression tasks.
     /// </summary>
-    public void InitializeFromCachedData<TInput, TOutput>()
+    /// <param name="inputFeatures">The number of input features (columns in the input matrix).</param>
+    /// <param name="outputSize">The number of output values to predict (typically 1 for simple regression).</param>
+    /// <param name="complexity">The complexity level of the neural network. Default is Medium.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor provides a simplified way to create a neural network architecture specifically for regression tasks.
+    /// It automatically sets the appropriate input type to TwoDimensional (for a matrix of samples × features) and
+    /// sets the task type to Regression.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a simpler way to create a neural network for predicting numerical values.
+    /// 
+    /// Use this constructor when:
+    /// - Your input is a matrix where each row is a sample and each column is a feature
+    ///   (like house size, number of bedrooms, etc. for multiple houses)
+    /// - You want to predict one or more numerical values (like house prices)
+    /// 
+    /// For example, to create a network that predicts house prices based on 5 features:
+    /// 
+    /// ```csharp
+    /// var architecture = new NeuralNetworkArchitecture<double>(
+    ///     inputFeatures: 5,  // 5 features (size, bedrooms, etc.)
+    ///     outputSize: 1      // 1 output (price)
+    /// );
+    /// ```
+    /// 
+    /// The network will automatically create appropriate layers based on the complexity setting.
+    /// You don't need to specify the number of samples - the network will handle any number of samples.
+    /// </para>
+    /// </remarks>
+    public NeuralNetworkArchitecture(
+        int inputFeatures,
+        int outputSize,
+        NetworkComplexity complexity = NetworkComplexity.Medium)
+        : this(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: complexity,
+            inputHeight: 0,  // This will be determined by the number of samples at runtime
+            inputWidth: inputFeatures,
+            outputSize: outputSize)
     {
-        if (IsInitialized) return;  // Already initialized
-
-        var inputExists = DefaultInputCache.TryGetDefaultInputData<T, Tensor<T>, Tensor<T>>(out var inputData);
-
-        if (!inputExists || inputData == null)
-        {
-            throw new InvalidOperationException(
-                "Cannot initialize neural network architecture: No default input data has been cached.");
-        }
-
-        // Get input and output tensors
-        var inputTensor = inputData.XFull;
-        var outputTensor = inputData.YFull;
-
-        // Set dimensions based on tensor shapes
-        var inputShape = inputTensor.Shape;
-
-        switch (inputShape.Length)
-        {
-            case 1:
-                InputType = InputType.OneDimensional;
-                InputSize = inputShape[0];
-                InputHeight = 0;
-                InputWidth = 0;
-                InputDepth = 1;
-                break;
-
-            case 2:
-                InputType = InputType.TwoDimensional;
-                InputHeight = inputShape[0];
-                InputWidth = inputShape[1];
-                InputSize = InputHeight * InputWidth;
-                InputDepth = 1;
-                break;
-
-            case 3:
-                InputType = InputType.ThreeDimensional;
-                InputDepth = inputShape[0];
-                InputHeight = inputShape[1];
-                InputWidth = inputShape[2];
-                InputSize = InputDepth * InputHeight * InputWidth;
-                break;
-
-            default:
-                throw new ArgumentException("Input tensor must have 1, 2, or 3 dimensions.");
-        }
-
-        // Set output size
-        var outputShape = outputTensor.Shape;
-        OutputSize = outputShape[outputShape.Length - 1];
-
-        // Infer task type if not explicitly set
-        if (TaskType == NeuralNetworkTaskType.Regression)  // Only overwrite if using default
-        {
-            TaskType = InferTaskType(outputTensor);
-        }
-
-        // Mark as initialized and no longer a placeholder
-        IsInitialized = true;
+        // The base constructor handles validation and setup
+        // We don't need to create custom layers here as the neural network will create
+        // appropriate default layers based on the architecture parameters
     }
 
     /// <summary>
-    /// Infers the neural network task type from an output tensor.
+    /// Initializes a new instance of the <see cref="NeuralNetworkArchitecture{T}"/> class for classification tasks.
     /// </summary>
-    private NeuralNetworkTaskType InferTaskType(Tensor<T> outputTensor)
+    /// <param name="inputFeatures">The number of input features (columns in the input matrix).</param>
+    /// <param name="numClasses">The number of classes to classify into.</param>
+    /// <param name="isMultiClass">Whether this is a multi-class classification (true) or binary classification (false). Default is true.</param>
+    /// <param name="complexity">The complexity level of the neural network. Default is Medium.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor provides a simplified way to create a neural network architecture specifically for classification tasks.
+    /// It automatically sets the appropriate input type to TwoDimensional (for a matrix of samples × features) and
+    /// sets the task type to either MultiClassClassification or BinaryClassification based on the isMultiClass parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a simpler way to create a neural network for classifying data into categories.
+    /// 
+    /// Use this constructor when:
+    /// - Your input is a matrix where each row is a sample and each column is a feature
+    ///   (like petal length, petal width, etc. for multiple flowers)
+    /// - You want to classify each sample into one of several categories (like flower species)
+    /// 
+    /// For example, to create a network that classifies flowers into 3 species based on 4 features:
+    /// 
+    /// ```csharp
+    /// var architecture = new NeuralNetworkArchitecture<double>(
+    ///     inputFeatures: 4,  // 4 features (petal length, width, etc.)
+    ///     numClasses: 3      // 3 classes (setosa, versicolor, virginica)
+    /// );
+    /// ```
+    /// 
+    /// The network will automatically create appropriate layers based on the complexity setting.
+    /// You don't need to specify the number of samples - the network will handle any number of samples.
+    /// </para>
+    /// </remarks>
+    public NeuralNetworkArchitecture(
+        int inputFeatures,
+        int numClasses,
+        bool isMultiClass = true,
+        NetworkComplexity complexity = NetworkComplexity.Medium)
+        : this(
+            inputType: InputType.TwoDimensional,
+            taskType: isMultiClass ? NeuralNetworkTaskType.MultiClassClassification : NeuralNetworkTaskType.BinaryClassification,
+            complexity: complexity,
+            inputHeight: 0,  // This will be determined by the number of samples at runtime
+            inputWidth: inputFeatures,
+            outputSize: isMultiClass ? numClasses : 1)  // For binary classification, we only need 1 output (probability)
     {
-        var shape = outputTensor.Shape;
-
-        // For one output value
-        if (shape.Length == 1 || (shape.Length > 1 && shape[shape.Length - 1] == 1))
-        {
-            // Check if it contains only 0s and 1s
-            if (ContainsOnlyZerosAndOnes(outputTensor))
-                return NeuralNetworkTaskType.BinaryClassification;
-            else
-                return NeuralNetworkTaskType.Regression;
-        }
-
-        // For multiple output values
-        if (shape.Length > 0 && shape[shape.Length - 1] > 1 && ContainsOnlyZerosAndOnes(outputTensor))
-            return NeuralNetworkTaskType.MultiClassClassification;
-
-        // Default to regression
-        return NeuralNetworkTaskType.Regression;
+        // The base constructor handles validation and setup
     }
-
-    /// <summary>
-    /// Checks if the tensor contains only values that are effectively 0 or 1.
-    /// </summary>
-    private bool ContainsOnlyZerosAndOnes(Tensor<T> tensor)
-    {
-        // Use the IEnumerable implementation to iterate through all values
-        foreach (var value in tensor)
-        {
-            double doubleVal = Convert.ToDouble(value);
-
-            // Use the MathHelper.AlmostEqual method for more robust comparison
-            if (!MathHelper.AlmostEqual(doubleVal, 0) &&
-                !MathHelper.AlmostEqual(doubleVal, 1))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-
 
     /// <summary>
     /// Gets the sizes of the hidden layers in the neural network.

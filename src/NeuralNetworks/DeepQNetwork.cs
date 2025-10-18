@@ -145,7 +145,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private readonly int _batchSize = 32;
 
-    private ILossFunction<T> _lossFunction = default!;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeepQNetwork{T}"/> class with the specified architecture and exploration rate.

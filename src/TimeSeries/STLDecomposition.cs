@@ -607,9 +607,9 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// by the sum of the weights.
     /// 
     /// For example, if we have values [10, 20, 30] with weights [1, 2, 1]:
-    /// - The weighted sum is 10×1 + 20×2 + 30×1 = 80
+    /// - The weighted sum is 10ï¿½1 + 20ï¿½2 + 30ï¿½1 = 80
     /// - The sum of weights is 1 + 2 + 1 = 4
-    /// - The weighted average is 80 ÷ 4 = 20
+    /// - The weighted average is 80 ï¿½ 4 = 20
     /// 
     /// In LOESS smoothing, this gives more influence to points that are closer to the one being estimated.
     /// </para>
@@ -1333,10 +1333,21 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             double doubleValue = Convert.ToDouble(value);
             return double.IsNaN(doubleValue) || double.IsInfinity(doubleValue);
         }
-        catch
+        catch (InvalidCastException)
         {
-            // If conversion fails, assume it's valid
+            // If conversion fails for non-numeric types, assume valid (not invalid)
+            // This is expected behavior for types that cannot be converted to double
             return false;
+        }
+        catch (FormatException)
+        {
+            // If format conversion fails, assume valid for non-numeric types
+            return false;
+        }
+        catch (OverflowException)
+        {
+            // If value is too large or small for double, it's invalid
+            return true;
         }
     }
 

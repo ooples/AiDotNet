@@ -540,120 +540,43 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         return result;
     }
 
-    /// <summary>
-    /// Extracts metadata from serialized data without fully deserializing the model.
-    /// </summary>
-    /// <param name="data">The serialized data.</param>
-    /// <returns>The model metadata.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts only the metadata portion from serialized data, without deserializing
-    /// the entire model. This is useful for determining the model type before full deserialization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method peeks at the saved model file to get basic information
-    /// about what type of model it contains, without loading the entire model.
-    /// 
-    /// It's like reading the label on a box to see what's inside before opening it completely.
-    /// This lets us determine what type of model we need to create before fully loading the data.
-    /// </para>
-    /// </remarks>
-    private static ModelMetadata<T> ExtractMetadataFromSerializedData(byte[] data)
+    public void Train(TInput input, TOutput expectedOutput)
     {
-        try
-        {
-            using var ms = new MemoryStream(data);
-            using var reader = new BinaryReader(ms);
-
-            // Skip model bytes
-            int modelBytesLength = reader.ReadInt32();
-            reader.BaseStream.Seek(modelBytesLength, SeekOrigin.Current);
-
-            // Skip optimization result bytes
-            int optimizationResultBytesLength = reader.ReadInt32();
-            reader.BaseStream.Seek(optimizationResultBytesLength, SeekOrigin.Current);
-
-            // Skip normalization info bytes
-            int normalizationInfoBytesLength = reader.ReadInt32();
-            reader.BaseStream.Seek(normalizationInfoBytesLength, SeekOrigin.Current);
-
-            // Read metadata bytes
-            int modelMetadataBytesLength = reader.ReadInt32();
-            var modelMetadataBytes = reader.ReadBytes(modelMetadataBytesLength);
-            var modelMetadataJson = Encoding.UTF8.GetString(modelMetadataBytes);
-
-            // Deserialize metadata
-            return JsonConvert.DeserializeObject<ModelMetadata<T>>(modelMetadataJson) ?? new ModelMetadata<T>();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"Failed to extract metadata from serialized data: {ex.Message}", ex);
-        }
+        throw new NotImplementedException();
     }
 
-    /// <summary>
-    /// Loads a model from a file using a simple approach that doesn't require a model factory.
-    /// This is a simplified version that uses JSON serialization for backward compatibility.
-    /// </summary>
-    /// <param name="filePath">The path of the file containing the serialized model.</param>
-    /// <returns>A new PredictionModelResult&lt;T&gt; instance loaded from the file.</returns>
-    /// <remarks>
-    /// <para>
-    /// This version of LoadModel uses JSON serialization for backward compatibility with previously
-    /// saved models. It should be used when loading models that were saved with the old serialization method.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads models that were saved using an older version
-    /// of the serialization code. It uses a different approach (pure JSON) that's compatible with
-    /// those older model files.
-    /// 
-    /// Use this method when:
-    /// - You're loading a model that was saved with an older version of the library
-    /// - You don't have a model factory function available
-    /// - You're not sure which version of serialization was used
-    /// 
-    /// For newer models, prefer the other LoadModel method that uses a model factory.
-    /// </para>
-    /// </remarks>
-    public static PredictionModelResult<T, TInput, TOutput> LoadModel(string filePath)
+    public ModelMetaData<T> GetModelMetaData()
     {
-        try
-        {
-            // First try the new binary serialization format
-            byte[] data = File.ReadAllBytes(filePath);
-            using (var ms = new MemoryStream(data))
-            using (var reader = new BinaryReader(ms))
-            {
-                // Check if this looks like our binary format by trying to read the first integer
-                try
-                {
-                    int modelBytesLength = reader.ReadInt32();
-                    // If we can read this without exception and it's a reasonable value,
-                    // this might be our binary format
-                    if (modelBytesLength >= 0 && modelBytesLength <= data.Length)
-                    {
-                        // This appears to be our binary format, but we can't continue without a model factory
-                        throw new InvalidOperationException(
-                            "This model appears to use the new binary serialization format. Please use the LoadModel method that accepts a model factory parameter.");
-                    }
-                }
-                catch (EndOfStreamException)
-                {
-                    // Not our binary format, try JSON
-                }
-            }
+        throw new NotImplementedException();
+    }
 
-            // Fall back to old JSON serialization format
-            var jsonString = Encoding.UTF8.GetString(data);
-            var settings = new JsonSerializerSettings
-            {
-                TypeNameHandling = TypeNameHandling.All
-            };
+    public Vector<T> GetParameters()
+    {
+        throw new NotImplementedException();
+    }
 
-            var result = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
-            return result ?? throw new InvalidOperationException("Deserialization resulted in a null object.");
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"Failed to load model from file: {ex.Message}", ex);
-        }
+    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        throw new NotImplementedException();
+    }
+
+    public IEnumerable<int> GetActiveFeatureIndices()
+    {
+        throw new NotImplementedException();
+    }
+
+    public bool IsFeatureUsed(int featureIndex)
+    {
+        throw new NotImplementedException();
+    }
+
+    public IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        throw new NotImplementedException();
+    }
+
+    public IFullModel<T, TInput, TOutput> Clone()
+    {
+        throw new NotImplementedException();
     }
 }

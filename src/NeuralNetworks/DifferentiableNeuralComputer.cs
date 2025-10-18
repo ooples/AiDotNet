@@ -300,6 +300,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
 
     private ILossFunction<T> _lossFunction = default!;
 
+    private ILossFunction<T> _lossFunction;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DifferentiableNeuralComputer{T}"/> class with the specified parameters.
     /// </summary>

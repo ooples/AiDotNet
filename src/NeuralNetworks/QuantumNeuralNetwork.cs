@@ -50,7 +50,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private int _numQubits;
 
-    private readonly INormalizer<T, Tensor<T>, Tensor<T>> _normalizer = default!;
+    private readonly INormalizer<T, Tensor<T>, Tensor<T>> _normalizer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="QuantumNeuralNetwork{T}"/> class with the specified architecture and number of qubits.
