@@ -789,7 +789,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// <summary>
     /// Gets the metadata for this neural network model.
     /// </summary>
-    /// <returns>A ModelMetadata object containing information about the model.</returns>
+    /// <returns>A ModelMetaData object containing information about the model.</returns>
     public abstract ModelMetaData<T> GetModelMetaData();
 
     /// <summary>
@@ -1315,9 +1315,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
 
     #region IInterpretableModel Implementation
 
+    /// <summary>
+    /// Set of interpretation methods that are enabled for this neural network model.
+    /// Controls which interpretability features (SHAP, LIME, etc.) are available.
+    /// </summary>
     protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
+
+    /// <summary>
+    /// Indices of features considered sensitive for fairness analysis.
+    /// </summary>
     protected Vector<int> _sensitiveFeatures;
+
+    /// <summary>
+    /// List of fairness metrics to evaluate for this model.
+    /// </summary>
     protected readonly List<FairnessMetric> _fairnessMetrics = new();
+
+    /// <summary>
+    /// Base model instance for interpretability delegation.
+    /// </summary>
     protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> _baseModel;
 
     /// <summary>

@@ -499,12 +499,15 @@ namespace AiDotNet.AutoML
         #region ICloneable Implementation
 
         /// <summary>
-        /// Creates a shallow copy of the AutoML model
+        /// Creates a memberwise clone of the AutoML model using MemberwiseClone().
+        /// This performs a shallow copy where reference types are shared between the original and clone.
         /// </summary>
+        /// <returns>A memberwise clone of the current AutoML model</returns>
+        /// <remarks>
+        /// For a deep copy with independent collections and state, use DeepCopy() instead.
+        /// </remarks>
         public virtual IFullModel<T, TInput, TOutput> Clone()
         {
-            // Clone creates a shallow copy using MemberwiseClone
-            // For a deep copy, use DeepCopy() instead
             return (AutoMLModelBase<T, TInput, TOutput>)MemberwiseClone();
         }
 
@@ -529,7 +532,7 @@ namespace AiDotNet.AutoML
                 // ParameterRange implements ICloneable, so we always call Clone()
                 foreach (var kvp in _searchSpace)
                 {
-                    copy._searchSpace[kvp.Key] = (ParameterRange)((ICloneable)kvp.Value).Clone();
+                    copy._searchSpace[kvp.Key] = (ParameterRange)kvp.Value.Clone();
                 }
 
                 // Copy candidate models (ModelType is an enum, so no deep copy needed)
@@ -542,7 +545,7 @@ namespace AiDotNet.AutoML
                 // SearchConstraint implements ICloneable, so we always call Clone()
                 foreach (var constraint in _constraints)
                 {
-                    copy._constraints.Add((SearchConstraint)((ICloneable)constraint).Clone());
+                    copy._constraints.Add((SearchConstraint)constraint.Clone());
                 }
             }
 
