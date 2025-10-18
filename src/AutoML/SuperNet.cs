@@ -807,7 +807,7 @@ namespace AiDotNet.AutoML
         /// SuperNet analyzes operation importance based on learned architecture parameters rather than input data.
         /// </para>
         /// </remarks>
-        public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync(Tensor<T> _inputs)
+        public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync(Tensor<T> inputs)
         {
             var importance = new Dictionary<int, T>();
 

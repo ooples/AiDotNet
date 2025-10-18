@@ -1,6 +1,6 @@
-namespace AiDotNet.NeuralNetworks;
-
 using AiDotNet.Interpretability;
+
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Base class for all neural network implementations in AiDotNet.
@@ -16,14 +16,27 @@ using AiDotNet.Interpretability;
 public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
 {
     /// <summary>
-    /// The collection of layers that make up this neural network.
+    /// The internal collection of layers that make up this neural network.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Layers are the building blocks of neural networks. Each layer contains 
-    /// neurons that process information and pass it to the next layer. A typical network has 
-    /// an input layer (receives data), hidden layers (process data), and an output layer (produces results).
+    /// This field is private to ensure parameter count cache invalidation.
+    /// Use the Layers property for read access or AddLayerToCollection/RemoveLayerFromCollection methods for modifications.
     /// </remarks>
-    protected readonly List<ILayer<T>> Layers;
+    private readonly List<ILayer<T>> _layers;
+
+    /// <summary>
+    /// Gets the collection of layers that make up this neural network (read-only access).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Layers are the building blocks of neural networks. Each layer contains
+    /// neurons that process information and pass it to the next layer. A typical network has
+    /// an input layer (receives data), hidden layers (process data), and an output layer (produces results).
+    /// <para>
+    /// <b>Important:</b> Do not directly modify this collection (e.g., Layers.Add()).
+    /// Use AddLayerToCollection() or RemoveLayerFromCollection() instead to ensure proper cache invalidation.
+    /// </para>
+    /// </remarks>
+    protected List<ILayer<T>> Layers => _layers;
     
     /// <summary>
     /// The architecture definition for this neural network.
@@ -144,7 +157,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     protected NeuralNetworkBase(NeuralNetworkArchitecture<T> architecture, ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
     {
         Architecture = architecture;
-        Layers = [];
+        _layers = [];
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
@@ -424,6 +437,52 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     protected void InvalidateParameterCountCache()
     {
         _cachedParameterCount = null;
+    }
+
+    /// <summary>
+    /// Adds a layer to the internal layers collection and invalidates the parameter count cache.
+    /// </summary>
+    /// <param name="layer">The layer to add</param>
+    /// <remarks>
+    /// This method ensures that the parameter count cache is properly invalidated when layers are added.
+    /// Derived classes should use this method instead of directly accessing Layers.Add().
+    /// </remarks>
+    protected void AddLayerToCollection(ILayer<T> layer)
+    {
+        _layers.Add(layer);
+        InvalidateParameterCountCache();
+    }
+
+    /// <summary>
+    /// Removes a layer from the internal layers collection and invalidates the parameter count cache.
+    /// </summary>
+    /// <param name="layer">The layer to remove</param>
+    /// <returns>True if the layer was successfully removed, false otherwise</returns>
+    /// <remarks>
+    /// This method ensures that the parameter count cache is properly invalidated when layers are removed.
+    /// Derived classes should use this method instead of directly accessing Layers.Remove().
+    /// </remarks>
+    protected bool RemoveLayerFromCollection(ILayer<T> layer)
+    {
+        bool removed = _layers.Remove(layer);
+        if (removed)
+        {
+            InvalidateParameterCountCache();
+        }
+        return removed;
+    }
+
+    /// <summary>
+    /// Clears all layers from the internal layers collection and invalidates the parameter count cache.
+    /// </summary>
+    /// <remarks>
+    /// This method ensures that the parameter count cache is properly invalidated when layers are cleared.
+    /// Derived classes should use this method instead of directly accessing Layers.Clear().
+    /// </remarks>
+    protected void ClearLayers()
+    {
+        _layers.Clear();
+        InvalidateParameterCountCache();
     }
 
     /// <summary>
@@ -918,8 +977,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         using var reader = new BinaryReader(ms);
 
         // Clear existing layers
-        Layers.Clear();
-        InvalidateParameterCountCache();
+        ClearLayers();
 
         // Read the number of layers
         int layerCount = reader.ReadInt32();
@@ -965,7 +1023,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             }
 
             // Add the layer to the network
-            Layers.Add(layer);
+            _layers.Add(layer);
         }
 
         // Invalidate parameter count cache after loading all layers
@@ -1647,8 +1705,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             LayerType.Dense => new DenseLayer<T>(inputSize, units, activationFunc),
             _ => throw new NotSupportedException($"Layer type {layerType} not supported in AddLayer method")
         };
-        Layers.Add(layer);
-        InvalidateParameterCountCache();
+        AddLayerToCollection(layer);
     }
 
     /// <summary>
@@ -1680,8 +1737,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     public virtual void AddDropoutLayer(double dropoutRate)
     {
         var layer = new DropoutLayer<T>(dropoutRate);
-        Layers.Add(layer);
-        InvalidateParameterCountCache();
+        AddLayerToCollection(layer);
     }
 
     /// <summary>
@@ -1693,8 +1749,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     public virtual void AddBatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9)
     {
         var layer = new BatchNormalizationLayer<T>(featureSize, epsilon, momentum);
-        Layers.Add(layer);
-        InvalidateParameterCountCache();
+        AddLayerToCollection(layer);
     }
 
     /// <summary>
@@ -1707,8 +1762,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     public virtual void AddPoolingLayer(int[] inputShape, PoolingType poolingType, int poolSize, int? strides = null)
     {
         var layer = new MaxPoolingLayer<T>(inputShape, poolSize, strides ?? poolSize);
-        Layers.Add(layer);
-        InvalidateParameterCountCache();
+        AddLayerToCollection(layer);
     }
 
     /// <summary>
