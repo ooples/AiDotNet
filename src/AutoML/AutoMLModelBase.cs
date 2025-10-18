@@ -433,7 +433,7 @@ namespace AiDotNet.AutoML
         public virtual IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
         {
             if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
+                throw new InvalidOperationException("No best model found. Run SearchAsync, Search, or SearchBestModel first.");
 
             // Create a deep copy and set the new parameters
             var copy = DeepCopy();
