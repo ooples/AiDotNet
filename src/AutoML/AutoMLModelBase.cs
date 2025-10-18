@@ -277,6 +277,8 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Evaluates a model on the validation set
         /// </summary>
+        /// <returns>The evaluation score, or double.NaN if no evaluator is set</returns>
+        /// <exception cref="InvalidOperationException">Thrown when no model evaluator has been set via SetModelEvaluator</exception>
         protected virtual async Task<double> EvaluateModelAsync(
             IFullModel<T, TInput, TOutput> model,
             TInput validationInputs,
@@ -455,9 +457,9 @@ namespace AiDotNet.AutoML
         public virtual IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
         {
             if (BestModel == null)
-                throw new InvalidOperationException("No best model found.");
+                throw new InvalidOperationException("No best model found. Run SearchAsync first or set BestModel before calling WithParameters.");
 
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            return BestModel.WithParameters(parameters);
         }
 
         #endregion
@@ -522,7 +524,10 @@ namespace AiDotNet.AutoML
         /// </summary>
         public virtual IFullModel<T, TInput, TOutput> Clone()
         {
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            if (BestModel == null)
+                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
+
+            return BestModel.Clone();
         }
 
         /// <summary>
@@ -530,7 +535,10 @@ namespace AiDotNet.AutoML
         /// </summary>
         public virtual IFullModel<T, TInput, TOutput> DeepCopy()
         {
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            if (BestModel == null)
+                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
+
+            return BestModel.DeepCopy();
         }
 
         #endregion
