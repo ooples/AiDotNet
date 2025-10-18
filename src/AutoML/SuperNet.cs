@@ -555,8 +555,16 @@ namespace AiDotNet.AutoML
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
-            // Validate path doesn't contain dangerous patterns
+            // Validate path security: prevent directory traversal attacks
+            if (filePath.Contains(".."))
+                throw new ArgumentException("File path contains invalid directory traversal patterns (..).", nameof(filePath));
+
             var fullPath = System.IO.Path.GetFullPath(filePath);
+
+            // Additional validation: ensure the resolved path doesn't escape the working directory
+            var currentDirectory = System.IO.Path.GetFullPath(Environment.CurrentDirectory);
+            if (!fullPath.StartsWith(currentDirectory, StringComparison.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException($"Attempted to save model outside of the current directory. Path: {fullPath}");
 
             using var fs = new System.IO.FileStream(fullPath, System.IO.FileMode.Create);
             using var writer = new System.IO.BinaryWriter(fs);
@@ -598,8 +606,17 @@ namespace AiDotNet.AutoML
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
-            // Validate path doesn't contain dangerous patterns
+            // Validate path security: prevent directory traversal attacks
+            if (filePath.Contains(".."))
+                throw new ArgumentException("File path contains invalid directory traversal patterns (..).", nameof(filePath));
+
             var fullPath = System.IO.Path.GetFullPath(filePath);
+
+            // Additional validation: ensure the resolved path doesn't escape the working directory
+            var currentDirectory = System.IO.Path.GetFullPath(Environment.CurrentDirectory);
+            if (!fullPath.StartsWith(currentDirectory, StringComparison.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException($"Attempted to load model from outside the current directory. Path: {fullPath}");
+
             if (!System.IO.File.Exists(fullPath))
                 throw new System.IO.FileNotFoundException($"Model file not found: {filePath}");
 
