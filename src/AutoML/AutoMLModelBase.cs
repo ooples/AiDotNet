@@ -357,6 +357,14 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Loads the model from a file
         /// </summary>
+        /// <param name="filePath">The file path to load from</param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when BestModel is null. BestModel must be initialized to the correct concrete model type before loading.
+        /// </exception>
+        /// <remarks>
+        /// This method requires that BestModel is already set to a concrete model instance that can deserialize the file format.
+        /// AutoML models should typically be recreated using SearchAsync, or BestModel should be initialized before calling this method.
+        /// </remarks>
         public virtual void LoadModel(string filePath)
         {
             if (BestModel == null)
@@ -382,8 +390,25 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Deserializes the model from bytes
         /// </summary>
+        /// <param name="data">The byte array containing the serialized model data</param>
+        /// <exception cref="ArgumentNullException">Thrown when data is null</exception>
+        /// <exception cref="ArgumentException">Thrown when data is empty</exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when BestModel is null. BestModel must be initialized to the correct concrete model type before deserializing.
+        /// </exception>
+        /// <remarks>
+        /// This method requires that BestModel is already set to a concrete model instance that can deserialize the byte format.
+        /// AutoML models should typically be recreated using SearchAsync, or BestModel should be initialized before calling this method.
+        /// The data format must match the serialization format expected by the BestModel instance.
+        /// </remarks>
         public virtual void Deserialize(byte[] data)
         {
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+
+            if (data.Length == 0)
+                throw new ArgumentException("Data cannot be empty.", nameof(data));
+
             if (BestModel == null)
             {
                 // This scenario requires a mechanism to determine the concrete type of BestModel
