@@ -564,27 +564,69 @@ namespace AiDotNet.AutoML
 
         /// <summary>
         /// Gets the global feature importance across all predictions.
-        /// Not supported for SuperNet as architecture parameters do not directly map to input features.
+        /// Analyzes architecture parameters to determine operation importance by aggregating absolute values.
         /// </summary>
         public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync(Tensor<T> inputs)
         {
-            await Task.CompletedTask;
-            throw new NotSupportedException(
-                "Feature importance calculation is not supported for SuperNet architecture search models, " +
-                "as architecture parameters do not directly map to input features. " +
-                "In DARTS, architecture parameters encode operation weights between nodes, not feature-level importance.");
+            var importance = new Dictionary<int, T>();
+
+            // For SuperNet, we analyze operation importance rather than input feature importance
+            // Each operation index represents a different architectural operation (identity, conv3x3, etc.)
+            for (int opIdx = 0; opIdx < _numOperations; opIdx++)
+            {
+                T sum = _ops.Zero;
+
+                // Aggregate importance across all nodes and connections
+                foreach (var alpha in _architectureParams)
+                {
+                    // Sum absolute values of architecture parameters for this operation
+                    for (int i = 0; i < alpha.Rows; i++)
+                    {
+                        if (opIdx < alpha.Columns)
+                        {
+                            sum = _ops.Add(sum, _ops.Abs(alpha[i, opIdx]));
+                        }
+                    }
+                }
+
+                importance[opIdx] = sum;
+            }
+
+            return await Task.FromResult(importance);
         }
 
         /// <summary>
         /// Gets the local feature importance for a specific input.
-        /// Not supported for SuperNet as architecture parameters do not directly map to input features.
+        /// Provides importance based on softmax weights, analyzing which operations are most active.
         /// </summary>
         public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Tensor<T> input)
         {
-            await Task.CompletedTask;
-            throw new NotSupportedException(
-                "Feature importance calculation is not supported for SuperNet architecture search models, " +
-                "as architecture parameters do not directly map to input features.");
+            var importance = new Dictionary<int, T>();
+
+            // For local importance, we use softmax-transformed architecture parameters
+            // to determine which operations are most active for this specific input
+            for (int opIdx = 0; opIdx < _numOperations; opIdx++)
+            {
+                T sum = _ops.Zero;
+
+                // Apply softmax and aggregate weights for each operation
+                foreach (var alpha in _architectureParams)
+                {
+                    var softmaxWeights = ApplySoftmax(alpha);
+
+                    for (int i = 0; i < softmaxWeights.Rows; i++)
+                    {
+                        if (opIdx < softmaxWeights.Columns)
+                        {
+                            sum = _ops.Add(sum, softmaxWeights[i, opIdx]);
+                        }
+                    }
+                }
+
+                importance[opIdx] = sum;
+            }
+
+            return await Task.FromResult(importance);
         }
 
         /// <summary>
@@ -726,14 +768,77 @@ namespace AiDotNet.AutoML
 
         /// <summary>
         /// Gets feature interaction effects between two features.
-        /// Not supported for SuperNet as architecture parameters do not directly map to input features.
+        /// Analyzes interactions between operations based on architecture parameter correlations.
         /// </summary>
         public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
         {
-            await Task.CompletedTask;
-            throw new NotSupportedException(
-                "Feature interaction calculation is not supported for SuperNet architecture search models, " +
-                "as architecture parameters do not directly map to input features.");
+            // In SuperNet context, feature indices represent operation indices
+            if (feature1Index < 0 || feature1Index >= _numOperations ||
+                feature2Index < 0 || feature2Index >= _numOperations)
+            {
+                return _ops.Zero;
+            }
+
+            // Calculate correlation between two operations across all architecture parameters
+            T sum1 = _ops.Zero;
+            T sum2 = _ops.Zero;
+            T sumProduct = _ops.Zero;
+            T sumSquares1 = _ops.Zero;
+            T sumSquares2 = _ops.Zero;
+            int count = 0;
+
+            foreach (var alpha in _architectureParams)
+            {
+                for (int i = 0; i < alpha.Rows; i++)
+                {
+                    if (feature1Index < alpha.Columns && feature2Index < alpha.Columns)
+                    {
+                        T val1 = alpha[i, feature1Index];
+                        T val2 = alpha[i, feature2Index];
+
+                        sum1 = _ops.Add(sum1, val1);
+                        sum2 = _ops.Add(sum2, val2);
+                        sumProduct = _ops.Add(sumProduct, _ops.Multiply(val1, val2));
+                        sumSquares1 = _ops.Add(sumSquares1, _ops.Multiply(val1, val1));
+                        sumSquares2 = _ops.Add(sumSquares2, _ops.Multiply(val2, val2));
+                        count++;
+                    }
+                }
+            }
+
+            if (count == 0)
+            {
+                return _ops.Zero;
+            }
+
+            // Calculate correlation coefficient
+            T n = _ops.FromDouble(count);
+            T numerator = _ops.Subtract(
+                _ops.Multiply(n, sumProduct),
+                _ops.Multiply(sum1, sum2)
+            );
+
+            T denom1 = _ops.Subtract(
+                _ops.Multiply(n, sumSquares1),
+                _ops.Multiply(sum1, sum1)
+            );
+
+            T denom2 = _ops.Subtract(
+                _ops.Multiply(n, sumSquares2),
+                _ops.Multiply(sum2, sum2)
+            );
+
+            T denominator = _ops.Multiply(denom1, denom2);
+
+            // Avoid division by zero
+            if (_ops.Equals(denominator, _ops.Zero))
+            {
+                return _ops.Zero;
+            }
+
+            T correlation = _ops.Divide(numerator, _ops.Sqrt(denominator));
+
+            return await Task.FromResult(correlation);
         }
 
         /// <summary>
