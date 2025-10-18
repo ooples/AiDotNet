@@ -543,12 +543,8 @@ namespace AiDotNet.AutoML
 
             // Validate path doesn't contain dangerous patterns
             var fullPath = System.IO.Path.GetFullPath(filePath);
-            if (!fullPath.StartsWith(System.IO.Path.GetFullPath(".")))
-            {
-                // Allow absolute paths, but be aware of security implications
-            }
 
-            using var fs = new System.IO.FileStream(filePath, System.IO.FileMode.Create);
+            using var fs = new System.IO.FileStream(fullPath, System.IO.FileMode.Create);
             using var writer = new System.IO.BinaryWriter(fs);
 
             writer.Write(_numNodes);
@@ -593,7 +589,7 @@ namespace AiDotNet.AutoML
             if (!System.IO.File.Exists(fullPath))
                 throw new System.IO.FileNotFoundException($"Model file not found: {filePath}");
 
-            using var fs = new System.IO.FileStream(filePath, System.IO.FileMode.Open);
+            using var fs = new System.IO.FileStream(fullPath, System.IO.FileMode.Open);
             using var reader = new System.IO.BinaryReader(fs);
 
             // Deserialize _numNodes and _numOperations (read-only fields need reflection or constructor)
