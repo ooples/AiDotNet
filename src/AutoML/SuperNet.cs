@@ -564,71 +564,27 @@ namespace AiDotNet.AutoML
 
         /// <summary>
         /// Gets the global feature importance across all predictions.
-        /// For SuperNet, this analyzes architecture parameters to determine feature importance.
+        /// Not supported for SuperNet as architecture parameters do not directly map to input features.
         /// </summary>
         public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
         {
-            var importance = new Dictionary<int, T>();
-
-            // Analyze architecture parameters to estimate feature importance
-            // Sum the absolute values of architecture parameters for each input feature
-            for (int featureIdx = 0; featureIdx < _inputSize; featureIdx++)
-            {
-                T totalImportance = _ops.Zero;
-
-                // Aggregate importance across all nodes and operations
-                // For each feature, sum the architecture parameters in the corresponding row (if it exists)
-                foreach (var alpha in _architectureParams)
-                {
-                    // Check if this feature index exists as a row in the architecture parameters
-                    if (featureIdx < alpha.Rows)
-                    {
-                        for (int j = 0; j < alpha.Columns; j++)
-                        {
-                            totalImportance = _ops.Add(totalImportance, _ops.Abs(alpha[featureIdx, j]));
-                        }
-                    }
-                }
-
-                importance[featureIdx] = totalImportance;
-            }
-
-            return await Task.FromResult(importance);
+            await Task.CompletedTask;
+            throw new NotSupportedException(
+                "Feature importance calculation is not supported for SuperNet architecture search models, " +
+                "as architecture parameters do not directly map to input features. " +
+                "In DARTS, architecture parameters encode operation weights between nodes, not feature-level importance.");
         }
 
         /// <summary>
         /// Gets the local feature importance for a specific input.
-        /// For SuperNet, this provides importance based on which operations are most active for the input.
+        /// Not supported for SuperNet as architecture parameters do not directly map to input features.
         /// </summary>
         public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Tensor<T> input)
         {
-            var importance = new Dictionary<int, T>();
-
-            // For each input feature, calculate importance based on softmax weights
-            for (int featureIdx = 0; featureIdx < _inputSize; featureIdx++)
-            {
-                T totalImportance = _ops.Zero;
-
-                // Analyze softmax weights across all nodes
-                // For each feature, analyze the architecture parameters in the corresponding row
-                foreach (var alpha in _architectureParams)
-                {
-                    var softmaxWeights = ApplySoftmax(alpha);
-
-                    // Sum the softmax weights for the row corresponding to this feature
-                    if (featureIdx < softmaxWeights.Rows)
-                    {
-                        for (int j = 0; j < softmaxWeights.Columns; j++)
-                        {
-                            totalImportance = _ops.Add(totalImportance, softmaxWeights[featureIdx, j]);
-                        }
-                    }
-                }
-
-                importance[featureIdx] = totalImportance;
-            }
-
-            return await Task.FromResult(importance);
+            await Task.CompletedTask;
+            throw new NotSupportedException(
+                "Feature importance calculation is not supported for SuperNet architecture search models, " +
+                "as architecture parameters do not directly map to input features.");
         }
 
         /// <summary>
@@ -740,22 +696,29 @@ namespace AiDotNet.AutoML
                 var softmax = ApplySoftmax(alpha);
 
                 // Find the operation with highest weight
-                int bestOp = 0;
-                T bestWeight = softmax[0, 0];
-
-                for (int i = 0; i < softmax.Rows; i++)
+                if (softmax.Rows > 0 && softmax.Columns > 0)
                 {
-                    for (int j = 0; j < softmax.Columns; j++)
+                    int bestOp = 0;
+                    T bestWeight = softmax[0, 0];
+
+                    for (int i = 0; i < softmax.Rows; i++)
                     {
-                        if (_ops.GreaterThan(softmax[i, j], bestWeight))
+                        for (int j = 0; j < softmax.Columns; j++)
                         {
-                            bestWeight = softmax[i, j];
-                            bestOp = j;
+                            if (_ops.GreaterThan(softmax[i, j], bestWeight))
+                            {
+                                bestWeight = softmax[i, j];
+                                bestOp = j;
+                            }
                         }
                     }
-                }
 
-                explanation += $"- Node {nodeIdx}: {GetOperationName(bestOp)} operation is dominant\n";
+                    explanation += $"- Node {nodeIdx}: {GetOperationName(bestOp)} operation is dominant\n";
+                }
+                else
+                {
+                    explanation += $"- Node {nodeIdx}: No operations available (empty softmax matrix)\n";
+                }
             }
 
             return await Task.FromResult(explanation);
@@ -763,48 +726,14 @@ namespace AiDotNet.AutoML
 
         /// <summary>
         /// Gets feature interaction effects between two features.
-        /// For SuperNet, analyzes how operations interact.
+        /// Not supported for SuperNet as architecture parameters do not directly map to input features.
         /// </summary>
         public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
         {
-            // Calculate interaction as the correlation between architecture parameters
-            // affecting different features
-            T interaction = _ops.Zero;
-
-            if (feature1Index >= 0 && feature1Index < _inputSize &&
-                feature2Index >= 0 && feature2Index < _inputSize &&
-                _architectureParams.Count > 0)
-            {
-                // Simple interaction measure: product of architecture parameter magnitudes
-                // for different features
-                foreach (var alpha in _architectureParams)
-                {
-                    T sum1 = _ops.Zero;
-                    T sum2 = _ops.Zero;
-
-                    // Sum over the row corresponding to feature1Index for sum1
-                    if (feature1Index >= 0 && feature1Index < alpha.Rows)
-                    {
-                        for (int j = 0; j < alpha.Columns; j++)
-                        {
-                            sum1 = _ops.Add(sum1, _ops.Abs(alpha[feature1Index, j]));
-                        }
-                    }
-
-                    // Sum over the row corresponding to feature2Index for sum2
-                    if (feature2Index >= 0 && feature2Index < alpha.Rows)
-                    {
-                        for (int j = 0; j < alpha.Columns; j++)
-                        {
-                            sum2 = _ops.Add(sum2, _ops.Abs(alpha[feature2Index, j]));
-                        }
-                    }
-
-                    interaction = _ops.Add(interaction, _ops.Multiply(sum1, sum2));
-                }
-            }
-
-            return await Task.FromResult(interaction);
+            await Task.CompletedTask;
+            throw new NotSupportedException(
+                "Feature interaction calculation is not supported for SuperNet architecture search models, " +
+                "as architecture parameters do not directly map to input features.");
         }
 
         /// <summary>
@@ -875,3 +804,4 @@ namespace AiDotNet.AutoML
         #endregion
     }
 }
+
