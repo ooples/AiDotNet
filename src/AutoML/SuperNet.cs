@@ -463,6 +463,19 @@ namespace AiDotNet.AutoML
             return output;
         }
 
+        private string GetOperationName(int opIdx)
+        {
+            return opIdx switch
+            {
+                0 => "identity",
+                1 => "conv3x3",
+                2 => "conv5x5",
+                3 => "maxpool",
+                4 => "avgpool",
+                _ => "identity"
+            };
+        }
+
         // IFullModel implementation
         public Vector<T> GetParameters()
         {
@@ -750,19 +763,6 @@ namespace AiDotNet.AutoML
         }
 
         public IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-        private string GetOperationName(int opIdx)
-        {
-            return opIdx switch
-            {
-                0 => "identity",
-                1 => "conv3x3",
-                2 => "conv5x5",
-                3 => "maxpool",
-                4 => "avgpool",
-                _ => "identity"
-            };
-        }
 
         #region IInterpretableModel Implementation
 
