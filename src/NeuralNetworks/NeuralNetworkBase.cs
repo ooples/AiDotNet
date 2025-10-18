@@ -872,10 +872,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// Deserializes the neural network from a byte array.
     /// </summary>
     /// <param name="data">The byte array containing the serialized neural network data.</param>
-    /// <summary>
-    /// Deserializes the neural network from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized neural network data.</param>
     public virtual void Deserialize(byte[] data)
     {
         using var ms = new MemoryStream(data);

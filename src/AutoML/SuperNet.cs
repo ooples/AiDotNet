@@ -464,6 +464,12 @@ namespace AiDotNet.AutoML
             return output;
         }
 
+        /// <summary>
+        /// Gets the human-readable name for a given operation index.
+        /// Maps operation indices to their corresponding operation types in the NAS search space.
+        /// </summary>
+        /// <param name="opIdx">The operation index (0-4)</param>
+        /// <returns>The operation name (identity, conv3x3, conv5x5, maxpool, avgpool)</returns>
         private string GetOperationName(int opIdx)
         {
             return opIdx switch
@@ -771,6 +777,11 @@ namespace AiDotNet.AutoML
         /// Gets the global feature importance across all predictions.
         /// Analyzes architecture parameters to determine operation importance by aggregating absolute values.
         /// </summary>
+        /// <param name="inputs">Input tensor (required for interface compliance but not used in this implementation)</param>
+        /// <remarks>
+        /// The 'inputs' parameter is required for interface compliance but is not used in this implementation.
+        /// SuperNet analyzes operation importance based on architecture parameters rather than input features.
+        /// </remarks>
         public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync(Tensor<T> inputs)
         {
             var importance = new Dictionary<int, T>();
