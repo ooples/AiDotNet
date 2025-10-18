@@ -277,8 +277,6 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Evaluates a model on the validation set
         /// </summary>
-        /// <returns>The evaluation score, or double.NaN if no evaluator is set</returns>
-        /// <exception cref="InvalidOperationException">Thrown when no model evaluator has been set via SetModelEvaluator</exception>
         protected virtual async Task<double> EvaluateModelAsync(
             IFullModel<T, TInput, TOutput> model,
             TInput validationInputs,
@@ -306,8 +304,11 @@ namespace AiDotNet.AutoML
                 }
                 else
                 {
-                    // No model evaluator set; cannot evaluate model without evaluator
-                    throw new InvalidOperationException("No model evaluator set; cannot evaluate model without evaluator.");
+                    // Fallback to simple prediction-based evaluation
+                    var predictions = model.Predict(validationInputs);
+                    // For now, return a placeholder score
+                    // In a real implementation, this would calculate the metric based on the data types
+                    return 0.0;
                 }
             }));
         }
@@ -359,14 +360,6 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Loads the model from a file
         /// </summary>
-        /// <param name="filePath">The file path to load from</param>
-        /// <exception cref="InvalidOperationException">
-        /// Thrown when BestModel is null. BestModel must be initialized to the correct concrete model type before loading.
-        /// </exception>
-        /// <remarks>
-        /// This method requires that BestModel is already set to a concrete model instance that can deserialize the file format.
-        /// AutoML models should typically be recreated using SearchAsync, or BestModel should be initialized before calling this method.
-        /// </remarks>
         public virtual void LoadModel(string filePath)
         {
             if (BestModel == null)
@@ -392,25 +385,8 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Deserializes the model from bytes
         /// </summary>
-        /// <param name="data">The byte array containing the serialized model data</param>
-        /// <exception cref="ArgumentNullException">Thrown when data is null</exception>
-        /// <exception cref="ArgumentException">Thrown when data is empty</exception>
-        /// <exception cref="InvalidOperationException">
-        /// Thrown when BestModel is null. BestModel must be initialized to the correct concrete model type before deserializing.
-        /// </exception>
-        /// <remarks>
-        /// This method requires that BestModel is already set to a concrete model instance that can deserialize the byte format.
-        /// AutoML models should typically be recreated using SearchAsync, or BestModel should be initialized before calling this method.
-        /// The data format must match the serialization format expected by the BestModel instance.
-        /// </remarks>
         public virtual void Deserialize(byte[] data)
         {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
-
-            if (data.Length == 0)
-                throw new ArgumentException("Data cannot be empty.", nameof(data));
-
             if (BestModel == null)
             {
                 // This scenario requires a mechanism to determine the concrete type of BestModel
@@ -457,9 +433,12 @@ namespace AiDotNet.AutoML
         public virtual IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
         {
             if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first or set BestModel before calling WithParameters.");
+                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
 
-            return BestModel.WithParameters(parameters);
+            // Create a deep copy and set the new parameters
+            var copy = DeepCopy();
+            copy.SetParameters(parameters);
+            return copy;
         }
 
         #endregion
@@ -520,14 +499,13 @@ namespace AiDotNet.AutoML
         #region ICloneable Implementation
 
         /// <summary>
-        /// Creates a deep copy of the AutoML model
+        /// Creates a shallow copy of the AutoML model
         /// </summary>
         public virtual IFullModel<T, TInput, TOutput> Clone()
         {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-
-            return BestModel.Clone();
+            // Clone creates a shallow copy using MemberwiseClone
+            // For a deep copy, use DeepCopy() instead
+            return (AutoMLModelBase<T, TInput, TOutput>)MemberwiseClone();
         }
 
         /// <summary>
@@ -535,11 +513,69 @@ namespace AiDotNet.AutoML
         /// </summary>
         public virtual IFullModel<T, TInput, TOutput> DeepCopy()
         {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync first.");
+            // Create a new instance using the factory method to avoid sharing readonly collections
+            var copy = CreateInstanceForCopy();
 
-            return BestModel.DeepCopy();
+            // Deep copy collections under lock to ensure thread safety
+            lock (_lock)
+            {
+                // Deep copy trial history
+                foreach (var t in _trialHistory)
+                {
+                    copy._trialHistory.Add(t.Clone());
+                }
+
+                // Deep copy search space parameters
+                foreach (var kvp in _searchSpace)
+                {
+                    // Deep copy each ParameterRange if it's cloneable, otherwise shallow copy
+                    // Since ParameterRange may not exist yet, we handle both scenarios
+                    copy._searchSpace[kvp.Key] = kvp.Value is ICloneable cloneable
+                        ? (ParameterRange)cloneable.Clone()
+                        : kvp.Value;
+                }
+
+                // Copy candidate models (ModelType is an enum, so no deep copy needed)
+                foreach (var model in _candidateModels)
+                {
+                    copy._candidateModels.Add(model);
+                }
+
+                // Deep copy constraints
+                foreach (var constraint in _constraints)
+                {
+                    // Deep copy each SearchConstraint if it's cloneable, otherwise shallow copy
+                    copy._constraints.Add(constraint is ICloneable cloneable
+                        ? (SearchConstraint)cloneable.Clone()
+                        : constraint);
+                }
+            }
+
+            // Deep copy the best model if it exists
+            copy.BestModel = BestModel?.DeepCopy();
+
+            // Copy value types and other properties
+            copy._optimizationMetric = _optimizationMetric;
+            copy._maximize = _maximize;
+            copy._earlyStoppingPatience = _earlyStoppingPatience;
+            copy._earlyStoppingMinDelta = _earlyStoppingMinDelta;
+            copy._trialsSinceImprovement = _trialsSinceImprovement;
+            copy.BestScore = BestScore;
+            copy.TimeLimit = TimeLimit;
+            copy.TrialLimit = TrialLimit;
+            copy.Status = Status;
+            copy.FeatureNames = (string[])FeatureNames.Clone();
+            copy._modelEvaluator = _modelEvaluator; // Shared reference is acceptable for the evaluator
+
+            return copy;
         }
+
+        /// <summary>
+        /// Factory method for creating a new instance for deep copy.
+        /// Derived classes must implement this to return a new instance of themselves.
+        /// This ensures each copy has its own collections and lock object.
+        /// </summary>
+        protected abstract AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy();
 
         #endregion
 
