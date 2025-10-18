@@ -11,7 +11,7 @@ namespace AiDotNet.AutoML
     public class HyperparameterSpace
     {
         private readonly Dictionary<string, ParameterRange> _parameters = new();
-        private readonly Random _random = default!;
+        private readonly Random _random;
 
         /// <summary>
         /// Initializes a new instance of the HyperparameterSpace class

@@ -23,7 +23,7 @@ namespace AiDotNet.AutoML
             // Create LSTM layer with proper parameters: inputSize, hiddenSize, inputShape
             // We need to pass activation functions to disambiguate the constructor
             controller = new LSTMLayer<T>(10, 50, new int[] { 1, 10 }, 
-                default(IActivationFunction<T>), default(IActivationFunction<T>));
+                null, null);
         }
         
         /// <summary>

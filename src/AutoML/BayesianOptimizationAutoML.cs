@@ -18,10 +18,10 @@ namespace AiDotNet.AutoML
     /// <typeparam name="TOutput">The output data type</typeparam>
     public class BayesianOptimizationAutoML<T, TInput, TOutput> : AutoMLModelBase<T, TInput, TOutput>
     {
-        private readonly HyperparameterSpace _hyperparameterSpace = default!;
+        private readonly HyperparameterSpace _hyperparameterSpace;
         private readonly int _numInitialPoints;
         private readonly double _explorationWeight;
-        private readonly Random _random = default!;
+        private readonly Random _random;
         
         // Gaussian Process components for Bayesian optimization
         private readonly List<T[]> _observedPoints = new();

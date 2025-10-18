@@ -3,7 +3,7 @@
 	  <TargetFrameworks>net462;net6.0;net8.0</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<NoWarn>CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8619;CS8625</NoWarn>
+		<!-- <NoWarn>CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8619;CS8625</NoWarn> -->
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Version>0.0.5-preview</Version>
 		<Title>Ai for .Net</Title>
