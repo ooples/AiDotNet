@@ -526,13 +526,10 @@ namespace AiDotNet.AutoML
                 }
 
                 // Deep copy search space parameters
+                // ParameterRange implements ICloneable, so we always call Clone()
                 foreach (var kvp in _searchSpace)
                 {
-                    // Deep copy each ParameterRange if it's cloneable, otherwise shallow copy
-                    // Since ParameterRange may not exist yet, we handle both scenarios
-                    copy._searchSpace[kvp.Key] = kvp.Value is ICloneable cloneable
-                        ? (ParameterRange)cloneable.Clone()
-                        : kvp.Value;
+                    copy._searchSpace[kvp.Key] = (ParameterRange)((ICloneable)kvp.Value).Clone();
                 }
 
                 // Copy candidate models (ModelType is an enum, so no deep copy needed)
@@ -542,12 +539,10 @@ namespace AiDotNet.AutoML
                 }
 
                 // Deep copy constraints
+                // SearchConstraint implements ICloneable, so we always call Clone()
                 foreach (var constraint in _constraints)
                 {
-                    // Deep copy each SearchConstraint if it's cloneable, otherwise shallow copy
-                    copy._constraints.Add(constraint is ICloneable cloneable
-                        ? (SearchConstraint)cloneable.Clone()
-                        : constraint);
+                    copy._constraints.Add((SearchConstraint)((ICloneable)constraint).Clone());
                 }
             }
 
@@ -575,6 +570,12 @@ namespace AiDotNet.AutoML
         /// Derived classes must implement this to return a new instance of themselves.
         /// This ensures each copy has its own collections and lock object.
         /// </summary>
+        /// <returns>A fresh instance of the derived class with default parameters</returns>
+        /// <remarks>
+        /// When implementing this method, derived classes should create a fresh instance with default parameters,
+        /// and should not attempt to preserve runtime or initialization state from the original instance.
+        /// The deep copy logic will transfer relevant state (trial history, search space, etc.) after construction.
+        /// </remarks>
         protected abstract AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy();
 
 

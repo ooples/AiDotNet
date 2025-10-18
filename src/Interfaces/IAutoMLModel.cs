@@ -2,11 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using AiDotNet.AutoML;
 using AiDotNet.Enums;
 using AiDotNet.Models;
-using ParameterRange = AiDotNet.AutoML.ParameterRange;
-using TrialResult = AiDotNet.AutoML.TrialResult;
-using SearchConstraint = AiDotNet.AutoML.SearchConstraint;
 
 namespace AiDotNet.Interfaces
 {

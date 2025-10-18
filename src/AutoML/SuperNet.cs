@@ -774,13 +774,21 @@ namespace AiDotNet.AutoML
         #region IInterpretableModel Implementation
 
         /// <summary>
-        /// Gets the global feature importance across all predictions.
-        /// Analyzes architecture parameters to determine operation importance by aggregating absolute values.
+        /// Gets the operation importance for SuperNet architecture search.
+        /// Returns importance scores for architectural operations rather than input features.
         /// </summary>
-        /// <param name="inputs">Input tensor (required for interface compliance but not used in this implementation)</param>
+        /// <param name="inputs">Input tensor (required for interface compliance; not used in this implementation)</param>
+        /// <returns>Dictionary mapping operation indices to their importance scores</returns>
         /// <remarks>
-        /// The 'inputs' parameter is required for interface compliance but is not used in this implementation.
-        /// SuperNet analyzes operation importance based on architecture parameters rather than input features.
+        /// <para>
+        /// <b>Note:</b> SuperNet reinterprets "feature importance" as "operation importance" in the context of Neural Architecture Search (NAS).
+        /// The returned dictionary maps operation indices (0=identity, 1=conv3x3, 2=conv5x5, etc.) to their importance scores,
+        /// calculated by aggregating the absolute values of architecture parameters across all nodes.
+        /// </para>
+        /// <para>
+        /// The 'inputs' parameter is required for IInterpretableModel interface compliance but is not used.
+        /// SuperNet analyzes operation importance based on learned architecture parameters rather than input data.
+        /// </para>
         /// </remarks>
         public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync(Tensor<T> inputs)
         {

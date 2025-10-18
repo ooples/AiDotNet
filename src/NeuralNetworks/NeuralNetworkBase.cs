@@ -300,6 +300,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// <para>
     /// The "gradients" are numbers that tell us how to adjust each parameter to reduce the error.
     /// </para>
+    /// <para>
+    /// <b>API Change Note:</b> The signature changed from Vector&lt;T&gt; to Tensor&lt;T&gt; to support multi-dimensional
+    /// gradients. This is a breaking change. If you need backward compatibility, consider adding an overload that
+    /// accepts Vector&lt;T&gt; and converts it internally to Tensor&lt;T&gt;.
+    /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when the network is not in training mode or doesn't support training.</exception>
     public virtual Tensor<T> Backpropagate(Tensor<T> outputGradients)
@@ -350,6 +355,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// remembers all the intermediate values. This is necessary for the learning process, as the network
     /// needs to know these values when figuring out how to improve.
     /// </para>
+    /// <para>
+    /// <b>API Change Note:</b> The signature changed from Vector&lt;T&gt; to Tensor&lt;T&gt; to support multi-dimensional
+    /// inputs. This is a breaking change. For backward compatibility, consider adding an overload that accepts
+    /// Vector&lt;T&gt; and converts it internally to Tensor&lt;T&gt;.
+    /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when the network doesn't support training.</exception>
     public virtual Tensor<T> ForwardWithMemory(Tensor<T> input)
@@ -383,6 +393,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// <b>For Beginners:</b> This tells you how many adjustable values (weights and biases) your neural network has.
     /// More complex networks typically have more parameters and can learn more complex patterns, but also
     /// require more data to train effectively. This is part of the IFullModel interface for consistency with other model types.
+    /// <para>
+    /// <b>Performance Note:</b> This property computes the sum on each access. For performance-critical code that accesses
+    /// ParameterCount multiple times, consider caching the value in a local variable to avoid redundant calculations.
+    /// </para>
     /// </remarks>
     public virtual int ParameterCount => Layers.Sum(layer => layer.ParameterCount);
 
