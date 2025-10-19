@@ -67,7 +67,7 @@ namespace AiDotNet.Interpretability
             T statisticalParityDifference)
         {
             // Validate parameters for reference types to prevent null assignment
-            if (default(T) == null)
+            if (!typeof(T).IsValueType)
             {
                 ArgumentNullException.ThrowIfNull(demographicParity);
                 ArgumentNullException.ThrowIfNull(equalOpportunity);
@@ -83,27 +83,6 @@ namespace AiDotNet.Interpretability
             PredictiveParity = predictiveParity;
             DisparateImpact = disparateImpact;
             StatisticalParityDifference = statisticalParityDifference;
-            AdditionalMetrics = new Dictionary<string, T>();
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the FairnessMetrics class.
-        /// </summary>
-        /// <remarks>
-        /// WARNING: This constructor uses default(T)! (null-forgiving operator) to initialize non-nullable properties.
-        /// For reference types, this assigns null to non-nullable properties, which may cause NullReferenceException at runtime.
-        /// For value types, this assigns the type's default value (e.g., 0 for numeric types).
-        /// This approach suppresses compiler warnings but does not eliminate runtime null reference risks.
-        /// </remarks>
-        [Obsolete("Use the constructor that accepts all metric values to avoid assigning null to non-nullable properties. This constructor will be removed in a future version.")]
-        public FairnessMetrics()
-        {
-            DemographicParity = default(T)!;
-            EqualOpportunity = default(T)!;
-            EqualizedOdds = default(T)!;
-            PredictiveParity = default(T)!;
-            DisparateImpact = default(T)!;
-            StatisticalParityDifference = default(T)!;
             AdditionalMetrics = new Dictionary<string, T>();
         }
     }
