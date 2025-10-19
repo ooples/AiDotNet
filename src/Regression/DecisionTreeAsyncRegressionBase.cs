@@ -582,6 +582,10 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
             importanceScores[node.FeatureIndex] = NumOps.Zero;
         }
 
+        // NOTE: This is a simple count-based approach to feature importance.
+        // It increments the score for each time a feature is used to split a node,
+        // but does NOT account for the quality of the split (e.g., reduction in impurity or error).
+        // This limitation means the importance scores may not reflect the true predictive power of each feature.
         importanceScores[node.FeatureIndex] = NumOps.Add(importanceScores[node.FeatureIndex], NumOps.One);
 
         CalculateFeatureImportanceRecursive(node.Left, importanceScores);
