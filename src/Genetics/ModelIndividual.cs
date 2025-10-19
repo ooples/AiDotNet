@@ -257,10 +257,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         throw new NotImplementedException("SetParameters is not yet implemented for this model type.");
     }
 
-    public virtual int ParameterCount
-    {
-        get { throw new NotImplementedException("ParameterCount is not yet implemented for this model type."); }
-    }
+    public virtual int ParameterCount => throw new NotImplementedException("ParameterCount is not yet implemented for this model type.");
 
     public virtual void SaveModel(string filePath)
     {
