@@ -320,6 +320,28 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Gets the total number of trainable parameters in the convolutional neural network.
+    /// </summary>
+    /// <returns>The total number of parameters across all layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the total number of trainable parameters by summing the parameter
+    /// counts from all layers in the network. Parameters include weights and biases that are
+    /// adjusted during training.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you how many individual values the network needs to learn
+    /// during training. Think of it like counting all the knobs and switches the network can adjust
+    /// to improve its performance. A network with more parameters can learn more complex patterns,
+    /// but also needs more training data to learn effectively.
+    /// </para>
+    /// </remarks>
+    public int GetParameterCount()
+    {
+        return Layers.Sum(layer => layer.ParameterCount);
+    }
+
+    /// <summary>
     /// Retrieves metadata about the convolutional neural network model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the network.</returns>
@@ -328,8 +350,8 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// This method collects and returns various pieces of information about the network's structure and configuration.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> This is like getting a summary of the network's blueprint. It tells you 
-    /// how many layers it has, what types of layers they are, and other important details about how 
+    /// <b>For Beginners:</b> This is like getting a summary of the network's blueprint. It tells you
+    /// how many layers it has, what types of layers they are, and other important details about how
     /// the network is set up.
     /// </para>
     /// </remarks>
