@@ -121,6 +121,14 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     protected T B { get; set; }
 
     /// <summary>
+    /// Gets or sets the feature names.
+    /// </summary>
+    /// <value>
+    /// An array of feature names. If not set, feature indices will be used as names.
+    /// </value>
+    public string[]? FeatureNames { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the NonLinearRegressionBase class with the specified options and regularization.
     /// </summary>
     /// <param name="options">Configuration options for the non-linear regression model. If null, default options will be used.</param>
@@ -778,6 +786,76 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         }
     
         return false;
+    }
+
+    /// <summary>
+    /// Sets the parameters for this model.
+    /// </summary>
+    /// <param name="parameters">A vector containing the model parameters.</param>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        int expectedParamCount = Alphas.Length + 1; // Alphas.Length + 1 (for Bias term)
+        if (parameters.Length != expectedParamCount)
+        {
+            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}", nameof(parameters));
+        }
+
+        for (int i = 0; i < Alphas.Length; i++)
+        {
+            Alphas[i] = parameters[i];
+        }
+        B = parameters[Alphas.Length];
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to activate.</param>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        var activeSet = new HashSet<int>(featureIndices);
+
+        for (int i = 0; i < SupportVectors.Rows; i++)
+        {
+            for (int j = 0; j < SupportVectors.Columns; j++)
+            {
+                if (!activeSet.Contains(j))
+                {
+                    SupportVectors[i, j] = NumOps.Zero;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        var result = new Dictionary<string, T>();
+        var importance = new T[SupportVectors.Columns];
+
+        for (int j = 0; j < SupportVectors.Columns; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < Alphas.Length; i++)
+            {
+                T weighted = NumOps.Multiply(NumOps.Abs(Alphas[i]), NumOps.Abs(SupportVectors[i, j]));
+                sum = NumOps.Add(sum, weighted);
+            }
+            importance[j] = sum;
+        }
+
+        for (int i = 0; i < importance.Length; i++)
+        {
+            string featureName = FeatureNames != null && i < FeatureNames.Length
+                ? FeatureNames[i]
+                : $"Feature_{i}";
+            result[featureName] = importance[i];
+        }
+
+        return result;
     }
 
     /// <summary>
