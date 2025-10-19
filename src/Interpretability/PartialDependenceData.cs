@@ -40,7 +40,9 @@ namespace AiDotNet.Interpretability
         /// </summary>
         public PartialDependenceData()
         {
+            FeatureIndices = new Vector<int>(0);
             GridValues = new Dictionary<int, Vector<T>>();
+            PartialDependenceValues = new Matrix<T>(0, 0);
             IceCurves = new List<Matrix<T>>();
         }
     }

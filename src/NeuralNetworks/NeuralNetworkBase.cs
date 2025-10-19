@@ -162,6 +162,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
         _cachedParameterCount = null;
+        _sensitiveFeatures = new Vector<int>(0);
     }
 
     /// <summary>
@@ -1392,7 +1393,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// <summary>
     /// Base model instance for interpretability delegation.
     /// </summary>
-    protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> _baseModel;
+    protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>>? _baseModel;
 
     /// <summary>
     /// Gets the global feature importance across all predictions.
