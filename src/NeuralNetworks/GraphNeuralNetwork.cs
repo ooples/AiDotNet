@@ -535,7 +535,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
 
         // Backpropagate to get parameter gradients
-        Vector<T> gradients = Backpropagate(outputGradients);
+        Vector<T> gradients = Backpropagate(Tensor<T>.FromVector(outputGradients)).ToVector();
 
         // Get parameter gradients for all trainable layers
         Vector<T> parameterGradients = GetParameterGradients();
@@ -599,7 +599,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         var outputGradients = new MeanSquaredErrorLoss<T>().CalculateDerivative(flattenedPredictions, flattenedExpected);
 
         // Back-propagate the gradients
-        Vector<T> backpropGradients = Backpropagate(outputGradients);
+        Vector<T> backpropGradients = Backpropagate(Tensor<T>.FromVector(outputGradients)).ToVector();
         
         // Get parameter gradients
         Vector<T> parameterGradients = GetParameterGradients();

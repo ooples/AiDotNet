@@ -162,6 +162,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
         _cachedParameterCount = null;
+        _sensitiveFeatures = new Vector<int>(0);
     }
 
     /// <summary>
@@ -428,6 +429,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             }
             return _cachedParameterCount.Value;
         }
+    }
+
+    /// <summary>
+    /// Gets the total number of parameters in the model.
+    /// </summary>
+    /// <returns>The total number of parameters in the neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the total count of all trainable parameters across all layers
+    /// in the neural network. It uses the cached ParameterCount property for efficiency.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you how many adjustable values (weights and biases)
+    /// your neural network has. More parameters mean the network can learn more complex patterns,
+    /// but also requires more training data and computational resources.
+    /// </para>
+    /// </remarks>
+    public int GetParameterCount()
+    {
+        return ParameterCount;
     }
 
     /// <summary>
@@ -706,7 +727,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         if (!Architecture.IsInitialized)
         {
             // Initialize from cached data
-            Architecture.InitializeFromCachedData<Tensor<T>, Tensor<T>>();
+            Architecture.InitializeFromCachedData();
 
             // Initialize network-specific layers
             InitializeLayers();
@@ -1392,7 +1413,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// <summary>
     /// Base model instance for interpretability delegation.
     /// </summary>
-    protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> _baseModel;
+    protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>>? _baseModel;
 
     /// <summary>
     /// Gets the global feature importance across all predictions.

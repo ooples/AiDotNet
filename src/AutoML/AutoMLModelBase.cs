@@ -227,25 +227,25 @@ namespace AiDotNet.AutoML
         /// </summary>
         public virtual ModelMetaData<T> GetModelMetaData()
         {
-            return new ModelMetaData<T>
+            var metadata = new ModelMetaData<T>
             {
                 Name = "AutoML",
                 Description = $"AutoML with {_candidateModels.Count} candidate models",
                 Version = "1.0",
-                TrainingDate = DateTime.UtcNow,
-                Properties = new Dictionary<string, object>
-                {
-                    ["Type"] = Type.ToString(),
-                    ["Status"] = Status.ToString(),
-                    ["BestScore"] = BestScore,
-                    ["TrialsCompleted"] = _trialHistory.Count,
-                    ["OptimizationMetric"] = _optimizationMetric.ToString(),
-                    ["Maximize"] = _maximize,
-                    ["CandidateModels"] = _candidateModels.Select(m => m.ToString()).ToList(),
-                    ["SearchSpaceSize"] = _searchSpace.Count,
-                    ["Constraints"] = _constraints.Count
-                }
+                TrainingDate = DateTimeOffset.UtcNow
             };
+
+            metadata.SetProperty("Type", Type.ToString());
+            metadata.SetProperty("Status", Status.ToString());
+            metadata.SetProperty("BestScore", BestScore);
+            metadata.SetProperty("TrialsCompleted", _trialHistory.Count);
+            metadata.SetProperty("OptimizationMetric", _optimizationMetric.ToString());
+            metadata.SetProperty("Maximize", _maximize);
+            metadata.SetProperty("CandidateModels", _candidateModels.Select(m => m.ToString()).ToList());
+            metadata.SetProperty("SearchSpaceSize", _searchSpace.Count);
+            metadata.SetProperty("Constraints", _constraints.Count);
+
+            return metadata;
         }
 
         /// <summary>
