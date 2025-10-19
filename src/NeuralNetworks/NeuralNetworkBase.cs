@@ -1415,14 +1415,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Base model instance for interpretability delegation.
     /// </summary>
     /// <remarks>
-    /// Typed as <see cref="object"/> to support the generic <see cref="SetBaseModel{TInput, TOutput, TMetadata}"/>
-    /// method that accepts <see cref="IModel{TInput, TOutput, TMetadata}"/> with varying type parameters.
-    /// This design allows the base class to store models with different generic type signatures while maintaining
-    /// compile-time type safety in the SetBaseModel method. The object type is necessary because C# does not support
-    /// fields with open generic types, and using object enables polymorphic storage of models with different
-    /// type parameter combinations.
+    /// Typed as <see cref="IFullModel{T, TInput, TOutput}"/> to maintain type safety while supporting
+    /// the interpretability infrastructure. This field stores models that implement the full model interface,
+    /// which includes training, prediction, serialization, and parameterization capabilities.
     /// </remarks>
-    protected object? _baseModel;
+    protected IFullModel<T, Tensor<T>, Tensor<T>>? _baseModel;
 
     /// <summary>
     /// Gets the global feature importance across all predictions.
@@ -1515,9 +1512,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <summary>
     /// Sets the base model for interpretability analysis.
     /// </summary>
-    public virtual void SetBaseModel<TInput, TOutput, TMetadata>(IModel<TInput, TOutput, TMetadata> model)
+    /// <typeparam name="TInput">The input type for the model.</typeparam>
+    /// <typeparam name="TOutput">The output type for the model.</typeparam>
+    /// <param name="model">The model to use for interpretability analysis. Must implement IFullModel.</param>
+    /// <exception cref="ArgumentNullException">Thrown when model is null.</exception>
+    public virtual void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
     {
-        _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+        _baseModel = (model ?? throw new ArgumentNullException(nameof(model))) as IFullModel<T, Tensor<T>, Tensor<T>>;
     }
 
     /// <summary>

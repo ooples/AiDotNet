@@ -99,9 +99,8 @@ namespace AiDotNet.Interfaces
         /// </summary>
         /// <typeparam name="TInput">The input type for the model.</typeparam>
         /// <typeparam name="TOutput">The output type for the model.</typeparam>
-        /// <typeparam name="TMetadata">The metadata type for the model.</typeparam>
-        /// <param name="model">The base model.</param>
-        void SetBaseModel<TInput, TOutput, TMetadata>(IModel<TInput, TOutput, TMetadata> model);
+        /// <param name="model">The base model. Must implement IFullModel.</param>
+        void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model);
 
         /// <summary>
         /// Enables specific interpretation methods.
