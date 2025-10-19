@@ -936,6 +936,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Loads a neural network model from a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    /// <exception cref="ArgumentException">Thrown when the file path is null or empty.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method allows you to load a previously saved neural network model
+    /// from a file on disk. This is the counterpart to SaveModel and uses the Deserialize method
+    /// to reconstruct the network from the saved data.
+    /// </para>
+    /// </remarks>
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Model file not found: {filePath}");
+        }
+
+        byte[] data = File.ReadAllBytes(filePath);
+        Deserialize(data);
+    }
+
+    /// <summary>
     /// Serializes the neural network to a byte array.
     /// </summary>
     /// <returns>A byte array representing the serialized neural network.</returns>
