@@ -681,6 +681,11 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
         }
 
         // Increment importance score for this feature
+        // Note: This is a simple count-based importance calculation that counts how many times
+        // each feature is used for splitting in the tree. It does not account for the quality
+        // of the splits (e.g., information gain or variance reduction). For a more sophisticated
+        // measure, consider weighting by the improvement in the split criterion or the number
+        // of samples affected by each split.
         importanceScores[node.FeatureIndex] = NumOps.Add(importanceScores[node.FeatureIndex], NumOps.One);
 
         CalculateFeatureImportanceRecursive(node.Left, importanceScores);

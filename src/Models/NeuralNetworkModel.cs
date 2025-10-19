@@ -783,25 +783,21 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// Gets the feature importance scores as a dictionary.
     /// </summary>
     /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    /// <exception cref="NotSupportedException">
+    /// This method is not supported for neural networks. Feature importance in neural networks
+    /// requires specialized techniques like gradient-based attribution or permutation importance.
+    /// </exception>
     public Dictionary<string, T> GetFeatureImportance()
     {
-        // For neural networks, feature importance can be approximated by input weights
-        var result = new Dictionary<string, T>();
-
-        if (Network == null || Network.Layers.Count == 0)
-        {
-            return result;
-        }
-
-        // Use weights from first layer as importance proxy
-        for (int i = 0; i < FeatureCount; i++)
-        {
-            string featureName = $"Feature_{i}";
-            // Sum absolute values of weights for this feature across first layer
-            result[featureName] = _numOps.FromDouble(0.1); // Placeholder
-        }
-
-        return result;
+        // Neural network feature importance requires specialized techniques like:
+        // - Gradient-based attribution methods (e.g., Integrated Gradients, SHAP)
+        // - Permutation importance
+        // - Layer-wise relevance propagation
+        // These are complex to implement correctly and beyond the scope of this basic method.
+        throw new NotSupportedException(
+            "Feature importance is not supported for neural networks through this method. " +
+            "Neural networks require specialized techniques like gradient-based attribution, " +
+            "permutation importance, or SHAP values to properly assess feature importance.");
     }
 
     /// <summary>
