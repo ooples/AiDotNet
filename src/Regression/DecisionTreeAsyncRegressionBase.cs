@@ -93,6 +93,14 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     protected Random Random => new(Options.Seed ?? Environment.TickCount);
 
     /// <summary>
+    /// Gets or sets the feature names.
+    /// </summary>
+    /// <value>
+    /// An array of feature names. If not set, feature indices will be used as names.
+    /// </value>
+    public string[]? FeatureNames { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the AsyncDecisionTreeRegressionBase class.
     /// </summary>
     /// <param name="options">The options for configuring the decision tree.</param>
@@ -518,6 +526,66 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     public virtual bool IsFeatureUsed(int featureIndex)
     {
         return IsFeatureUsedInSubtree(Root, featureIndex);
+    }
+
+    /// <summary>
+    /// Sets the parameters for this model.
+    /// </summary>
+    /// <param name="parameters">A vector containing the model parameters.</param>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException("Decision trees do not support direct parameter setting. Use WithParameters to create a new model with different parameters.");
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to activate.</param>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        throw new NotSupportedException("Decision trees do not support setting active features after training. Features are selected during tree construction.");
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        if (Root == null)
+        {
+            return new Dictionary<string, T>();
+        }
+
+        var importanceScores = new Dictionary<int, T>();
+        CalculateFeatureImportanceRecursive(Root, importanceScores);
+
+        var result = new Dictionary<string, T>();
+        foreach (var kvp in importanceScores)
+        {
+            string featureName = FeatureNames != null && kvp.Key < FeatureNames.Length
+                ? FeatureNames[kvp.Key]
+                : $"Feature_{kvp.Key}";
+            result[featureName] = kvp.Value;
+        }
+
+        return result;
+    }
+
+    private void CalculateFeatureImportanceRecursive(DecisionTreeNode<T>? node, Dictionary<int, T> importanceScores)
+    {
+        if (node == null || node.IsLeaf)
+            return;
+
+        if (!importanceScores.ContainsKey(node.FeatureIndex))
+        {
+            importanceScores[node.FeatureIndex] = NumOps.Zero;
+        }
+
+        importanceScores[node.FeatureIndex] = NumOps.Add(importanceScores[node.FeatureIndex], NumOps.One);
+
+        CalculateFeatureImportanceRecursive(node.Left, importanceScores);
+        CalculateFeatureImportanceRecursive(node.Right, importanceScores);
     }
 
     /// <summary>

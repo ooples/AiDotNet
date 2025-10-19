@@ -1103,6 +1103,57 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     }
 
     /// <summary>
+    /// Sets the parameters for this model.
+    /// </summary>
+    /// <param name="parameters">A vector containing the model parameters.</param>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ModelParameters.Length)
+        {
+            throw new ArgumentException($"Expected {ModelParameters.Length} parameters, but got {parameters.Length}");
+        }
+
+        for (int i = 0; i < ModelParameters.Length; i++)
+        {
+            ModelParameters[i] = parameters[i];
+        }
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to activate.</param>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        var activeSet = new HashSet<int>(featureIndices);
+
+        for (int i = 0; i < ModelParameters.Length; i++)
+        {
+            if (!activeSet.Contains(i))
+            {
+                ModelParameters[i] = NumOps.Zero;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        var result = new Dictionary<string, T>();
+
+        for (int i = 0; i < ModelParameters.Length; i++)
+        {
+            string featureName = $"Lag_{i + 1}";
+            result[featureName] = NumOps.Abs(ModelParameters[i]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Creates a deep copy of the time series model.
     /// </summary>
     /// <returns>A new instance that is a deep copy of this model.</returns>

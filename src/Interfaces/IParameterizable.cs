@@ -12,6 +12,11 @@ public interface IParameterizable<T, TInput, TOutput>
     Vector<T> GetParameters();
 
     /// <summary>
+    /// Sets the parameters for this model.
+    /// </summary>
+    void SetParameters(Vector<T> parameters);
+
+    /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>
     IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);

@@ -19,7 +19,7 @@ namespace AiDotNet.Models;
 /// - It supports genetic algorithm operations for optimization
 /// 
 /// For example, if predicting house prices, the model might learn that:
-/// price = 50,000 × bedrooms + 100 × square_feet + 20,000 × bathrooms
+/// price = 50,000 ï¿½ bedrooms + 100 ï¿½ square_feet + 20,000 ï¿½ bathrooms
 /// 
 /// This is one of the simplest and most interpretable machine learning models,
 /// making it a good starting point for many problems.
@@ -219,10 +219,10 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// - Throws an error if the input has the wrong number of features
     /// 
     /// This is the core of how a linear model works - it's just a weighted sum:
-    /// prediction = (input1 × coefficient1) + (input2 × coefficient2) + ...
+    /// prediction = (input1 ï¿½ coefficient1) + (input2 ï¿½ coefficient2) + ...
     /// 
     /// For example, with coefficients [50000, 100, 20000] and input [3, 1500, 2],
-    /// the prediction would be: 3×50000 + 1500×100 + 2×20000 = 350,000
+    /// the prediction would be: 3ï¿½50000 + 1500ï¿½100 + 2ï¿½20000 = 350,000
     /// </para>
     /// </remarks>
     public T Evaluate(Vector<T> input)
@@ -743,6 +743,73 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                 yield return i;
             }
         }
+    }
+
+    /// <summary>
+    /// Sets the parameters for this model.
+    /// </summary>
+    /// <param name="parameters">A vector containing the model parameters.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has an incorrect length.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method updates the model's coefficients directly.
+    /// The parameters vector should match the number of features in the model.
+    /// </para>
+    /// </remarks>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != Coefficients.Length)
+        {
+            throw new ArgumentException($"Expected {Coefficients.Length} parameters, but got {parameters.Length}");
+        }
+
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            Coefficients[i] = parameters[i];
+        }
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to activate.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method selectively activates only certain features
+    /// by setting all other feature coefficients to zero.
+    /// </para>
+    /// </remarks>
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        var activeSet = new HashSet<int>(featureIndices);
+
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            if (!activeSet.Contains(i))
+            {
+                Coefficients[i] = _numOps.Zero;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method returns the absolute values of coefficients
+    /// as feature importance scores. Features with larger absolute coefficients are more important.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, T> GetFeatureImportance()
+    {
+        var result = new Dictionary<string, T>();
+
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            string featureName = $"Feature_{i}";
+            result[featureName] = _numOps.Abs(Coefficients[i]);
+        }
+
+        return result;
     }
 
     /// <summary>
