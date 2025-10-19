@@ -19,20 +19,6 @@ public enum ModelType
     None,
 
     /// <summary>
-    /// An automated machine learning model that automatically selects and trains the best model.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) automates the process of selecting and
-    /// configuring the best machine learning model for your data. Instead of manually trying different
-    /// models, AutoML experiments with various algorithms, evaluates them, and chooses the one that
-    /// performs best. It's like having an AI assistant that tests different approaches and picks the
-    /// winner for you, saving you time and expertise.
-    /// </para>
-    /// </remarks>
-    AutoML,
-    
-    /// <summary>
     /// A basic model that finds the relationship between a single input variable and an output variable.
     /// </summary>
     /// <remarks>
@@ -791,5 +777,19 @@ public enum ModelType
 
     ProphetModel,
 
-    NeuralNetworkARIMA
+    NeuralNetworkARIMA,
+
+    /// <summary>
+    /// An automated machine learning model that automatically selects and trains the best model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) automates the process of selecting and
+    /// configuring the best machine learning model for your data. Instead of manually trying different
+    /// models, AutoML experiments with various algorithms, evaluates them, and chooses the one that
+    /// performs best. It's like having an AI assistant that tests different approaches and picks the
+    /// winner for you, saving you time and expertise.
+    /// </para>
+    /// </remarks>
+    AutoML
 }
