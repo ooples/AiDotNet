@@ -342,19 +342,19 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
                 {
                     var x = batchX.GetRow(i);
                     var y = batchY.GetRow(i);
-                    
+
                     // Forward pass with memory to save intermediate states
-                    var prediction = ForwardWithMemory(x);
-                    
+                    var prediction = ForwardWithMemory(Tensor<T>.FromVector(x));
+
                     // Calculate loss and gradients for this example
-                    T loss = LossFunction.CalculateLoss(prediction, y);
+                    T loss = LossFunction.CalculateLoss(prediction.ToVector(), y);
                     totalLoss = NumOps.Add(totalLoss, loss);
-                    
+
                     // Calculate output gradients
-                    Vector<T> outputGradients = LossFunction.CalculateDerivative(prediction, y);
-                    
+                    Vector<T> outputGradients = LossFunction.CalculateDerivative(prediction.ToVector(), y);
+
                     // Backpropagate to compute gradients for all parameters
-                    Backpropagate(outputGradients);
+                    Backpropagate(Tensor<T>.FromVector(outputGradients));
                     
                     // Accumulate gradients
                     var gradients = GetParameterGradients();

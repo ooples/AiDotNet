@@ -369,7 +369,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
 
         // Forward pass with memory for backpropagation
         Vector<T> inputVector = input.ToVector();
-        Vector<T> outputVector = ForwardWithMemory(inputVector);
+        Vector<T> outputVector = ForwardWithMemory(Tensor<T>.FromVector(inputVector)).ToVector();
 
         // Calculate error/loss
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
@@ -379,7 +379,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         LastLoss = LossFunction.CalculateLoss(outputVector, expectedOutputVector);
 
         // Backpropagate error through the network
-        Backpropagate(errorVector);
+        Backpropagate(Tensor<T>.FromVector(errorVector));
     }
 
     /// <summary>
