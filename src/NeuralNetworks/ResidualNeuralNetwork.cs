@@ -345,13 +345,13 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
 
                     // Forward pass with memory to save intermediate states
                     Tensor<T> predictionTensor = ForwardWithMemory(Tensor<T>.FromVector(x));
-                    Vector<T> prediction = predictionTensor.ToVector();
 
                     // Calculate loss and gradients for this example
-                    T loss = LossFunction.CalculateLoss(prediction, y);
+                    T loss = CalculateLoss(predictionTensor, Tensor<T>.FromVector(y));
                     totalLoss = NumOps.Add(totalLoss, loss);
 
                     // Calculate output gradients
+                    Vector<T> prediction = predictionTensor.ToVector();
                     Vector<T> outputGradients = LossFunction.CalculateDerivative(prediction, y);
 
                     // Backpropagate to compute gradients for all parameters
@@ -385,7 +385,35 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
         // Set back to inference mode after training
         SetTrainingMode(false);
     }
-   
+
+    /// <summary>
+    /// Calculates the loss between predicted and expected outputs using the loss function.
+    /// </summary>
+    /// <param name="predicted">The predicted output from the network.</param>
+    /// <param name="expected">The expected (ground truth) output.</param>
+    /// <returns>The loss value based on the loss function.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the loss between the network's prediction and the expected output
+    /// using the loss function specified during initialization. The loss value provides a measure
+    /// of how well the network is performing on the task.
+    /// </para>
+    /// <para><b>For Beginners:</b> This measures how wrong the network's predictions are.
+    ///
+    /// The loss function:
+    /// - Compares the network's prediction with the correct answer
+    /// - Produces a number that's higher when predictions are worse
+    /// - Uses the appropriate calculation based on your task type
+    ///
+    /// During training, we aim to minimize this loss, meaning the network gets better at
+    /// making accurate predictions for the specific task.
+    /// </para>
+    /// </remarks>
+    private T CalculateLoss(Tensor<T> predicted, Tensor<T> expected)
+    {
+        return LossFunction.CalculateLoss(predicted.ToVector(), expected.ToVector());
+    }
+
     /// <summary>
     /// Gets metadata about the Residual Neural Network model.
     /// </summary>
