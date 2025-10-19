@@ -338,7 +338,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         // Convert tensors to the format expected by the network
         Vector<T> inputVector = input.ToVector();
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
-
+        
         // Forward pass with memory to store intermediate values for backpropagation
         Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(inputVector));
         Vector<T> outputVector = outputTensor.ToVector();
@@ -428,7 +428,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         }
         
         // Forward pass with memory to store intermediate values
-        Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(input.ToVector()));
+        Tensor<T> outputTensor = Network.ForwardWithMemory(input);
         Vector<T> output = outputTensor.ToVector();
 
         // Calculate error gradient

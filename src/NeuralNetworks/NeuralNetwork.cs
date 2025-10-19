@@ -56,7 +56,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// before you start "training" it (like furnishing the rooms).
     /// 
     /// For example, a simple network for classifying handwritten digits might have:
-    /// - 784 inputs (for a 28�28 pixel image)
+    /// - 784 inputs (for a 28x28 pixel image)
     /// - 2 hidden layers with 128 neurons each
     /// - 10 outputs (one for each digit 0-9)
     /// </para>
@@ -232,8 +232,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
 
         // Step 1: Forward pass with memory for backpropagation
         Vector<T> inputVector = input.ToVector();
-        Tensor<T> outputTensor = ForwardWithMemory(Tensor<T>.FromVector(inputVector));
-        Vector<T> outputVector = outputTensor.ToVector();
+        Vector<T> outputVector = ForwardWithMemory(Tensor<T>.FromVector(inputVector)).ToVector();
 
         // Step 2: Calculate loss/error (e.g., mean squared error)
         Vector<T> expectedVector = expectedOutput.ToVector();
@@ -262,6 +261,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
             }
         }
     }
+
 
     /// <summary>
     /// Gets metadata about the neural network.
@@ -317,11 +317,11 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
             {
                 { "InputSize", Architecture.InputSize },
                 { "OutputSize", Architecture.OutputSize },
-                { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
+                { "TotalParameters", ParameterCount },
                 { "TotalLayers", Layers.Count },
-                { "TotalParameters", GetParameterCount() },
                 { "LayerTypes", layerCounts },
                 { "LayerSizes", layerSizes },
+                { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
             ModelData = this.Serialize()

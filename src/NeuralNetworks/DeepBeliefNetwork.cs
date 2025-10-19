@@ -569,18 +569,19 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
                 {
                     var x = batchX.GetRow(i);
                     var y = batchY.GetRow(i);
-
+                    
                     // Forward pass with memory to save intermediate states
-                    Tensor<T> predictionTensor = ForwardWithMemory(Tensor<T>.FromVector(x));
-                    Vector<T> prediction = predictionTensor.ToVector();
-
+                    // NOTE: This optimization uses predictionTensor directly instead of converting to Vector<T> and back.
+                    // This is the recommended pattern for consistency across all neural network implementations.
+                    var prediction = ForwardWithMemory(Tensor<T>.FromVector(x));
+                    
                     // Calculate loss and gradients for this example
-                    T loss = CalculateLoss(predictionTensor, Tensor<T>.FromVector(y));
+                    T loss = CalculateLoss(prediction, Tensor<T>.FromVector(y));
                     totalLoss = NumOps.Add(totalLoss, loss);
-
+                    
                     // Calculate output gradients
-                    Vector<T> outputGradients = CalculateOutputGradients(prediction, y);
-
+                    Vector<T> outputGradients = CalculateOutputGradients(prediction.ToVector(), y);
+                    
                     // Backpropagate to compute gradients for all parameters
                     Backpropagate(Tensor<T>.FromVector(outputGradients));
                     

@@ -343,23 +343,32 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
                     var x = batchX.GetRow(i);
                     var y = batchY.GetRow(i);
 
+                    // Convert input vector to tensor once before forward pass
+                    var xTensor = Tensor<T>.FromVector(x);
+
                     // Forward pass with memory to save intermediate states
-                    Tensor<T> predictionTensor = ForwardWithMemory(Tensor<T>.FromVector(x));
+                    var prediction = ForwardWithMemory(xTensor);
+
+                    // Cache prediction vector to avoid repeated conversions
+                    Vector<T> predictionVector = prediction.ToVector();
 
                     // Calculate loss and gradients for this example
-                    T loss = CalculateLoss(predictionTensor, Tensor<T>.FromVector(y));
+                    T loss = LossFunction.CalculateLoss(predictionVector, y);
                     totalLoss = NumOps.Add(totalLoss, loss);
 
                     // Calculate output gradients
-                    Vector<T> prediction = predictionTensor.ToVector();
-                    Vector<T> outputGradients = LossFunction.CalculateDerivative(prediction, y);
+                    Vector<T> outputGradients = LossFunction.CalculateDerivative(predictionVector, y);
+
+                    // Convert output gradients to tensor once before backpropagation
+                    var outputGradientsTensor = Tensor<T>.FromVector(outputGradients);
 
                     // Backpropagate to compute gradients for all parameters
-                    Backpropagate(Tensor<T>.FromVector(outputGradients));
-                    
-                    // Accumulate gradients
+                    Backpropagate(outputGradientsTensor);
+
+                    // Accumulate gradients - convert once before adding
                     var gradients = GetParameterGradients();
-                    totalGradient = totalGradient.Add(Tensor<T>.FromVector(gradients));
+                    var gradientsTensor = Tensor<T>.FromVector(gradients);
+                    totalGradient = totalGradient.Add(gradientsTensor);
                 }
                 
                 // Average the gradients across the batch
@@ -385,35 +394,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
         // Set back to inference mode after training
         SetTrainingMode(false);
     }
-
-    /// <summary>
-    /// Calculates the loss between predicted and expected outputs using the loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted output from the network.</param>
-    /// <param name="expected">The expected (ground truth) output.</param>
-    /// <returns>The loss value based on the loss function.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the loss between the network's prediction and the expected output
-    /// using the loss function specified during initialization. The loss value provides a measure
-    /// of how well the network is performing on the task.
-    /// </para>
-    /// <para><b>For Beginners:</b> This measures how wrong the network's predictions are.
-    ///
-    /// The loss function:
-    /// - Compares the network's prediction with the correct answer
-    /// - Produces a number that's higher when predictions are worse
-    /// - Uses the appropriate calculation based on your task type
-    ///
-    /// During training, we aim to minimize this loss, meaning the network gets better at
-    /// making accurate predictions for the specific task.
-    /// </para>
-    /// </remarks>
-    private T CalculateLoss(Tensor<T> predicted, Tensor<T> expected)
-    {
-        return LossFunction.CalculateLoss(predicted.ToVector(), expected.ToVector());
-    }
-
+   
     /// <summary>
     /// Gets metadata about the Residual Neural Network model.
     /// </summary>
