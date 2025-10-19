@@ -77,19 +77,19 @@ public enum LayerType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Fully Connected layers (also called Dense layers) connect every input to every output, 
+    /// <b>For Beginners:</b> Fully Connected layers (also called Dense layers) connect every input to every output,
     /// allowing the network to combine all available information to make decisions.
-    /// 
+    ///
     /// Think of it as:
     /// - A voting system where every piece of evidence gets to influence the final decision
     /// - A committee where everyone listens to all information before making a judgment
     /// - The "thinking" part of the network that combines all the features detected by earlier layers
-    /// 
+    ///
     /// How it works:
     /// - Each neuron receives input from all neurons in the previous layer
     /// - Each connection has a weight that strengthens or weakens that particular influence
     /// - The network learns which connections are important by adjusting these weights
-    /// 
+    ///
     /// Fully Connected layers are typically used:
     /// - Near the end of a neural network
     /// - To combine features extracted by earlier layers
@@ -97,5 +97,24 @@ public enum LayerType
     /// - When all input features might be relevant to all outputs
     /// </para>
     /// </remarks>
-    FullyConnected
+    FullyConnected,
+
+    /// <summary>
+    /// A densely connected layer where each neuron is connected to every neuron in the previous layer (alias for FullyConnected).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Dense is another name for FullyConnected layers. They are exactly the same thing.
+    ///
+    /// This naming convention is commonly used in popular frameworks like Keras/TensorFlow, where "Dense"
+    /// is used to create fully connected layers. Having this alias makes the code more familiar to developers
+    /// coming from those frameworks.
+    ///
+    /// Use this when:
+    /// - You're more familiar with Keras/TensorFlow terminology
+    /// - You want your code to read like those frameworks
+    /// - You need a fully connected layer
+    /// </para>
+    /// </remarks>
+    Dense
 }
