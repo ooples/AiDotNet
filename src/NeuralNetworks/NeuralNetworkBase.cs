@@ -935,11 +935,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         File.WriteAllBytes(filePath, serializedData);
     }
 
-    public virtual void LoadModel(string filePath)
-    {
-        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
-    }
-
     /// <summary>
     /// Loads a neural network model from a file.
     /// </summary>
