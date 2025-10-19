@@ -93,6 +93,12 @@ public interface IModelSerializer
     /// <b>For Beginners:</b> This is like clicking "Save As" in a document editor.
     /// Instead of manually calling Serialize() and then writing to a file, this method does both steps for you.
     /// </remarks>
+    /// <exception cref="IOException">
+    /// Thrown when an I/O error occurs while writing to the file.
+    /// </exception>
+    /// <exception cref="UnauthorizedAccessException">
+    /// Thrown when the caller does not have the required permission to write to the specified file path.
+    /// </exception>
     void SaveModel(string filePath);
 
     /// <summary>
@@ -106,5 +112,11 @@ public interface IModelSerializer
     /// <b>For Beginners:</b> This is like clicking "Open" in a document editor.
     /// Instead of manually reading from a file and then calling Deserialize(), this method does both steps for you.
     /// </remarks>
+    /// <exception cref="FileNotFoundException">
+    /// Thrown when the specified file does not exist.
+    /// </exception>
+    /// <exception cref="IOException">
+    /// Thrown when an I/O error occurs while reading from the file or when the file contains corrupted or invalid model data.
+    /// </exception>
     void LoadModel(string filePath);
 }

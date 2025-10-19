@@ -21,6 +21,9 @@ public interface IParameterizable<T, TInput, TOutput>
     /// If the length of <paramref name="parameters"/> does not match <see cref="ParameterCount"/>,
     /// an <see cref="ArgumentException"/> should be thrown.
     /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the length of <paramref name="parameters"/> does not match <see cref="ParameterCount"/>.
+    /// </exception>
     void SetParameters(Vector<T> parameters);
 
     /// <summary>
