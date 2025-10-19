@@ -1625,7 +1625,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
                 { "InputSize", Architecture.InputSize },
                 { "OutputSize", Architecture.OutputSize },
                 { "LayerCount", Layers.Count },
-                { "ParameterCount", GetParameterCount() }
+                { "ParameterCount", ParameterCount }
             },
             ModelData = this.Serialize()
         };

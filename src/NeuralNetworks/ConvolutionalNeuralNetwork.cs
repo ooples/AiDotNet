@@ -328,8 +328,8 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// This method collects and returns various pieces of information about the network's structure and configuration.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> This is like getting a summary of the network's blueprint. It tells you 
-    /// how many layers it has, what types of layers they are, and other important details about how 
+    /// <b>For Beginners:</b> This is like getting a summary of the network's blueprint. It tells you
+    /// how many layers it has, what types of layers they are, and other important details about how
     /// the network is set up.
     /// </para>
     /// </remarks>

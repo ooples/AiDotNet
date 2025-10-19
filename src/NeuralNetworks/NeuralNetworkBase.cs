@@ -162,6 +162,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
         _cachedParameterCount = null;
+        _sensitiveFeatures = new Vector<int>(0);
     }
 
     /// <summary>
@@ -431,20 +432,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     }
 
     /// <summary>
-    /// Gets the total number of trainable parameters in the model.
+    /// Gets the total number of parameters in the model.
     /// </summary>
-    /// <returns>The total parameter count.</returns>
+    /// <returns>The total number of parameters in the neural network.</returns>
     /// <remarks>
     /// <para>
-    /// This method returns the total number of trainable parameters across all layers in the neural network.
-    /// It delegates to the ParameterCount property for consistency.
+    /// This method returns the total count of all trainable parameters across all layers
+    /// in the neural network. It uses the cached ParameterCount property for efficiency.
     /// </para>
-    /// <para><b>For Beginners:</b> This tells you how many adjustable values (weights and biases) your neural network has.
-    /// More parameters generally mean more capacity to learn complex patterns, but also require more data and computation.
-    /// This is equivalent to accessing the ParameterCount property.
+    /// <para>
+    /// <b>For Beginners:</b> This tells you how many adjustable values (weights and biases)
+    /// your neural network has. More parameters mean the network can learn more complex patterns,
+    /// but also requires more training data and computational resources.
     /// </para>
     /// </remarks>
-    public virtual int GetParameterCount()
+    public int GetParameterCount()
     {
         return ParameterCount;
     }
@@ -725,7 +727,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         if (!Architecture.IsInitialized)
         {
             // Initialize from cached data
-            Architecture.InitializeFromCachedData<Tensor<T>, Tensor<T>>();
+            Architecture.InitializeFromCachedData();
 
             // Initialize network-specific layers
             InitializeLayers();
@@ -1411,7 +1413,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// <summary>
     /// Base model instance for interpretability delegation.
     /// </summary>
-    protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> _baseModel;
+    protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>>? _baseModel;
 
     /// <summary>
     /// Gets the global feature importance across all predictions.
