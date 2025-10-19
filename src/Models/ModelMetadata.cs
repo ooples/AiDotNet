@@ -52,24 +52,46 @@ public class ModelMetaData<T>
     public string Version { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the date when the model was trained.
+    /// Gets or sets the date and time (with timezone) when the model was trained.
     /// </summary>
-    /// <value>A DateTime representing when the model was trained.</value>
+    /// <value>A nullable DateTimeOffset representing when the model was trained, or null if unknown.</value>
     /// <remarks>
-    /// This property stores the date and time when the model was trained, which is useful for tracking model freshness
-    /// and understanding when it may need to be retrained.
+    /// This property stores the date and time (including timezone information) when the model was trained.
+    /// It is nullable, allowing you to indicate when the training date is unknown or not set.
+    /// Using DateTimeOffset ensures accurate tracking across different time zones.
     /// </remarks>
-    public DateTime TrainingDate { get; set; }
+    public DateTimeOffset? TrainingDate { get; set; }
 
     /// <summary>
-    /// Gets or sets custom properties associated with the model.
+    /// Gets custom properties associated with the model.
     /// </summary>
     /// <value>A dictionary containing custom properties as key-value pairs.</value>
     /// <remarks>
     /// This property provides an extensible way to store custom properties and configuration settings specific to the model.
     /// It complements the AdditionalInfo property by providing a dedicated space for model-specific properties.
+    /// Use <see cref="SetProperty"/> and <see cref="RemoveProperty"/> methods to modify the properties.
     /// </remarks>
-    public Dictionary<string, object> Properties { get; set; } = [];
+    public Dictionary<string, object> Properties { get; private set; } = [];
+
+    /// <summary>
+    /// Adds or updates a custom property in the Properties dictionary.
+    /// </summary>
+    /// <param name="key">The property key.</param>
+    /// <param name="value">The property value.</param>
+    public void SetProperty(string key, object value)
+    {
+        Properties[key] = value;
+    }
+
+    /// <summary>
+    /// Removes a custom property from the Properties dictionary.
+    /// </summary>
+    /// <param name="key">The property key to remove.</param>
+    /// <returns>True if the property was removed; otherwise, false.</returns>
+    public bool RemoveProperty(string key)
+    {
+        return Properties.Remove(key);
+    }
 
     /// <summary>
     /// Gets or sets the type of the model.
