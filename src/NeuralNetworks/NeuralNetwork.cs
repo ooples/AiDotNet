@@ -231,8 +231,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
 
         // Step 1: Forward pass with memory for backpropagation
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> outputVector = ForwardWithMemory(inputVector);
+        Vector<T> outputVector = ForwardWithMemory(input).ToVector();
 
         // Step 2: Calculate loss/error (e.g., mean squared error)
         Vector<T> expectedVector = expectedOutput.ToVector();
@@ -248,7 +247,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
 
         // Step 3: Backpropagation to compute gradients
-        Backpropagate(errorVector);
+        Backpropagate(Tensor<T>.FromVector(errorVector));
 
         // Step 4: Update parameters using gradients and learning rate
         T learningRate = NumOps.FromDouble(0.01);
