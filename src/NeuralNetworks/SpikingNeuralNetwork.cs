@@ -793,23 +793,6 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Gets the total number of trainable parameters in the spiking neural network.
-    /// </summary>
-    /// <returns>The total parameter count.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the total number of trainable parameters across all layers in the spiking neural network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you how many adjustable values (weights and biases) the network has.
-    /// More parameters generally mean more capacity to learn complex patterns, but also require more data and computation.
-    /// </para>
-    /// </remarks>
-    public int GetParameterCount()
-    {
-        return ParameterCount;
-    }
-
-    /// <summary>
     /// Gets metadata about the spiking neural network.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the network.</returns>
@@ -1142,11 +1125,11 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     ///   - More steps allow longer temporal patterns to develop
     ///   - But require more computation time
     /// 
-    /// The total simulation time is: timeStep � simulationSteps
-    /// 
+    /// The total simulation time is: timeStep × simulationSteps
+    ///
     /// For example:
-    /// - 0.1 time step � 100 steps = 10 time units of simulation
-    /// - 0.01 time step � 1000 steps = 10 time units with 10� more precision
+    /// - 0.1 time step × 100 steps = 10 time units of simulation
+    /// - 0.01 time step × 1000 steps = 10 time units with 10× more precision
     /// </para>
     /// </remarks>
     public void SetSimulationParameters(double timeStep, int simulationSteps)
