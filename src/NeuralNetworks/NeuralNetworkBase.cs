@@ -431,6 +431,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     }
 
     /// <summary>
+    /// Gets the total number of trainable parameters in the model.
+    /// </summary>
+    /// <returns>The total parameter count.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the total number of trainable parameters across all layers in the neural network.
+    /// It delegates to the ParameterCount property for consistency.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many adjustable values (weights and biases) your neural network has.
+    /// More parameters generally mean more capacity to learn complex patterns, but also require more data and computation.
+    /// This is equivalent to accessing the ParameterCount property.
+    /// </para>
+    /// </remarks>
+    public virtual int GetParameterCount()
+    {
+        return ParameterCount;
+    }
+
+    /// <summary>
     /// Invalidates the parameter count cache.
     /// Call this method whenever layers are added, removed, or modified.
     /// </summary>

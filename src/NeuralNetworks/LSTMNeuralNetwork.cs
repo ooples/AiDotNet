@@ -1896,6 +1896,23 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Gets the total number of trainable parameters in the LSTM neural network.
+    /// </summary>
+    /// <returns>The total parameter count.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the total number of trainable parameters across all layers in the network.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many adjustable values (weights and biases) the network has.
+    /// More parameters generally mean more capacity to learn complex patterns, but also require more data and computation.
+    /// </para>
+    /// </remarks>
+    public int GetParameterCount()
+    {
+        return ParameterCount;
+    }
+
+    /// <summary>
     /// Gets metadata about the LSTM model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the LSTM model.</returns>
