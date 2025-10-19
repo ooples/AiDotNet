@@ -69,12 +69,12 @@ namespace AiDotNet.Interpretability
             // Validate parameters for reference types to prevent null assignment
             if (!typeof(T).IsValueType)
             {
-                ArgumentNullException.ThrowIfNull(demographicParity);
-                ArgumentNullException.ThrowIfNull(equalOpportunity);
-                ArgumentNullException.ThrowIfNull(equalizedOdds);
-                ArgumentNullException.ThrowIfNull(predictiveParity);
-                ArgumentNullException.ThrowIfNull(disparateImpact);
-                ArgumentNullException.ThrowIfNull(statisticalParityDifference);
+                if (demographicParity == null) throw new ArgumentNullException(nameof(demographicParity));
+                if (equalOpportunity == null) throw new ArgumentNullException(nameof(equalOpportunity));
+                if (equalizedOdds == null) throw new ArgumentNullException(nameof(equalizedOdds));
+                if (predictiveParity == null) throw new ArgumentNullException(nameof(predictiveParity));
+                if (disparateImpact == null) throw new ArgumentNullException(nameof(disparateImpact));
+                if (statisticalParityDifference == null) throw new ArgumentNullException(nameof(statisticalParityDifference));
             }
 
             DemographicParity = demographicParity;
