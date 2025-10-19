@@ -962,7 +962,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         if (!File.Exists(filePath))
         {
-            throw new FileNotFoundException($"Model file not found: {filePath}");
+            throw new FileNotFoundException($"Model file not found: {filePath}", filePath);
         }
 
         byte[] data = File.ReadAllBytes(filePath);
