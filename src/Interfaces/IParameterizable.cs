@@ -18,6 +18,8 @@ public interface IParameterizable<T, TInput, TOutput>
     /// <remarks>
     /// This method allows direct modification of the model's internal parameters.
     /// This is useful for optimization algorithms that need to update parameters iteratively.
+    /// If the length of <paramref name="parameters"/> does not match <see cref="ParameterCount"/>,
+    /// an <see cref="ArgumentException"/> should be thrown.
     /// </remarks>
     void SetParameters(Vector<T> parameters);
 
