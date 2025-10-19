@@ -1393,7 +1393,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <summary>
     /// Base model instance for interpretability delegation.
     /// </summary>
-    protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> _baseModel;
+    protected object _baseModel;
 
     /// <summary>
     /// Gets the global feature importance across all predictions.
@@ -1486,7 +1486,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <summary>
     /// Sets the base model for interpretability analysis.
     /// </summary>
-    public virtual void SetBaseModel(IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> model)
+    public virtual void SetBaseModel<TInput, TOutput, TMetadata>(IModel<TInput, TOutput, TMetadata> model)
     {
         _baseModel = model ?? throw new ArgumentNullException(nameof(model));
     }

@@ -17,19 +17,17 @@ namespace AiDotNet.Interpretability
         /// <param name="model">The model to analyze.</param>
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
         /// <returns>A dictionary mapping feature indices to importance scores.</returns>
-        public static async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync<T>(
+        public static Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync<T>(
             IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             if (!enabledMethods.Contains(InterpretationMethod.FeatureImportance))
             {
                 throw new InvalidOperationException("FeatureImportance method is not enabled.");
             }
 
             // Return placeholder implementation
-            return new Dictionary<int, T>();
+            return Task.FromResult(new Dictionary<int, T>());
         }
 
         /// <summary>
@@ -40,20 +38,18 @@ namespace AiDotNet.Interpretability
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
         /// <param name="input">The input to analyze.</param>
         /// <returns>A dictionary mapping feature indices to importance scores.</returns>
-        public static async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync<T>(
+        public static Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync<T>(
             IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods,
             Tensor<T> input)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             if (!enabledMethods.Contains(InterpretationMethod.FeatureImportance))
             {
                 throw new InvalidOperationException("FeatureImportance method is not enabled.");
             }
 
             // Return placeholder implementation
-            return new Dictionary<int, T>();
+            return Task.FromResult(new Dictionary<int, T>());
         }
 
         /// <summary>
@@ -63,19 +59,17 @@ namespace AiDotNet.Interpretability
         /// <param name="model">The model to analyze.</param>
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
         /// <returns>A matrix containing SHAP values.</returns>
-        public static async Task<Matrix<T>> GetShapValuesAsync<T>(
+        public static Task<Matrix<T>> GetShapValuesAsync<T>(
             IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             if (!enabledMethods.Contains(InterpretationMethod.SHAP))
             {
                 throw new InvalidOperationException("SHAP method is not enabled.");
             }
 
             // Return placeholder implementation
-            return new Matrix<T>(0, 0);
+            return Task.FromResult(new Matrix<T>(0, 0));
         }
 
         /// <summary>
@@ -85,22 +79,20 @@ namespace AiDotNet.Interpretability
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
         /// <param name="numFeatures">The number of features to include in the explanation.</param>
         /// <returns>A LIME explanation.</returns>
-        public static async Task<LimeExplanation<T>> GetLimeExplanationAsync<T>(
+        public static Task<LimeExplanation<T>> GetLimeExplanationAsync<T>(
             HashSet<InterpretationMethod> enabledMethods,
             int numFeatures = 10)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             if (!enabledMethods.Contains(InterpretationMethod.LIME))
             {
                 throw new InvalidOperationException("LIME method is not enabled.");
             }
 
             // Return placeholder implementation
-            return new LimeExplanation<T>
+            return Task.FromResult(new LimeExplanation<T>
             {
                 NumFeatures = numFeatures
-            };
+            });
         }
 
         /// <summary>
@@ -111,24 +103,22 @@ namespace AiDotNet.Interpretability
         /// <param name="featureIndices">The feature indices to analyze.</param>
         /// <param name="gridResolution">The grid resolution to use.</param>
         /// <returns>Partial dependence data.</returns>
-        public static async Task<PartialDependenceData<T>> GetPartialDependenceAsync<T>(
+        public static Task<PartialDependenceData<T>> GetPartialDependenceAsync<T>(
             HashSet<InterpretationMethod> enabledMethods,
             Vector<int> featureIndices,
             int gridResolution = 20)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             if (!enabledMethods.Contains(InterpretationMethod.PartialDependence))
             {
                 throw new InvalidOperationException("PartialDependence method is not enabled.");
             }
 
             // Return placeholder implementation
-            return new PartialDependenceData<T>
+            return Task.FromResult(new PartialDependenceData<T>
             {
                 FeatureIndices = featureIndices,
                 GridResolution = gridResolution
-            };
+            });
         }
 
         /// <summary>
@@ -138,22 +128,20 @@ namespace AiDotNet.Interpretability
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
         /// <param name="maxChanges">The maximum number of changes allowed.</param>
         /// <returns>A counterfactual explanation.</returns>
-        public static async Task<CounterfactualExplanation<T>> GetCounterfactualAsync<T>(
+        public static Task<CounterfactualExplanation<T>> GetCounterfactualAsync<T>(
             HashSet<InterpretationMethod> enabledMethods,
             int maxChanges = 5)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             if (!enabledMethods.Contains(InterpretationMethod.Counterfactual))
             {
                 throw new InvalidOperationException("Counterfactual method is not enabled.");
             }
 
             // Return placeholder implementation
-            return new CounterfactualExplanation<T>
+            return Task.FromResult(new CounterfactualExplanation<T>
             {
                 MaxChanges = maxChanges
-            };
+            });
         }
 
         /// <summary>
@@ -162,13 +150,11 @@ namespace AiDotNet.Interpretability
         /// <typeparam name="T">The numeric type for calculations.</typeparam>
         /// <param name="model">The model to analyze.</param>
         /// <returns>A dictionary of model-specific interpretability information.</returns>
-        public static async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync<T>(
+        public static Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync<T>(
             IInterpretableModel<T> model)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             // Return placeholder implementation
-            return new Dictionary<string, object>();
+            return Task.FromResult(new Dictionary<string, object>());
         }
 
         /// <summary>
@@ -179,15 +165,13 @@ namespace AiDotNet.Interpretability
         /// <param name="input">The input data.</param>
         /// <param name="prediction">The prediction made by the model.</param>
         /// <returns>A text explanation of the prediction.</returns>
-        public static async Task<string> GenerateTextExplanationAsync<T>(
+        public static Task<string> GenerateTextExplanationAsync<T>(
             IInterpretableModel<T> model,
             Tensor<T> input,
             Tensor<T> prediction)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             // Return placeholder implementation
-            return "Explanation not yet implemented.";
+            return Task.FromResult("Explanation not yet implemented.");
         }
 
         /// <summary>
@@ -198,20 +182,19 @@ namespace AiDotNet.Interpretability
         /// <param name="feature1Index">The index of the first feature.</param>
         /// <param name="feature2Index">The index of the second feature.</param>
         /// <returns>The interaction effect value.</returns>
-        public static async Task<T> GetFeatureInteractionAsync<T>(
+        public static Task<T> GetFeatureInteractionAsync<T>(
             HashSet<InterpretationMethod> enabledMethods,
             int feature1Index,
             int feature2Index)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             if (!enabledMethods.Contains(InterpretationMethod.FeatureInteraction))
             {
                 throw new InvalidOperationException("FeatureInteraction method is not enabled.");
             }
 
-            // Return placeholder implementation
-            return default(T)!;
+            // Return placeholder implementation - return zero for numeric type T
+            var numOps = MathHelper.GetNumericOperations<T>();
+            return Task.FromResult(numOps.Zero);
         }
 
         /// <summary>
@@ -220,13 +203,11 @@ namespace AiDotNet.Interpretability
         /// <typeparam name="T">The numeric type for calculations.</typeparam>
         /// <param name="fairnessMetrics">The fairness metrics to validate.</param>
         /// <returns>Fairness metrics results.</returns>
-        public static async Task<FairnessMetrics<T>> ValidateFairnessAsync<T>(
+        public static Task<FairnessMetrics<T>> ValidateFairnessAsync<T>(
             List<FairnessMetric> fairnessMetrics)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             // Return placeholder implementation
-            return new FairnessMetrics<T>();
+            return Task.FromResult(new FairnessMetrics<T>());
         }
 
         /// <summary>
@@ -236,22 +217,20 @@ namespace AiDotNet.Interpretability
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
         /// <param name="threshold">The threshold for anchor construction.</param>
         /// <returns>An anchor explanation.</returns>
-        public static async Task<AnchorExplanation<T>> GetAnchorExplanationAsync<T>(
+        public static Task<AnchorExplanation<T>> GetAnchorExplanationAsync<T>(
             HashSet<InterpretationMethod> enabledMethods,
             T threshold)
         {
-            await Task.CompletedTask; // Placeholder for async operations
-
             if (!enabledMethods.Contains(InterpretationMethod.Anchor))
             {
                 throw new InvalidOperationException("Anchor method is not enabled.");
             }
 
             // Return placeholder implementation
-            return new AnchorExplanation<T>
+            return Task.FromResult(new AnchorExplanation<T>
             {
                 Threshold = threshold
-            };
+            });
         }
     }
 }

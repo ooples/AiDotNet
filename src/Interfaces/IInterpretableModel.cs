@@ -97,8 +97,11 @@ namespace AiDotNet.Interfaces
         /// <summary>
         /// Sets the base model for interpretability analysis.
         /// </summary>
+        /// <typeparam name="TInput">The input type for the model.</typeparam>
+        /// <typeparam name="TOutput">The output type for the model.</typeparam>
+        /// <typeparam name="TMetadata">The metadata type for the model.</typeparam>
         /// <param name="model">The base model.</param>
-        void SetBaseModel(IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> model);
+        void SetBaseModel<TInput, TOutput, TMetadata>(IModel<TInput, TOutput, TMetadata> model);
 
         /// <summary>
         /// Enables specific interpretation methods.
