@@ -816,14 +816,37 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
             Prediction = node.Prediction,
             IsLeaf = node.IsLeaf
         };
-    
+
         // Recursively clone child nodes
         if (node.Left != null)
             clone.Left = DeepCloneNode(node.Left);
-    
+
         if (node.Right != null)
             clone.Right = DeepCloneNode(node.Right);
-    
+
         return clone;
+    }
+
+    /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model should be saved.</param>
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    /// <summary>
+    /// Loads the model from a file.
+    /// </summary>
+    /// <param name="filePath">The path from which to load the model.</param>
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return CountNodes(Root) * 4 + 1; }
     }
 }

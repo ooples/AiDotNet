@@ -711,14 +711,14 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// behavior specific to their implementation.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates an exact independent copy of your model.
-    /// 
+    ///
     /// Cloning a model means creating a new model that's exactly the same as the original,
     /// including all its learned parameters and settings. However, the clone is independent -
     /// changes to one model won't affect the other.
-    /// 
+    ///
     /// Think of it like photocopying a document - the copy has all the same information,
     /// but you can mark up the copy without changing the original.
-    /// 
+    ///
     /// Note: Specific regression algorithms will customize this method to ensure all their
     /// unique properties are properly copied.
     /// </para>
@@ -727,5 +727,10 @@ public abstract class RegressionBase<T> : IRegression<T>
     {
         // By default, Clone behaves the same as DeepCopy
         return DeepCopy();
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return ExpectedParameterCount; }
     }
 }

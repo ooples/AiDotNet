@@ -880,16 +880,21 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// the only state that needs to be copied is the Coefficients vector.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates a duplicate of the model.
-    /// 
+    ///
     /// For the VectorModel:
     /// - Clone and DeepCopy do the same thing
     /// - Both create a new model with a copy of the coefficients
-    /// 
+    ///
     /// The Clone method is provided for compatibility with the IFullModel interface.
     /// </para>
     /// </remarks>
     public IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         return DeepCopy();
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return Coefficients.Length; }
     }
 }

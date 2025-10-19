@@ -856,7 +856,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// with the IFullModel interface.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates a copy of the neural network model.
-    /// 
+    ///
     /// In this implementation, Clone and DeepCopy do the same thing - they
     /// both create a completely independent copy of the model with the same
     /// architecture and parameters. Both methods are provided for compatibility
@@ -866,5 +866,20 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     public IFullModel<T, Tensor<T>, Tensor<T>> Clone()
     {
         return DeepCopy();
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return Network.GetParameterCount(); }
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
     }
 }

@@ -923,14 +923,29 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
             Prediction = node.Prediction,
             IsLeaf = node.IsLeaf
         };
-    
+
         // Recursively clone child nodes
         if (node.Left != null)
             clone.Left = DeepCloneNode(node.Left);
-    
+
         if (node.Right != null)
             clone.Right = DeepCloneNode(node.Right);
-    
+
         return clone;
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return CountNodes(Root) * 4 + 1; }
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
     }
 }
