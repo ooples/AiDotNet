@@ -28,8 +28,7 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("FeatureImportance method is not enabled.");
             }
 
-            // Return placeholder implementation
-            return Task.FromResult(new Dictionary<int, T>());
+            throw new NotImplementedException("Global feature importance calculation is not yet implemented.");
         }
 
         /// <summary>
@@ -52,8 +51,7 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("FeatureImportance method is not enabled.");
             }
 
-            // Return placeholder implementation
-            return Task.FromResult(new Dictionary<int, T>());
+            throw new NotImplementedException("Local feature importance calculation is not yet implemented.");
         }
 
         /// <summary>
@@ -73,8 +71,7 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("SHAP method is not enabled.");
             }
 
-            // Return placeholder implementation
-            return Task.FromResult(new Matrix<T>(0, 0));
+            throw new NotImplementedException("SHAP values calculation is not yet implemented.");
         }
 
         /// <summary>
@@ -93,11 +90,7 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("LIME method is not enabled.");
             }
 
-            // Return placeholder implementation
-            return Task.FromResult(new LimeExplanation<T>
-            {
-                NumFeatures = numFeatures
-            });
+            throw new NotImplementedException("LIME explanation generation is not yet implemented.");
         }
 
         /// <summary>
@@ -118,12 +111,7 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("PartialDependence method is not enabled.");
             }
 
-            // Return placeholder implementation
-            return Task.FromResult(new PartialDependenceData<T>
-            {
-                FeatureIndices = featureIndices,
-                GridResolution = gridResolution
-            });
+            throw new NotImplementedException("Partial dependence calculation is not yet implemented.");
         }
 
         /// <summary>
@@ -142,11 +130,7 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("Counterfactual method is not enabled.");
             }
 
-            // Return placeholder implementation
-            return Task.FromResult(new CounterfactualExplanation<T>
-            {
-                MaxChanges = maxChanges
-            });
+            throw new NotImplementedException("Counterfactual explanation generation is not yet implemented.");
         }
 
         /// <summary>
@@ -159,8 +143,7 @@ namespace AiDotNet.Interpretability
             IInterpretableModel<T> model)
         {
             _ = model;
-            // Return placeholder implementation
-            return Task.FromResult(new Dictionary<string, object>());
+            throw new NotImplementedException("Model-specific interpretability information retrieval is not yet implemented.");
         }
 
         /// <summary>
@@ -235,11 +218,7 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("Anchor method is not enabled.");
             }
 
-            // Return placeholder implementation
-            return Task.FromResult(new AnchorExplanation<T>
-            {
-                Threshold = threshold
-            });
+            throw new NotImplementedException("Anchor explanation generation is not yet implemented.");
         }
     }
 }
