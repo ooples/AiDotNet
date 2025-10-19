@@ -1514,6 +1514,6 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
 
     public virtual void LoadModel(string filePath)
     {
-        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
     }
 }
