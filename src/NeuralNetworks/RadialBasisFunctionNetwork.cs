@@ -368,8 +368,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Forward pass with memory for backpropagation
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> outputVector = ForwardWithMemory(Tensor<T>.FromVector(inputVector)).ToVector();
+        Vector<T> outputVector = ForwardWithMemory(input).ToVector();
 
         // Calculate error/loss
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
