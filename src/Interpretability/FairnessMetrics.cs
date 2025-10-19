@@ -53,6 +53,12 @@ namespace AiDotNet.Interpretability
         /// </summary>
         public FairnessMetrics()
         {
+            DemographicParity = default(T)!;
+            EqualOpportunity = default(T)!;
+            EqualizedOdds = default(T)!;
+            PredictiveParity = default(T)!;
+            DisparateImpact = default(T)!;
+            StatisticalParityDifference = default(T)!;
             AdditionalMetrics = new Dictionary<string, T>();
         }
     }
