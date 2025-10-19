@@ -794,7 +794,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// <param name="parameters">A vector containing the model parameters.</param>
     public virtual void SetParameters(Vector<T> parameters)
     {
-        int expectedParamCount = Alphas.Length + 1; // Alphas + Bias
+        int expectedParamCount = Alphas.Length + 1; // Alphas.Length + 1 (for Bias term)
         if (parameters.Length != expectedParamCount)
         {
             throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}");
@@ -804,7 +804,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         {
             Alphas[i] = parameters[i];
         }
-        Bias = parameters[Alphas.Length];
+        B = parameters[Alphas.Length];
     }
 
     /// <summary>

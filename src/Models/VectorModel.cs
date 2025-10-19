@@ -54,7 +54,23 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// </para>
     /// </remarks>
     public Vector<T> Coefficients { get; }
-    
+
+    /// <summary>
+    /// Gets or sets the feature names.
+    /// </summary>
+    /// <value>
+    /// An array of feature names. If not set, feature indices will be used as names.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This allows you to give meaningful names to your features.
+    ///
+    /// Instead of having features referred to as "Feature_0", "Feature_1", etc.,
+    /// you can use descriptive names like "bedrooms", "bathrooms", "square_feet".
+    /// This makes the model's feature importance output more readable.
+    /// </para>
+    /// </remarks>
+    public string[]? FeatureNames { get; set; }
+
     /// <summary>
     /// The numeric operations provider used for mathematical operations on type T.
     /// </summary>
@@ -797,6 +813,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method returns the absolute values of coefficients
     /// as feature importance scores. Features with larger absolute coefficients are more important.
+    /// If FeatureNames is set, those names will be used; otherwise, default names like "Feature_0" are used.
     /// </para>
     /// </remarks>
     public Dictionary<string, T> GetFeatureImportance()
@@ -805,7 +822,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
         for (int i = 0; i < Coefficients.Length; i++)
         {
-            string featureName = $"Feature_{i}";
+            string featureName = FeatureNames != null && i < FeatureNames.Length
+                ? FeatureNames[i]
+                : $"Feature_{i}";
             result[featureName] = _numOps.Abs(Coefficients[i]);
         }
 

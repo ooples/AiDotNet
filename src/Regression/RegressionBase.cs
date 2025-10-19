@@ -85,6 +85,14 @@ public abstract class RegressionBase<T> : IRegression<T>
     public string[]? FeatureNames { get; set; }
 
     /// <summary>
+    /// Gets the expected number of parameters (coefficients plus intercept if used).
+    /// </summary>
+    /// <value>
+    /// The total number of parameters, which equals the number of coefficients plus 1 if an intercept is used, or just the number of coefficients otherwise.
+    /// </value>
+    protected int ExpectedParameterCount => Coefficients.Length + (Options.UseIntercept ? 1 : 0);
+
+    /// <summary>
     /// Initializes a new instance of the RegressionBase class with the specified options and regularization.
     /// </summary>
     /// <param name="options">Configuration options for the regression model. If null, default options will be used.</param>
@@ -434,12 +442,9 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        // Calculate expected parameter count
-        int expectedParamCount = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
-    
-        if (parameters.Length != expectedParamCount)
+        if (parameters.Length != ExpectedParameterCount)
         {
-            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}");
         }
     
         // Create a new instance of the model
@@ -558,12 +563,9 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </remarks>
     public virtual void SetParameters(Vector<T> parameters)
     {
-        // Calculate expected parameter count
-        int expectedParamCount = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
-
-        if (parameters.Length != expectedParamCount)
+        if (parameters.Length != ExpectedParameterCount)
         {
-            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}");
         }
 
         // Extract and set coefficients
