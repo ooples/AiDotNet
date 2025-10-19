@@ -1413,9 +1413,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     /// <summary>
     /// Base model instance for interpretability delegation.
-    /// Typed as object to support generic SetBaseModel method that accepts IModel with varying type parameters.
-    /// This design allows the base class to store models with different generic type signatures.
     /// </summary>
+    /// <remarks>
+    /// Typed as <see cref="object"/> to support the generic <see cref="SetBaseModel{TInput, TOutput, TMetadata}"/>
+    /// method that accepts <see cref="IModel{TInput, TOutput, TMetadata}"/> with varying type parameters.
+    /// This design allows the base class to store models with different generic type signatures while maintaining
+    /// compile-time type safety in the SetBaseModel method. The object type is necessary because C# does not support
+    /// fields with open generic types, and using object enables polymorphic storage of models with different
+    /// type parameter combinations.
+    /// </remarks>
     protected object? _baseModel;
 
     /// <summary>
