@@ -19,7 +19,7 @@ public enum MetricType
     R2,
 
     /// <summary>
-    /// R-Squared (R²) - Coefficient of determination measuring model fit quality.
+    /// Alias of <see cref="R2"/>. R-Squared (R²) - Coefficient of determination measuring model fit quality.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -895,7 +895,7 @@ public enum MetricType
     AUCROC,
 
     /// <summary>
-    /// Area Under the Curve - Measures the area under the ROC curve for classification models.
+    /// Alias of <see cref="AUCROC"/>. Area Under the Curve - Measures the area under the ROC curve for classification models.
     /// </summary>
     /// <remarks>
     /// <para>
