@@ -445,7 +445,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// but also requires more training data and computational resources.
     /// </para>
     /// </remarks>
-    public virtual int GetParameterCount()
+    public int GetParameterCount()
     {
         return ParameterCount;
     }
