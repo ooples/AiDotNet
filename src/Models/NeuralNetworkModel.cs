@@ -428,7 +428,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         }
         
         // Forward pass with memory to store intermediate values
-        Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(input.ToVector()));
+        Tensor<T> outputTensor = Network.ForwardWithMemory(input);
         Vector<T> output = outputTensor.ToVector();
 
         // Calculate error gradient
