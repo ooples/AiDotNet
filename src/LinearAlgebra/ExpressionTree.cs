@@ -796,27 +796,53 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     public IEnumerable<int> GetActiveFeatureIndices()
     {
         HashSet<int> activeIndices = new HashSet<int>();
-    
+
         void CollectFeatureIndices(ExpressionTree<T, TInput, TOutput> node)
         {
             if (node.Type == ExpressionNodeType.Variable)
             {
                 activeIndices.Add(_numOps.ToInt32(node.Value));
             }
-        
+
             if (node.Left != null)
             {
                 CollectFeatureIndices(node.Left);
             }
-        
+
             if (node.Right != null)
             {
                 CollectFeatureIndices(node.Right);
             }
         }
-    
+
         CollectFeatureIndices(this);
         return activeIndices;
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores for this expression tree.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to importance scores.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Feature importance tells you which input variables matter most in your formula.
+    /// This is not yet implemented for expression trees.
+    /// </remarks>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        throw new NotImplementedException("GetFeatureImportance is not yet implemented for this model type.");
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this expression tree.
+    /// </summary>
+    /// <param name="featureIndices">The feature indices to use.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This would restrict the formula to only use specific input variables.
+    /// This is not yet implemented for expression trees.
+    /// </remarks>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        throw new NotImplementedException("SetActiveFeatureIndices is not yet implemented for this model type.");
     }
 
     /// <summary>
@@ -1019,5 +1045,25 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             CollectCoefficients(this);
             return new Vector<T>(coefficients.ToArray());
         }
+    }
+
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        throw new NotImplementedException("SetParameters is not yet implemented for this model type.");
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return Coefficients.Length; }
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
     }
 }

@@ -902,4 +902,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </para>
     /// </remarks>
     public abstract OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions();
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+    }
 }

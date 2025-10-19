@@ -12,22 +12,22 @@ namespace AiDotNet.Interpretability
         /// <summary>
         /// Gets or sets the original input.
         /// </summary>
-        public required Tensor<T> OriginalInput { get; set; }
+        public Tensor<T> OriginalInput { get; set; }
 
         /// <summary>
         /// Gets or sets the counterfactual input (modified version).
         /// </summary>
-        public required Tensor<T> CounterfactualInput { get; set; }
+        public Tensor<T> CounterfactualInput { get; set; }
 
         /// <summary>
         /// Gets or sets the original prediction.
         /// </summary>
-        public required Tensor<T> OriginalPrediction { get; set; }
+        public Tensor<T> OriginalPrediction { get; set; }
 
         /// <summary>
         /// Gets or sets the counterfactual prediction.
         /// </summary>
-        public required Tensor<T> CounterfactualPrediction { get; set; }
+        public Tensor<T> CounterfactualPrediction { get; set; }
 
         /// <summary>
         /// Gets or sets the feature changes made.
@@ -38,7 +38,7 @@ namespace AiDotNet.Interpretability
         /// <summary>
         /// Gets or sets the total distance between original and counterfactual.
         /// </summary>
-        public required T Distance { get; set; }
+        public T Distance { get; set; }
 
         /// <summary>
         /// Gets or sets the maximum number of changes allowed.
@@ -50,7 +50,12 @@ namespace AiDotNet.Interpretability
         /// </summary>
         public CounterfactualExplanation()
         {
+            OriginalInput = new Tensor<T>();
+            CounterfactualInput = new Tensor<T>();
+            OriginalPrediction = new Tensor<T>();
+            CounterfactualPrediction = new Tensor<T>();
             FeatureChanges = new Dictionary<int, T>();
+            Distance = default(T);
         }
     }
 }
