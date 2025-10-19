@@ -758,6 +758,51 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     }
 
     /// <summary>
+    /// Sets the parameters for this model.
+    /// </summary>
+    /// <param name="parameters">A vector containing the model parameters.</param>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (Network == null)
+        {
+            throw new InvalidOperationException("Network has not been initialized.");
+        }
+
+        Network.SetParameters(parameters);
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to activate.</param>
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        // Neural networks typically don't support feature masking after training
+        throw new NotSupportedException("Neural networks do not support setting active features after network construction.");
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    /// <exception cref="NotSupportedException">
+    /// This method is not supported for neural networks. Feature importance in neural networks
+    /// requires specialized techniques like gradient-based attribution or permutation importance.
+    /// </exception>
+    public Dictionary<string, T> GetFeatureImportance()
+    {
+        // Neural network feature importance requires specialized techniques like:
+        // - Gradient-based attribution methods (e.g., Integrated Gradients, SHAP)
+        // - Permutation importance
+        // - Layer-wise relevance propagation
+        // These are complex to implement correctly and beyond the scope of this basic method.
+        throw new NotSupportedException(
+            "Feature importance is not supported for neural networks through this method. " +
+            "Neural networks require specialized techniques like gradient-based attribution, " +
+            "permutation importance, or SHAP values to properly assess feature importance.");
+    }
+
+    /// <summary>
     /// Creates a deep copy of this model.
     /// </summary>
     /// <returns>A new instance with the same architecture and parameters.</returns>
